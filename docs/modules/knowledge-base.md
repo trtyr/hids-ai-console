@@ -34,7 +34,7 @@ updated: 2026-11-17
 - **不开 HTTP 服务**。三个文件都没有监听或路由代码，对外调用由业务 API 接线，不在本模块。
 - **不自动发布**。`publish()` 要求人工填审核人与审核说明，缺一直接拒绝（`wiki-workbench.js:287-290`）。
 - **不重新取证**。回放报告自带说明：「同一份冻结材料分别配旧判据和草案判据；这只检验判据变化的影响，不等同于重新调用牧云取证」（`wiki-replay.js:93`）。
-- **不判断结论在语义上对不对**。回放只核对模型给出的结论与摘录能否在冻结材料和判据里逐字对上（`wiki-replay.js:71-73`）。
+- **不判断结论在语义上对不对**。回放只核对模型给出的结论与摘录能否在冻结材料和判据里逐字对上（`wiki-replay.js:70-73`）。
 
 ## 2 覆盖构件
 
@@ -170,7 +170,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 3. **选样本**。`loadCases()` 扫会话目录，取文件名是 UUID 的 `.json` 会话中 `status === 'published'` 且带审核人与反馈的那些（`wiki-replay.js:23-26`），按审核时间倒序（`wiki-replay.js:27`），再加上当前会话自己的反馈（标「待审核反馈」）与别的已发布会话（标「已审核反馈」）（`wiki-replay.js:28-29`）。
 4. **样本过滤**。预期结论必须是三态之一、`case_id` 不重复、原始告警与研判事实都不为空、该事件类型能算出判据目录，且目录里至少有一页在本次变更清单里（`wiki-replay.js:33-38`）。最多取 5 条，并记下 `eligible` 与 `omitted`（`wiki-replay.js:45`）。
 5. **两遍对照**。同一条样本分别用旧判据（空 candidate）和草案判据（变更内容）组装上下文，两次模型调用并发（`wiki-replay.js:96-102`）；上下文里 `deprecated` 的页被剔除，每页截 15000 字（`wiki-replay.js:53-54`）。
-6. **摘录校验**。模型必须给出 `basis_quote`（逐字出现在冻结材料里）与 `criterion_quote`（逐字出现在某页判据里），两段长度都不少于 4 字，否则本条判为错误「模型结论缺少可在冻结材料和判据中逐字核对的摘录」（`wiki-replay.js:71-73`）。
+6. **摘录校验**。模型必须给出 `basis_quote`（逐字出现在冻结材料里）与 `criterion_quote`（逐字出现在某页判据里），两段长度都不少于 4 字，否则本条判为错误「模型结论缺少可在冻结材料和判据中逐字核对的摘录」（`wiki-replay.js:70-73`）。
 7. **逐条定性**（`wiki-replay.js:103-107`）：
 
 | 取值 | 含义 |
@@ -250,7 +250,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 ### 5.2 返回值
 
-**页面元数据**（`metadata()`，`wiki-store.js:20-27`）：`path`、`id`（缺 `id:` 字段时取文件名）、`title`（缺 `title:` 时取正文首个一级标题，再缺取文件名）、`status`（缺 `status:` 时为 `reference`）、`updated`、`revision`（正文 SHA-256 前 16 位）、`characters`（正文字符数）。
+**页面元数据**（`metadata()`，`wiki-store.js:20-27`）：`path`、`id`（缺 `id:` 字段时取文件名）、`title`（缺 `title:` 时取正文首个一级标题，再缺取文件名）、`status`（缺 `status:` 时为 `reference`）、`updated`、`revision`（页面源文件全文的 SHA-256 前 16 位，含 frontmatter 围栏与字段行）、`characters`（页面源文件全文的字符数，含 frontmatter）。两个值都由 `hash(source)` / `source.length` 算出，入参是整份页面文本而非去掉 frontmatter 的正文（`wiki-store.js:26`）。
 
 **体检结果**（`health()`，`wiki-store.js:149`）：`checked_at`（ISO 时间戳）、`active_pages`（生效中判据页数）、`issues`（数组，每条含 `path`、`kind`、`message`；`kind` 取 `duplicate_id`、`missing_source`、`broken_ref`、`missing_evidence`，见 `wiki-store.js:139`、`wiki-store.js:143`、`wiki-store.js:145`、`wiki-store.js:147`）。
 
@@ -301,7 +301,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 | `R-KB-05` | 批量发布一次 1 至 6 页，且路径不重复 | 传 7 条或两条同路径 | `wiki-store.js:228`、`wiki-store.js:236-238` | 抛 400 |
 | `R-KB-06` | 判据页发布前必须先回放，且回放对应同一份草案 | 直接发布或草案改过 | `wiki-workbench.js:294-295` | 抛 409「发布前请先回放当前判据草案」 |
 | `R-KB-07` | 发布时的提示词版本要与回放时一致 | 回放后提示词升级了 | `wiki-workbench.js:296-297` | 抛 409「研判提示词版本已变化，请重新回放」 |
-| `R-KB-08` | 回放结论的两段摘录要逐字出现在冻结材料与判据里 | 模型编一段不在输入里的原文 | `wiki-replay.js:71-73` | 该条判为 `invalid`，报告状态转 `needs_review` |
+| `R-KB-08` | 回放结论的两段摘录要逐字出现在冻结材料与判据里 | 模型编一段不在输入里的原文 | `wiki-replay.js:70-73` | 该条判为 `invalid`，报告状态转 `needs_review` |
 | `R-KB-09` | 客户经验九项字段的 `source_quote` 要逐字出现在用户发过的消息里 | 字段里写了一段没说过的话 | `wiki-workbench.js:199-200` | 抛 400「客户经验尚缺告警场景、九项字段或原话出处，请继续补充」 |
 | `R-KB-10` | 客户经验的复核期限在一年以内，过期后不再复用 | 填一个两年后的日期，或期限已过 | `wiki-workbench.js:277`、`wiki-store.js:332-333` | 抛 400；过期后 `publishedFor()` 不再返回它 |
 | `R-KB-11` | 判据库的写操作串行执行，不并发 | 同时发起两次修订 | `wiki-store.js:30`、`wiki-store.js:153`、`wiki-store.js:177` | 后一条排队等前一条完成 |
