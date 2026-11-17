@@ -77,12 +77,10 @@ $ grep -n "knowledge" server.js
 但它是独立文件、独立维护。两边对不上的地方不会自动暴露——本卡没有逐条比对 35 条路径与路由分支，
 那属于接口契约卡的事。
 
-## 五、模块页还不存在
+## 五、模块页
 
-`docs/modules/_breakdown.json` 里的 `doc` 字段指向 14 个尚未创建的页面
-（`docs/modules/<name>.md`）。这些页面由模块卡逐篇写，写完才算齐。
-清单里的 `files` 字段已逐个验过存在，`components` 字段描述的是「模块覆盖什么」，
-不是重构建议。
+14 个模块页都已写完，落在 `docs/modules/<name>.md`。清单见 [docs/modules/_breakdown.json](../modules/_breakdown.json)。
+架构篇第 12 节的覆盖构件已与清单里的 `components` 对齐。各篇自己的「未决」还在模块页里，不在这里复制一份。
 
 ## 六、没查到的部分
 
@@ -96,7 +94,8 @@ $ grep -n "knowledge" server.js
 | 生产部署形态（反向代理、端口、凭据来源） | `openapi.yaml:7` 描述了客户前端默认 8081、维护页面默认 18082，但这两个工程不在本仓，无法核对 |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` 在各部署环境的实际取值 | 属于部署配置，代码只提供换算逻辑（`syslog-input.js:61-72`） |
 
-## 七、下一棒该补什么
+## 七、还没做的
 
-- 模块卡：按 `docs/modules/_breakdown.json` 逐篇写 `docs/modules/<name>.md`，每篇只讲一个模块。
 - 上面第一节到第四节四条，代码改动时需回头核对架构篇第 8.1、4、13 节的对应段落。
+- 第六节那五条仍然没查到。没有牧云凭据、没有生产部署，补不了。
+- 各模块页里的局部未决留在各自页面，不升成全局缺口。

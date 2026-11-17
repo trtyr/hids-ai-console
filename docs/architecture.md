@@ -119,7 +119,7 @@
 | --- | --- | --- |
 | 工具箱 | `TriageEvidenceToolbox`：牧云 API 事件工具 + 一组受控的 MCP 补证工具 | `AgentToolbox`：纯 MCP |
 | 构造位置 | `server.js:32`、`server.js:36` | `server.js:31`、`server.js:37` |
-| 可调工具范围 | API 侧 11 类事件的 `get_*_event` / `list_*_events` 与 `list_host_events`，加上正则限定的 8 个 MCP 工具 | `investigationToolNames` 白名单里的约 40 个名字（`agent-tools.js:8-17`） |
+| 可调工具范围 | API 侧 11 类事件的 `get_*_event` / `list_*_events` 与 `list_host_events`，加上正则限定的 8 个 MCP 工具 | `investigationToolNames` 白名单里的 47 个名字（`agent-tools.js:8-17`） |
 | 工具白名单执行点 | `TriageEvidenceToolbox.callTool` 先查 API 侧，再查 MCP 侧是否命中正则，不命中直接报错（`agent-tools.js:107-114`） | `AgentToolbox.callTool` 用 `allowed` 集合拦截，不在集合里直接报错（`agent-tools.js:41-48`） |
 
 常规研判之所以要「API + MCP」两路：牧云 API 有事件身份校验，但缺少补证工具；MCP 工具多，但本仓对 MCP 侧的可用工具集合做了更严的限制。
@@ -472,24 +472,23 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 
 ## 12. 模块清单
 
-下表与 [docs/modules/_breakdown.json](modules/_breakdown.json) 一一对应；模块页的落点是 `docs/modules/<name>.md`。
-**写这份架构篇时这 14 个页面还不存在**——它们由下游的模块卡逐篇写，本页只给出归属与职责。清单里的 `files` 字段已逐个验过存在（见 [docs/_meta/gaps.md](_meta/gaps.md) 第五节）。
+下表与 [docs/modules/_breakdown.json](modules/_breakdown.json) 一一对应。14 个模块页都已写完，覆盖构件的用词与清单里的 `components` 相同。清单里的 `files` 已逐个验过存在。
 
 | 模块 | 页面 | 实现文件 | 覆盖构件 | 职责一句话 |
 | --- | --- | --- | --- | --- |
-| `http-api` | [modules/http-api.md](modules/http-api.md) | `server.js` | 路由分发、Basic 认证、管理员令牌、SSE 流式响应 | 业务 HTTP 接口的唯一入口，把编排层的能力包成路由 |
-| `event-gateway` | [modules/event-gateway.md](modules/event-gateway.md) | `cloudwalker.js`、`rpc-client.js` | 事件类型表、事件归一化、多源合并分页、只读 RPC 白名单 | 读牧云事件列表与详情，并把不同类型的原始行归一成同一形状 |
-| `evidence-tools` | [modules/evidence-tools.md](modules/evidence-tools.md) | `mcp-client.js`、`agent-tools.js`、`api-tools.js` | MCP 客户端、API 工具箱、MCP 工具箱、常规研判工具箱、取证会话、工具白名单 | 把「一次取证」包装成模型可调用的工具，并限制可调范围 |
-| `model-client` | [modules/model-client.md](modules/model-client.md) | `model-client.js` | 对话补全、超时、环境装配 | 与模型服务对话的唯一通道 |
-| `evidence-view` | [modules/evidence-view.md](modules/evidence-view.md) | `evidence-view.js` | 字段投影、JSON Pointer、上下文裁剪 | 把工具原始返回压成模型看得懂、引用得了的精简视图 |
-| `investigation-agent` | [modules/investigation-agent.md](modules/investigation-agent.md) | `investigation-agent.js`、`required-evidence.js`、`triage-output.js` | 三态结论、独立复核、引用校验、必查项、客户报告 | 研判的决策内核：取证、质疑、校验、降级、出报告 |
-| `triage-pipeline` | [modules/triage-pipeline.md](modules/triage-pipeline.md) | `triage-monitor.js`、`syslog-input.js`、`syslog-case.js` | syslog 接收与解析、去重、队列与游标、案件目录 | 把告警变成一条排队中的研判任务，并落好案件材料 |
-| `triage-rules` | [modules/triage-rules.md](modules/triage-rules.md) | `triage-rules.js` | 规则集校验、规则评估、乐观并发 | 已审核的误报规则，作为候选交给 AI 复核 |
-| `knowledge-base` | [modules/knowledge-base.md](modules/knowledge-base.md) | `wiki-store.js`、`wiki-workbench.js`、`wiki-replay.js` | 判据读写、发布前检查、维护会话、发布前回放 | 判据库的存储与「会话→草案→回放→人工发布」流水线 |
-| `trace-board` | [modules/trace-board.md](modules/trace-board.md) | `trace-board.js` | 白板节点、节点调查、自主追查 | 从一条告警或一个 IP 出发，追出关联资产与事件 |
+| `http-api` | [modules/http-api.md](modules/http-api.md) | `server.js` | 路由分发、Basic 认证、管理员令牌校验、SSE 流式响应、分页参数校验 | 业务 HTTP 接口的唯一入口，把编排层的能力包成路由 |
+| `event-gateway` | [modules/event-gateway.md](modules/event-gateway.md) | `cloudwalker.js`、`rpc-client.js` | 事件类型表、RPC 方法映射、只读 RPC 白名单、事件归一化、多类型合并分页 | 读牧云事件列表与详情，并把不同类型的原始行归一成同一形状 |
+| `evidence-tools` | [modules/evidence-tools.md](modules/evidence-tools.md) | `mcp-client.js`、`agent-tools.js`、`api-tools.js` | MCP 客户端、API 取证工具箱、MCP 取证工具箱、常规研判工具箱、取证会话、工具白名单 | 把「一次取证」包装成模型可调用的工具，并限制可调范围 |
+| `model-client` | [modules/model-client.md](modules/model-client.md) | `model-client.js` | 对话补全、工具调用请求、超时与错误翻译、环境变量装配 | 与模型服务对话的唯一通道 |
+| `evidence-view` | [modules/evidence-view.md](modules/evidence-view.md) | `evidence-view.js` | 字段投影、JSON Pointer、预聚合计数、上下文裁剪 | 把工具原始返回压成模型看得懂、引用得了的精简视图 |
+| `investigation-agent` | [modules/investigation-agent.md](modules/investigation-agent.md) | `investigation-agent.js`、`required-evidence.js`、`triage-output.js` | 三态结论映射、工具轮次与调用上限、独立复核、引用校验与降级、必查项清单、客户报告整形 | 研判的决策内核：取证、质疑、校验、降级、出报告 |
+| `triage-pipeline` | [modules/triage-pipeline.md](modules/triage-pipeline.md) | `triage-monitor.js`、`syslog-input.js`、`syslog-case.js` | syslog 接收与解析、指纹去重、队列与游标、案件目录、结果写回 | 把告警变成一条排队中的研判任务，并落好案件材料 |
+| `triage-rules` | [modules/triage-rules.md](modules/triage-rules.md) | `triage-rules.js` | 规则集校验、字段取值映射、规则评估、乐观并发保存 | 已审核的误报规则，作为候选交给 AI 复核 |
+| `knowledge-base` | [modules/knowledge-base.md](modules/knowledge-base.md) | `wiki-store.js`、`wiki-workbench.js`、`wiki-replay.js` | 判据页读写、发布前检查、维护会话、发布前回放、客户经验发布 | 判据库的存储与「会话→草案→回放→人工发布」流水线 |
+| `trace-board` | [modules/trace-board.md](modules/trace-board.md) | `trace-board.js` | 白板节点与边、节点调查、自主追查循环、白板持久化 | 从一条告警或一个 IP 出发，追出关联资产与事件 |
 | `prompt-store` | [modules/prompt-store.md](modules/prompt-store.md) | `prompt-store.js` | 提示词装载、本地覆盖、版本指纹、整包安装 | 决定本次研判用哪一套提示词与 SOP |
-| `maintenance-service` | [modules/maintenance-service.md](modules/maintenance-service.md) | `maintenance-server.js`、`update-store.js`、`package-policy.js` | 维护认证与角色、升级包信封、密钥生成、策略包制作 | 独立维护端与升级包链路 |
-| `record-store` | [modules/record-store.md](modules/record-store.md) | `investigation-store.js` | 研判记录存取 | 按「告警 + 模式」保存最近一次研判结果 |
+| `maintenance-service` | [modules/maintenance-service.md](modules/maintenance-service.md) | `maintenance-server.js`、`update-store.js`、`package-policy.js` | 维护端认证与角色、跨站写请求校验、升级包信封、密钥生成、策略包制作 | 独立维护端与升级包链路 |
+| `record-store` | [modules/record-store.md](modules/record-store.md) | `investigation-store.js` | 研判记录存取、文件名散列、原子写入 | 按「告警 + 模式」保存最近一次研判结果 |
 | `experience-draft` | [modules/experience-draft.md](modules/experience-draft.md) | `knowledge-store.js`、`knowledge-workbench.js` | 九项经验字段、逐项追问、审核发布、撤回 | 候选经验的整理台；当前只被测试引用，未接入业务 API（第 4 节末） |
 
 模块名与 `docs/modules/` 下的文件名一一对应，拆分依据是「谁拥有这份状态、谁定义这份契约」，不是按目录或按行数切。
