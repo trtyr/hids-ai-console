@@ -6,7 +6,6 @@ import { probeSession } from './session.js';
 import { DEFAULT_ROUTE, hashFor, routeFromHash } from './router.js';
 import { mountLogin } from './views/login.js';
 import { mountShell } from './views/shell.js';
-import { mountPlaceholder } from './views/placeholder.js';
 
 const root = document.getElementById('root');
 const themeToggle = document.querySelector('[data-theme-toggle]');
@@ -38,15 +37,13 @@ function showLogin() {
 function showShell() {
   shell = mountShell({ onSignOut: signOut, themeToggle });
 
-  const route = routeFromHash(window.location.hash);
-  shell.setRoute(route);
-  shell.content.replaceChildren(mountPlaceholder(route));
-
   function syncRoute() {
-    const next = routeFromHash(window.location.hash);
-    shell.setRoute(next);
-    shell.content.replaceChildren(mountPlaceholder(next));
+    const { page, params } = routeFromHash(window.location.hash);
+    shell.setRoute(page);
+    page.render(shell.content, { params });
   }
+
+  syncRoute();
   window.addEventListener('hashchange', syncRoute);
   untrackHash = () => window.removeEventListener('hashchange', syncRoute);
 

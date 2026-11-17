@@ -102,17 +102,37 @@ probeSession(credentials, options?) → Promise<{ authenticated: true }>
 
 ### 路由表（`src/router.js`，顺序即侧栏顺序）
 
-| hash | 侧栏文案 | 顶栏标题 | 当前状态 |
-| --- | --- | --- | --- |
-| `#/overview` | 总览 | 总览 | 占位（T002 接） |
-| `#/alerts` | 告警 | 告警 | 占位（T003/T004 接） |
-| `#/trace` | 深度溯源 | 深度溯源 | 占位（T005 接） |
-| `#/rules` | 规则 | 规则 | 占位（T006 接） |
-| `#/wiki` | 知识库 | 知识库 | 占位（T007 接） |
+| hash | 侧栏文案 | 顶栏标题 | 页面模块 | 当前状态 |
+| --- | --- | --- | --- | --- |
+| `#/overview` | 总览 | 总览 | `pages/overview.js` | 占位（T002 接） |
+| `#/alerts` | 告警 | 告警 | `pages/alerts.js` | 占位（T003 接） |
+| `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | 占位（T004 接），参数从第二段起原样传 |
+| `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | 占位（T005 接） |
+| `#/rules` | 规则 | 规则 | `pages/rules.js` | 占位（T006 接） |
+| `#/knowledge` | 知识库 | 知识库 | `pages/knowledge.js` | 占位（T007 接） |
 
-- 空 hash、`#/`、未知 hash 一律回落到总览，不报错、不空白。
+- 空 hash、`#/`、未知 id 一律回落到总览，不报错、不空白；回落时 `params` 为空数组。
 - 导航项是 `<a href="#/…">`（真链接，键盘可达），当前项带 `aria-current="page"`，样式上 `.is-active`。
 - 「退出登录」是 `<button>`（动作不是跳转），清空内存凭据、去掉 hash、回到登录页、焦点落账号框。
+
+### 页面模块契约（T002–T007 照这个写，不动壳）
+
+```js
+// web/pages/<name>.js
+export const page = {
+  id: 'overview',            // 路由 id，也是 hash 第一段
+  title: '总览',              // 顶栏标题
+  navLabel: '总览',           // 侧栏文案；null = 不在侧栏（告警详情就是这样）
+  render(content, { params }) {
+    content.replaceChildren(/* 本页的 DOM */);
+  },
+};
+```
+
+- 加一页 = 新建 `web/pages/<name>.js` 并在 `web/src/router.js` 的 `PAGES` 里登记一行；壳、登录、别的页面都不用动。
+- `render` 每次路由切换都会重跑，内容是整块替换——不要在模块顶层缓存上一次的 DOM。
+- 页内取数走 `web/src/` 的 adapter（一个领域一个文件），**页面文件里不许出现 `fetch`**。
+- 未接接口前一律用 `src/views/placeholder.js` 的占位，不放假表格假数字。
 
 ### A3：屏幕上的账号名与角色
 
@@ -151,15 +171,17 @@ web/
   index.html            单页入口（登录 / 壳都渲染进 #root）
   serve.js              静态服务 + /api 反代
   assets/               theme.css / theme.js / fonts/ / app.css
+  pages/                一页一个文件：overview / alerts / alert-detail / trace / rules / knowledge
   src/
     app.js              组装：登录 ↔ 壳、hash 路由、退出
     session.js          会话 adapter（唯一 HTTP 处）
     credentials.js      内存凭据 + Authorization 头
-    router.js           五页路由表
+    router.js           页面登记表 + hash 解析
     views/login.js      登录视图（状态机在此）
     views/shell.js      壳视图（侧栏 / 顶栏 / 内容槽）
-    views/placeholder.js 未实现页
+    views/placeholder.js 未接接口时的占位
   test/                 单测（node --test + jsdom）
+  _handoff/             设计稿交接件（`handoff.md` + `design/` 原件），只读参考，不参与构建
 ```
 
 ## 8. 已知边界（这一版故意没做）

@@ -2,8 +2,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ROUTES, hashFor, routeFromHash } from '../src/router.js';
-import { mountPlaceholder } from '../src/views/placeholder.js';
+import { NAV_PAGES, PAGES, hashFor, routeFromHash } from '../src/router.js';
 import { mountShell } from '../src/views/shell.js';
 import { allByRole, byRole, setupDom, text } from './dom.js';
 
@@ -24,20 +23,20 @@ beforeEach(() => setupDom());
 test('侧栏五个入口：可访问名与 href 一一对应（总览/告警/深度溯源/规则/知识库）', () => {
   mount();
   const links = navLinks().filter(link => link.getAttribute('href')?.startsWith('#/'));
-  assert.deepEqual(links.map(link => text(link)), ROUTES.map(route => route.label));
-  assert.deepEqual(links.map(link => link.getAttribute('href')), ROUTES.map(route => hashFor(route.id)));
+  assert.deepEqual(links.map(link => text(link)), NAV_PAGES.map(page => page.navLabel));
+  assert.deepEqual(links.map(link => link.getAttribute('href')), NAV_PAGES.map(page => hashFor(page.id)));
 });
 
 test('setRoute：只有当前项带 aria-current="page"，顶栏标题跟着换', () => {
   mount();
-  shell.setRoute(routeFromHash('#/alerts'));
+  shell.setRoute(routeFromHash('#/alerts').page);
   const links = navLinks();
   const active = links.filter(link => link.getAttribute('aria-current') === 'page');
   assert.equal(active.length, 1);
   assert.equal(text(active[0]), '告警');
   assert.equal(text(byRole(document, 'heading', '告警')), '告警');
 
-  shell.setRoute(routeFromHash('#/wiki'));
+  shell.setRoute(routeFromHash('#/knowledge').page);
   const next = navLinks().filter(link => link.getAttribute('aria-current') === 'page');
   assert.equal(next.length, 1);
   assert.equal(text(next[0]), '知识库');
@@ -59,14 +58,14 @@ test('退出登录：点一下回调一次', () => {
   assert.equal(signOuts, 1);
 });
 
-test('空页占位：每页都说清「尚未接入」，不画假数据、不放假按钮', () => {
+test('每页渲染：占位说清「尚未接入」，不画假数据、不放假按钮', () => {
   mount();
-  for (const route of ROUTES) {
-    const placeholder = mountPlaceholder(route);
-    assert.match(text(placeholder), new RegExp(`${route.label}尚未接入`));
-    assert.equal(placeholder.querySelectorAll('button, table, input').length, 0);
-    shell.content.replaceChildren(placeholder);
-    assert.equal(shell.content.children.length, 1);
+  for (const page of PAGES) {
+    page.render(shell.content, { params: [] });
+    assert.equal(shell.content.children.length, 1, `${page.id} 渲染后内容区应只有一个根节点`);
+    const copy = text(shell.content);
+    assert.match(copy, new RegExp(`${page.title}尚未接入`));
+    assert.equal(shell.content.querySelectorAll('button, table, input, form').length, 0, `${page.id} 不许放控件`);
   }
 });
 

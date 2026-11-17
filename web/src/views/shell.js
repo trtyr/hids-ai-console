@@ -4,7 +4,7 @@
 // GET /api/session）只返回 { authenticated: true }，没有账号名也没有角色，所以这一块**不渲染**——
 // 不编名字、不拿输入框里的账号名充当身份（A3）。侧栏底部只留「退出登录」。
 
-import { ROUTES, hashFor } from '../router.js';
+import { NAV_PAGES, hashFor } from '../router.js';
 
 const BRAND_MARK = `
   <svg class="rail-mark" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
@@ -33,10 +33,10 @@ const ICONS = {
     <path d="M11.4 10h5.2M14 7.4 16.6 10 14 12.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />`,
 };
 
-const NAV = ROUTES.map(route => `
-  <a class="nav-item" href="${hashFor(route.id)}" data-route="${route.id}">
-    <svg class="od-icon" viewBox="0 0 20 20" aria-hidden="true">${ICONS[route.id]}</svg>
-    <span class="label">${route.label}</span>
+const NAV = NAV_PAGES.map(page => `
+  <a class="nav-item" href="${hashFor(page.id)}" data-route="${page.id}">
+    <svg class="od-icon" viewBox="0 0 20 20" aria-hidden="true">${ICONS[page.id] ?? ''}</svg>
+    <span class="label">${page.navLabel}</span>
   </a>`).join('');
 
 const TEMPLATE = `
@@ -89,11 +89,11 @@ export function mountShell({ onSignOut, themeToggle }) {
 
   $('signout').addEventListener('click', onSignOut);
 
-  /** @param {{ id: string, title: string }} route */
-  function setRoute(route) {
-    title.textContent = route.title;
+  /** @param {{ id: string, title: string }} page */
+  function setRoute(page) {
+    title.textContent = page.title;
     for (const item of navItems) {
-      const active = item.dataset.route === route.id;
+      const active = item.dataset.route === page.id;
       if (active) item.setAttribute('aria-current', 'page');
       else item.removeAttribute('aria-current');
       item.classList.toggle('is-active', active);
