@@ -303,7 +303,7 @@ updated: 2026-11-17
 
 | 方向 | 内容 | 依据 |
 | --- | --- | --- |
-| 上游 | 装配层：业务 HTTP 层与自动研判流水线把告警、工具箱传进来。接入点见 [架构篇](../architecture.md) 第 5.2 节「规则预筛」、第 9.2 节「管理员令牌」、第 12 节模块清单里的 `triage-rules` 行（文档指针，不在本页的证据范围内） | — |
+| 上游 | 装配层：业务 HTTP 层与自动研判流水线把告警、工具箱传进来。接入点见 [架构篇](../architecture.md) 第 5.2 节「口径不同」里的「规则预筛」条目、第 9.2 节「管理员令牌」、第 12 节模块清单里的 `triage-rules` 行（文档指针，不在本页的证据范围内） | — |
 | 下游 | 本模块不 import 仓内其它实现文件。顶部 5 条 import 都是 Node 标准库：`node:crypto`、`node:fs/promises`、`node:net`、`node:path`、`node:url` | triage-rules.js:1-5 |
 | 外部 | 牧云事件详情——靠调用方给的 `toolbox.callTool` 取，工具名由本模块拼成 `get_<事件类型>_event` | triage-rules.js:277-280 |
 | 外部 | 文件系统——规则集文件，以及同目录下的示例文件 `triage-rules.example.json` | triage-rules.js:7、225、228、248-251 |
@@ -504,7 +504,7 @@ observed [{"field":"host_id","value":7,"pointer":"/host_id"},{"field":"source_ip
 
 ## 13 指针
 
-- [架构篇](../architecture.md)：第 5.2 节「规则预筛」、第 8.2 节规则集文件位置、第 9.2 节规则写接口、第 12 节模块清单
+- [架构篇](../architecture.md)：第 5.2 节「口径不同」里的「规则预筛」条目、第 8.2 节规则集文件位置、第 9.2 节规则写接口、第 12 节模块清单
 - [模块清单](../modules/_breakdown.json)：本模块的 `name` / `doc` / `files` / `components`
 - [已知边界](../_meta/gaps.md)：全局缺口台账
 - [侦察与复现记录](../../evidence/recon/P001-T009.md)：本页第 11 节命令的原始跑法与输出
