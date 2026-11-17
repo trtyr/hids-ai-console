@@ -165,7 +165,7 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 | `createdAt` | UTC ISO 串 | 解析不出为 `null` | `cloudwalker.js:44`、`cloudwalker.js:47` |
 | `time` | Asia/Shanghai 的 时:分:秒 | `createdAt` 为 null 时是 `—` | `cloudwalker.js:47` |
 | `title` | `event_name`（对象取 `zh_cn`/`name`/`title`）→ `rule_name` → `name` → 类型中文名 | 类型中文名 | `cloudwalker.js:27-30` |
-| `level` / `levelKey` | 1 低危/low、2 中危/medium、3 高危/high、4 严重/critical | 未知/unknown | `cloudwalker.js:23`、`cloudwalker.js:43` |
+| `level` / `levelKey` | 1 低危/low、2 中危/medium、3 高危/high、4 严重/critical | 未知/unknown | `cloudwalker.js:23`、`cloudwalker.js:43`、`cloudwalker.js:48` |
 | `asset` | `host.host_name` → `row.host_name` | `未知主机` | `cloudwalker.js:49` |
 | `source` / `target` | 见 6.2 | `待核查` | `cloudwalker.js:36-42` |
 | `assetIp` | `host.host_ip` → `host.ip` | null | `cloudwalker.js:35`、`cloudwalker.js:50` |
@@ -209,12 +209,15 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 | 标签 | 字段 | 证据 |
 | --- | --- | --- |
 | 命令行 | `cmdline`、`shell_cmdline` | `cloudwalker.js:62` |
-| 进程路径 | `process_path` | `cloudwalker.js:63` |
-| 执行用户 | `uname` | `cloudwalker.js:64` |
-| 远端地址 | `remote_addr` | `cloudwalker.js:65` |
-| 本地地址 | `local_addr` | `cloudwalker.js:66` |
-| 文件路径 | `file_path` | `cloudwalker.js:67` |
-| 描述 | `description` | `cloudwalker.js:68` |
+| 进程路径 | `process_path` | `cloudwalker.js:62` |
+| 执行用户 | `uname` | `cloudwalker.js:63` |
+| 远端地址 | `remote_addr` | `cloudwalker.js:63` |
+| 本地地址 | `local_addr` | `cloudwalker.js:63` |
+| 文件路径 | `file_path` | `cloudwalker.js:64` |
+| 描述 | `description` | `cloudwalker.js:64` |
+
+（`fields` 数组一行放三个字段：`cloudwalker.js:62` 是命令行两个加进程路径，`:63` 是执行用户/远端地址/本地地址，
+`:64` 是文件路径与描述。所以上表多个标签同指一行。）
 
 文本值每条截断到 500 字符（`cloudwalker.js:69`）；`process_tree` 是数组时只给节点数，
 `cmdlines` 是数组时只给条数（`cloudwalker.js:71-72`）。
@@ -286,8 +289,11 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
    `牧云详情事件 ID 与请求不符`）（`cloudwalker.js:152-154`）。
 5. 复用 `normalizeAlert` 得到统一结构，再把详情证据追加进去，并用详情里的命令与账号覆盖列表里的缺省文案
    （`cloudwalker.js:155-159`）。
-6. 改写 `detail` 与 `gap` 两句文案：证据非空时说「已读取牧云事件详情；证据仅为原始字段，尚未形成 AI 结论。」，
-   为空时说「事件详情未提供可展示的行为字段。」（`cloudwalker.js:160-161`）。
+6. 改写两句文案（`cloudwalker.js:160-161`）：
+   - `detail` 是**二选一的三元式**（`cloudwalker.js:160`）：证据非空时说「已读取牧云事件详情；证据仅为原始字段，尚未形成 AI 结论。」，
+     一条都没挑到时说「事件详情未提供可展示的行为字段。」。
+   - `gap` 是**一句固定文本**（`cloudwalker.js:161`）：「需核查会话授权、资产用途及相关历史；当前没有已审核案例结论」——
+     不看详情内容，每次都一样。
 7. 返回 `{ alert, detail }`，其中 `detail` 是牧云原始详情（`cloudwalker.js:162`）。
 
 实测（第 16 节命令 15）：请求蜜罐 11 号时实际调用 `HoneypotService.GetEvent {"id":11}`，
