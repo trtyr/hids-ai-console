@@ -244,8 +244,8 @@
 - **目录**：`<root>/backend/.data/trace-boards`（`server.js:50-51`）；`root` 的解析规则见架构篇第 8.1 节。
 - **文件名**：入参是裸 IP 就落成 `ip:<IP>.json`，否则原样加 `.json`（`trace-board.js:157`）。
 - **写入方式**：先写 `<目标>.<UUID>.tmp`，再 `rename` 覆盖；文件权限 `0o600`；写失败先删临时文件再抛（`trace-board.js:184-197`）。
-- **落盘很频繁**：每次工具调用后（成功或失败）都存一次（`trace-board.js:232-247`），每个动作执行后也存一次
-  （`trace-board.js:386-391`、`trace-board.js:396-416`、`trace-board.js:417-423`、`trace-board.js:425-430`）。
+- **落盘很频繁**：每次工具调用后（成功或失败）都存一次（`trace-board.js:232-247`）。调查收尾也存一次（`trace-board.js:331-334`），后面这几处动作执行完同样存：
+  `trace-board.js:386-391`、`trace-board.js:396-416`、`trace-board.js:417-423`、`trace-board.js:425-430`。
 - **读**：`get()` 读不到文件返回 `null`；读到状态是 `running` 而进程内没有对应在跑任务时（一般是进程重启过），改写成 `interrupted`、
   追加一条「调查已中断」活动并回写（`trace-board.js:173-183`）。
 - **列**：`list()` 扫目录里的 `.json`，逐个读出 `id`／`title`／`status`／`created_at`／`updated_at`，读坏的文件跳过，按 `updated_at` 倒序，
