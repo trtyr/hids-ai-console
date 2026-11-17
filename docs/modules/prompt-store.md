@@ -471,4 +471,5 @@ load() 或 metadata()            → 拿到当前 revision
 
 - 本模块在整体结构中的位置见 [架构篇 §7.1](../architecture.md#71-提示词)。
 - 模块归属与构件清单见 [\_breakdown.json](_breakdown.json) 的 `prompt-store` 条目。
-- 本页的实测命令与原始输出见 [侦察记录](../../evidence/recon/P001-T012.md)。
+- 本页的实测命令与原始输出见 [侦察记录](../../evidence/recon/P001-T012.md)：
+  第九节是本页 77 个 `prompt-store.js` 锚点的清单（逐条附源码摘录），第十节是引用核对脚本。
