@@ -122,7 +122,7 @@ probeSession(credentials, options?) → Promise<{ authenticated: true }>
 | `#/alerts` | 告警 | 告警 | `pages/alerts.js` | 占位（T003 接） |
 | `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | 占位（T004 接），参数从第二段起原样传 |
 | `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | 占位（T005 接） |
-| `#/rules` | 规则 | 规则 | `pages/rules.js` | 占位（T006 接） |
+| `#/rules` | 规则 | 规则 | `pages/rules.js` | 已接（T006）：表单 / JSON 双视图编辑 + 校验 + 保存 |
 | `#/knowledge` | 知识库 | 知识库 | `pages/knowledge.js` | 占位（T007 接） |
 
 - 空 hash、`#/`、未知 id 一律回落到总览，不报错、不空白；回落时 `params` 为空数组。
@@ -209,3 +209,101 @@ web/
 - 维护端：设计稿写明是独立入口，本目录不管。
 - 凭据不持久化 → 刷新即重新登录（见第 2 节）。
 - `web/_handoff/`（开工交接件：`handoff.md` + 设计稿副本）只是参考材料：不参与构建，`serve.js` 对 `/_handoff/*` 一律回 404，不会被当成产品资源发出去。
+
+## 9. 前置规则页（`pages/rules.js` + `src/rules.js`，P002-T006）
+
+维护「前置规则」配置：读 `GET /api/triage/rules` 的 `config` / `revision` / `writable`，
+用「表单 ⇄ JSON」双视图编辑，校验走 `POST /api/triage/rules/validate`，保存走 `PUT /api/triage/rules`。
+视觉与结构来自设计稿 `rules.html`（`rules-notes.md` 是交接说明）；颜色只用 `assets/theme.css` 的令牌。
+
+### 结构（稿 → 文件）
+
+| 稿中区块 | 落在哪 | 备注 |
+| --- | --- | --- |
+| 内容区首行「刷新」 | `pages/rules.js` 的 `.rules-tools` | 稿里在顶栏，顶栏属壳（forbidden）→ 挪进内容区，与 T005 同一条处理 |
+| 编辑面板头部：标题 / revision / 可写徽标 / 未保存 / 视图切换 / 撤销修改 / 复制 JSON | `.pane-head` + `.title-block` + `.pane-actions` | 文案照稿 |
+| 表单区（按 config 递归生成） | `[data-role="form"]`，渲染函数 `paintForm()` / `valueEl()` | 对象 → `details.nested`（默认折叠）；数组 → `details.nested open={true}`；布尔 → 勾选框；数字 → number；字符串 → text；`null` → 原样显示，不给编辑 |
+| JSON 区（行号 + 等宽文本域） | `.editor-wrap` + `[data-role="gutter"]` + `[data-role="config"]` | 行号随 `input` 与 `scroll` 同步 |
+| 编辑区底栏：JSON 状态 + 光标行列 | `.editor-foot` | 表单视图显示「表单视图」 |
+| 右侧 320px 操作栏：状态 / 校验 / 保存 / 操作日志 | `.side` 的四个 `.panel` / `.log` | 保存卡的令牌只存在页面内存，刷新即清 |
+| 整页读取失败提示（稿没画） | `.notice` `[data-role="error"]` | 缺项：稿是演示数据，无失败态；按同批页面（T005 `.notice`）先例补 |
+
+### adapter 契约（`src/rules.js`，`adapter 之外出现 fetch 即缺陷`）
+
+```js
+getRules(options?)                          → { config, revision, writable, origin, error }
+validateRules(config, options?)             → { valid: true, count }
+saveRules({ config, expectedRevision, token, ...options }) → { config, revision, origin }
+// options: { fetchImpl?, baseUrl? }   单测注入用
+```
+
+| 场景 | HTTP | 结果 |
+| --- | --- | --- |
+| 读成功 | 200 | `{ config, revision, writable, origin, error }`；`revision` 可为 `null`（配置取自 `triage-rules.example.json`，`triage-rules.js:231`） |
+| 读回包缺 `config` / `writable` | 200 | `RulesError{kind:'invalid'}` |
+| 登录失效 | 401 | `RulesError{kind:'unauthorized'}`——**不解析正文**（401 正文是纯文本「需要登录后访问」，`server.js:70-74`） |
+| 管理令牌无效 | 403 | `RulesError{kind:'forbidden', message:<服务端原话>}` |
+| 版本过期 | 409 | `RulesError{kind:'conflict'}`（`triage-rules.js:245`；`openapi.yaml` 没写这一档） |
+| 服务端没配令牌 | 503 | `RulesError{kind:'unavailable'}`（`server.js:194`） |
+| 校验不合法 / 其它非 2xx | 400 等 | `RulesError{kind:'http', status}` |
+| 连不上 | — | `RulesError{kind:'network'}` |
+| 2xx 但不是 JSON | 200 | `RulesError{kind:'invalid'}` |
+
+- 每个请求都带 `Authorization: Basic`（`credentials.js` 的内存凭据）；`PUT` 另带 `X-Rule-Admin-Token`（页面令牌输入框，**不进** `credentials.js`）。
+- `saveRules` 的 body 逐字是 `{ config, expected_revision }`；成功后 revision 只取响应里的，不自造。
+
+### 状态矩阵（六格，全部有单测）
+
+| 格 | 触发 | 界面 | 断言要点 |
+| --- | --- | --- | --- |
+| loading | 首帧 | 表单区「正在读取规则配置…」，revision / 可写 / expected_revision 全是 `—`，保存 / 撤销 / 校验禁用，`.rules-shell` 带 `aria-busy="true"` | 按钮 `disabled === true`；`[data-role="rev-value"]` 文本为 `—` |
+| empty | `config === {}` | 「当前 config 为空对象。添加字段，或切到 JSON 粘贴配置。」+ 添加字段行；JSON 视图是 `{}` | 文案断言 + 新字段行存在 |
+| partial | `writable === false`（只读）/ JSON 语法错 / `config` 不是对象 / 409 冲突 | 只读：徽标「只读」、控件 `disabled`、`.form-wrap.is-readonly`（`opacity:.65`、`pointer-events:none`）、JSON `readOnly`、保存禁用；语法错：底栏红字并挡住切表单与校验；非对象：表单提示「config 不是对象」；409：结果条带「刷新」 | 只读时 `form` 里所有 `input`/`select` 都 `disabled`；语法错时 `[data-role="json-wrap"]` 仍可见 |
+| error | 读取失败（网络 / 401 / 502 / 503） | `.notice` 整块提示 + 「重试」；表单区「规则配置没有读到，点上方「重试」。」；已有数据时刷新失败**不清屏**，只在结果条与日志报错 | `[data-role="error"]` 的 `hidden === false`；点重试成功后重新渲染表单 |
+| long-content | 深嵌套 / 超长字符串 | 表单区与 JSON 区各自内部滚动，不撑破页面；行号与行数一致 | 4 层嵌套 → 4 个 `details`；`gutter` 行数 === textarea 行数 |
+| disabled | 只读 / 加载中 / 未修改 / 没填令牌 / 请求在飞 | 保存：`!writable || !dirty || !token || busy` 任一为真即禁用；撤销：`!writable || !dirty`；校验：加载中或请求在飞时禁用；刷新：请求在飞时禁用并转圈 | 逐条断言 `disabled` |
+
+### 字段映射（稿元素 → 接口字段）
+
+| 界面元素 | 字段 | 备注 |
+| --- | --- | --- |
+| 头部 revision / 状态卡 revision / 保存卡 expected_revision | `GET` 的 `revision` | 三个位置同值；`null` 显示 `null`，头部显示「无 revision」 |
+| 可写徽标 / 状态卡「可写」 | `writable` | 语义是「服务端有没有配 `HIDS_RULE_ADMIN_TOKEN`」（`server.js:182`），不是当前用户权限 |
+| 表单与 JSON 内容 | `config` | 表单按 JSON 类型递归生成，**不预设字段名**；`config` 结构由后端定 |
+| 状态卡「条目数」 | `POST /validate` 的 `count` | 未校验显示「未校验」，校验失败显示 `—`；实现里等于 `config.rules.length`（`server.js:190`） |
+| 保存 / 撤销 / 未保存 | 本地模型 vs 上次保存快照 | 纯前端状态，不来自接口 |
+| 操作日志 | 本地时间 + 事件文案 | 不来自接口 |
+
+### 交互与事件
+
+| 动作 | 后果 |
+| --- | --- |
+| 「表单 / JSON」切换 | 切 JSON：先按当前模型格式化并同步行号；切表单：先解析，**语法错就停在 JSON 并提示**，解析成功才重建表单 |
+| 改字段名（失焦） | 空名或与同级重名 → 记一条错误日志并恢复原名；合法 → 就地重排字段顺序 |
+| 值输入（字符串 / 数字） | `input` 即时写回本地模型；数字清空不写回（避免把 `""` 当 0） |
+| 布尔勾选 | `change` 写回 `true/false` 并同步旁边文案 |
+| 删除字段 / 删除项 / 上移 / 下移 / 添加字段 / 添加一项 | 只改本地模型并重绘；只读态一律无效 |
+| 「校验配置」 | 先同步 JSON 视图内容（语法错直接拒），`config` 不是对象也拒；发 `POST /validate`，成功显示「校验通过 · 条目数 N」 |
+| 「保存规则」 | 需要「可写 + 有未保存改动 + 令牌非空」；`PUT` 成功后用响应 revision 刷新三个位置、清掉未保存标记；失败（403/409/网络）**保留编辑内容**，结果条显示服务端原话 |
+| 「撤销修改」 | 模型回到上次保存的快照，清空结果条 |
+| 「复制 JSON」 | `navigator.clipboard.writeText(格式化 JSON)`；不支持或失败时记一条错误日志 |
+| 「刷新」/「重试」 | 重新 `GET`，丢弃未保存改动，清掉结果条；已有数据时刷新失败不清屏 |
+| `Ctrl/Cmd + S` | 保存按钮可用时等同点它 |
+
+### 可访问性
+
+- 编辑面板 `section[aria-label="规则配置编辑器"]`，操作栏 `aside[aria-label="规则操作"]`；视图切换是 `role="group"` + 两枚 `aria-pressed` 按钮。
+- 每组字段：字段名输入 `aria-label="字段名"`；值控件 `aria-label="值 · <字段路径>"`（如 `值 · rules / 0 / id`）；数组项按钮可访问名是「上移第 1 项 / 下移第 1 项 / 删除第 1 项」。
+- 令牌输入有 `<label for>`；JSON 文本域 `aria-label="规则配置 JSON"`。
+- 操作日志 `aria-live="polite"`；页面另有一个 `role="status"` 的读屏播报节点（`[data-role="sr-status"]`），汇报读取 / 校验 / 保存结论。
+- 只读态除视觉置灰外，控件同时 `disabled`——键盘也改不了（稿只写「置灰不可操作」）。
+- 焦点：渲染时不给焦点；「没填令牌就保存」把焦点送回令牌框。
+
+### 已知限制（这一页故意没做）
+
+- **`config` 的真实约束不在前端**：`openapi.yaml:854` 写 `additionalProperties: true`，实现 `validateRuleSet` 要求恰好 `{schema_version, enabled, rules[]}` 三键（`triage-rules.js:126-138`）。页面不猜字段，校验失败显示服务端原话（`规则集格式无效`）。
+- **没有规则专用控件**（告警类型 / 主机 / 生效时间 / 条件阈值）：需要后端给 `config` 的 schema，`rules-notes.md:5` 已把这条列为后续。
+- **`null` 只能看不能编辑**，也不做字符串 / 数字 / 布尔互转（稿 §5 同样保留）。
+- **`origin` / `error` 两个键不渲染**：实现会返回它们（`triage-rules.js:223-238`，配置坏时会退回示例并带 `error`），稿上没有对应区块。
+- **没有 409 自动合并**：冲突只能「刷新后重编辑」。
+- 稿的「知识库未定稿占位 + 导航拦截」不实现：导航与占位属壳。
