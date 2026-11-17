@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>登录 · HIDS AI 研判平台</title>
+<meta name="description" content="HIDS AI 研判平台登录页设计稿。" />
+<link rel="stylesheet" href="assets/theme.css" />
+<link rel="stylesheet" href="assets/fonts/fonts.css" />
+<script src="assets/theme.js"></script>
+<style>
+/* ============================================================
+   布局基础（结构层，勿改优先级）
+   ============================================================ */
+@layer od-layout {
+  [hidden]:not([hidden="until-found" i]) { display: none !important; }
+  dialog:not([open]) { display: none !important; }
+
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  /* containers */
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  /* stacked information: each piece is its own line — never sibling inline spans */
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  /* media keeps its intrinsic ratio by default; never a distorted or cropped
+     cover by accident. height:auto lets the ratio win over an <img height="…">
+     attribute. Cropping to a uniform box is an explicit opt-in: set --od-ratio
+     AND add .od-media-cover together (per the core rule, only where a crop is
+     deliberate — tile thumbs, decorative fills — never on full-frame content). */
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  /* functional inline SVG icons opt into bounded geometry; content SVGs keep their own */
+  .od-icon { display: inline-block; inline-size: var(--od-icon-size, 1em); block-size: var(--od-icon-size, 1em); flex: none; }
+
+  /* data text only — authored copy is rewritten to its budget instead */
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }   /* block-level reservation for a shared baseline */
+  .od-nowrap  { white-space: nowrap; }           /* 数字+单位 · 价格+起 · 日期+星期 */
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; } /* CJK labels break at spaces / <wbr> first */
+
+  /* screen skeleton (optional): bars take their own space, the middle scrolls — no padding guessed for chrome */
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  /* horizontal rail: the next item peeks at the edge; trailing room survives overflow */
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
+/* /OD-LAYOUT-PRIMITIVES v1 */
+
+/* ============================================================
+   Design tokens
+   ============================================================ */
+:root {
+
+
+
+
+
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 10px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  --control-h: 48px;
+
+  --dur-fast: 160ms;
+  --dur: 220ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(.2, .7, .3, 1);
+
+  --font-ui: "SpaceGrotesk", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrainsMono", ui-monospace, SFMono-Regular, Menlo, Consolas, "PingFang SC", "Microsoft YaHei", monospace;
+
+
+  --pad-block: clamp(32px, 3.4vw, 56px);
+  --pad-inline: clamp(24px, 4vw, 64px);
+
+  --od-gap: var(--sp-2);
+}
+
+* { box-sizing: border-box; }
+
+html { height: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--ink-900);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--selection-bg); color: var(--selection-text); }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1; }
+
+/* ---------- split frame ---------- */
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(400px, 46%);
+  min-height: 100dvh;
+}
+
+/* ---------- left: brand panel ---------- */
+.brand-panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--sp-8);
+  padding: var(--pad-block) var(--pad-inline);
+  background: var(--ink-800);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+
+/* 攻击链路底图：节点与连线，极低透明度，只做气质 */
+.topology {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+/* 测量网格，只出现在左面板 */
+.brand-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 72px 72px;
+  -webkit-mask-image: radial-gradient(90% 80% at 30% 20%, #000 0%, transparent 76%);
+  mask-image: radial-gradient(90% 80% at 30% 20%, #000 0%, transparent 76%);
+}
+
+.brand {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  animation: rise var(--dur-slow) var(--ease-out) both;
+}
+.brand-mark { width: 30px; height: 30px; color: var(--accent); flex: none; }
+.brand-name {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  color: var(--text);
+}
+.brand-sep { width: 1px; height: 16px; background: var(--line-2); flex: none; }
+.brand-sub { font-size: 12.5px; letter-spacing: .04em; color: var(--text-3); white-space: nowrap; }
+
+.brand-mid {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.statement {
+  margin: 0;
+  max-width: 16ch;
+  font-size: clamp(28px, 2.7vw, 42px);
+  font-weight: 400;
+  line-height: 1.38;
+  letter-spacing: -.022em;
+  color: var(--text);
+  text-wrap: balance;
+  animation: rise var(--dur-slow) var(--ease-out) 80ms both;
+}
+.statement::before {
+  content: "";
+  display: block;
+  width: 28px;
+  height: 1px;
+  margin-bottom: var(--sp-6);
+  background: var(--accent);
+  opacity: .7;
+}
+
+.brand-foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  letter-spacing: .03em;
+  color: var(--text-3);
+}
+
+/* ---------- right: auth ---------- */
+.auth {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-12) clamp(24px, 3vw, 40px);
+}
+
+.card {
+  width: 100%;
+  max-width: 396px;
+  padding: var(--sp-7);
+  background: var(--ink-700);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  animation: rise var(--dur-slow) var(--ease-out) 60ms both;
+}
+
+.card h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+/* banner */
+.banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  margin-top: var(--sp-4);
+  padding: 11px 12px;
+  border: 1px solid var(--danger-line);
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  animation: drop var(--dur-fast) var(--ease-out) both;
+}
+.banner[data-tone="warn"] { border-color: var(--warn-line); background: var(--warn-bg); }
+.banner > .od-icon { margin-top: 2px; color: var(--danger); }
+.banner[data-tone="warn"] > .od-icon { color: var(--warn); }
+.banner strong { display: block; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.banner-text { display: block; margin-top: 3px; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+
+/* form */
+form { margin-top: var(--sp-5); }
+.field { display: grid; gap: 6px; }
+.field + .field { margin-top: var(--sp-4); }
+.field-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.field label { font-size: 13px; font-weight: 500; color: var(--text); }
+
+input[type="text"], input[type="password"] {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 13px;
+  border: 1px solid var(--input-line);
+  border-radius: var(--r-md);
+  background: var(--input-bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+input::placeholder { color: var(--input-placeholder); }
+input:hover { border-color: var(--line-hover); }
+input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+input:focus-visible { outline: none; }
+input[aria-invalid="true"] { border-color: var(--danger-line); }
+input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px var(--danger-ring); }
+input:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  box-shadow: 0 0 0 100px var(--input-bg) inset;
+  caret-color: var(--text);
+}
+
+.field-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+.reveal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 40px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.reveal:hover { color: var(--text); }
+.reveal:disabled { cursor: default; opacity: .5; }
+.reveal .eye-slash { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.reveal[aria-pressed="true"] .eye-slash { opacity: 1; }
+.reveal[aria-pressed="true"] { color: var(--accent); }
+
+.submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  height: var(--control-h);
+  margin-top: var(--sp-6);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.submit:hover:not(:disabled) { background: var(--accent-hover); }
+.submit:active:not(:disabled) { background: var(--accent-hover); }
+.submit:disabled {
+  background: var(--bg-active);
+  border-color: var(--line-2);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+.spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid var(--spinner-track);
+  border-top-color: var(--accent-ink);
+  animation: spin .7s linear infinite;
+  flex: none;
+}
+.submit:disabled .spinner { border-color: var(--spinner-track-disabled); border-top-color: var(--text-disabled); }
+
+.helper {
+  margin: var(--sp-4) 0 0;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-3);
+}
+
+/* signed-in view */
+.signed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  padding: 4px 8px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--accent);
+}
+.signed h2 {
+  margin: var(--sp-4) 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+.signed-meta { margin: var(--sp-5) 0 0; padding: 0; border-top: 1px solid var(--line); }
+.signed-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.signed-row dt { font-size: 12px; color: var(--text-3); flex: none; }
+.signed-row dd { margin: 0; font-size: 12.5px; color: var(--text); text-align: right; overflow-wrap: anywhere; }
+.signed-row dd.mono { font-size: 11.5px; }
+.ghost {
+  width: 100%;
+  height: 44px;
+  margin-top: var(--sp-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.ghost:hover { color: var(--text); border-color: var(--line-hover); }
+
+.enter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 44px;
+  margin-top: var(--sp-5);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.enter:hover { background: var(--accent-hover); }
+
+/* draft-only annotation, remove with the mock validation */
+.demo {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  color: var(--text-faint);
+  animation: rise var(--dur-slow) var(--ease-out) 120ms both;
+}
+
+/* ---------- motion ---------- */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes drop {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  .statement { font-size: clamp(26px, 2.6vw, 34px); }
+  .auth { padding: var(--sp-10) var(--sp-5); }
+}
+
+@media (max-width: 960px) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+  .brand-panel {
+    grid-template-rows: auto;
+    padding: var(--sp-4) var(--sp-5);
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow: visible;
+  }
+  .brand-panel::before,
+  .topology,
+  .brand-mid,
+  .brand-foot { display: none; }
+  .brand { animation-delay: 0ms; }
+  .auth { padding: var(--sp-8) var(--sp-5) var(--sp-6); }
+  .card { max-width: 420px; }
+}
+
+@media (max-width: 720px) {
+  .page { min-height: 100dvh; }
+  .card { padding: var(--sp-5); }
+  input[type="text"], input[type="password"] { font-size: 16px; }
+  .reveal { min-height: 44px; }
+  .brand-name { font-size: 16px; }
+}
+
+@media (max-width: 400px) {
+  .brand-sub { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+</style>
+</head>
+<body>
+<button type="button" class="theme-toggle theme-toggle--float" data-theme-toggle>
+  <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3" />
+    <path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+  </svg>
+  <svg class="icon-moon" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+  </svg>
+  <span data-theme-label>浅色</span>
+</button>
+<div class="page">
+  <aside class="brand-panel">
+    <svg class="topology" viewBox="0 0 720 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity=".2">
+        <circle cx="470" cy="640" r="300" opacity=".5" />
+        <circle cx="470" cy="640" r="196" opacity=".7" />
+        <path d="M150 250 250 330M250 330 210 460M250 330 360 420M360 420 420 560M420 560 560 620M560 620 600 760M600 760 470 800" />
+        <path d="M210 460 420 560" stroke-dasharray="4 6" opacity=".8" />
+        <path d="M360 420 560 620" stroke-dasharray="4 6" opacity=".8" />
+        <path d="M420 560 470 800" stroke-dasharray="4 6" opacity=".8" />
+        <path d="M470 640 660 560" opacity=".4" />
+      </g>
+      <g fill="currentColor" opacity=".5">
+        <circle cx="150" cy="250" r="3" />
+        <circle cx="250" cy="330" r="4" />
+        <circle cx="210" cy="460" r="3" />
+        <circle cx="360" cy="420" r="5" />
+        <circle cx="420" cy="560" r="3.5" />
+        <circle cx="560" cy="620" r="6" />
+        <circle cx="600" cy="760" r="3" />
+        <circle cx="470" cy="800" r="4" />
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1" opacity=".3">
+        <circle cx="560" cy="620" r="14" />
+        <circle cx="360" cy="420" r="11" />
+      </g>
+    </svg>
+
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
+        <path d="M14 2.6 24 8.3v11.4L14 25.4 4 19.7V8.3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+        <path d="M9.4 11.4h9.2M9.4 14.6h9.2M11 17.8h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".85" />
+      </svg>
+      <span class="brand-name">HIDS</span>
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-sub">AI 研判平台</span>
+    </div>
+
+    <div class="brand-mid">
+      <p class="statement">告警是起点，<br />结论才是答案。</p>
+    </div>
+
+    <div class="brand-foot">
+      <span>仅限授权人员使用</span>
+      <span class="mono" id="app-version">—</span>
+    </div>
+  </aside>
+
+  <main class="auth">
+    <section class="card" aria-labelledby="login-title">
+      <div id="form-view">
+        <h1 id="login-title">登录</h1>
+
+        <div class="banner" id="banner" role="alert" aria-live="assertive" hidden>
+          <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true" style="--od-icon-size:14px">
+            <circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.3" />
+            <path d="M8 4.9v3.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            <circle cx="8" cy="11.2" r="0.9" fill="currentColor" />
+          </svg>
+          <span class="banner-body">
+            <strong id="banner-title">登录失败</strong>
+            <span class="banner-text" id="banner-text"></span>
+          </span>
+        </div>
+
+        <form id="login-form" novalidate>
+          <div class="field">
+            <div class="field-head">
+              <label for="username">账号</label>
+            </div>
+            <input id="username" name="username" type="text" autocomplete="username" spellcheck="false"
+                   placeholder="请输入账号" required autofocus aria-describedby="username-error" />
+            <p class="field-error" id="username-error" hidden>请输入账号。</p>
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <label for="password">密码</label>
+              <button type="button" class="reveal" id="reveal" aria-pressed="false" aria-controls="password">
+                <svg class="od-icon" viewBox="0 0 20 20" aria-hidden="true" style="--od-icon-size:15px">
+                  <path d="M1.9 10S5 5 10 5s8.1 5 8.1 5-3.1 5-8.1 5-8.1-5-8.1-5Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+                  <circle cx="10" cy="10" r="2.3" fill="none" stroke="currentColor" stroke-width="1.3" />
+                  <path class="eye-slash" d="M3.4 16.6 16.6 3.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                </svg>
+                <span id="reveal-label">显示</span>
+              </button>
+            </div>
+            <input id="password" name="password" type="password" autocomplete="current-password"
+                   placeholder="请输入密码" required aria-describedby="password-error" />
+            <p class="field-error" id="password-error" hidden>请输入密码。</p>
+          </div>
+
+          <button class="submit" id="submit" type="submit">
+            <span class="spinner" id="spinner" aria-hidden="true" hidden></span>
+            <span id="submit-label">登录</span>
+          </button>
+
+          <p class="helper">账号由管理员分配，无法登录请联系管理员。</p>
+          <noscript><p class="helper">需要启用 JavaScript 才能登录。</p></noscript>
+        </form>
+      </div>
+
+      <div class="signed" id="signed-view" hidden>
+        <span class="signed-badge">
+          <svg class="od-icon" viewBox="0 0 14 14" aria-hidden="true" style="--od-icon-size:12px">
+            <path d="M2.4 7.4 5.3 10.3 11.6 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          已登录
+        </span>
+        <h2 id="signed-title" tabindex="-1">会话已建立</h2>
+
+        <dl class="signed-meta">
+          <div class="signed-row"><dt>账号</dt><dd class="mono" id="signed-user">—</dd></div>
+          <div class="signed-row"><dt>登录时间</dt><dd class="mono" id="signed-time">—</dd></div>
+        </dl>
+
+        <a class="enter" href="overview.html">进入控制台</a>
+        <button type="button" class="ghost" id="signout">退出登录</button>
+      </div>
+    </section>
+
+    <p class="demo">设计稿演示账号 hids / hids-2026</p>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var formView = $("form-view");
+  var signedView = $("signed-view");
+  var form = $("login-form");
+  var user = $("username");
+  var pass = $("password");
+  var userErr = $("username-error");
+  var passErr = $("password-error");
+  var banner = $("banner");
+  var bannerTitle = $("banner-title");
+  var bannerText = $("banner-text");
+  var submitBtn = $("submit");
+  var submitLabel = $("submit-label");
+  var spinner = $("spinner");
+  var reveal = $("reveal");
+  var revealLabel = $("reveal-label");
+  var signedTitle = $("signed-title");
+  var signedUser = $("signed-user");
+  var signedTime = $("signed-time");
+  var signoutBtn = $("signout");
+
+  /* 版本号取自 /api/updates.revision，此处为响应形状示例 */
+  var UPDATES = { revision: "v2026-11-13" };
+  var versionEl = document.getElementById("app-version");
+  if (versionEl) versionEl.textContent = UPDATES.revision || "—";
+
+  /* 设计稿演示账号，接真实接口时连同本地校验一起删除 */
+  var DEMO = { user: "hids", pass: "hids-2026" };
+
+  var state = {
+    attempts: 0,
+    lockedUntil: 0,
+    submitting: false,
+    timer: null
+  };
+
+  function wait(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function setBanner(title, text, tone) {
+    if (!banner) return;
+    bannerTitle.textContent = title;
+    bannerText.textContent = text;
+    banner.dataset.tone = tone || "danger";
+    banner.hidden = false;
+  }
+
+  function clearBanner() {
+    if (banner) banner.hidden = true;
+  }
+
+  function showFieldError(input, msgEl) {
+    input.setAttribute("aria-invalid", "true");
+    if (msgEl) msgEl.hidden = false;
+  }
+
+  function hideFieldError(input, msgEl) {
+    input.removeAttribute("aria-invalid");
+    if (msgEl) msgEl.hidden = true;
+  }
+
+  function validateUser() {
+    if (!user.value.trim()) {
+      showFieldError(user, userErr);
+      return false;
+    }
+    hideFieldError(user, userErr);
+    return true;
+  }
+
+  function validatePass() {
+    if (!pass.value) {
+      showFieldError(pass, passErr);
+      return false;
+    }
+    hideFieldError(pass, passErr);
+    return true;
+  }
+
+  function setSubmitting(on) {
+    state.submitting = on;
+    form.setAttribute("aria-busy", on ? "true" : "false");
+    submitBtn.disabled = on;
+    spinner.hidden = !on;
+    submitLabel.textContent = on ? "正在登录…" : "登录";
+    reveal.disabled = on;
+  }
+
+  function pad(n) { return n < 10 ? "0" + n : String(n); }
+
+  function stamp() {
+    var d = new Date();
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function signIn() {
+    formView.hidden = true;
+    signedView.hidden = false;
+    signedUser.textContent = user.value.trim();
+    signedTime.textContent = stamp();
+    clearBanner();
+    signedTitle.focus();
+  }
+
+  function resetLock() {
+    if (state.timer) {
+      clearInterval(state.timer);
+      state.timer = null;
+    }
+    state.lockedUntil = 0;
+    state.attempts = 0;
+    submitBtn.disabled = false;
+    submitLabel.textContent = "登录";
+  }
+
+  function startLock(seconds) {
+    state.lockedUntil = Date.now() + seconds * 1000;
+    submitBtn.disabled = true;
+    setBanner("登录已暂时受限", "连续 3 次登录失败，请稍候再试。", "warn");
+
+    var tick = function () {
+      var left = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+      if (left <= 0) {
+        resetLock();
+        clearBanner();
+        pass.focus();
+        return;
+      }
+      submitLabel.textContent = left + " 秒后可重试";
+    };
+
+    tick();
+    state.timer = setInterval(tick, 1000);
+  }
+
+  function logout() {
+    signedView.hidden = true;
+    formView.hidden = false;
+    pass.value = "";
+    pass.type = "password";
+    reveal.setAttribute("aria-pressed", "false");
+    revealLabel.textContent = "显示";
+    hideFieldError(user, userErr);
+    hideFieldError(pass, passErr);
+    resetLock();
+    clearBanner();
+    user.focus();
+  }
+
+  user.addEventListener("blur", validateUser);
+  pass.addEventListener("blur", validatePass);
+  user.addEventListener("input", function () {
+    if (user.value.trim()) hideFieldError(user, userErr);
+  });
+  pass.addEventListener("input", function () {
+    if (pass.value) hideFieldError(pass, passErr);
+  });
+
+  reveal.addEventListener("click", function () {
+    var show = pass.type === "password";
+    pass.type = show ? "text" : "password";
+    reveal.setAttribute("aria-pressed", String(show));
+    revealLabel.textContent = show ? "隐藏" : "显示";
+    pass.focus();
+  });
+
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    if (state.submitting || state.lockedUntil) return;
+
+    clearBanner();
+    var userOk = validateUser();
+    var passOk = validatePass();
+    if (!userOk || !passOk) {
+      (userOk ? pass : user).focus();
+      return;
+    }
+
+    if (!navigator.onLine) {
+      setBanner("无法连接到服务", "请检查网络连接，或稍后再试。", "warn");
+      return;
+    }
+
+    setSubmitting(true);
+    await wait(900);
+    setSubmitting(false);
+
+    if (user.value.trim() === DEMO.user && pass.value === DEMO.pass) {
+      signIn();
+      return;
+    }
+
+    state.attempts += 1;
+    pass.value = "";
+
+    if (state.attempts >= 3) {
+      startLock(30);
+      return;
+    }
+
+    setBanner(
+      "登录失败",
+      "账号或密码不正确，请核对后重试。还可尝试 " + (3 - state.attempts) + " 次。",
+      "danger"
+    );
+    pass.focus();
+  });
+
+  signoutBtn.addEventListener("click", logout);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "hids-ai-console-web",
+  "private": true,
+  "type": "module",
+  "description": "HIDS AI 研判平台前端（壳与登录）。无 UI 框架，原生 ESM + 静态资源。",
+  "scripts": {
+    "test": "node --test",
+    "serve": "node serve.js"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.1"
+  }
+}
