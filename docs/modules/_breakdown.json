@@ -1,0 +1,89 @@
+{
+  "source": "docs/architecture.md",
+  "modules": [
+    {
+      "name": "http-api",
+      "doc": "docs/modules/http-api.md",
+      "files": ["server.js"],
+      "components": ["路由分发", "Basic 认证", "管理员令牌校验", "SSE 流式响应", "分页参数校验"]
+    },
+    {
+      "name": "event-gateway",
+      "doc": "docs/modules/event-gateway.md",
+      "files": ["cloudwalker.js", "rpc-client.js"],
+      "components": ["事件类型表", "RPC 方法映射", "只读 RPC 白名单", "事件归一化", "多类型合并分页"]
+    },
+    {
+      "name": "evidence-tools",
+      "doc": "docs/modules/evidence-tools.md",
+      "files": ["mcp-client.js", "agent-tools.js", "api-tools.js"],
+      "components": ["MCP 客户端", "API 取证工具箱", "MCP 取证工具箱", "常规研判工具箱", "取证会话", "工具白名单"]
+    },
+    {
+      "name": "model-client",
+      "doc": "docs/modules/model-client.md",
+      "files": ["model-client.js"],
+      "components": ["对话补全", "工具调用请求", "超时与错误翻译", "环境变量装配"]
+    },
+    {
+      "name": "evidence-view",
+      "doc": "docs/modules/evidence-view.md",
+      "files": ["evidence-view.js"],
+      "components": ["字段投影", "JSON Pointer", "预聚合计数", "上下文裁剪"]
+    },
+    {
+      "name": "investigation-agent",
+      "doc": "docs/modules/investigation-agent.md",
+      "files": ["investigation-agent.js", "required-evidence.js", "triage-output.js"],
+      "components": ["三态结论映射", "工具轮次与调用上限", "独立复核", "引用校验与降级", "必查项清单", "客户报告整形"]
+    },
+    {
+      "name": "triage-pipeline",
+      "doc": "docs/modules/triage-pipeline.md",
+      "files": ["triage-monitor.js", "syslog-input.js", "syslog-case.js"],
+      "components": ["syslog 接收与解析", "指纹去重", "队列与游标", "案件目录", "结果写回"]
+    },
+    {
+      "name": "triage-rules",
+      "doc": "docs/modules/triage-rules.md",
+      "files": ["triage-rules.js"],
+      "components": ["规则集校验", "字段取值映射", "规则评估", "乐观并发保存"]
+    },
+    {
+      "name": "knowledge-base",
+      "doc": "docs/modules/knowledge-base.md",
+      "files": ["wiki-store.js", "wiki-workbench.js", "wiki-replay.js"],
+      "components": ["判据页读写", "发布前检查", "维护会话", "发布前回放", "客户经验发布"]
+    },
+    {
+      "name": "trace-board",
+      "doc": "docs/modules/trace-board.md",
+      "files": ["trace-board.js"],
+      "components": ["白板节点与边", "节点调查", "自主追查循环", "白板持久化"]
+    },
+    {
+      "name": "prompt-store",
+      "doc": "docs/modules/prompt-store.md",
+      "files": ["prompt-store.js"],
+      "components": ["提示词装载", "本地覆盖", "版本指纹", "整包安装"]
+    },
+    {
+      "name": "maintenance-service",
+      "doc": "docs/modules/maintenance-service.md",
+      "files": ["maintenance-server.js", "update-store.js", "package-policy.js"],
+      "components": ["维护端认证与角色", "跨站写请求校验", "升级包信封", "密钥生成", "策略包制作"]
+    },
+    {
+      "name": "record-store",
+      "doc": "docs/modules/record-store.md",
+      "files": ["investigation-store.js"],
+      "components": ["研判记录存取", "文件名散列", "原子写入"]
+    },
+    {
+      "name": "experience-draft",
+      "doc": "docs/modules/experience-draft.md",
+      "files": ["knowledge-store.js", "knowledge-workbench.js"],
+      "components": ["九项经验字段", "逐项追问", "审核发布", "撤回"]
+    }
+  ]
+}
