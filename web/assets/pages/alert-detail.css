@@ -18,7 +18,7 @@
 .detail-page { min-width: 0; }
 
 /* ---------- 内容区首行：返回 / 告警 ID / 复制 / 刷新 ---------- */
-.detail-tools {
+.detail-page .detail-tools {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -41,12 +41,12 @@
 .detail-page .action-note:not(:empty) { padding: 8px 0; }
 
 /* ---------- 整页加载 / 错误 / 未找到 ---------- */
-.detail-loading { display: flex; align-items: center; gap: 10px; padding: 48px 0; font-size: 12px; color: var(--text-3); }
+.detail-page .detail-loading { display: flex; align-items: center; gap: 10px; padding: 48px 0; font-size: 12px; color: var(--text-3); }
 
-.detail-error { padding: 56px 0; max-width: 60ch; }
-.detail-error h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text); }
-.detail-error p { margin: 8px 0 0; font-size: 12.5px; line-height: 1.7; color: var(--text-3); }
-.detail-error .textbtn { margin-top: 18px; }
+.detail-page .detail-error { padding: 56px 0; max-width: 60ch; }
+.detail-page .detail-error h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text); }
+.detail-page .detail-error p { margin: 8px 0 0; font-size: 12.5px; line-height: 1.7; color: var(--text-3); }
+.detail-page .detail-error .textbtn { margin-top: 18px; }
 
 .detail-page .not-found { padding: 80px 0; text-align: center; }
 .detail-page .not-found h2 { margin: 0; font-size: 16px; font-weight: 600; }
@@ -180,6 +180,8 @@
 .detail-page .claim-meta { display: flex; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
 .detail-page .claim-state { font-size: 10.5px; }
 .detail-page .claim-state.is-confirmed { color: var(--accent); }
+/* 零引用的依据是缺口、不是确认态：不染强调色，走次要文字色（与 .claim-ref 同档） */
+.detail-page .claim-state.is-plain { color: var(--text-3); }
 .detail-page .claim-ref { font-size: 10px; color: var(--text-3); }
 
 /* 缺失证据 / 所需证据 */

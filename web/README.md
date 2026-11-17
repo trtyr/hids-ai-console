@@ -297,6 +297,7 @@ getTraceBoard(target, options?)              → Promise<TraceBoard | null>   //
 - 样式文件 `web/assets/pages/alert-detail.css`，由页面模块首次 render 时插 `<link data-page-style="alert-detail">`
   （`web/index.html` 与 `assets/app.css` 不在本卡 scope）。所有选择器挂在 `.detail-page` 下，避免与别的页面串样式。
 - 颜色只用 `theme.css` 变量；间距/圆角/动效只用 `app.css` 的令牌；稿里非令牌的字号/行高照抄（见 `coding-reports/P002-T004.md` 的令牌表）。
-- 页面结构：`h1` = 告警标题；每个区块是 `<section aria-labelledby>` + `<h2>`；概况条是 `<dl>`；
+- 页面结构：页级 `h1` 由壳提供（页面标题「告警详情」），内容区告警标题是 `h2.head-title`，内容区不出第二个一级标题
+  （单测钉 `host.querySelectorAll('h1').length === 0`）；每个区块是 `<section aria-labelledby>` + `<h2>`；概况条是 `<dl>`；
   步骤/依据是 `<ol>`，缺口/证据/实体是 `<ul>`；原始事件是 `<details><summary>`（键盘原生可达）。
 - 状态不只靠颜色：等级有文字、结论有文字、必查证据状态有文字。

@@ -390,6 +390,31 @@ test('结论依据：claims 的 text 原样，引用数按 citations 的 evidenc
   assert.doesNotMatch(shown, /存疑/);
 });
 
+test('结论依据：有引用与零引用用两个状态类，零引用不借强调色（is-plain 走次要文字色）', async () => {
+  const withRefs = investigation();
+  const { host } = mount({
+    investigationBody: investigation({
+      verdict: {
+        ...withRefs.verdict,
+        claims: [
+          withRefs.verdict.claims[0],
+          { text: '外联地址不属于业务出口白名单', citations: [] },
+        ],
+      },
+    }),
+  });
+  await flush();
+
+  const states = [...host.querySelectorAll('.claim-state')];
+  assert.equal(states.length, 2);
+  assert.equal(states[0].className, 'claim-state is-confirmed');
+  assert.equal(text(states[0]), '引用 1 处证据');
+  assert.equal(states[1].className, 'claim-state is-plain');
+  assert.equal(text(states[1]), '未引用证据');
+  // 零引用不给引用编号：refs 为空时 .claim-ref 不出
+  assert.equal(host.querySelectorAll('.claim-ref').length, 1);
+});
+
 test('所需证据：五值 status 照实写，不压成「已具备/缺失」；reason 进 title', async () => {
   const { host } = mount();
   await flush();

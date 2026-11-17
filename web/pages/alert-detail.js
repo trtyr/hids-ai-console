@@ -491,7 +491,7 @@ export function mountAlertDetailPage(params = [], options = {}) {
       el(document, 'span', {}, [
         el(document, 'span', { class: 'claim-text', text: claim.text }),
         el(document, 'span', { class: 'claim-meta' }, [
-          el(document, 'span', { class: 'claim-state is-confirmed', text: claim.refs.length ? `引用 ${claim.refs.length} 处证据` : '未引用证据' }),
+          el(document, 'span', { class: `claim-state ${claim.refs.length ? 'is-confirmed' : 'is-plain'}`, text: claim.refs.length ? `引用 ${claim.refs.length} 处证据` : '未引用证据' }),
           claim.refs.length
             ? el(document, 'span', { class: 'claim-ref mono', text: claim.refs.slice(0, 4).join(' · ') + (claim.refs.length > 4 ? ' …' : '') })
             : null,
