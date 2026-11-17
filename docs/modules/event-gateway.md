@@ -140,9 +140,9 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 | 请求体 | `{"jsonrpc":"2.0","method":…,"params":…,"id":<自增序号>}`，序号从 1 开始 | `rpc-client.js:20` |
 | 超时 | 15 秒（`AbortSignal.timeout(15000)`） | `rpc-client.js:21` |
 
-实测（命令见第 16 节）：base 取 `https://cw.example/base` 时，实际请求是
-`https://cw.example/rpc?method=HoneypotService.List`，Cookie 为 `API-Token=abcdef`，
-连续两次调用的 `id` 分别是 1 和 2。
+实测：base 取 `https://cw.example/base` 时，实际请求是
+`https://cw.example/rpc?method=HoneypotService.List`，Cookie 为 `API-Token=abcdef`（第 16 节命令 7）；
+同一个客户端连续两次调用的 `id` 分别是 1 和 2（命令 11）。
 
 ## 6 事件归一化
 
@@ -152,7 +152,7 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 
 **前置条件**：事件 ID 必须是正的安全整数。取 `row.id ?? row.event_id`（`cloudwalker.js:32`）；
 不是安全整数或不大于 0 就抛 `牧云 <type> 返回无效事件 ID`（`cloudwalker.js:33`）。
-实测 `id: 0` 与 `id: 1.5` 都抛（复跑命令见第 16 节）。
+实测 `id: 0` 与 `id: 1.5` 都抛（第 16 节命令 10）。
 
 **输出**：固定的一组字段（`cloudwalker.js:45-57`），11 类事件共用同一形状：
 
@@ -191,17 +191,20 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 取第一个非空的候选，都空则填 `待核查`（`cloudwalker.js:17`）。
 
 **时间解析**（`cloudwalker.js:18-22`）：先按数值处理——大于 0 且小于 `1e12` 当作秒（乘 1000），否则当作毫秒；
-数值走不通就交给 `new Date(value)` 解析字符串；两种都失败返回 `null`。实测：`detected_at: 1767225600`
-→ `2026-01-01T00:00:00.000Z`；`created_at: "not-a-date"` → `null`。
+数值走不通就交给 `new Date(value)` 解析字符串；两种都失败返回 `null`（第 16 节命令 10）。
+实测：`detected_at: 1767225600` → `2026-01-01T00:00:00.000Z`；`created_at: "not-a-date"` → `null`，
+此时 `time` 字段是 `—`（`cloudwalker.js:47`）。
 
 **一个容易看错的取数口径**（`cloudwalker.js:16-17`）：候选值先过 `string()`，数字会被转成字符串，
 于是数字 `0` 变成字符串 `'0'`，`find(Boolean)` 判定它**非空**——`0` 会被选中，不是「没有值」。
 `hostId` 是另一套写法（`Number(row.host_id || host.id) || null`），那里 `0` 被当成没有值；
-实测 `host_id: 0` 且 `host.id: 42` 时 `hostId` 是 `42`。
+实测 `host_id: 0` 且 `host.id: 42` 时 `hostId` 是 `42`，而 `source_ip: 0` 得到的 `source` 是字符串 `"0"`
+而不是 `待核查`（两处同一命令，第 16 节命令 10）。
 
 ### 6.3 详情证据
 
-`detailEvidence(detail)`（`cloudwalker.js:60-74`）从详情里挑 8 个字段做展示行：
+`detailEvidence(detail)`（`cloudwalker.js:60-74`）从详情里挑 8 个字段做展示行
+（`cmdline` 与 `shell_cmdline` 共用「命令行」标签，所以下表是 7 行 8 个字段）：
 
 | 标签 | 字段 | 证据 |
 | --- | --- | --- |
@@ -246,7 +249,10 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 - **空页异常**：某类返回 0 行但 `total > 0`，记 `事件列表返回空页，但总数非零` 并把该类标成失败（`cloudwalker.js:108`）。
 - **合并循环**：每轮从各来源当前条目里挑最新的一个追加到结果，直到攒够 `offset + count` 条
   （`cloudwalker.js:116-117`、`cloudwalker.js:135-139`）。挑最新的口径是 `compareAlerts`（`cloudwalker.js:24-26`）：
-  `createdAt` 降序，相同则 `id` 升序。`createdAt` 为 `null` 的条目排在有时间的条目之后（实测，命令见第 16 节）。
+  `createdAt` 降序；`createdAt` 相同则把 `id` 当作**字符串**比（`cloudwalker.js:25`），
+  所以 `abnormal_login:10` 排在 `abnormal_login:9` 前面，不是数值升序；
+  `createdAt` 为 `null` 的条目排在有时间的条目之后（`(b.createdAt || '')` 把 null 当空串；`localeCompare` 里空串比非空串小）。
+  两种次序实测见第 16 节命令 12。
 - **补拉**：某来源取完但 `fetched < total` 时，按 `offset = fetched` 再拉一批（`cloudwalker.js:118-120`）。
   补拉失败则标失败并记错误（`cloudwalker.js:123`）；补拉返回空页且 `fetched < total` 则记
   `事件列表提前返回空页，分页可能不完整` 并标失败（`cloudwalker.js:127-129`）。
@@ -263,8 +269,8 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 | `query` | 钳制后的 `{ count, offset }` | `cloudwalker.js:144` |
 | `note` | 固定文案，说明不同请求之间的页边界可能移动 | `cloudwalker.js:145` |
 
-实测（命令见第 16 节）：11 类各 1 条时 `total` 为 3；某类抛错时 `partial` 为 true、`errors` 记下错误、
-该类型不进 `totals`、`total` 只算其余 10 类。
+实测：11 类各 1 条、`count: 5` 时 `total` 为 11、`totals` 有 11 个键、`alerts` 只回 5 条（第 16 节命令 14）；
+某类抛错时 `partial` 为 true、`errors` 记下错误、该类型不进 `totals`、`total` 只算其余 10 类（命令 4）。
 
 ## 8 单条详情与连通性探测
 
@@ -284,9 +290,11 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
    为空时说「事件详情未提供可展示的行为字段。」（`cloudwalker.js:160-161`）。
 7. 返回 `{ alert, detail }`，其中 `detail` 是牧云原始详情（`cloudwalker.js:162`）。
 
-实测（命令见第 16 节）：请求蜜罐 11 号时实际调用 `HoneypotService.GetEvent {"id":11}`；
-详情事件号 99 与请求的 11 不符时报 `牧云详情事件 ID 与请求不符`；详情里没有事件号时报
-`牧云详情缺少事件 ID，无法确认事件身份`。
+实测（第 16 节命令 15）：请求蜜罐 11 号时实际调用 `HoneypotService.GetEvent {"id":11}`，
+详情里的 `cmdline` / `uname` 覆盖了列表缺省文案；详情没有任何可展示字段时 `detail` 是
+`事件详情未提供可展示的行为字段。`，`evidence` 只剩列表那一行。
+身份校验的两种报错见命令 6：详情事件号 99 与请求的 11 不符时报 `牧云详情事件 ID 与请求不符`；
+详情里没有事件号时报 `牧云详情缺少事件 ID，无法确认事件身份`。
 
 ### 8.2 `status()`
 
@@ -330,7 +338,7 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 | `R-EVENT-GATEWAY-02` | 11 类事件的原始行归一化后字段集合一致 | `cloudwalker.js:45-57` |
 | `R-EVENT-GATEWAY-03` | 事件 ID 不是正的安全整数时抛错，不产出半条告警 | `cloudwalker.js:32-33` |
 | `R-EVENT-GATEWAY-04` | 详情返回的事件 ID 必须与请求一致，否则抛错 | `cloudwalker.js:152-154` |
-| `R-EVENT-GATEWAY-05` | 合并结果按 `createdAt` 降序，同一时间按 `id` 升序 | `cloudwalker.js:24-26`、`cloudwalker.js:137-139` |
+| `R-EVENT-GATEWAY-05` | 合并结果按 `createdAt` 降序；同一时间的条目按 `id` 字符串比升序（`…:10` 在 `…:9` 之前），`createdAt` 为 `null` 的排在最后 | `cloudwalker.js:24-26`、`cloudwalker.js:137-139` |
 | `R-EVENT-GATEWAY-06` | 单类事件查询失败不阻断其余类型；全部类型失败才抛错 | `cloudwalker.js:100`、`cloudwalker.js:110`、`cloudwalker.js:112-114` |
 | `R-EVENT-GATEWAY-07` | `count` 钳制在 1–50、`offset` 钳制在 ≥ 0，返回值里的 `query` 是钳制后的值 | `cloudwalker.js:85-86`、`cloudwalker.js:144` |
 | `R-EVENT-GATEWAY-08` | 详情证据里的单条文本不超过 500 字符 | `cloudwalker.js:69` |
@@ -372,7 +380,7 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 | 首轮并发度 | 11 个并发请求 | `cloudwalker.js:100` |
 | 单类单次最多取回的条数 | 20–50（`batchSize`） | `cloudwalker.js:87`、`cloudwalker.js:91` |
 | 单次返回的告警条数 | ≤ 50 | `cloudwalker.js:85` |
-| RPC 单次超时 | 15 秒 | `rpc-client.js:21`（本地实测约 15003 ms，命令见第 16 节命令 9） |
+| RPC 单次超时 | 15 秒 | `rpc-client.js:21`（本机实测 15005 ms，随负载浮动，命令见第 16 节命令 9） |
 | 详情证据单条文本长度 | ≤ 500 字符 | `cloudwalker.js:69` |
 
 上表全是代码常量，**不是实测值**。本机没有牧云凭据，延迟与吞吐未测量（第 15 节缺口 5）。
@@ -408,6 +416,9 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 - `time` 固定按 Asia/Shanghai 渲染（`cloudwalker.js:47`），与 `createdAt` 的 UTC 串并存；代码没写为什么不跟随调用方时区。
 - 排序用 `localeCompare` 比时间串（`cloudwalker.js:25`）。`createdAt` 要么是 `parseTime` 产出的 ISO 串，要么是 `null`
   （`cloudwalker.js:21`、`cloudwalker.js:44`），所以被比的两边要么都是 ISO 串，要么一边是空串。
+- 同一时间戳的两条事件，次序按 `id` **字符串**比而不是数值比（`cloudwalker.js:25`）：`abnormal_login:10`
+  排在 `abnormal_login:9` 前面（第 16 节命令 12）。事件号跨过 10 位时，这个次序跟「新事件在前」无关——
+  `id` 里只有类型键与事件号，不包含时间信息。
 
 ## 15 缺口
 
@@ -426,7 +437,9 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 
 ## 16 复跑命令
 
-以下命令在本仓根目录跑，全部只读、不发外部请求。`node --input-type=module -e` 需要 Node.js 20 及以上。
+以下命令在本仓根目录跑，全在本机执行——命令 9 只在本机 127.0.0.1 上起一个只收不回的空服务，
+不对牧云发任何请求；其余命令用注入的假 `rpc` / 假 `fetcher`。本页命令在 Node.js v26.13.0 上逐条跑通
+（`node --input-type=module -e` 需要带 ESM 支持的 Node）。
 
 **命令 1——类型表与服务名，以及 11 个服务名是否都过白名单**：
 
@@ -566,7 +579,98 @@ srv.close();
 '
 ```
 
-输出：`TimeoutError | The operation was aborted due to timeout | elapsed_ms: 15003` 左右（毫秒数随机器负载浮动）。
+输出：`TimeoutError | The operation was aborted due to timeout | elapsed_ms: 15005` 左右（毫秒数随机器负载浮动）。
+
+**命令 10——事件 ID 校验、时间解析、`0` 的两套口径**：
+
+```bash
+node --input-type=module -e '
+import { normalizeAlert } from "./cloudwalker.js";
+for (const bad of [0, 1.5]) { try { normalizeAlert("webshell", { id: bad }); console.log("no throw"); } catch (e) { console.log("id=" + bad, e.message); } }
+console.log(normalizeAlert("webshell", { id: 1, detected_at: 1767225600 }).createdAt);
+console.log(normalizeAlert("webshell", { id: 1, created_at: "not-a-date" }).createdAt);
+console.log(normalizeAlert("webshell", { id: 1, host_id: 0, host: { id: 42 } }).hostId);
+console.log(JSON.stringify(normalizeAlert("webshell", { id: 1, source_ip: 0 }).source));
+'
+```
+
+输出（依次）：`id=0 牧云 webshell 返回无效事件 ID`、`id=1.5 牧云 webshell 返回无效事件 ID`、
+`2026-01-01T00:00:00.000Z`、`null`、`42`、`"0"`。
+
+**命令 11——JSON-RPC 序号自增**：
+
+```bash
+node --input-type=module -e '
+import { RpcClient } from "./rpc-client.js";
+const ids = [];
+const c = new RpcClient("https://cw.example", "abcdef", async (u, o) => { ids.push(JSON.parse(o.body).id); return { ok: true, status: 200, json: async () => ({ result: {} }) }; });
+await c.call("HoneypotService.List"); await c.call("HoneypotService.List");
+console.log(ids.join(","));
+'
+```
+
+输出：`1,2`。（被白名单拦下的调用在自增之前就抛了，不占号——命令 7 里的第二次调用没把序号推到 2。）
+
+**命令 12——同一时间戳的 `id` 次序与 `createdAt` 为 `null` 的次序**：
+
+```bash
+node --input-type=module -e '
+import { CloudwalkerGateway } from "./cloudwalker.js";
+const t = "2026-01-01T00:00:00Z";
+const gw = new CloudwalkerGateway({ call: async m => m.startsWith("Abnormal") ? { events: [{id:9, created_at:t},{id:10, created_at:t}], total: 2 } : { events: [], total: 0 } });
+console.log((await gw.alerts({ count: 2 })).alerts.map(a => a.id).join(" "));
+const gw2 = new CloudwalkerGateway({ call: async m => m.startsWith("Abnormal") ? { events: [{id:2, created_at:"not-a-date"}], total: 1 } : m.startsWith("Webshell") ? { events: [{id:1, created_at:t}], total: 1 } : { events: [], total: 0 } });
+console.log((await gw2.alerts({ count: 2 })).alerts.map(a => a.id).join(" "));
+'
+```
+
+输出两行：`abnormal_login:10 abnormal_login:9`（同时间戳，字符串比把 `10` 放前面）与
+`webshell:1 abnormal_login:2`（`createdAt` 为 `null` 的排后面）。
+
+**命令 13——HTTP 500 且响应体带 error 时报哪个**：
+
+```bash
+node --input-type=module -e '
+import { RpcClient } from "./rpc-client.js";
+const mk = json => new RpcClient("https://cw.example", "abcdef", async () => ({ ok: false, status: 500, json }));
+try { await mk(async () => ({ error: { code: -32000, message: "内部错误" } })).call("HoneypotService.List"); } catch (e) { console.log(e.message); }
+try { await mk(async () => ({})).call("HoneypotService.List"); } catch (e) { console.log(e.message); }
+'
+```
+
+输出：`牧云 /rpc -32000: 内部错误` 与 `牧云 /rpc HTTP 500`——带 error 时报 error 文本。
+
+**命令 14——11 类各 1 条时 `total` 与 `alerts` 的关系**：
+
+```bash
+node --input-type=module -e '
+import { CloudwalkerGateway } from "./cloudwalker.js";
+const gw = new CloudwalkerGateway({ call: async () => ({ events: [{id:1, created_at:"2026-01-01T00:00:00Z"}], total: 1 }) });
+const r = await gw.alerts({ count: 5 });
+console.log("alerts=" + r.alerts.length, "total=" + r.total, "totals=" + Object.keys(r.totals).length);
+'
+```
+
+输出：`alerts=5 total=11 totals=11`——`total` 是 11 类总数之和，不是这一页的条数。
+
+**命令 15——`alert(type, id)` 的调用形状与文案覆盖**：
+
+```bash
+node --input-type=module -e '
+import { CloudwalkerGateway } from "./cloudwalker.js";
+const calls = [];
+const gw = new CloudwalkerGateway({ call: async (m, p) => { calls.push(m + " " + JSON.stringify(p)); return { event: { event_id: 11, cmdline: "whoami", uname: "root" } }; } });
+const r = await gw.alert("honeypot", 11);
+console.log(calls[0]);
+console.log(r.alert.command, r.alert.account, "|", r.alert.detail);
+const empty = await new CloudwalkerGateway({ call: async () => ({ event: { event_id: 5 } }) }).alert("malware", 5);
+console.log(empty.alert.detail, "|", JSON.stringify(empty.alert.evidence));
+'
+```
+
+输出三行：`HoneypotService.GetEvent {"id":11}`、
+`whoami root | 已读取牧云事件详情；证据仅为原始字段，尚未形成 AI 结论。`、
+`事件详情未提供可展示的行为字段。 | ["牧云 恶意文件 事件 #5"]`。
 
 ## 17 指针
 
