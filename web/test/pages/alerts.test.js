@@ -382,6 +382,47 @@ test('抽屉：研判失败且没有结论时，结论区写「研判失败」�
   assert.match(steps, /正在读取牧云工具与提示词/);
 });
 
+test('抽屉「缺失证据」：done 态有值就显示（文案取接口数组，逐项不丢）', async () => {
+  const { host } = mount({
+    alertsBody: {
+      alerts: [alert({
+        triage: {
+          status: 'done', verdict_label: '存疑', verified_facts: 2, evidence_sources: 1,
+          missing_evidence: ['主机登录日志', '进程树'],
+        },
+      })],
+      total: 1,
+    },
+  });
+  await flush();
+
+  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
+  const missing = host.querySelector('[data-role="drawer-missing"]');
+  assert.equal(missing.hidden, false, 'done 且有 missing_evidence 时不该藏');
+  assert.equal(text(missing), '缺失证据：主机登录日志、进程树');
+  assert.ok(missing.querySelector('b'), '稿的 .missing 里 b 单独上警示色（alerts.html:645）');
+});
+
+test('抽屉「缺失证据」：未研判与空数组都 hidden（不画空行）', async () => {
+  const { host } = mount();
+  await flush();
+  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
+  assert.equal(host.querySelector('[data-role="drawer-missing"]').hidden, true);
+  assert.equal(text(host.querySelector('[data-role="drawer-missing"]')), '');
+});
+
+test('抽屉「缺失证据」：done 但数组为空时 hidden', async () => {
+  const { host } = mount({
+    alertsBody: {
+      alerts: [alert({ triage: { status: 'done', verdict_label: '误报', missing_evidence: [] } })],
+      total: 1,
+    },
+  });
+  await flush();
+  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
+  assert.equal(host.querySelector('[data-role="drawer-missing"]').hidden, true);
+});
+
 test('抽屉底部按钮：未研判→加入队列（POST），失败→重试，完成→重新研判', async () => {
   const { host, calls } = mount({
     handler: (url, init) => (url.startsWith('/api/agent/triage/') && init?.method === 'POST'

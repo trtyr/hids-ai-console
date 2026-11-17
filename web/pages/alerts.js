@@ -9,8 +9,11 @@
 //   2) 等级排序、时间排序按钮 —— 接口没有 sort；时间倒序是接口自己的合并顺序（cloudwalker.js:143），只保留静态箭头。
 //   3) 队列条「查看 N 条失败」—— 需要按研判状态过滤，同样没有参数。
 //   4) 抽屉「场景」行 —— 接口只有 scenario（= 事件类型中文名），与「事件类型」重复，不单列。
-//   5) 抽屉「缺失证据」—— TriageCase 文档与实现都没有这个字段（openapi.yaml:800-816）。
-//   6) 证据来源按分类拆条 —— 接口只有 verified_facts / evidence_sources 两个数量。
+//   5) 证据来源按分类拆条 —— 接口只有 verified_facts / evidence_sources 两个数量。
+//
+// 「缺失证据」不在上面：TriageCase schema 没列这个键（openapi.yaml:803-816，additionalProperties: true），
+// 但实现返回体里有（triage-monitor.js:108；done 态由 :385 从 verdict 填值），稿也画了（alerts.html:1139）——
+// 按实现渲染，见 paintDrawer。
 //
 // 「共 N 条 · 更新时间 · 刷新」在稿里位于顶栏，但顶栏属壳（web/src/views/shell.js，本卡 forbidden），
 // 所以落在内容区首行——只挪位置，不动壳。
@@ -148,6 +151,7 @@ const TEMPLATE = `
       <span class="block-label">研判结论</span>
       <p class="verdict-big" data-role="drawer-verdict">—</p>
       <p class="report" data-role="drawer-report">—</p>
+      <p class="missing" data-role="drawer-missing" hidden></p>
     </section>
 
     <section class="drawer-block">
@@ -498,6 +502,19 @@ export function mountAlertsPage(options = {}) {
     $('verdict-block').dataset.tone = verdict === '真实威胁' ? 'danger' : verdict === '存疑' ? 'warn' : 'muted';
     $('drawer-report').textContent = alert.triage?.report
       || (verdict ? '' : '该告警尚未产生研判结论。');
+
+    // 缺失证据：TriageCase schema 没列该键（openapi.yaml:803-816，additionalProperties: true），
+    // 实现里 status() 返回体带它（triage-monitor.js:108），done 态由 verdict 填值（:385）。
+    // 稿只在 DOM 里放了空 <p>、没写文案（alerts.html:1139），文案按最近邻取「缺失证据：A、B」。
+    const missing = Array.isArray(alert.triage?.missing_evidence)
+      ? alert.triage.missing_evidence.filter(item => typeof item === 'string' && item.trim())
+      : [];
+    const missingEl = $('drawer-missing');
+    missingEl.hidden = missing.length === 0;
+    missingEl.replaceChildren(...(missing.length === 0 ? [] : [
+      el(document, 'b', { text: '缺失证据' }),
+      el(document, 'span', { text: `：${missing.join('、')}` }),
+    ]));
 
     $('drawer-asset').textContent = alert.asset ?? '—';
     $('drawer-ip').textContent = alert.assetIp || '—';
