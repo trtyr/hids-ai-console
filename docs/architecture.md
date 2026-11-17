@@ -1,7 +1,7 @@
 # HIDS 智能研判平台 · 后端架构
 
 这份文档写给第一次进这个仓的人。它回答三个问题：这套后端在干什么、由哪些件组成、每个件落在哪个文件。
-每条结论都标了 `文件:行号`，行号对应当前提交 `a16e0d5`；改动代码后请重新核对。
+关键结论都标了 `文件:行号`，行号对应当前提交 `a16e0d5`；改动代码后请重新核对。
 
 - 页面地图见 [docs/index.md](index.md)
 - 模块级细节见 [docs/modules/](modules/)，清单来源见 [docs/modules/_breakdown.json](modules/_breakdown.json)
@@ -85,9 +85,9 @@
 
 ## 4. 模块分层与依赖
 
-按依赖方向自下而上分五层。下层不 import 上层，上层可以随意组装下层。
+按依赖方向分成下面七组。下层不 import 上层，上层可以组装下层；「存储」是并列的另一支——它不被编排层依赖，也不依赖编排层。
 
-| 层 | 文件 | 职责 |
+| 组 | 文件 | 职责 |
 | --- | --- | --- |
 | 传输 | `rpc-client.js`、`mcp-client.js`、`model-client.js` | 跟牧云和模型服务说话。三者各自封装超时、错误翻译与响应校验，没有本地依赖 |
 | 事件网关 | `cloudwalker.js` | 11 类事件的类型表、RPC 方法名映射、原始行到统一告警结构的归一化 |
@@ -132,7 +132,7 @@
 - **必查项清单**（`investigation-agent.js:258-260`）：由 `required-evidence.js` 按告警类型生成最低取证清单并执行，缺项进 `missing_evidence`。
 - **客户报告契约**（`investigation-agent.js:56`、`investigation-agent.js:357`）：额外要求模型输出 ≤300 字的 `report` 与 `recommended_actions`。
 - **通用 SOP**（`investigation-agent.js:355`）与**场景 SOP**（`prompts.sop[card.id]`）。
-- **规则预筛**：`server.js:115-127` 只在 `mode === 'triage'` 时先跑 `monitor.ruleEngine.evaluate`，把结果作为 `rule_evaluation` 附加到结论上。
+- **规则预筛**：`server.js:117-129` 只在 `mode === 'triage'` 时先跑 `monitor.ruleEngine.evaluate`，把结果作为 `rule_evaluation` 附加到结论上。
 
 深度研判走的是「单告警深查」提示词（`investigation-agent.js:354`），不带判据目录、不带必查项、不生成客户报告。
 
@@ -188,7 +188,7 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 ### 6.6 必查项不是可选的
 
-常规研判还有一层「必查项」清单（`required-evidence.js`）。清单按告警类型生成（`required-evidence.js:36-89`），例如同主机关联事件、同主机命令会话、相关来源的网络连接、同来源同类告警。每项都有 `scope` 说明（多为「当前返回页；不能代表全部历史」）和三种以上状态：`records_returned`、`empty_page`、`source_unavailable`、`missing_identifier`、`query_failed`（`required-evidence.js:92-129`）。
+常规研判还有一层「必查项」清单（`required-evidence.js`）。清单按告警类型生成（`required-evidence.js:36-89`），例如同主机关联事件、同主机命令会话、相关来源的网络连接、同来源同类告警。每项都有 `scope` 说明（多为「当前返回页；不能代表全部历史」）和五种状态：`records_returned`、`empty_page`、`source_unavailable`、`missing_identifier`、`query_failed`（`required-evidence.js:92-129`）。
 
 这五种状态刻意不互相混同——「查了没查到」和「没有这个数据源」和「查询失败」是三件事。空页与失败都会进 `missing_evidence`（`required-evidence.js:131-139`），并以「必查项：…」的措辞追加到客户报告尾部（`required-evidence.js:154-165`）。
 
@@ -253,7 +253,7 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 ```
 
-此后运行态路径一律是 `path.join(root, 'backend', '.data', ...)`。也就是说，**运行态数据落在「仓库目录的上一级」下的 `backend/.data/`，而不是仓库内的 `.data/`**。在当前工作树里它解析到：
+此后 `server.js` 里定义的运行态路径一律是 `path.join(root, 'backend', '.data', ...)`。也就是说，**运行态数据落在「仓库目录的上一级」下的 `backend/.data/`，而不是仓库内的 `.data/`**。在当前工作树里它解析到：
 
 ```
 /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/backend/.data/
@@ -267,7 +267,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 | 路径 | 存什么 | 谁写 | 证据 |
 | --- | --- | --- | --- |
-| `<root>/backend/.data/investigations/` | 研判记录，每个告警每种模式一条 | `InvestigationStore` | `server.js:38` |
+| `<root>/backend/.data/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:38` |
 | `<root>/backend/.data/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:39` |
 | `<root>/backend/.data/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:42`、`triage-monitor.js:69-71` |
 | `<root>/backend/.data/cases/` | syslog 案件目录 | `writeSyslogCase()` | `server.js:46`、`syslog-case.js:64-87` |
@@ -304,13 +304,13 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 ## 9. 访问控制边界
 
-这套后端有四层边界，一层比一层窄。
+这套后端的访问边界按由外到内分几道，越往里越窄。
 
 ### 9.1 业务 API 的 Basic 认证
 
 `server.js:58-65` 的 `hasAccess()` 逻辑是：**只有当 `HIDS_BASIC_AUTH_PASSWORD` 配了时才校验**；没配密码就放行（`server.js:59` 直接 `return true`）。校验时把请求头里的 Base64 解出来，与 `user:password` 做 `timingSafeEqual`（长度不等直接判否）。失败时返回纯文本 401「需要登录后访问」，并带 `WWW-Authenticate` 头（`server.js:66-70`）。
 
-默认监听 `127.0.0.1`（`server.js:25`），所以即便没开认证，接口也不在公网上；开认证是给「前端反向代理到后端」这种部署形态用的。
+默认监听 `127.0.0.1`（`server.js:25`），所以在默认配置下接口只在回环地址可达；开认证是给「前端反向代理到后端」这种部署形态用的。
 
 ### 9.2 管理员令牌
 
@@ -442,14 +442,29 @@ node --test triage-rules.test.js   # 只跑一个文件
 
 ### 11.2 手工冒烟
 
-不配任何凭据启动业务 API（`node server.js`），只有两个接口能在无外部依赖时给出稳定结果：
+不配任何凭据启动业务 API，有一批只读接口仍能给出稳定结果。**本卡实测**（命令 `HIDS_PORT=18099 node server.js`，另起端口是因为本机 8080 已被别的进程占用）：
 
 ```bash
-curl -s http://127.0.0.1:8080/api/session   # {"authenticated":true}
-curl -s http://127.0.0.1:8080/api/status    # {"configured":false,...,"reason":"请设置牧云地址和 API Token"}
+$ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/prompts /api/triage/rules "/api/wiki/pages?q=HP" /api/alerts /api/agent/triage/status; do
+    curl -s -o /tmp/body.json -w "%{http_code} " "http://127.0.0.1:18099$p"; head -c 120 /tmp/body.json; echo
+  done
+/api/session             200 {"authenticated":true}
+/api/status              200 {"configured":false,"connected":false,"reason":"请设置牧云地址和 API Token"}
+/api/agent/status        200 {"configured":false,"model":null,"missing":["LLM_BASE_URL","LLM_API_KEY","LLM_MODEL"],"prompt_version":"merged-three-state-2026-11-06+deabe4abb842db81"}
+/api/updates             200 {"revision":"deabe4abb842db81","current":{"version":"merged-three-state-2026-11-06",...
+/api/agent/prompts       200 {"version":"merged-three-state-2026-11-06","revision":"deabe4abb842db81","sections":[{"id":"triage",...
+/api/triage/rules        200 {"config":{"schema_version":1,"enabled":false,"rules":[{"id":"approved-network-egress-001",...
+/api/wiki/pages?q=HP     200 {"pages":[{"path":"honeypot/HP-01.md","id":"HP-01","title":"ENISA《Honeypots study》...
+/api/alerts              503 {"error":"未配置 CLOUDWALKER_URL 和 CLOUDWALKER_API_TOKEN"}
+/api/agent/triage/status 503 {"error":"自动研判尚未配置"}
 ```
 
-`/api/status` 不返回 503，而是用 `configured` 与 `connected` 两个字段区分「没配」和「连不上」（`server.js:136-139`）。其余业务接口（告警、研判、案件、规则写、Wiki 写）在缺配置或缺令牌时返回 503。
+即：**读本地状态与本地文件的接口**（会话、状态、提示词、升级包概览、规则集、判据目录）不依赖牧云与模型，返回 200；
+**需要牧云或模型才能工作的接口**（告警列表、自动研判状态）返回 503，并写明缺什么。
+
+`/api/status` 不返回 503，而是用 `configured` 与 `connected` 两个字段区分「没配」和「连不上」（`server.js:136-139`）。`/api/agent/status` 同理，会列出缺哪个环境变量（`server.js:141-144`）。
+
+启动后若 `HIDS_TRIAGE_INPUT_MODE` 为 `syslog`，还会打印一行 `牧云 syslog 接收：udp://...`（`server.js:369-370`）；未配牧云时这行不出现，因为自动研判器整个不启用。
 
 ### 11.3 接口契约
 
@@ -457,7 +472,8 @@ curl -s http://127.0.0.1:8080/api/status    # {"configured":false,...,"reason":"
 
 ## 12. 模块清单
 
-下表与 [docs/modules/_breakdown.json](modules/_breakdown.json) 一一对应；模块页的落点是 `docs/modules/<name>.md`。这些页面由模块卡逐篇写，本页只给出归属与职责。
+下表与 [docs/modules/_breakdown.json](modules/_breakdown.json) 一一对应；模块页的落点是 `docs/modules/<name>.md`。
+**写这份架构篇时这 14 个页面还不存在**——它们由下游的模块卡逐篇写，本页只给出归属与职责。清单里的 `files` 字段已逐个验过存在（见 [docs/_meta/gaps.md](_meta/gaps.md) 第五节）。
 
 | 模块 | 页面 | 实现文件 | 覆盖构件 | 职责一句话 |
 | --- | --- | --- | --- | --- |
