@@ -32,7 +32,7 @@ updated: 2026-11-17
 
 **不做什么**
 
-- 不承载业务研判。本模块只接受 `/api/maintenance/` 前缀的路径，其余一律 404（`maintenance-server.js:58`）。
+- 不承载业务研判。本模块只接受 `/api/maintenance/` 前缀的路径，其余路径一律 404（`maintenance-server.js:58`）；比这一行更早的请求地址解析失败走 400（`maintenance-server.js:57`）。
 - 不提供业务侧的提示词上传。本模块的上传入口只有 `POST /api/maintenance/packages` 一处（`maintenance-server.js:121-128`）。
 - 不自己存提示词。升级包安装转交给提示词存储，本模块只把章节与发布记录递过去（`update-store.js:162`）。
 - 不返回 HTML。响应统一由 `json()` 助手写成 JSON——`grep -n "res.end" maintenance-server.js` 只返回第 9 行这一处（`maintenance-server.js:9`）。
@@ -266,23 +266,27 @@ curl -s -c "$OUT/jar" -X POST -H 'x-hids-maintenance: 1' \
 
 实测输出：`200 {"user":"ops","role":"updater"}`，同时下发名为 `hids_maintenance_session` 的 Cookie（`maintenance-server.js:88-90`）。
 
-上传：
+上传（把响应里的 `id` 接进 `$ID`，下面用它）：
 
 ```bash
-curl -s -b "$OUT/jar" -X POST -H 'x-hids-maintenance: 1' \
+ID=$(curl -s -b "$OUT/jar" -X POST -H 'x-hids-maintenance: 1' \
   -H 'Content-Type: application/octet-stream' \
   -H "x-package-filename: 26.11.008.hids-policy" \
   --data-binary "@$OUT/26.11.008.hids-policy" \
-  http://127.0.0.1:18099/api/maintenance/packages
+  http://127.0.0.1:18099/api/maintenance/packages \
+  | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).id))")
+echo "$ID"
+sha256sum "$OUT/26.11.008.hids-policy"
 ```
 
-实测输出：
+实测输出（两行是同一个值）：
 
 ```
-201 {"id":"afe568fd981b26031501b1bcddec19c0c9e61150d99e612df365748e5566bd54","version":"26.11.008"}
+a1f221fe313898f44c127c67b1b89f3f6f1a6e20d54272ac6e4b4bd87db45551
+a1f221fe313898f44c127c67b1b89f3f6f1a6e20d54272ac6e4b4bd87db45551  /tmp/.../26.11.008.hids-policy
 ```
 
-`id` 就是包原始字节的 SHA-256（`update-store.js:117`）。此时包已落盘，但提示词还没换——上传与应用是分开的两步。
+`id` 就是包原始字节的 SHA-256（`update-store.js:117`），可以直接用 `sha256sum` 复核。它每次重做包都会变——信封里的 `iv` 是随机数（`update-store.js:30`），所以本节不写死 id，一律用 `$ID`。上传响应体本身是 `201 {"id":"<64 位十六进制>","version":"26.11.008"}`（`maintenance-server.js:127`）。此时包已落盘，但提示词还没换——上传与应用是分开的两步。
 
 确认替换：
 
@@ -290,7 +294,7 @@ curl -s -b "$OUT/jar" -X POST -H 'x-hids-maintenance: 1' \
 REV=$(curl -s -b "$OUT/jar" http://127.0.0.1:18099/api/maintenance/overview \
   | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).revision))")
 curl -s -b "$OUT/jar" -X POST -H 'x-hids-maintenance: 1' -H "If-Match: $REV" \
-  http://127.0.0.1:18099/api/maintenance/packages/afe568fd981b26031501b1bcddec19c0c9e61150d99e612df365748e5566bd54/apply
+  http://127.0.0.1:18099/api/maintenance/packages/$ID/apply
 ```
 
 实测输出：
@@ -387,8 +391,8 @@ HIDS_MAINTENANCE_PORT=18097 node maintenance-server.js --preview
 
 - 读正文超限时直接抛 413，读正文的循环随即中止，不会把超限的正文读完（`maintenance-server.js:21-25`）。
 - 预览模式返回的包列表是写死的常量，不读上传目录（`maintenance-server.js:112-118`）。
-- 概览里的 `writable` 由三件事同时决定：不在预览模式、角色是 `updater`、已配置好密钥（`maintenance-server.js:119`）。
-- 包列表每多一个包，概览就多一次详情计算，而每次详情计算都会重取一次提示词快照（`update-store.js:142`、`update-store.js:152`、`update-store.js:87`）。包多时这项开销随包数线性增长。
+- 概览里的 `writable` 由三件事同时决定：不在预览模式、角色是 `updater`、密钥/验签公钥/目标标识三样都配齐（`maintenance-server.js:119`、`update-store.js:70`）。
+- 包列表每多一个包，概览就多一次详情计算（`update-store.js:152`）。详情计算只在包**还没应用过**时重跑一遍载荷校验（`update-store.js:142`），那次校验会重取一次提示词快照（`update-store.js:87`）；已应用的包跳过校验，不取快照。包多时这项开销随包数增长。
 
 ## 8 指针
 
