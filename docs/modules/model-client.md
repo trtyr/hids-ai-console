@@ -152,8 +152,10 @@ updated: 2026-11-17
 **超时怎么做**：每次请求挂一个 `AbortSignal.timeout(实例超时毫秒数)` 产生的信号（🟢 `model-client.js:22`）。
 超时时长来自构造参数 `timeoutMs`，不传时是 `90000` 毫秒（🟢 `model-client.js:2`、`model-client.js:10`）。
 
-**超时会真的中断**：起一个不响应的本地 HTTP 服务、用真实 `fetch` 请求，超时毫秒数设 800，约 806 毫秒后抛出
-`DOMException`，`name` 为 `TimeoutError`，`message` 为 `The operation was aborted due to timeout`（🟢 实测，见第 11 节命令 G）。
+**超时会真的中断**：起一个不响应的本地 HTTP 服务、用真实 `fetch` 请求，超时毫秒数设 800，请求在超时点被中断。
+这个断言的可复跑证据是命令 G 里的窗口判定（实测耗时落在 800–2000 毫秒之间），而不是一个固定数字——
+本卡实测是 806 毫秒，这个值随机器与负载浮动。抛的是 `DOMException`，`name` 为 `TimeoutError`，
+`message` 为 `The operation was aborted due to timeout`（🟢 实测，见第 11 节命令 G）。
 
 **错误翻译的范围**：模块只翻译「已经拿到 HTTP 响应」之后的问题。翻译规则有三条（🟢 `model-client.js:25-26`、`model-client.js:28`）：
 
@@ -184,17 +186,24 @@ updated: 2026-11-17
 | `LLM_BASE_URL` | 返回 `null` | 前缀不是 `http://` / `https://` 时构造抛错 | `model-client.js:3`、`model-client.js:34` |
 | `LLM_API_KEY` | 返回 `null` | 为空串时构造抛 `缺少 LLM_API_KEY` | `model-client.js:4`、`model-client.js:34` |
 | `LLM_MODEL` | 返回 `null` | 为空串时构造抛 `缺少 LLM_MODEL` | `model-client.js:5`、`model-client.js:34` |
-| `LLM_TIMEOUT_MS` | 回落到 `90000` | 转成数字后不是正数（`0`、负数、非数字文本、空串、未设置）一律回落到 `90000` | `model-client.js:36` |
+| `LLM_TIMEOUT_MS` | 回落到 `90000` | 转成数字后不是正数时回落到 `90000`；是正数就照用，不管是不是整数或有限值 | `model-client.js:36` |
 
 实测的取值行为（🟢 第 11 节命令 E）：
 
 - `'5000'` → `5000`；`'  3000  '`（带空格）→ `3000`；`'1e4'` → `10000`；`'1.5'` → `1.5`（小数原样保留）。
 - `'0'`、`'-1'`、`'abc'`、`''` → 都是 `90000`（这四种分别落在「零」「负数」「非数字文本」「空串」四类里）。
+- 反例一：`'1.5'` 是正数、但不是整数 → 不回落到 `90000`，装配出 `1.5`（见下段）。
+- 反例二：`'1e999'` 与 `'Infinity'` 转成 `Infinity`，它是正数但不有限 → 同样不回落到 `90000`，装配出 `Infinity`。
+
+所以「非正数回落」这条只盖住那四类；正数里的小数与无穷大都会被原样收下，靠发请求那一步的运行时拦。
 
 注意 `'1.5'` 这一条：模块只判「大于 0」，小数照样装配进实例（🟢 `model-client.js:36`）。到了发请求那一步，
 `AbortSignal.timeout` 要求毫秒数是整数，非整数会被它拒绝——本机 Node.js v26.13.0 上抛的是
 `RangeError`（`code=ERR_OUT_OF_RANGE`，原文 `The value of "delay" is out of range. It must be an integer. Received 1.5`）。
 这个错误不在模块的三条翻译规则覆盖范围内（见第 4.3 节），会以原始形态抛给调用方（🟢 实测，见第 11 节命令 I）。
+
+`Infinity` 走同一条路：装配不拦，发请求时被 `AbortSignal.timeout` 拒。抛的也是 `RangeError`，
+`code=ERR_OUT_OF_RANGE`，原文的尾缀是 `Received Infinity`（🟢 实测，见第 11 节命令 I）。
 
 ## 5. 值语义：参数与返回值
 
@@ -206,7 +215,7 @@ updated: 2026-11-17
 | `baseUrl` | string | — | 必填 | 空串或非 `http(s)://` 前缀 → 构造抛 `LLM_BASE_URL 必须是 HTTP(S) 地址` | `model-client.js:3` |
 | `apiKey` | string | — | 必填 | 空串或其他 falsy 值 → 构造抛 `缺少 LLM_API_KEY` | `model-client.js:4` |
 | `model` | string | — | 必填 | 空串或其他 falsy 值 → 构造抛 `缺少 LLM_MODEL` | `model-client.js:5` |
-| `timeoutMs` | number | 毫秒（ms） | 缺省 `90000` | 构造时不做校验；由 `createModelFromEnv` 装配时，非正数回落为 `90000`；非整数不拦，发请求时由运行时抛 `RangeError` | `model-client.js:2`、`model-client.js:10`、`model-client.js:22`、`model-client.js:36` |
+| `timeoutMs` | number | 毫秒（ms） | 缺省 `90000` | 构造时不做校验；由 `createModelFromEnv` 装配时，非正数回落为 `90000`，正数则原值采用（不要求整数或有限）；非整数与 `Infinity` 不拦，发请求时由运行时抛 `RangeError` | `model-client.js:2`、`model-client.js:10`、`model-client.js:22`、`model-client.js:36` |
 | `fetcher` | function | — | 缺省取运行时全局 `fetch` | 不校验 | `model-client.js:2`、`model-client.js:11` |
 | `messages` | array | — | `complete` 的第一个参数，必传 | 不校验；`undefined` 时请求体里没有这个键，`null` 时原样发出 | `model-client.js:14`、`model-client.js:15` |
 | `tools` | array | — | 缺省 `[]` | 空数组 → 走不带工具的分支；非空数组原样进请求体 | `model-client.js:14`、`model-client.js:16` |
@@ -229,7 +238,7 @@ updated: 2026-11-17
 | `R-MODEL-CLIENT-06` | 只有 `tool_calls`、没有 `content` 的回复不算失败 | 这种回复被判为「模型没有返回可用消息」 | `model-client.js:28-29` | 工具调用被当成空回复丢掉 |
 | `R-MODEL-CLIENT-07` | 每次请求都带一个超时信号；模型迟迟不回应时，请求会在超时后中断而不是一直挂着 | 注入一个不响应的服务后请求永久挂起 | `model-client.js:22`（实测见第 11 节命令 G） | 调用方被一个不响应的模型服务永久占住 |
 | `R-MODEL-CLIENT-08` | 一次 `complete()` 至多发出一个 HTTP 请求，失败不重试 | 同一个 `complete()` 里因 500 重发一次 | `model-client.js:18-29` | 重试放大上游压力，也可能重复计费 |
-| `R-MODEL-CLIENT-09` | 模块不校验超时毫秒数是不是整数；非整数会在发请求时被运行时的 `AbortSignal.timeout` 拒绝 | 传 `1.5` 时模块先拦下来，报本模块的中文错误 | `model-client.js:22`、`model-client.js:36`（实测见第 11 节命令 I） | 配置里写错小数，调用方收到一个与本模块无关的英文 `RangeError` |
+| `R-MODEL-CLIENT-09` | 模块不校验超时毫秒数是不是整数、是不是有限值；非整数与 `Infinity` 都会在发请求时被运行时的 `AbortSignal.timeout` 拒绝 | 传 `1.5` 或 `1e999` 时模块先拦下来，报本模块的中文错误 | `model-client.js:22`、`model-client.js:36`（实测见第 11 节命令 I） | 配置里写错小数或无穷大，调用方收到一个与本模块无关的英文 `RangeError` |
 
 ## 7. 失败面
 
@@ -245,7 +254,7 @@ updated: 2026-11-17
 | 响应体带 `error` 字段（HTTP 200 也会触发） | `Error`：`模型接口 HTTP <状态码>: <上游信息>` | 模块内无残留 | 可以 | 无 |
 | 取不到可用消息 | `Error`：`模型没有返回可用消息` | 模块内无残留 | 可以 | 无 |
 | 请求超时 | `DOMException`，`name` 为 `TimeoutError`，英文原文 | 模块内无残留 | 可以 | 无（不翻译成中文提示） |
-| 超时毫秒数不是整数 | `RangeError`，`code=ERR_OUT_OF_RANGE`（运行时抛的，未翻译） | 模块内无残留 | 改成整数后可以 | 无 |
+| 超时毫秒数不是整数或不是有限值 | `RangeError`，`code=ERR_OUT_OF_RANGE`（运行时抛的，未翻译） | 模块内无残留 | 改成正整数后可以 | 无 |
 | 连不上模型服务 | `TypeError`：`fetch failed` | 模块内无残留 | 可以 | 无（不翻译成中文提示） |
 | 必填环境变量不齐 | 不抛错，装配函数返回 `null` | 模块内无残留 | 补齐变量后可以再装配 | 由调用方决定怎么用这个 `null` |
 
@@ -306,9 +315,9 @@ updated: 2026-11-17
 2. 上游错误原文截断到 250 字符，这个数字是怎么定的。
 3. 超时、连不上这两类传输层错误没有翻译成中文提示，是有意留给调用方识别，还是漏了。
 4. 响应体带 `error` 字段时（HTTP 200 也算），错误消息里照抄状态码 200，是否符合预期。
-5. 超时毫秒数写成小数时，模块不拦（见 `R-MODEL-CLIENT-09`）；这个兜底该由模块做还是由配置侧保证，代码里没有说明。
+5. 超时毫秒数写成小数或无穷大时，模块不拦（见 `R-MODEL-CLIENT-09`）；这个兜底该由模块做还是由配置侧保证，代码里没有说明。
 
-这四条按本仓分工属于「现状之外的判断」，本仓文档只写现状，因此本页不替它们下结论；同一条也登记在
+这五条按本仓分工属于「现状之外的判断」，本仓文档只写现状，因此本页不替它们下结论；同一条也登记在
 `coding-reports/P001-T005.md` 的「未决」小节。本仓的缺口台账 `docs/_meta/gaps.md` 不在本卡可写范围内，
 本卡没有改动它。
 
@@ -317,7 +326,9 @@ updated: 2026-11-17
 
 ## 11. 怎么验证
 
-下面 8 条命令都在仓根目录下用 `node --input-type=module -e` 跑（需要 Node.js 20 及以上），只引用 `model-client.js`。
+下面 9 条命令（A–I）都在仓根目录下跑，需要 Node.js 20 及以上，只引用 `model-client.js`。
+其中 8 条（A、B、C、D、E、F、G、I）用 `node --input-type=module -e`；命令 H 是裸 `node -e`——它只查运行时内建，
+不 import 本模块。
 输出是本卡写作时实测的原文（Node.js v26.13.0）。命令 B、C、D 用一个假 `fetcher` 拦截请求，不发真实流量；
 命令 A、E 只构造对象不发请求；命令 F、G 会起一个本机回环 HTTP 服务；命令 H 不碰网络；命令 I 会在发请求前就失败。
 
@@ -438,7 +449,7 @@ console.log("三项齐全        ->", createModelFromEnv(env) ? "实例" : "null
 console.log("缺 LLM_MODEL    ->", createModelFromEnv({ ...env, LLM_MODEL: undefined }) ? "实例" : "null");
 console.log("缺 LLM_API_KEY  ->", createModelFromEnv({ ...env, LLM_API_KEY: undefined }) ? "实例" : "null");
 console.log("缺 LLM_BASE_URL ->", createModelFromEnv({ ...env, LLM_BASE_URL: undefined }) ? "实例" : "null");
-for (const v of ["5000", "0", "-1", "abc", "", "  3000  ", "1e4", "1.5"])
+for (const v of ["5000", "0", "-1", "abc", "", "  3000  ", "1e4", "1.5", "1e999"])
   console.log("LLM_TIMEOUT_MS=" + JSON.stringify(v).padEnd(11), "->", createModelFromEnv({ ...env, LLM_TIMEOUT_MS: v }).timeoutMs);
 '
 ```
@@ -456,6 +467,7 @@ LLM_TIMEOUT_MS=""          -> 90000
 LLM_TIMEOUT_MS="  3000  "  -> 3000
 LLM_TIMEOUT_MS="1e4"       -> 10000
 LLM_TIMEOUT_MS="1.5"       -> 1.5
+LLM_TIMEOUT_MS="1e999"     -> Infinity
 ```
 
 ### 11.6 真实链路（命令 F）
@@ -494,8 +506,9 @@ const server = http.createServer(() => {});   // 故意不响应，逼出超时
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const port = server.address().port;
 const c = new ChatModelClient({ baseUrl: "http://127.0.0.1:" + port + "/v1", apiKey: "k", model: "m", timeoutMs: 800 });
+const t0 = Date.now();
 try { await c.complete([{ role: "user", content: "hi" }]); console.log("未抛错"); }
-catch (e) { console.log("超时   ->", e.constructor.name, "| name=" + e.name, "| message=" + e.message, "| code=" + e.code); }
+catch (e) { const el = Date.now() - t0; console.log("超时   ->", e.constructor.name, "| name=" + e.name, "| message=" + e.message, "| code=" + e.code, "| 耗时落在 800-2000ms 窗口内:", el >= 800 && el < 2000); }
 const c2 = new ChatModelClient({ baseUrl: "http://127.0.0.1:1/v1", apiKey: "k", model: "m" });
 try { await c2.complete([]); console.log("未抛错"); }
 catch (e) { console.log("连不上 ->", e.constructor.name, "| name=" + e.name, "| message=" + e.message); }
@@ -504,11 +517,12 @@ server.close();
 ```
 
 ```
-超时   -> DOMException | name=TimeoutError | message=The operation was aborted due to timeout | code=23
+超时   -> DOMException | name=TimeoutError | message=The operation was aborted due to timeout | code=23 | 耗时落在 800-2000ms 窗口内: true
 连不上 -> TypeError | name=TypeError | message=fetch failed
 ```
 
-这两行就是第 4.3 节说的「没被翻译的两类错误」：抛出来的是运行时的原始错误对象。
+这两行就是第 4.3 节说的「没被翻译的两类错误」：抛出来的是运行时的原始错误对象。第一行输出的是窗口判定而不是
+原始毫秒数，因为实测耗时逐次有几十毫秒的浮动（本卡两次实测为 804 与 806 毫秒）——写死一个数字就不能原样复跑。
 
 ### 11.8 运行时内建（命令 H）
 
@@ -520,29 +534,35 @@ node -e 'console.log("node", process.version, "| AbortSignal.timeout:", typeof A
 node v26.13.0 | AbortSignal.timeout: function | fetch: function | URL: function
 ```
 
-### 11.9 超时毫秒数不是整数（命令 I）
+### 11.9 超时毫秒数不是整数或不是有限值（命令 I）
 
 ```bash
 node --input-type=module -e '
 import { createModelFromEnv } from "./model-client.js";
-const c = createModelFromEnv({ LLM_BASE_URL: "http://h/v1", LLM_API_KEY: "k", LLM_MODEL: "m", LLM_TIMEOUT_MS: "1.5" });
-console.log("装配出的 timeoutMs =", c.timeoutMs);
-try { await c.complete([{ role: "user", content: "hi" }]); console.log("未抛错"); }
-catch (e) { console.log("complete 抛出 =>", e.constructor.name, "| code=" + e.code, "| message=" + e.message); }
+const env = { LLM_BASE_URL: "http://h/v1", LLM_API_KEY: "k", LLM_MODEL: "m" };
+for (const raw of ["1.5", "1e999"]) {
+  const c = createModelFromEnv({ ...env, LLM_TIMEOUT_MS: raw });
+  console.log("LLM_TIMEOUT_MS=" + JSON.stringify(raw), "-> 装配出的 timeoutMs =", c.timeoutMs);
+  try { await c.complete([{ role: "user", content: "hi" }]); console.log("  未抛错"); }
+  catch (e) { console.log("  complete 抛出 =>", e.constructor.name, "| code=" + e.code, "| message=" + e.message); }
+}
 '
 ```
 
 ```
-装配出的 timeoutMs = 1.5
-complete 抛出 => RangeError | code=ERR_OUT_OF_RANGE | message=The value of "delay" is out of range. It must be an integer. Received 1.5
+LLM_TIMEOUT_MS="1.5" -> 装配出的 timeoutMs = 1.5
+  complete 抛出 => RangeError | code=ERR_OUT_OF_RANGE | message=The value of "delay" is out of range. It must be an integer. Received 1.5
+LLM_TIMEOUT_MS="1e999" -> 装配出的 timeoutMs = Infinity
+  complete 抛出 => RangeError | code=ERR_OUT_OF_RANGE | message=The value of "delay" is out of range. It must be an integer. Received Infinity
 ```
 
-模块没有拦这个值（`R-MODEL-CLIENT-09`）：装配时它只看「大于 0」，小数照收；拦住它的是运行时的 `AbortSignal.timeout`。
+模块没拦这两个值（`R-MODEL-CLIENT-09`）：装配时它只看「大于 0」，小数与无穷大照收；拦住它们的是运行时的
+`AbortSignal.timeout`。两条请求都没有发出——`AbortSignal.timeout` 在 `fetch` 之前就抛了。
 
 ## 12. 指针
 
 - 本模块在模块清单里的位置：[docs/modules/_breakdown.json](_breakdown.json) 的 `model-client` 条目
   （实现文件 `model-client.js`，覆盖构件四项）。
 - 全局视角（分层、两条研判路径、配置项速查）：[docs/architecture.md](../architecture.md)。
-- 侦察记录（本卡核过的 27 条事实与当时的输出）：`evidence/recon/P001-T005.md`。
+- 侦察记录（本卡核过的 28 条事实与当时的输出）：`evidence/recon/P001-T005.md`。
 - 本卡的交卷报告（含未决项）：`coding-reports/P001-T005.md`。
