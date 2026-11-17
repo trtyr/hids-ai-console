@@ -165,7 +165,7 @@ MCP 客户端自己的公开面是 `request(method, params)`、`initialize()`、
 | `partial` | 布尔 | — | 是否存在失败类型 | `api-tools.js:62` |
 | `query_scope` | 字符串 | — | 覆盖范围说明 | `api-tools.js:63` |
 
-**引用校验结果**（`verifyClaims`，`agent-tools.js:92`）：`{ ok, errors }`。`errors` 是一串中文错误文案，每条带 `claims[i].citations[j]` 前缀（`agent-tools.js:81`）。
+**引用校验结果**（`verifyClaims`，`agent-tools.js:92`）：`{ ok, errors }`。引用级错误带 `claims[i].citations[j]` 前缀（`agent-tools.js:81`）。`claims` 不是数组、空数组、某条缺少 citations 这三种不带这个前缀（`agent-tools.js:73-74`、`agent-tools.js:77`）。
 
 ## 6 依赖
 
