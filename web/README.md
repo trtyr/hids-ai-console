@@ -119,7 +119,7 @@ probeSession(credentials, options?) → Promise<{ authenticated: true }>
 | hash | 侧栏文案 | 顶栏标题 | 页面模块 | 当前状态 |
 | --- | --- | --- | --- | --- |
 | `#/overview` | 总览 | 总览 | `pages/overview.js` | 占位（T002 接） |
-| `#/alerts` | 告警 | 告警 | `pages/alerts.js` | 占位（T003 接） |
+| `#/alerts` | 告警 | 告警 | `pages/alerts.js` | 已接入（T003；详情页仍占位，T004 接） |
 | `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | 占位（T004 接），参数从第二段起原样传 |
 | `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | 占位（T005 接） |
 | `#/rules` | 规则 | 规则 | `pages/rules.js` | 占位（T006 接） |
@@ -209,3 +209,110 @@ web/
 - 维护端：设计稿写明是独立入口，本目录不管。
 - 凭据不持久化 → 刷新即重新登录（见第 2 节）。
 - `web/_handoff/`（开工交接件：`handoff.md` + 设计稿副本）只是参考材料：不参与构建，`serve.js` 对 `/_handoff/*` 一律回 404，不会被当成产品资源发出去。
+
+## 9. 告警页（`pages/alerts.js` + `src/alerts.js` + `assets/pages/alerts.css`）
+
+稿：`design/alerts.html` + `alerts-notes.md`。值班的主操作面，**自动研判队列不单独成页，开关并进本页**。
+
+### 9.1 数据来源：形态 B（四个 operation，字段逐字照文档与实现）
+
+| 用途 | operation | 出处 | 成功体 |
+| --- | --- | --- | --- |
+| 列表 / 分页 | `GET /api/alerts?count&offset` | `openapi.yaml:134-157`；`server.js:335-345` | `alerts[]`、`total`、`totals`、`errors`、`partial`（+ `query`、`note`，本页不渲染） |
+| 队列汇总 | `GET /api/agent/triage/status` | `openapi.yaml:178-189`；`server.js:178-180` | `initialized`、`enabled`、`input_mode`、`counts{queued,running,done,failed}`、`last_poll_at`、`last_error` |
+| 暂停 / 恢复 | `PUT /api/agent/triage/control` | `openapi.yaml:211-234`；`server.js:213-219` | 正文 `{ enabled: boolean }`（`additionalProperties: false`）→ 同上 `TriageSummary` |
+| 入队 / 重试 | `POST /api/agent/triage/{alertId}` | `openapi.yaml:235-260`；`server.js:220-231` | 202 `TriageCase` |
+
+`count` 只接受 1–50、`offset` ≥ 0（`server.js:339`，越界 400）；页面只给 20 / 50 两档。
+
+**告警行字段**（`normalizeAlert`，`cloudwalker.js:31-56`）——页面用到的就是这些，别的不画：
+
+| 列 | 字段 | 空值 |
+| --- | --- | --- |
+| 等级 | `level`（低危/中危/高危/严重）+ `levelKey`（low/medium/high/critical，决定色点） | 色点回落 `sq-low` |
+| 告警 ID | `id`（`type:eventId`）+ `eventId`（抽屉里带 `#`） | 「—」 |
+| 告警 | `title` | 「—」 |
+| 类型 | `scenario`（11 类事件的中文名） | 回落 `eventType` |
+| 资产 / IP | `asset` / `assetIp` | 「—」 |
+| 研判状态 | `triage.status`（`not_queued/queued/running/done/failed` → 未研判/排队中/研判中/完成/失败） | 没有 `triage` → 未研判 |
+| 结论 | `triage.verdict_label`（真实威胁/存疑/误报） | 「—」 |
+| 时间 | `createdAt`（ISO → `YYYY-MM-DD HH:MM:SS` 本地） | 「—」 |
+
+**不要读 `alert.verdict`**：它是 `normalizeAlert` 里的占位值（恒为「待研判」），不是结论（`backend-contract-gaps.md` §4）。
+结论只认 `triage.verdict_label`。
+
+### 9.2 adapter 契约（`web/src/alerts.js`，本页唯一 HTTP 处）
+
+```js
+listAlerts({ count, offset }, { fetchImpl?, baseUrl? })
+  → { alerts, total, totals, errors, partial }
+fetchTriageSummary({ fetchImpl?, baseUrl? })        → TriageSummary
+setTriageEnabled(enabled, { fetchImpl?, baseUrl? }) → TriageSummary
+enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // alertId 会被 encodeURIComponent
+```
+
+失败一律抛 `AlertsError`，`kind` 决定界面文案：
+
+| kind | 触发 | 页面怎么显示 |
+| --- | --- | --- |
+| `unauthorized` | 401（含没有凭据时**一条请求都不发**） | 「登录已失效」+ 请重新登录 |
+| `unavailable` | 503（牧云或自动研判没配） | 「告警接口不可用」/ 队列条「状态不可用」 |
+| `http` | 其它非 2xx | 「服务返回异常」+ 状态码 |
+| `network` | fetch 抛（连不上、超时） | 「无法连接」 |
+| `invalid` | 2xx 但回包形状不对 | 「返回格式异常」 |
+
+服务端正文（`{error: '...'}`）**不直接贴到界面上**；401 的纯文本正文也不解析（同登录页口径）。
+
+### 9.3 状态矩阵（六格）
+
+| 格 | 触发 | 界面 | 可断言的形状 |
+| --- | --- | --- | --- |
+| 加载中 | 首次 render / 刷新 / 翻页 | 表内一行「正在读取告警…」，`.table-wrap` 带 `aria-busy="true"`、降透明，刷新按钮 `disabled` | 刷新 disabled；取到数据后 `aria-busy` 移除 |
+| 空 | `total === 0` | 表内一行「暂无告警。」 | 上一页/下一页/全选都 `disabled`；共 N 条 显示 0 |
+| 部分失败 | 回包 `partial: true` | 表格上方提示条：`部分类型查询失败，总数只合计成功的类型；<type>：<原因>；…` | 提示条 `[data-role="partial"]` 去掉 `hidden`；原因逐类列出 |
+| 错误 | 列表请求抛 `AlertsError` | 表位置换成 `role="alert"` 区块：标题按 kind、正文、`重试` 按钮 | 文案区分 401/503/502/网络；服务端原文不出现 |
+| 超长内容 | 标题或 ID 很长 | 单行截断（CSS `text-overflow: ellipsis`），`title` 属性给全文 | `textContent` 与 `title` 都是完整原值 |
+| 禁用 | 队列暂停 / 任务排队中 / 空页 | 队列开关变「恢复」、`qstate` 加 `is-paused`；抽屉底部按钮 `disabled` 且文案换成当前状态；翻页到头禁用 | 见 `web/test/pages/alerts.test.js` |
+
+队列状态接口单独失败时**只降级队列条**（「状态不可用」、计数全「—」、开关隐藏、右侧一行失败原因），列表照常显示。
+
+### 9.4 交互与事件
+
+| 动作 | 后果 |
+| --- | --- |
+| 刷新 | 重新取列表 + 队列；成功后「更新时间」换成本地时刻 |
+| 上一页 / 下一页 / 页码 | 换 `offset = (页-1) × count` 重新取数；页数 = `ceil(total / count)` |
+| 每页 20 / 50 | 换 `count` 并回到第一页 |
+| 勾行 / 全选当前页 | 出现批量条「已选 N 条」；选择跨页保留；表头复选框 `indeterminate` 表示部分选中 |
+| 重新研判所选 | 逐条 `POST /api/agent/triage/{id}`；**排队中/研判中跳过**；完成后清空选择并重新取数，`aria-live` 播报数量 |
+| 点标题 / 告警 ID / 行 | 打开右侧抽屉（480px），焦点移到关闭按钮 |
+| 抽屉关闭（按钮 / `Esc`） | 焦点回到该行标题；`≤760px` 才有遮罩 |
+| 抽屉「加入研判队列 / 重试 / 重新研判」 | 未研判→加入、失败→重试、完成→重新研判；排队中/研判中禁用 |
+| 抽屉「查看完整详情」 | `#/alert-detail/<encodeURIComponent(id)>` |
+| 抽屉「复制」 | `navigator.clipboard` 可用则复制，否则播报「复制失败，请手动选择 …」 |
+| 队列「暂停 / 恢复」 | `PUT /api/agent/triage/control`，正文只有 `{ enabled }` |
+
+### 9.5 稿上有、接口没有 → 本页没有（A2）
+
+已全部记进 `~/.plantree/hids-ai-console/plans/002-frontend/topics/backend-findings.md` 的「P002-T003」一节，这里只列清单：
+
+1. **筛选条**（搜索 / 类型 / 等级 / 结论 / 研判状态 / 结果计数 / 清除筛选）：`GET /api/alerts` 只认 `count` 与 `offset`。
+   前端自筛当前页会把它画成「全量筛选」，所以整条不渲染。
+2. **等级排序 / 时间排序按钮**：接口没有 `sort`。时间列保留静态「↓」+ `aria-sort="descending"`（接口本身就是时间倒序合并，`cloudwalker.js:143`）。
+3. **队列条「查看 N 条失败」**：需要按研判状态过滤，同样没有参数。失败数仍然显示（`counts.failed` 是真的）。
+4. **抽屉「场景」行**：接口只有 `scenario`（= 事件类型中文名），与「事件类型」重复。
+5. **抽屉「缺失证据」**：`TriageCase` 文档与实现都没有这个字段。
+6. **证据来源按分类拆条**：只有 `verified_facts` / `evidence_sources` 两个数量，没有条目级数据。
+
+页脚「完整证据链…可在详情页查看」保留；详情页在 T004。
+
+### 9.6 样式与落点
+
+- `assets/pages/alerts.css`：只写本页独有的块（队列条 / 批量条 / 表格 / 分页 / 抽屉 / 遮罩 / 空态 / 错误态），
+  壳的部分（`.app/.rail/.bar/.content/.textbtn/.placeholder`）留在 `app.css`，不重复定义；颜色只用 `theme.css` 变量。
+- **样式由页面模块注入**：`pages/alerts.js` 首次 `render` 时往 `<head>` 插 `<link data-page-style="alerts">`（重复 render 不重复插）。
+  原因：`web/index.html` 与 `assets/app.css` 不在本卡 scope 里，入口不能改。
+- 稿里「共 N 条 · 更新时间 · 刷新」在顶栏，顶栏属壳（`src/views/shell.js`，forbidden）→ 挪到内容区首行（`.page-tools`）。
+- 断点照稿 §6：≥1100 显示 IP；≤1100 收导航 + 藏 IP；≤900 藏时间；≤760 藏 ID 与类型、抽屉占满宽度；≤620 藏资产。
+  各档实测无横向滚动（见 `coding-reports/P002-T003.md`）。
+- 稿没有的两格，按最近邻取值并记账：列表级错误块（登录页错误横幅的最近邻）、研判失败任务的步骤节点（按已完成节点画）。
