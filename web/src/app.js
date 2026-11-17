@@ -27,7 +27,9 @@ function showLogin() {
       return session;
     },
     onSuccess: () => {
-      window.location.hash = hashFor(DEFAULT_ROUTE);
+      // 用 replaceState 落到总览：赋 location.hash 会再排一个 hashchange，进壳后内容会被渲染两次
+      const target = hashFor(DEFAULT_ROUTE);
+      if (window.location.hash !== target) window.history.replaceState(null, '', target);
       showShell();
     },
   });

@@ -108,6 +108,8 @@ export function createHandler(options = {}) {
       const pathname = parsePathname(req.url);
       if (pathname === null) return sendText(res, 400, '请求路径无效');
       if (pathname === '/api' || pathname.startsWith('/api/')) return proxy(req, res, apiOrigin);
+      // _handoff 是交接件（设计稿副本、设计期契约快照、zip 包），不是产品资源：不发布
+      if (pathname === '/_handoff' || pathname.startsWith('/_handoff/')) return sendText(res, 404, '找不到文件');
       return serveStatic(req, res, webRoot, pathname);
     } catch (error) {
       return sendText(res, 500, `服务内部错误：${error.message}`);

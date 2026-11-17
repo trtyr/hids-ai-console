@@ -65,6 +65,18 @@ test('回归：GET /%zz 回 400，且服务还活着（下一条请求照常 200
   });
 });
 
+test('交接件不发布：/_handoff/* 一律 404（含设计稿副本、zip、设计期契约快照）', async () => {
+  await withServer(createHandler(), async base => {
+    for (const path of ['/_handoff/handoff.md', '/_handoff/design/hids-ai-design.zip', '/_handoff/design/openapi_2_.yaml']) {
+      const response = await fetch(`${base}${path}`);
+      assert.equal(response.status, 404, `${path} 不该被当成产品资源发出去`);
+    }
+    // 同类前缀但不同目录不受影响
+    const other = await fetch(`${base}/_handoffx/handoff.md`);
+    assert.equal(other.status, 404, '不存在的文件仍然是 404，与上面同码不同因');
+  });
+});
+
 test('越界路径回 403（%2f 编码的 ../ 也挡住）', async () => {
   await withServer(createHandler(), async base => {
     const traversal = await fetch(`${base}/..%2f..%2f..%2fetc%2fpasswd`);

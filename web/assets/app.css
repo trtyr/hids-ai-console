@@ -622,3 +622,16 @@ button.nav-item {
   .content { padding: 0 14px 24px; }
   .bar { padding: 0 14px; }
 }
+
+/* 窄屏（≤430px 尤其明显）：稿把导航与「退出登录」挤在同一行，第 4、5 个入口被退出按钮
+   盖住、点不到。这里让顶部条折成两行——品牌 + 退出在上、导航独占一行并横向滚动，
+   导航项一律可点。稿上是同一个遮挡，按 D002「稿不好用可以改交互」处理，报告记一笔。 */
+@media (max-width: 620px) {
+  .rail { flex-wrap: wrap; padding: 0 12px 0; }
+  .rail-brand { height: 44px; }
+  .rail-foot { height: 44px; }
+  .rail-foot .nav-item { height: 44px; }
+  .nav { order: 3; flex: 1 1 100%; height: 42px; margin-inline: -12px; padding-inline: 12px; }
+  .nav-item { height: 42px; padding: 0 8px; border-bottom: 2px solid transparent; }
+  .nav-item.is-active { border-bottom-color: var(--accent); }
+}
