@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "rules": [
+    {
+      "id": "approved-network-egress-001",
+      "enabled": false,
+      "action": "observe",
+      "event_type": "network_audit",
+      "host_id": 171,
+      "reason": "示例：该主机的指定进程访问经客户核准的固定地址",
+      "approved_by": "客户安全负责人",
+      "valid_from": "2026-11-10T00:00:00Z",
+      "expires_at": "2026-12-10T00:00:00Z",
+      "conditions": [
+        { "field": "source_ip", "operator": "equals", "value": "10.2.28.217" },
+        { "field": "destination_ip", "operator": "equals", "value": "192.0.2.20" },
+        { "field": "network_type", "operator": "equals", "value": "ip" },
+        { "field": "process_path", "operator": "equals", "value": "/usr/bin/curl" },
+        { "field": "command_line", "operator": "equals", "value": "curl --head https://192.0.2.20/health" },
+        { "field": "detection_reference", "operator": "equals", "value": "客户已核准的固定目的地址检测规则" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "hids-ai-console-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "start:local": "node --env-file=.env.local server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" }
+}

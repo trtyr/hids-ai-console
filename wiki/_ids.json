@@ -1,0 +1,290 @@
+{
+  "GEN-01": {
+    "class": "common",
+    "title": "MITRE ATT&CK《Finding Cyber Threats with ATT&CK-Based Analytics》(16-3713)"
+  },
+  "GEN-02": {
+    "class": "common",
+    "title": "研判结论只有三态"
+  },
+  "GEN-03": {
+    "class": "common",
+    "title": "「缺信息」要明说，不要用猜的填"
+  },
+  "GEN-04": {
+    "class": "common",
+    "title": "IP 归属地只能加权，不能定罪"
+  },
+  "GEN-05": {
+    "class": "common",
+    "title": "云厂商 IP ≠ 良性（OWASP Credential Stuffing Prevention Cheat Sheet）"
+  },
+  "GEN-06": {
+    "class": "common",
+    "title": "降噪的真正来源是「历史」，不是「白名单」"
+  },
+  "GEN-07": {
+    "class": "common",
+    "title": "时间窗关联的边界"
+  },
+  "GEN-08": {
+    "class": "common",
+    "title": "什么才叫「该丢弃」"
+  },
+  "GEN-09": {
+    "class": "common",
+    "title": "攻击者也会用扫描器段"
+  },
+  "GEN-11": {
+    "class": "common",
+    "title": "三态判定程序（按顺序走，第一个命中就停）"
+  },
+  "GEN-10": {
+    "class": "common",
+    "title": "输出必须能被人复核"
+  },
+  "WS-01": {
+    "class": "webshell",
+    "title": "这一类告警在说什么"
+  },
+  "WS-02": {
+    "class": "webshell",
+    "title": "第一判据：文件在不在 web 目录里（`WS-02b` 见下）"
+  },
+  "WS-02b": {
+    "class": "webshell",
+    "title": "「web 目录」到底指哪些"
+  },
+  "WS-03": {
+    "class": "webshell",
+    "title": "谁写的这个文件：第一眼要看所有权"
+  },
+  "WS-04": {
+    "class": "webshell",
+    "title": "文件代码特征：能帮你，但不能定罪"
+  },
+  "WS-05": {
+    "class": "webshell",
+    "title": "外连行为：`event_type` 在说什么"
+  },
+  "WS-06": {
+    "class": "webshell",
+    "title": "文件时间线：创建时间比修改时间有用"
+  },
+  "WS-07": {
+    "class": "webshell",
+    "title": "站点技术栈对不对得上"
+  },
+  "WS-08": {
+    "class": "webshell",
+    "title": "判定程序"
+  },
+  "WS-09": {
+    "class": "webshell",
+    "title": "syslog 里没有的，去 API 查"
+  },
+  "WS-10": {
+    "class": "webshell",
+    "title": "处置建议：先隔离，别急着删"
+  },
+  "WS-11": {
+    "class": "webshell",
+    "title": "白名单只出建议，绝不自动执行"
+  },
+  "WS-12": {
+    "class": "webshell",
+    "title": "拿到了代码，怎么看"
+  },
+  "AL-01": {
+    "class": "abnormal-login",
+    "title": "这一类告警在说什么"
+  },
+  "AL-02": {
+    "class": "abnormal-login",
+    "title": "「来源可信」是最强的一个维度，但它只管一半"
+  },
+  "AL-03": {
+    "class": "abnormal-login",
+    "title": "时段单独**不能**定罪"
+  },
+  "AL-04": {
+    "class": "abnormal-login",
+    "title": "频次是「运维习惯」的证据，**不是**「良性」的证据"
+  },
+  "AL-05": {
+    "class": "abnormal-login",
+    "title": "归属地漂移是**加重项**，不是定罪项"
+  },
+  "AL-06": {
+    "class": "abnormal-login",
+    "title": "不可能旅行：这才是归属地维度上的硬证据"
+  },
+  "AL-06b": {
+    "class": "abnormal-login",
+    "title": "后渗透行为：全类最硬的证据"
+  },
+  "AL-07": {
+    "class": "abnormal-login",
+    "title": "判定程序"
+  },
+  "AL-08": {
+    "class": "abnormal-login",
+    "title": "syslog 里没有的，去 API 查"
+  },
+  "AL-09": {
+    "class": "abnormal-login",
+    "title": "处置建议：五个固定动作"
+  },
+  "AL-10": {
+    "class": "abnormal-login",
+    "title": "白名单只出建议，绝不自动执行"
+  },
+  "HP-01": {
+    "class": "honeypot",
+    "title": "ENISA《Honeypots study》—— 蜜罐的用途之一就是观测背景噪音"
+  },
+  "HP-02": {
+    "class": "honeypot",
+    "title": "CISA《Using Cyber Decoys to Strengthen Detection and Response》(2026-09)"
+  },
+  "HP-03": {
+    "class": "honeypot",
+    "title": "SANS《Implementer's Guide to Deception Technologies》"
+  },
+  "HP-04": {
+    "class": "honeypot",
+    "title": "MITRE ATT&CK · T1595 Active Scanning vs T1133/T1210 外部远程服务 / 远程服务利用"
+  },
+  "HP-05": {
+    "class": "honeypot",
+    "title": "交互时长作为深度代理 —— 但不能单独定罪"
+  },
+  "HP-06": {
+    "class": "honeypot",
+    "title": "牧云自带的处置建议（原文，4 步）"
+  },
+  "HP-07": {
+    "class": "honeypot",
+    "title": "蜜罐触碰 ≠ 主机沦陷（demo 实测）"
+  },
+  "HP-08": {
+    "class": "honeypot",
+    "title": "蜜罐端点清单必须自己维护"
+  },
+  "HP-09": {
+    "class": "honeypot",
+    "title": "已知噪音源要「显式登记」才算数"
+  },
+  "SC-01": {
+    "class": "suspicious-command",
+    "title": "双用途工具：命令本身不能定罪"
+  },
+  "SC-02": {
+    "class": "suspicious-command",
+    "title": "SUID 提权链：单条不是威胁，链才是"
+  },
+  "SC-03": {
+    "class": "suspicious-command",
+    "title": "执行路径不对：命令名对了，路径错了"
+  },
+  "SC-04": {
+    "class": "suspicious-command",
+    "title": "挖矿 = 资源劫持"
+  },
+  "SC-05": {
+    "class": "suspicious-command",
+    "title": "谁执行的：执行者身份是第一维度"
+  },
+  "SC-06": {
+    "class": "suspicious-command",
+    "title": "反弹 Shell = Unix Shell 执行"
+  },
+  "SC-06b": {
+    "class": "suspicious-command",
+    "title": "netcat 的两种形态：监听器 vs 外连器"
+  },
+  "SC-07": {
+    "class": "suspicious-command",
+    "title": "DNS 域名回连：可能是探测，也可能是 C2"
+  },
+  "SC-08": {
+    "class": "suspicious-command",
+    "title": "摸安全软件：反侦察"
+  },
+  "SC-09": {
+    "class": "suspicious-command",
+    "title": "命令序列的语义连贯（这一类的核心判据）"
+  },
+  "SC-10": {
+    "class": "suspicious-command",
+    "title": "路径白名单是配置基线，不是知识库"
+  },
+  "SC-11": {
+    "class": "suspicious-command",
+    "title": "判定程序（可疑命令版）"
+  },
+  "SC-12": {
+    "class": "suspicious-command",
+    "title": "这三个事实层拿不到（先查 API，查不到才成立）"
+  },
+  "SC-13": {
+    "class": "suspicious-command",
+    "title": "命令记录是枢纽"
+  },
+  "SC-14": {
+    "class": "suspicious-command",
+    "title": "重复：先分清「重复投递」和「重复行为」"
+  },
+  "GEN-12": {
+    "class": "common",
+    "title": "研判通则 · 事实、行为、结果与授权分开核对"
+  },
+  "WS-13": {
+    "class": "webshell",
+    "title": "WebShell · 核查文件内容、可达性、调用与执行链"
+  },
+  "AL-11": {
+    "class": "abnormal-login",
+    "title": "异常登录 · 先核实会话与身份，再看登录后行为"
+  },
+  "SC-15": {
+    "class": "suspicious-command",
+    "title": "可疑命令 · 结合执行身份、语义序列和实际结果"
+  },
+  "HP-10": {
+    "class": "honeypot",
+    "title": "蜜罐诱捕 · 区分触碰、利用尝试与真实资产后果"
+  },
+  "BF-10": {
+    "class": "bruteforce",
+    "title": "暴力破解 · 失败尝试、成功认证与账号滥用分层判断"
+  },
+  "LP-10": {
+    "class": "elevation",
+    "title": "本地提权 · 核对身份变化、提权方式和授权范围"
+  },
+  "CA-08": {
+    "class": "cmdaudit",
+    "title": "命令记录 · 以会话还原顺序和执行结果"
+  },
+  "MA-09": {
+    "class": "malware",
+    "title": "恶意文件 · 分开核对检测、落地、运行与影响"
+  },
+  "NA-09": {
+    "class": "net",
+    "title": "网络异常 · 由单条目标线索走向进程和 DNS 序列"
+  },
+  "MW-08": {
+    "class": "memwebshell",
+    "title": "内存后门 · 先核查注入证据，再核查进程与授权"
+  },
+  "RP-09": {
+    "class": "rasp",
+    "title": "内存安全 RASP · 分开记录攻击尝试、防护动作与实际影响"
+  },
+  "RS-09": {
+    "class": "revshell",
+    "title": "反弹 Shell · 用进程、套接字和输入输出链证明通道"
+  }
+}
