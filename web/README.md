@@ -292,7 +292,27 @@ enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // ale
 | 抽屉「复制」 | `navigator.clipboard` 可用则复制，否则播报「复制失败，请手动选择 …」 |
 | 队列「暂停 / 恢复」 | `PUT /api/agent/triage/control`，正文只有 `{ enabled }` |
 
-### 9.5 稿上有、接口没有 → 本页没有（A2）
+### 9.5 可访问性
+
+- **表格是语义表格**：真 `<table>` + `<caption class="sr-only">`（`pages/alerts.js:86`，「告警列表，时间倒序；点标题或告警 ID 查看摘要，可勾选后批量重新研判」），
+  表头十列都是 `<th scope="col">`（`:88-98`）；时间列 `aria-sort="descending"` 是**静态**标记（接口没有 `sort`，见 9.6-2）。
+- **可访问名**（每个控件都能被单独点名，不靠上下文猜）：全选 `aria-label="全选当前页"`（`:89`）；行内复选框 `选择告警 <id>`（`:363`）；
+  复制 `aria-label="复制告警 ID"`（`:128`）；关闭 `aria-label="关闭摘要"`（`:141`）；
+  两个具名分组 `role="group"`：队列条「自动研判队列」（`:63`）、每页条数「每页条数」（`:112`）——**无 role 的 `div` 上 `aria-label` 不会被读屏暴露**，所以这两个补了 role。
+- **抽屉**：`<aside aria-labelledby="drawer-title">`（`:123`），标题 `h2#drawer-title`（`:136`）。
+  🔴 **不是 `role="dialog"`、没有 `aria-modal`、没有 Tab 焦点圈禁**——稿没规定，本卡没做；Tab 可以走到抽屉外的表格与分页。
+- **焦点路径**：打开抽屉 → 焦点到关闭按钮（`:586`）；关闭（按钮 / `Esc` / 遮罩）→ 焦点回该行标题（`:598-599`），
+  该行已不在页面上 → 回打开前的 `document.activeElement`（`lastTrigger`，`:576`）。
+- **键盘可达**：行标题与告警 ID 是 `<button type="button">`（`:355-361`，Tab 到达、Enter / Space 打开抽屉）；
+  分页、每页档位、队列开关、抽屉底部按钮都是原生 `<button>`；每页档位用 `aria-pressed` 表示当前档（`:457`）。
+- **`Esc`**：仅当抽屉打开时关闭抽屉（`keydown` 挂在页面宿主上，`:778`），其它情况不吞键盘事件。
+- **播报**：`role="status" aria-live="polite"` 的 `sr-only` 节点（`:119`）承载「已载入 N 条，共 M 条」/「已选 N 条」/
+  「自动研判已暂停」/「复制失败，请手动选择 …」；列表级错误块是 `role="alert"`（`:415`）。
+- **焦点可见**：复选框与行内按钮的 `:focus-visible` 是 2px `--accent` 外框（`alerts.css:133`、`:169`），不靠颜色单通道（外框 + 位置）。
+- **减少动效**：`@media (prefers-reduced-motion: reduce)` 关掉抽屉入场动画、表格过渡与刷新图标旋转（`alerts.css:525-529`）。
+- **对比度**：本页不写色值，全部取 `theme.css` 令牌（浅深两套，`theme.js` 切换）；`critical` 与 `high` 共用 `--danger`（见 `coding-reports/P002-T003.md` 未决 7）。
+
+### 9.6 稿上有、接口没有 → 本页没有（A2）
 
 已全部记进 `~/.plantree/hids-ai-console/plans/002-frontend/topics/backend-findings.md` 的「P002-T003」一节，这里只列清单：
 
@@ -309,7 +329,7 @@ enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // ale
 
 页脚「完整证据链…可在详情页查看」保留；详情页在 T004。
 
-### 9.6 样式与落点
+### 9.7 样式与落点
 
 - `assets/pages/alerts.css`：只写本页独有的块（队列条 / 批量条 / 表格 / 分页 / 抽屉 / 遮罩 / 空态 / 错误态），
   壳的部分（`.app/.rail/.bar/.content/.textbtn/.placeholder`）留在 `app.css`，不重复定义；颜色只用 `theme.css` 变量。
@@ -321,3 +341,18 @@ enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // ale
 - 稿没有的两格，按最近邻取值并记账：列表级错误块（登录页错误横幅的最近邻）、研判失败任务的步骤节点（按已完成节点画）。
 - **动效令牌映射**：稿在自己 `:root` 里定义了 `--ease: cubic-bezier(.2,.7,.3,1)`（`alerts.html:86`），仓里没有这个名，
   只有值完全相同的 `--ease-out`（`app.css:98`）——本页 8 处缓动全部用 `var(--ease-out)`（复审前误写 `var(--ease)`，静默退化成浏览器默认曲线，已改）。
+
+### 9.8 失败与退化
+
+| 情形 | 页面怎么退化 |
+| --- | --- |
+| 没有数据（`total === 0`） | 表内一行「暂无告警。」；上一页/下一页/全选 `disabled`；「共 0 条」 |
+| 部分类型查不到（回包 `partial: true`） | 表格上方提示条逐类列出原因；总数只合计成功的类型；页面照常可用 |
+| 列表请求失败 | 表位置换 `role="alert"` 块：按 `kind` 分四类文案（登录已失效 / 接口不可用 / 无法连接 / 返回异常+状态码 / 返回格式异常）+「重试」按钮；刷新按钮恢复可用 |
+| 队列状态单独失败 | **只降级队列条**：状态「状态不可用」、四个计数全是「—」、开关隐藏、右侧一行失败原因；列表与分页不受影响 |
+| 慢网 / 超时 | **前端不设超时**（`src/alerts.js` 用 `fetch` 的默认行为，没有 `AbortController`）：请求未返回前保持加载态，刷新按钮 `disabled`；用户可重试但不能中途取消 |
+| 分页越界（两次请求间数据变少） | 游标拉回最后一页并**重拉一次**（`pages/alerts.js:637-642`）；重拉只做一次，不做无限重试 |
+| 剪贴板不可用（非安全上下文） | 不报错：`sr-only` 播报「复制失败，请手动选择 <id>」 |
+| 图片 / 外部字体加载失败 | **不适用**：本页无图片；令牌色与字体失败时回落系统字体（`app.css` 已声明 fallback），布局不变 |
+| JS 未加载 | **不适用（纯客户端渲染）**：本页由 `app.js` 挂载，脚本跑不起来就没有内容槽——壳已有此限制，非本页特有 |
+

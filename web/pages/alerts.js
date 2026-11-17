@@ -60,7 +60,7 @@ const TEMPLATE = `
     <span><strong>部分类型查询失败</strong>，总数只合计成功的类型；<span data-role="partial-reason">—</span></span>
   </div>
 
-  <div class="queuestrip" data-role="queue" aria-label="自动研判队列">
+  <div class="queuestrip" data-role="queue" role="group" aria-label="自动研判队列">
     <span class="qstate" data-role="qstate"><i class="dot" aria-hidden="true"></i>自动研判 <b data-role="qstate-text">—</b></span>
     <span class="qmeta">输入 <b data-role="qmode">—</b></span>
     <span class="qcounts">
@@ -612,7 +612,13 @@ export function mountAlertsPage(options = {}) {
     return { title: '加载失败', detail: error?.message ?? '未知错误' };
   }
 
-  async function load() {
+  /**
+   * 取一页列表 + 队列汇总。
+   * 两次请求之间后端数据可能变少：此时游标被拉回最后一页，必须跟着重拉一次，
+   * 否则页脚按新 `total` 画、行区还是超界请求的空数组（「281–300 / 300 条」+「本页没有告警」）。
+   * @param {boolean} [refetchOnClamp] 仅在游标真被拉回时重拉；重拉最多一次，防止数据连续缩水时空转
+   */
+  async function load(refetchOnClamp = true) {
     state.phase = 'loading';
     paint();
     const [alertsResult, summaryResult] = await Promise.allSettled([
@@ -630,7 +636,10 @@ export function mountAlertsPage(options = {}) {
       state.updatedAt = now();
       // 总页数缩水时把游标拉回最后一页（接口数据在两次请求之间会变）
       const maxOffset = Math.max(0, (pageCount() - 1) * state.count);
-      if (state.offset > maxOffset) state.offset = maxOffset;
+      if (state.offset > maxOffset) {
+        state.offset = maxOffset;
+        if (refetchOnClamp) return load(false);
+      }
     } else {
       state.phase = 'error';
       state.error = alertsResult.reason;

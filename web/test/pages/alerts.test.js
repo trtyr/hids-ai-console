@@ -251,6 +251,56 @@ test('分页：请求只带 count/offset；下一页 +20；每页 50 回到第�
   assert.equal(alertCalls().length, 3, '已经在第一页时不再发请求');
 });
 
+test('分页：总页数缩水时游标拉回最后一页并重拉一次（页脚与行区不许打架）', async () => {
+  // 第 20 页请求（offset 380）时后端只剩 300 条 → 页数 15 → 游标拉回 280，且必须重拉那一页
+  let shrunk = false;
+  const { host, calls } = mount({
+    handler: url => {
+      if (!url.startsWith('/api/alerts')) return null;
+      const offset = Number(new URL(url, 'http://localhost').searchParams.get('offset'));
+      const total = shrunk ? 300 : 400;
+      return respond({ alerts: offset >= total ? [] : [alert({ id: `revshell:${offset + 1}` })], total });
+    },
+  });
+  await flush();
+  const alertCalls = () => calls.filter(call => call.url.startsWith('/api/alerts')).map(call => call.url);
+  const pageButton = label => [...host.querySelectorAll('[data-role="page-numbers"] button')]
+    .find(button => text(button) === label);
+
+  shrunk = true;
+  pageButton('20').dispatchEvent(new dom.window.Event('click'));
+  await flush();
+
+  assert.deepEqual(alertCalls(), [
+    '/api/alerts?count=20&offset=0',
+    '/api/alerts?count=20&offset=380',
+    '/api/alerts?count=20&offset=280',
+  ], '游标被拉回后必须重拉一次，不能只改游标');
+  assert.equal(text(host.querySelector('[data-role="pager-info"]')), '281–281 / 300 条 · 共 15 页');
+  assert.equal(rows(host).length, 1, '行区要显示拉回后那一页的数据，不是空行');
+  assert.equal(text(host.querySelector('[data-role="page-numbers"] [aria-current="page"]')), '15');
+
+  // 游标没被改动时（正常刷新）不多打一轮
+  buttonByName(host, '刷新').dispatchEvent(new dom.window.Event('click'));
+  await flush();
+  assert.deepEqual(alertCalls().slice(3), ['/api/alerts?count=20&offset=280']);
+});
+
+// ---------- 可访问名 ----------
+
+test('可访问名：队列条是可命名分组，行内复选框点名到告警 ID，全选框说明范围', async () => {
+  const { host } = mount();
+  await flush();
+
+  const strip = host.querySelector('[data-role="queue"]');
+  assert.equal(strip.getAttribute('role'), 'group', '无 role 的 div 上 aria-label 不会被读屏暴露');
+  assert.equal(strip.getAttribute('aria-label'), '自动研判队列');
+
+  assert.equal(host.querySelector('[data-role="select-all"]').getAttribute('aria-label'), '全选当前页');
+  assert.equal(host.querySelector('tbody input[type="checkbox"]').getAttribute('aria-label'), '选择告警 revshell:1');
+  assert.match(text(host.querySelector('caption')), /告警列表/);
+});
+
 // ---------- 选择与批量重新研判 ----------
 
 test('选择：勾行出现批量条；全选只作用于当前页；「重新研判所选」逐条 POST，跳过排队中/研判中', async () => {
