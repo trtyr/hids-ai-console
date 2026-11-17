@@ -58,14 +58,11 @@ test('退出登录：点一下回调一次', () => {
   assert.equal(signOuts, 1);
 });
 
-test('每页渲染：占位说清「尚未接入」，不画假数据、不放假按钮', () => {
+test('每页都能 render 进内容槽：不抛错、只留一个根节点', () => {
   mount();
   for (const page of PAGES) {
-    page.render(shell.content, { params: [] });
+    assert.doesNotThrow(() => page.render(shell.content, { params: [] }), `${page.id} 渲染抛错`);
     assert.equal(shell.content.children.length, 1, `${page.id} 渲染后内容区应只有一个根节点`);
-    const copy = text(shell.content);
-    assert.match(copy, new RegExp(`${page.title}尚未接入`));
-    assert.equal(shell.content.querySelectorAll('button, table, input, form').length, 0, `${page.id} 不许放控件`);
   }
 });
 

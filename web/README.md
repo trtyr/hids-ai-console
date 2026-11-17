@@ -120,7 +120,7 @@ probeSession(credentials, options?) → Promise<{ authenticated: true }>
 | --- | --- | --- | --- | --- |
 | `#/overview` | 总览 | 总览 | `pages/overview.js` | 占位（T002 接） |
 | `#/alerts` | 告警 | 告警 | `pages/alerts.js` | 占位（T003 接） |
-| `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | 占位（T004 接），参数从第二段起原样传 |
+| `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | **已接入**（P002-T004）；参数从第二段起原样传，页面自己 `decodeURIComponent` |
 | `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | 占位（T005 接） |
 | `#/rules` | 规则 | 规则 | `pages/rules.js` | 占位（T006 接） |
 | `#/knowledge` | 知识库 | 知识库 | `pages/knowledge.js` | 占位（T007 接） |
@@ -209,3 +209,94 @@ web/
 - 维护端：设计稿写明是独立入口，本目录不管。
 - 凭据不持久化 → 刷新即重新登录（见第 2 节）。
 - `web/_handoff/`（开工交接件：`handoff.md` + 设计稿副本）只是参考材料：不参与构建，`serve.js` 对 `/_handoff/*` 一律回 404，不会被当成产品资源发出去。
+
+
+## 9. 告警详情页（`pages/alert-detail.js`，P002-T004）
+
+一条告警的全貌：结论、依据、证据缺口、研判步骤、证据来源、核验与复核、原始事件。
+设计稿 `design/alert-detail.html` + `alert-detail-notes.md`；字段只来自本仓接口，接口没有的一律不画（第 9.5 节列了每一条）。
+
+### 9.1 数据来源：形态 B · 五个 operation
+
+| # | operation | 出处 | 用途 |
+| --- | --- | --- | --- |
+| 1 | `GET /api/alerts/{alertId}`（`getAlert`） | `openapi.yaml:158-176`；实现 `server.js:347-355` → `cloudwalker.js:148-163` | 告警本体 + 牧云原始事件 |
+| 2 | `GET /api/agent/triage/{alertId}`（`getTriageRecord`） | `openapi.yaml:238-248`；`server.js:220-231` | 研判状态、步骤、结论标签、缺口 |
+| 3 | `POST /api/agent/triage/{alertId}`（`retryTriage`） | `openapi.yaml:249-260`；`server.js:231`（202） | 「加入研判队列 / 重新研判」 |
+| 4 | `GET /api/agent/investigations/{alertId}?mode=triage|deep` | `openapi.yaml:295-312`；`server.js:326-333` | 结论摘要/报告、依据、所需证据、核验、复核、证据条目 |
+| 5 | `GET /api/trace/boards/{target}` | `openapi.yaml:353-371`；`server.js:169-176` | 关联实体（`nodes[]`） |
+
+失败口径（`web/src/alert-detail.js` 的 `request`）：
+
+| 情况 | kind | 页面表现 |
+| --- | --- | --- |
+| 401 | `unauthorized` | 整页错误「登录已失效」 |
+| 503 | `unavailable` | 整页错误「告警接口不可用」（动作失败时说「服务端尚未配置自动研判」） |
+| 400（事件类型/ID 无效） | `invalid_id` | 「没有找到这条告警」+ 返回链接 |
+| 502 及其它非 2xx | `http` | 整页错误带状态码 + 重试 |
+| fetch 抛 | `network` | 「无法连接」+ 重试 |
+| 2xx 非 JSON / 形状不对 | `invalid` | 「返回格式异常」 |
+| 404（仅 operation 4、5） | — | **不抛**，返回 `null`：没有研判记录 / 没有白板 |
+
+### 9.2 adapter 契约（`web/src/alert-detail.js`，本页唯一 HTTP 处）
+
+```js
+getAlert(alertId, options?)                  → Promise<{ alert, detail }>   // detail 非对象时给 {}
+getTriageRecord(alertId, options?)           → Promise<TriageCase>
+enqueueTriage(alertId, options?)             → Promise<TriageCase>          // POST，202
+getInvestigation(alertId, { mode }?, opts?)  → Promise<Investigation | null>// 默认 mode=triage；404→null
+getTraceBoard(target, options?)              → Promise<TraceBoard | null>   // 404→null
+// options: { fetchImpl?, baseUrl? }（单测注入）；失败一律抛 AlertDetailError{kind,status}
+```
+
+路径里的告警 ID 一律 `encodeURIComponent`（`revshell:1` → `revshell%3A1`）；服务端 `decodeURIComponent` 后再匹配
+（`server.js:346`、`:328`、`:223`）。
+取研判结果时先查 `mode=triage`，为 `null` 再查 `mode=deep`——两条都 404 才当「没有研判结果」。
+
+### 9.3 状态矩阵（六格）
+
+| 格 | 触发 | 界面 | 断言要点 |
+| --- | --- | --- | --- |
+| loading | 挂载 / 点刷新 | 「正在读取告警…」，业务区整块不出现，刷新与复制禁用 | 加载中再点刷新不发第二次请求 |
+| empty（未研判） | `triage.status = not_queued` 且两条 mode 都 404 | 结论「待研判」+「这条告警还没有研判结论。」；依据/缺失证据/证据来源/关联实体整块隐藏；步骤区一句「还没有研判步骤…」；核验区「尚未核验」 | 概况条的事实/来源/缺口都是「—」，不拿 0 充数 |
+| partial | 告警本体拿到了，研判记录或研判结果读不到 | 主体照常；状态行写「状态读取失败」（不是「未入队」），步骤或核验区写「…读取失败：<原因>」 | 状态读不到时入队按钮禁用并写「研判状态未知」 |
+| error | operation 1 失败（401/503/502/网络） | 整页错误块 `role="alert"`：标题 + 原因 + 「重试」 | 重试要真的再发一轮请求 |
+| long-content | 超长标题/报告/原始字段 | 原样整段渲染，`overflow-wrap: anywhere`；原始 JSON 的 `<pre>` `max-height:360px` 内滚动 | 标题与报告文本与接口回包逐字相等 |
+| disabled | 状态 `queued`/`running`；提交中；加载中 | 按钮文案「已在队列中」/「研判状态未知」，`disabled`；刷新在加载中禁用 | 禁用时点击不发请求 |
+
+另外两态（不在六格里，但页面上真有）：**未找到**（400 或没有 ID）与 **校验未通过**（`validation.ok === false`，
+概况条写「N · 未通过校验」，核验区给错误条数）。
+
+### 9.4 交互与事件
+
+| 动作 | 后果 |
+| --- | --- |
+| ← 告警列表 | `<a href="#/alerts">`（真链接，键盘可达） |
+| 复制告警 ID | `navigator.clipboard.writeText(alert.id)`；成功播报「已复制 <ID>」，不可用/失败播报「复制失败，请手动选择 <ID>」 |
+| 刷新 | 重新走 1→2→4→5 四轮取数；加载中禁用 |
+| 加入研判队列 / 重新研判 | `POST /api/agent/triage/{alertId}`；用 202 回包更新状态（不乐观改），成功后按钮转「已在队列中」并禁用；失败播报「提交失败：<原因>」且按钮恢复 |
+| 深度溯源 | `<a href="#/trace/<encodeURIComponent(alertId)>">`——trace 页从 `params[0]` 取 |
+| 原始事件 / 原始 JSON | 原生 `<details>` 折叠，默认收起 |
+
+播报容器：`[data-role="note"]`（`role="status"` + `aria-live="polite"`，可见文本）。
+
+### 9.5 A2：稿上有、接口没有 → 藏掉（原文见 `topics/backend-findings.md`）
+
+1. 页内顶栏 → 前四项挪进内容区首行；主题切换已在壳的顶栏里，不重复造。
+2. 概况条「依据通过 `claimsPassed/claimsTotal`」→ 接口没有通过数/分母，改画 `claims.length`（校验未过时加「未通过校验」）。
+3. 概况条「证据缺口 `validation.gaps`」→ 用 `missing_evidence.length`；字段缺席时显示「—」。
+4. 依据条目的「已证实 / 存疑」徽标 → `claims[]` 只有 `text` + `citations[]`，改画「引用 N 处证据」+ `evidence_id`。
+5. 步骤的工具名与耗时 → `steps[]` 元素只有 `{ stage, detail, at }`。
+6. 证据来源的分类分组与事实文本 → 只有数量 + `evidence[]`（`evidence_id / tool / fetched_at`），平铺。
+7. 核验的「证据覆盖 / 核验时间」、复核的「复核人 / 时间 / 结论 / 备注」→ `review` 是模型独立复核，没有人工复核字段。
+8. 稿的「ID 不存在」页 → 接口没有 404（未知 ID 走 502），只有 400 按「没有这条告警」处理。
+9. 头部「场景」行（稿映射 `scenario`）→ 与「类型」重复，不单列。
+
+### 9.6 样式与可访问性
+
+- 样式文件 `web/assets/pages/alert-detail.css`，由页面模块首次 render 时插 `<link data-page-style="alert-detail">`
+  （`web/index.html` 与 `assets/app.css` 不在本卡 scope）。所有选择器挂在 `.detail-page` 下，避免与别的页面串样式。
+- 颜色只用 `theme.css` 变量；间距/圆角/动效只用 `app.css` 的令牌；稿里非令牌的字号/行高照抄（见 `coding-reports/P002-T004.md` 的令牌表）。
+- 页面结构：`h1` = 告警标题；每个区块是 `<section aria-labelledby>` + `<h2>`；概况条是 `<dl>`；
+  步骤/依据是 `<ol>`，缺口/证据/实体是 `<ul>`；原始事件是 `<details><summary>`（键盘原生可达）。
+- 状态不只靠颜色：等级有文字、结论有文字、必查证据状态有文字。
