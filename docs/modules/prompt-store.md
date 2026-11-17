@@ -46,7 +46,7 @@
 
 ## 2. 公开面
 
-`PromptStore` 只导出一个类（`prompt-store.js:25`），共 5 个方法加 1 个构造函数。
+`PromptStore` 只导出一个类（`prompt-store.js:25`），共 6 个方法加 1 个构造函数。
 
 | 能力 | 方法 | 入参 | 返回 | 抛错 |
 | --- | --- | --- | --- | --- |
@@ -400,7 +400,7 @@ load() 或 metadata()            → 拿到当前 revision
 | `R-PROMPT-01` | 覆盖文件里对应键的值不是 null/undefined 时，生效正文取覆盖值 | 覆盖文件写了 `triage`，生效的却是仓内 `triage.md` | `prompt-store.js:38`、`prompt-store.js:40`、`prompt-store.js:44` | 本机改的提示词不生效 |
 | `R-PROMPT-02` | `revision` 的输入包含生效中的核心提示词、场景卡、SOP 与发布版本 | 改了场景卡正文而 `revision` 不变 | `prompt-store.js:45` | 乐观并发失效，旧指纹仍能写入 |
 | `R-PROMPT-03` | `update()` 不接受 SOP 章节 | 拿 `sop:common` 调 `update()` 并成功 | `prompt-store.js:103-104` | SOP 被局部改写，与整包安装口径不一致 |
-| `R-PROMPT-04` | 整包安装只前进不后退 | `sequence` 等于当前值也能装上 | `prompt-store.js:72-73` | 旧包覆盖新包 |
+| `R-PROMPT-04` | 整包安装要求 `sequence` 严格大于当前值，等于或更小都拒绝 | `sequence` 等于当前值也能装上 | `prompt-store.js:72-73` | 旧包覆盖新包 |
 | `R-PROMPT-05` | 整包安装的章节集合必须与当前快照一致（21 个） | 少一个章节也能装上 | `prompt-store.js:67-70` | 装出一套残缺的提示词 |
 | `R-PROMPT-06` | 单章节改写不丢覆盖文件里的其他键 | 改完 `triage`，`_release` 与 `_history` 没了 | `prompt-store.js:107-108` | 版本号与安装历史被清掉 |
 | `R-PROMPT-07` | 同一实例上两个写操作不交叉 | 两个 `update()` 同时读到同一份旧覆盖文件并各自落盘 | `prompt-store.js:62`、`prompt-store.js:84`、`prompt-store.js:101`、`prompt-store.js:115` | 后写覆盖前写 |
@@ -415,7 +415,7 @@ load() 或 metadata()            → 拿到当前 revision
 | 覆盖文件不是合法 JSON | `load()` 抛错 | `SyntaxError` | 不变 | 修好文件后可以 | 无 |
 | 提示词文件缺失（6 个核心之一或 `scenarios.json`） | `load()` 抛错 | `Error` / `ENOENT` | 不变 | 补回文件后可以 | 无 |
 | 判据页缺失（`HIDS_WIKI_DIR` 指错、或判据页被删） | `load()` 抛错，报缺哪个文件 | `Error` / `ENOENT` | 不变 | 补回页面后可以 | 无 |
-| 场景卡 id 不在 `wikiSop` 映射表里 | `path.join` 收到 `undefined` | `TypeError` | 不变 | 补上映射表后可以 | 无 |
+| 场景卡 id 不在 `wikiSop` 映射表里 | `path.join` 收到 `undefined`（推断，本仓没有实测触发） | `TypeError` | 不变 | 补上映射表后可以 | 无 |
 | 章节名不在白名单 | `update()` 抛错 | `Error` / 无 `status` | 不变 | 换个章节名 | 无 |
 | 正文不合法（非字符串 / 全空白 / 超长 / 带 NUL） | `update()` 抛错 | `Error` / 无 `status` | 不变 | 改正文 | 无 |
 | 版本对不上（`expectedRevision` 或 `knowledgeRevision`） | `install()` / `update()` 抛错 | `Error` / `409` | 不变（未落盘） | 重新读当前版本后可以 | 无 |
