@@ -10,6 +10,7 @@ depth: complete
 
 一句话：把一次研判的结论按「告警 + 模式」存成一个 JSON 文件，下次用同一个键读回最近一次。
 
+- 模块名：`record-store`（拆分清单与架构篇第 12 节的模块表里都用这个名字）
 - 实现文件：`investigation-store.js`（32 行；唯一的导出是 `InvestigationStore` 类，`investigation-store.js:6`）
 - 模块划分依据：[docs/modules/_breakdown.json](_breakdown.json) 里的 `record-store` 条目
 - 本页每条断言的出处（源码原文 + 验证命令 + 实跑输出）：[evidence/recon/P001-T014.md](../../evidence/recon/P001-T014.md)
@@ -39,6 +40,10 @@ depth: complete
 | 研判记录存取 | `investigation-store.js:14-31` | `save()` 写入、`latest()` 读回；读不到返回 `null` |
 | 文件名散列 | `investigation-store.js:9-12` | 文件名 = `sha256(mode + ':' + alert_id)` 的十六进制 + `.json` |
 | 原子写入 | `investigation-store.js:18-21` | 先写带 UUID 的 `.tmp`，再 `rename` 覆盖到最终文件名 |
+
+构件全集以拆分清单为准：[docs/modules/_breakdown.json](_breakdown.json) 的 `record-store.components` 列的是上面三项；
+[架构篇第 12 节](../architecture.md) 的同一个模块行只写了「研判记录存取」一项（`docs/architecture.md:492`）。
+两处写法不同——代码里能逐个对应上的，是拆分清单那三项。
 
 ## 3 关键路径
 
