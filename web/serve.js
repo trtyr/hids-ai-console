@@ -4,10 +4,13 @@
 // 页面若直连 127.0.0.1:8080 会被浏览器拦。这里让页面与 /api 同源。
 //
 // 用法：node web/serve.js        （HIDS_API_ORIGIN 默认 http://127.0.0.1:8080，HIDS_WEB_PORT 默认 3000）
+//
+// 请求处理抽成 createHandler()，单测可以直接挂到临时端口上（见 web/test/serve.test.js）。
+// 任何一条请求都不许把进程打死：畸形 URL → 400，越界路径 → 403，意外异常 → 500。
 
 import { createReadStream, statSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
-import { extname, join, normalize, sep } from 'node:path';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const WEB_ROOT = fileURLToPath(new URL('.', import.meta.url));
@@ -25,42 +28,60 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
-function proxy(req, res) {
+function sendText(res, status, message) {
+  if (res.headersSent) {
+    res.destroy();
+    return;
+  }
+  res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(message);
+}
+
+/**
+ * 请求路径解码。畸形百分号编码（`/%zz`）、URL 解析失败一律返回 null——
+ * 交给调用方回 400，绝不让 URIError 冒到进程顶上（整死服务等于 A1 打不开页面）。
+ * @param {string} url
+ * @returns {string | null}
+ */
+export function parsePathname(url) {
+  try {
+    return decodeURIComponent(new URL(url, 'http://localhost').pathname);
+  } catch {
+    return null;
+  }
+}
+
+function proxy(req, res, apiOrigin) {
   const upstream = httpRequest(
     {
-      protocol: API_ORIGIN.protocol,
-      hostname: API_ORIGIN.hostname,
-      port: API_ORIGIN.port,
+      protocol: apiOrigin.protocol,
+      hostname: apiOrigin.hostname,
+      port: apiOrigin.port,
       method: req.method,
       path: req.url,
-      headers: { ...req.headers, host: API_ORIGIN.host },
+      headers: { ...req.headers, host: apiOrigin.host },
     },
     upstreamRes => {
       res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
       upstreamRes.pipe(res);
     },
   );
-  upstream.on('error', error => {
-    res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end(`后端不可达：${error.message}`);
-  });
+  upstream.on('error', error => sendText(res, 502, `后端不可达：${error.message}`));
   req.pipe(upstream);
 }
 
-function serveStatic(req, res) {
-  const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+function serveStatic(req, res, webRoot, pathname) {
   const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
-  const target = normalize(join(WEB_ROOT, relative));
-  if (target !== WEB_ROOT.replace(/\/$/, '') && !target.startsWith(WEB_ROOT.endsWith(sep) ? WEB_ROOT : WEB_ROOT + sep)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end('禁止访问');
+  const target = normalize(join(webRoot, relative));
+  const rootWithSep = webRoot.endsWith(sep) ? webRoot : webRoot + sep;
+  if (target !== webRoot.replace(/\/$/, '') && !target.startsWith(rootWithSep)) {
+    return sendText(res, 403, '禁止访问');
   }
   let stat;
   try {
     stat = statSync(target);
   } catch {
-    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end('找不到文件');
+    return sendText(res, 404, '找不到文件');
   }
   if (stat.isDirectory()) {
     res.writeHead(302, { Location: `${pathname.replace(/\/$/, '')}/index.html` });
@@ -74,9 +95,29 @@ function serveStatic(req, res) {
   createReadStream(target).pipe(res);
 }
 
-createServer((req, res) => {
-  if (req.url === '/api' || req.url.startsWith('/api/') || req.url.startsWith('/api?')) return proxy(req, res);
-  return serveStatic(req, res);
-}).listen(PORT, HOST, () => {
-  console.log(`web 已启动：http://${HOST}:${PORT}/    （/api 反代到 ${API_ORIGIN.origin}）`);
-});
+/**
+ * 造请求处理器（单测用这个，别直接起进程）。
+ * @param {{ webRoot?: string, apiOrigin?: URL }} [options]
+ */
+export function createHandler(options = {}) {
+  const webRoot = options.webRoot ?? WEB_ROOT;
+  const apiOrigin = options.apiOrigin ?? API_ORIGIN;
+
+  return function handle(req, res) {
+    try {
+      const pathname = parsePathname(req.url);
+      if (pathname === null) return sendText(res, 400, '请求路径无效');
+      if (pathname === '/api' || pathname.startsWith('/api/')) return proxy(req, res, apiOrigin);
+      return serveStatic(req, res, webRoot, pathname);
+    } catch (error) {
+      return sendText(res, 500, `服务内部错误：${error.message}`);
+    }
+  };
+}
+
+const isEntry = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isEntry) {
+  createServer(createHandler()).listen(PORT, HOST, () => {
+    console.log(`web 已启动：http://${HOST}:${PORT}/    （/api 反代到 ${API_ORIGIN.origin}）`);
+  });
+}

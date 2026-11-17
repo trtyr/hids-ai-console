@@ -19,8 +19,21 @@ HIDS_API_ORIGIN=http://127.0.0.1:19880 HIDS_WEB_PORT=13300 node web/serve.js
 
 - `web/serve.js` 只做两件事：给 `web/` 里的静态文件、把 `/api/*` 原样反代到 `HIDS_API_ORIGIN`（默认 `http://127.0.0.1:8080`）。
   需要反代是因为：`server.js` 不提供静态文件，也没有 CORS 头（`server.js:53-56`），页面直连 8080 会被浏览器拦。
+- **它不许被一条请求打死**（A1 的载体就是它）。返回码就这么几张，`web/test/serve.test.js` 逐条钉着：
+
+  | 情况 | 返回 |
+  | --- | --- |
+  | 正常路径 | 200 + 按扩展名的 MIME（`.woff2` / `.js` / `.css` / `.html` / `.json` / `.svg`） |
+  | 畸形百分号编码（`/%zz`、`/%`、半截 UTF-8） | **400**「请求路径无效」，服务继续接客（不是进程退出） |
+  | `..` 越界（含 `%2f` 编码） | 403「禁止访问」 |
+  | 文件不存在 | 404「找不到文件」 |
+  | `/api/*` 后端连不上 | 502「后端不可达」，页面据此显示「服务异常」 |
+  | 处理中意外异常 | 500「服务内部错误」，响应已发出则断开连接 |
+
+- 请求处理抽成了 `createHandler({ webRoot?, apiOrigin? })`（`web/serve.js:102`），`node web/serve.js` 才真正 listen（`:118`）；
+  单测直接把它挂到临时端口上，不占固定端口。
 - 端口被占就换 `HIDS_PORT` / `HIDS_WEB_PORT`，两个都要换（反代跟着 `HIDS_API_ORIGIN` 走）。
-- 单测：`cd web && npm install && npm test`（`node --test`，jsdom 只给单测用）。
+- 单测：`cd web && npm install && npm test`（`node --test`，jsdom 只给单测用；`serve.js` 的用例起在临时端口上，不需要先起服务）。
   仓根 `npm test` 也会跑到 `web/test/*.test.js`（`node --test` 递归发现），结果一致。
 
 ## 2. 数据来源：形态 B（对接已就绪后端）
