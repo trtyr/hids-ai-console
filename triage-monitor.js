@@ -102,7 +102,8 @@ export class TriageMonitor {
     const record = this.records.get(alertId) || [...this.records.values()].reverse().find(item => item.matched_alert_id === alertId);
     if (!record) return null;
     const { input, ...visible } = record;
-    return { ...visible, steps: [...(record.steps || [])] };
+    // TriageCase.evidence[] 恒为数组：排队/失败/未入队的记录也不能缺键。
+    return { ...visible, evidence: visible.evidence || [], steps: [...(record.steps || [])] };
   }
 
   cases({ count = 20, offset = 0 } = {}) {

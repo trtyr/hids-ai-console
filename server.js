@@ -288,7 +288,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         try { alertId = decodeURIComponent(url.pathname.slice('/api/agent/triage/'.length)); }
         catch { return error(res, 400, '告警 ID 编码无效'); }
         if (!validTriageId(alertId)) return error(res, 400, '告警 ID 无效');
-        if (req.method === 'GET') return json(res, 200, monitor.status(alertId) || { alert_id: alertId, status: 'not_queued' });
+        if (req.method === 'GET') return json(res, 200, monitor.status(alertId) || { alert_id: alertId, status: 'not_queued', evidence: [] });
         if (req.method === 'POST') return json(res, 202, await monitor.enqueue(alertId, { retry: true }));
       }
       if (url.pathname === '/api/agent/prompts' && req.method === 'GET') {
@@ -408,20 +408,23 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const result = triageFiltered
           ? await triageFilteredAlerts(service, monitor, filters.query, { statuses: filters.statuses, verdicts: filters.verdicts, count, offset })
           : await service.alerts({ count, offset, ...filters.query });
-        if (monitor && !triageFiltered) result.alerts = result.alerts.map(alert => ({ ...alert, triage: monitor.status(alert.id) }));
-        // 没配研判时 triage 恒为 null：前端靠这个布尔分辨「没记录」与「没配」两种空。
+        // 没配研判时 triage 键仍在、值为 null：前端靠这个布尔分辨「没记录」与「没配」两种空。
+        if (!triageFiltered) result.alerts = result.alerts.map(alert => ({ ...alert, triage: monitor ? monitor.status(alert.id) : null }));
         result.triage_configured = Boolean(monitor);
         return json(res, 200, result);
       }
       let decodedPath;
       try { decodedPath = decodeURIComponent(url.pathname); }
       catch { return error(res, 400, '事件路径编码无效'); }
-      const match = decodedPath.match(/^\/api\/alerts\/([a-z_]+):([0-9]+)$/);
-      if (match && req.method === 'GET') {
+      // 详情：路径形状对但 ID / 事件类型不合法一律 400，不把牧云调用浪费掉。
+      const detailPath = decodedPath.match(/^\/api\/alerts\/([^/]+)$/);
+      if (detailPath && req.method === 'GET') {
+        if (!Object.hasOwn(eventTypes, detailPath[1].split(':')[0])) return error(res, 400, '不支持的事件类型');
+        if (!validAlertId(detailPath[1])) return error(res, 400, '告警 ID 无效');
         if (!service) return configured(res);
-        if (!Object.hasOwn(eventTypes, match[1])) return error(res, 400, '不支持的事件类型');
+        const [type, id] = detailPath[1].split(':');
         let result;
-        try { result = await service.alert(match[1], Number(match[2])); }
+        try { result = await service.alert(type, Number(id)); }
         catch (cause) {
           // 404 = 牧云可达但这条事件读不到（cloudwalker.js 标 status）；其余（不可达、上游自相矛盾）落到外层 502。
           if (cause?.status === 404) return error(res, 404, cause.message);

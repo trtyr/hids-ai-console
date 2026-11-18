@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { RpcClient } from './rpc-client.js';
+import { TriageMonitor } from './triage-monitor.js';
 import { CloudwalkerGateway, rpcMethods } from './cloudwalker.js';
 import { normalizeAlert } from './cloudwalker.js';
 import { createServer } from './server.js';
@@ -317,7 +322,8 @@ test('/api/alerts 顶层 triage_configured 区分「没记录」与「没配研�
   t.after(() => off.server.close());
   const withoutTriage = await (await fetch(`${off.base}/api/alerts`)).json();
   assert.equal(withoutTriage.triage_configured, false);
-  assert.equal(Object.hasOwn(withoutTriage.alerts[0], 'triage'), false);
+  // 没配研判时 triage 键在、值为 null（契约写的是「恒为 null」，不是「缺键」）
+  assert.equal(withoutTriage.alerts[0].triage, null);
   const on = await serve(service, { status: () => null });
   t.after(() => on.server.close());
   const withTriage = await (await fetch(`${on.base}/api/alerts`)).json();
@@ -326,4 +332,39 @@ test('/api/alerts 顶层 triage_configured 区分「没记录」与「没配研�
   const filtered = await (await fetch(`${on.base}/api/alerts?triage_status=not_queued`)).json();
   assert.equal(filtered.triage_configured, true);
   assert.equal(filtered.total, 1);
+});
+
+test('HTTP 详情：告警 ID 格式不对或类型不在枚举 → 400，不浪费一次牧云调用', async t => {
+  const calls = [];
+  const service = { alert: async (type, id) => { calls.push([type, id]); return { alert: { id: `${type}:${id}` }, detail: {} }; } };
+  const { server, base } = await serve(service);
+  t.after(() => server.close());
+  for (const id of ['webshell:0', 'webshell:abc', 'webshell', '1.5', 'nope:1']) {
+    const response = await fetch(`${base}/api/alerts/${id}`);
+    assert.equal(response.status, 400, id);
+    assert.match((await response.json()).error, /事件类型|告警 ID/, id);
+  }
+  assert.deepEqual(calls, []);
+  assert.equal((await fetch(`${base}/api/alerts/webshell:3`)).status, 200);
+});
+
+test('TriageCase 三处都带 evidence[]：未入队详情、入队 202、告警列表挂的 triage', async t => {
+  const directory = path.join(tmpdir(), `hids-triage-${randomUUID()}`);
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const monitor = new TriageMonitor({ file: path.join(directory, 'queue.json'), concurrency: 1,
+    history: { latest: async () => null, save: async result => ({ ...result, saved_at: new Date().toISOString() }) },
+    service: { alerts: async () => ({ alerts: [], partial: false }) },
+    investigator: { run: async () => ({}) } });
+  await monitor.load();
+  const service = { alerts: async () => ({ alerts: [{ id: 'webshell:1' }], total: 1, totals: { webshell: 1 },
+    errors: {}, partial: false }) };
+  const { server, base } = await serve(service, monitor);
+  t.after(() => server.close());
+  const notQueued = await (await fetch(`${base}/api/agent/triage/webshell:1`)).json();
+  assert.deepEqual(notQueued, { alert_id: 'webshell:1', status: 'not_queued', evidence: [] });
+  const posted = await fetch(`${base}/api/agent/triage/webshell:1`, { method: 'POST' });
+  assert.equal(posted.status, 202);
+  assert.deepEqual((await posted.json()).evidence, []);
+  const list = await (await fetch(`${base}/api/alerts`)).json();
+  assert.deepEqual(list.alerts[0].triage.evidence, []);
 });

@@ -120,3 +120,23 @@ test('旧队列记录缺 evidence 时从研判记录就地补齐', async t => {
   assert.deepEqual(monitor.status('honeypot:9').evidence,
     [{ evidence_id: 'syslog:1', tool: 'received_syslog', fetched_at: '2026-11-03T08:00:00.000Z', sha256: 'b'.repeat(64) }]);
 });
+
+test('排队中与研判失败的 TriageCase 也带空的 evidence[]', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-evidence-empty-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const options = { concurrency: 1, history: new InvestigationStore(path.join(directory, 'results')),
+    service: { alerts: async () => ({ alerts: [], partial: false }) },
+    investigator: { run: async () => { throw new Error('模型不可达'); } } };
+  const failed = new TriageMonitor({ ...options, file: path.join(directory, 'failed.json') });
+  await failed.load();
+  await failed.enqueue('honeypot:8');
+  for (let n = 0; n < 50 && failed.status('honeypot:8').status !== 'failed'; n++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(failed.status('honeypot:8').status, 'failed');
+  assert.deepEqual(failed.status('honeypot:8').evidence, []);
+  const paused = new TriageMonitor({ ...options, file: path.join(directory, 'paused.json') });
+  await paused.load();
+  await paused.setEnabled(false);
+  const queued = await paused.enqueue('honeypot:9');
+  assert.equal(queued.status, 'queued');
+  assert.deepEqual(queued.evidence, []);
+});
