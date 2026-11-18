@@ -304,3 +304,52 @@ test('总览接口在 syslog 模式透出最后一条到达时刻，poll 模式�
   assert.equal('last_received_at' in pollBody, false);
   assert.equal('interval_ms' in pollBody, true);
 });
+
+// ---------- P003-T014：溯源列表筛选与 200/202 语义 ----------
+
+test('白板列表把状态/类型/主机/时间筛选交给服务层，非法值回 400 且不调服务层', async t => {
+  const seen = [];
+  const boardService = { page: async options => { seen.push(options); return { boards: [], total: 0 }; } };
+  const server = createServer(null, null, null, null, null, null, null, {}, boardService);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  const response = await fetch(`${base}/api/trace/boards?count=5&offset=2&status=done&type=honeypot` +
+    '&host=10.0.0.1&from=2026-11-18T00:00:00Z&to=1795046400');
+  assert.equal(response.status, 200);
+  assert.deepEqual(seen[0], { count: 5, offset: 2, statuses: ['done'], type: 'honeypot', host: '10.0.0.1',
+    from: Date.parse('2026-11-18T00:00:00Z'), to: 1795046400000 });
+
+  const before = seen.length;
+  for (const [query, message] of [['status=bogus', /筛选状态无效/], ['type=bogus', /筛选事件类型无效/],
+    ['from=not-a-time', /筛选起始时间无效/], ['to=bad', /筛选结束时间无效/],
+    ['from=2026-11-19T00:00:00Z&to=2026-11-18T00:00:00Z', /晚于结束时间/]]) {
+    const failed = await fetch(`${base}/api/trace/boards?${query}`);
+    assert.equal(failed.status, 400, `${query} 应回 400`);
+    assert.match((await failed.json()).error, message);
+  }
+  assert.equal(seen.length, before);
+  await fetch(`${base}/api/trace/boards`);
+  assert.deepEqual(seen.at(-1), { count: 20, offset: 0 });
+});
+
+test('POST 白板：已有返回 200，新建返回 202，syslog 形态告警 ID 也收', async t => {
+  const calls = [];
+  const boardService = { get: async () => null,
+    startOrResume: async (id, focus) => { calls.push({ id, focus });
+      return { created: id !== 'honeypot:7', board: { alert_id: id, status: 'running' } }; } };
+  const server = createServer(null, null, null, null, null, null, null, {}, boardService);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const syslog = 'syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43';
+  const post = async target => {
+    const response = await fetch(`${base}/api/trace/boards`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target, focus: '看链' }) });
+    return { status: response.status, body: await response.json() };
+  };
+  assert.deepEqual(await post('honeypot:7'), { status: 200, body: { alert_id: 'honeypot:7', status: 'running' } });
+  assert.deepEqual(await post(syslog), { status: 202, body: { alert_id: syslog, status: 'running' } });
+  assert.deepEqual(calls, [{ id: 'honeypot:7', focus: '看链' }, { id: syslog, focus: '看链' }]);
+});

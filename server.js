@@ -51,8 +51,24 @@ const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, i
   baselineFile: path.join(root, 'backend', '.data', 'baseline.json'),
   intelFile: path.join(root, 'backend', '.data', 'intel.json') }) : null;
 const wikiWorkbench = new WikiWorkbench(wikiStore, model, promptStore, path.join(root, 'backend', '.data', 'wiki-sessions'));
+// A4：告警分析已经取到的证据（syslog 形态的分析记录留着原始报文）直接引用，溯源不再查同一份。
+async function analyzedAlert(alertId) {
+  const record = triageMonitor?.status(alertId);
+  const parsed = record?.input?.parsed;
+  const type = parsed ? eventTypeFor(parsed.msgid) : null;
+  if (!type) return null;
+  const payload = parsed.payload || {};
+  const hostIp = String(payload.host_ip || '').replace(/\/32$/, '');
+  if (!hostIp) return null;
+  return { evidence_id: 'syslog:1', tool: 'received_syslog', type, facts: {
+    host_ip: hostIp, host_name: payload.host_name || null,
+    source_ip: payload.source_ip || payload.login_ip || null,
+    destination_ip: payload.target_ip || payload.destination_ip || null,
+    occurred_at: parseInstant(payload.event_create_time ?? parsed.ts),
+    title: payload.event_name || eventTypes[type], event_id: payload.event_id ?? null } };
+}
 const traceBoard = agentToolbox && model ? new TraceBoardService({ toolbox: agentToolbox, model, promptStore,
-  directory: path.join(root, 'backend', '.data', 'trace-boards') }) : null;
+  directory: path.join(root, 'backend', '.data', 'trace-boards'), analysis: analyzedAlert }) : null;
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -118,7 +134,7 @@ function wikiPagePath(pathname) {
   catch { return { invalidEncoding: true }; }
 }
 function validTraceTarget(value) {
-  if (validAlertId(value)) return true;
+  if (validTriageId(value)) return true;
   const address = String(value || '').replace(/^ip:/, '');
   return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(address) && address.split('.').every(part => Number(part) <= 255);
 }
@@ -177,6 +193,26 @@ function caseQuery(params) {
   return { filters: { verdicts, type, host: params.get('host')?.trim() || null,
     from: fromTime ? Math.floor(Date.parse(fromTime) / 1000) : null,
     to: toTime ? Math.floor(Date.parse(toTime) / 1000) : null, sort } };
+}
+
+// 解析 /api/trace/boards 的查询参数：分页由路由先校验；这里只做筛选词表与时间校验。
+const traceStatuses = new Set(['running', 'done', 'failed', 'interrupted']);
+function traceQuery(params) {
+  const statuses = paramList(params, 'status');
+  for (const value of statuses) if (!traceStatuses.has(value)) return { error: `筛选状态无效：${value}` };
+  const type = params.get('type')?.trim() || null;
+  if (type && !Object.hasOwn(eventTypes, type)) return { error: `筛选事件类型无效：${type}` };
+  const from = params.get('from')?.trim();
+  const to = params.get('to')?.trim();
+  const fromTime = from ? parseInstant(from) : null;
+  const toTime = to ? parseInstant(to) : null;
+  if (from && !fromTime) return { error: `筛选起始时间无效：${from}` };
+  if (to && !toTime) return { error: `筛选结束时间无效：${to}` };
+  if (fromTime && toTime && fromTime > toTime) return { error: '筛选起始时间晚于结束时间' };
+  const host = params.get('host')?.trim() || null;
+  return { filters: { ...(statuses.length ? { statuses } : {}), ...(type ? { type } : {}),
+    ...(host ? { host } : {}), ...(fromTime ? { from: Date.parse(fromTime) } : {}),
+    ...(toTime ? { to: Date.parse(toTime) } : {}) } };
 }
 
 // 研判侧筛选：逐页拉取、挂 triage 后过滤，翻到流末或扫描上限后再切页。
@@ -266,15 +302,21 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const offset = Number(url.searchParams.get('offset') || 0);
         if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
           return error(res, 400, '分页参数无效');
-        return json(res, 200, await boardService.page({ count, offset }));
+        const parsed = traceQuery(url.searchParams);
+        if (parsed.error) return error(res, 400, parsed.error);
+        return json(res, 200, await boardService.page({ count, offset, ...parsed.filters }));
       }
       if (url.pathname === '/api/trace/boards' && req.method === 'POST') {
         if (!boardService) return error(res, 503, '深度溯源模型或牧云 MCP 尚未配置');
         const body = await readJSON(req);
         const target = body?.target || body?.alert_id || body?.ip;
         if (!validTraceTarget(target)) return error(res, 400, '请输入有效告警 ID 或 IPv4 地址');
-        try { return json(res, 202, await boardService.start(target, body.focus)); }
-        catch (cause) { return error(res, cause.status || 502, cause.message); }
+        try {
+          // 已有白板回 200（直接打开那条），新建才回 202（任务已启动）。
+          const started = boardService.startOrResume ? await boardService.startOrResume(target, body.focus)
+            : { created: true, board: await boardService.start(target, body.focus) };
+          return json(res, started.created ? 202 : 200, started.board);
+        } catch (cause) { return error(res, cause.status || 502, cause.message); }
       }
       if (url.pathname.startsWith('/api/trace/boards/') && req.method === 'GET') {
         if (!boardService) return error(res, 503, '深度溯源模型或牧云 MCP 尚未配置');
