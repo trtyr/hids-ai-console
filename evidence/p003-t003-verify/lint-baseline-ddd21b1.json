@@ -1,0 +1,514 @@
+{
+  "totals": {
+    "errors": 0,
+    "warnings": 21,
+    "ignored": 0
+  },
+  "version": "2.77.0",
+  "problems": [
+    {
+      "ruleId": "info-license",
+      "severity": "warn",
+      "message": "Info object should contain `license` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/info",
+          "reportOnKey": true,
+          "start": {
+            "line": 2,
+            "col": 1
+          },
+          "end": {
+            "line": 2,
+            "col": 5
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/info-license",
+      "suggest": []
+    },
+    {
+      "ruleId": "tag-description",
+      "severity": "warn",
+      "message": "Tag object should contain `description` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/tags/0/description",
+          "reportOnKey": true,
+          "start": {
+            "line": 18,
+            "col": 5
+          },
+          "end": {
+            "line": 18,
+            "col": 13
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/tag-description",
+      "suggest": []
+    },
+    {
+      "ruleId": "tag-description",
+      "severity": "warn",
+      "message": "Tag object should contain `description` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/tags/1/description",
+          "reportOnKey": true,
+          "start": {
+            "line": 19,
+            "col": 5
+          },
+          "end": {
+            "line": 19,
+            "col": 13
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/tag-description",
+      "suggest": []
+    },
+    {
+      "ruleId": "tag-description",
+      "severity": "warn",
+      "message": "Tag object should contain `description` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/tags/2/description",
+          "reportOnKey": true,
+          "start": {
+            "line": 20,
+            "col": 5
+          },
+          "end": {
+            "line": 20,
+            "col": 15
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/tag-description",
+      "suggest": []
+    },
+    {
+      "ruleId": "tag-description",
+      "severity": "warn",
+      "message": "Tag object should contain `description` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/tags/3/description",
+          "reportOnKey": true,
+          "start": {
+            "line": 21,
+            "col": 5
+          },
+          "end": {
+            "line": 21,
+            "col": 15
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/tag-description",
+      "suggest": []
+    },
+    {
+      "ruleId": "tag-description",
+      "severity": "warn",
+      "message": "Tag object should contain `description` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/tags/4/description",
+          "reportOnKey": true,
+          "start": {
+            "line": 22,
+            "col": 5
+          },
+          "end": {
+            "line": 22,
+            "col": 13
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/tag-description",
+      "suggest": []
+    },
+    {
+      "ruleId": "tag-description",
+      "severity": "warn",
+      "message": "Tag object should contain `description` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/tags/5/description",
+          "reportOnKey": true,
+          "start": {
+            "line": 23,
+            "col": 5
+          },
+          "end": {
+            "line": 23,
+            "col": 14
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/tag-description",
+      "suggest": []
+    },
+    {
+      "ruleId": "tag-description",
+      "severity": "warn",
+      "message": "Tag object should contain `description` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/tags/6/description",
+          "reportOnKey": true,
+          "start": {
+            "line": 24,
+            "col": 5
+          },
+          "end": {
+            "line": 24,
+            "col": 15
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/tag-description",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1status/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 47,
+            "col": 7
+          },
+          "end": {
+            "line": 47,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1updates/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 77,
+            "col": 7
+          },
+          "end": {
+            "line": 77,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1agent~1status/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 84,
+            "col": 7
+          },
+          "end": {
+            "line": 84,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1agent~1tools/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 102,
+            "col": 7
+          },
+          "end": {
+            "line": 102,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1trace~1tools/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 110,
+            "col": 7
+          },
+          "end": {
+            "line": 110,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1agent~1prompts/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 119,
+            "col": 7
+          },
+          "end": {
+            "line": 119,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-2xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `2XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1agent~1prompts~1upload/post/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 128,
+            "col": 7
+          },
+          "end": {
+            "line": 128,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-2xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1agent~1triage~1status/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 236,
+            "col": 7
+          },
+          "end": {
+            "line": 236,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1trace~1boards/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 371,
+            "col": 7
+          },
+          "end": {
+            "line": 371,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1triage~1rules/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 430,
+            "col": 7
+          },
+          "end": {
+            "line": 430,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1wiki~1pages/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 495,
+            "col": 7
+          },
+          "end": {
+            "line": 495,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1wiki~1sessions~1{sessionId}~1replay/post/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 620,
+            "col": 7
+          },
+          "end": {
+            "line": 620,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "../../../../../../tmp/p003-baseline-ddd21b1/openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1maintenance~1session/get/responses",
+          "reportOnKey": true,
+          "start": {
+            "line": 650,
+            "col": 7
+          },
+          "end": {
+            "line": 650,
+            "col": 16
+          }
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    }
+  ]
+}

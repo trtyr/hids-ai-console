@@ -145,6 +145,9 @@ paths:
 
         带 level / q / from / to 或 sort=level 时单次请求最多扫描 500 条原始事件（研判侧筛选同样最多扫 500 条）；
         扫到上限仍未到流末时返回 truncated=true，此时 total 只统计扫描窗口内的匹配。
+
+        顶层 triage_configured 说明本进程是否配了自动研判：为 false 时 alerts[].triage 恒为 null，
+        triage_status / verdict 筛选按「无研判记录」口径（全部算 not_queued / review）。
       operationId: listAlerts
       parameters:
         - $ref: '#/components/parameters/Count'
@@ -164,7 +167,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [alerts, total, totals, errors, partial]
+                required: [alerts, total, totals, errors, partial, triage_configured]
                 properties:
                   alerts: { type: array, items: { $ref: '#/components/schemas/Alert' } }
                   total:
@@ -173,6 +176,9 @@ paths:
                   totals: { type: object, additionalProperties: { type: integer } }
                   errors: { type: object, additionalProperties: { type: string } }
                   partial: { type: boolean }
+                  triage_configured:
+                    type: boolean
+                    description: 是否配置了自动研判（有研判监视器）；false 时 alerts[].triage 恒为 null
                   truncated:
                     type: boolean
                     description: 扫描窗口被截断（仅带筛选或 sort=level 时可能为 true）；为 true 时 total 不是全量精确值
@@ -185,6 +191,7 @@ paths:
                     totals: { webshell: 1 }
                     errors: {}
                     partial: false
+                    triage_configured: true
                     truncated: false
         '400': { $ref: '#/components/responses/BadRequest' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
@@ -192,6 +199,13 @@ paths:
     get:
       tags: [告警]
       summary: 获取指定牧云事件详情
+      description: |
+        返回告警摘要与牧云原始详情。错误码按「牧云可达性」分：
+        - 牧云可达、但这条事件读不到（GetEvent 报错、返回空结果，或结果里没有事件身份）→ 404；
+        - 连不上牧云（传输 / HTTP / JSON-RPC 失败，且同类事件列表也失败）→ 502；
+        - 上游返回了别的事件 ID 属于自相矛盾 → 502，不归为 404。
+
+        告警 ID 格式不对或事件类型不在枚举内 → 400；未配置牧云 → 503。
       operationId: getAlert
       parameters:
         - $ref: '#/components/parameters/AlertId'
@@ -207,7 +221,13 @@ paths:
                   alert: { $ref: '#/components/schemas/Alert' }
                   detail: { type: object, additionalProperties: true }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '404':
+          description: 牧云可达但没有这条事件（ID 不存在或已不可见）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '502': { $ref: '#/components/responses/BackendError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/agent/triage/status:
     get:
       tags: [自动研判]
@@ -913,6 +933,21 @@ components:
         report: { type: [string, 'null'] }
         verified_facts: { type: integer }
         evidence_sources: { type: integer }
+        evidence:
+          type: array
+          description: |
+            本次研判实际取到的证据条目，按取证顺序；只给四个字段，工具入参（args）不外露。
+            未配置研判或记录仍在排队时是空数组。
+          items:
+            type: object
+            required: [evidence_id, tool, fetched_at, sha256]
+            properties:
+              evidence_id: { type: string }
+              tool: { type: string }
+              fetched_at: { type: string, format: date-time }
+              sha256:
+                type: string
+                description: 证据原始内容的 SHA-256，64 位小写十六进制
         steps: { type: array, items: { type: object, additionalProperties: true } }
       additionalProperties: true
     Investigation:

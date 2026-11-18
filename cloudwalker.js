@@ -81,6 +81,15 @@ export function detailEvidence(detail) {
   return result;
 }
 
+// 列表动词：蜜罐是 List，其余 10 类是 GetEventList（见文件头注释）。
+const listMethod = type => `${rpcMethods[type]}.${type === 'honeypot' ? 'List' : 'GetEventList'}`;
+// 牧云可达、但这条事件读不到：HTTP 详情接口按 404 处理（server.js 认 status 字段）。
+function eventMissing(type, id) {
+  const error = new Error(`牧云 ${eventTypes[type]} 事件 #${id} 不存在或已不可见`);
+  error.status = 404;
+  return error;
+}
+
 export class CloudwalkerGateway {
   constructor(rpc) { this.rpc = rpc; }
 
@@ -112,7 +121,7 @@ export class CloudwalkerGateway {
     // 无后置筛选且按时间排时沿用流式归并（不额外扫描）；否则要扫窗口才能过滤计数与排序。
     const scanMode = Boolean(levels || needle || from || to) || sort === 'level';
     const fetchBatch = async (type, start) => {
-      const method = `${rpcMethods[type]}.${type === 'honeypot' ? 'List' : 'GetEventList'}`;
+      const method = listMethod(type);
       const data = await this.rpc.call(method, { count: batchSize, offset: start });
       const rows = data.events ?? data.data ?? data.list;
       if (!Array.isArray(rows) || !Number.isSafeInteger(Number(data.total)) || Number(data.total) < 0) {
@@ -182,10 +191,19 @@ export class CloudwalkerGateway {
 
   async alert(type, id) {
     if (!Object.hasOwn(eventTypes, type) || !Number.isSafeInteger(Number(id)) || Number(id) <= 0) throw new Error('无效的事件类型或 ID');
-    const raw = await this.rpc.call(`${rpcMethods[type]}.GetEvent`, { id: Number(id) });
-    const detail = raw.event || raw;
-    const returned = Number(detail.event_id ?? detail.id);
-    if (!Number.isSafeInteger(returned) || returned <= 0) throw new Error('牧云详情缺少事件 ID，无法确认事件身份');
+    let raw;
+    try { raw = await this.rpc.call(`${rpcMethods[type]}.GetEvent`, { id: Number(id) }); }
+    catch (cause) {
+      // 拿不到「不可达」的结构化错误码（RpcClient 不在本卡 scope），只能再探一次同类列表：
+      // 探得通说明故障只属于这条事件（通常就是 ID 不存在）→ 404；探不通算牧云不可达 → 原错上抛（502）。
+      try { await this.rpc.call(listMethod(type), { count: 1, offset: 0 }); }
+      catch { throw cause; }
+      throw eventMissing(type, id);
+    }
+    const detail = raw && typeof raw === 'object' && raw.event && typeof raw.event === 'object' ? raw.event : raw;
+    const returned = Number(detail?.event_id ?? detail?.id);
+    // result 里没有事件身份（null / {} / {event:null}）同样是「这条事件读不到」。
+    if (!Number.isSafeInteger(returned) || returned <= 0) throw eventMissing(type, id);
     if (returned !== Number(id)) throw new Error('牧云详情事件 ID 与请求不符');
     const normalized = normalizeAlert(type, { ...detail, id: Number(id) });
     const evidence = detailEvidence(detail);
