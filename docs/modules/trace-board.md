@@ -15,21 +15,21 @@
 ### 1.1 做什么
 
 - **开白板**：以告警 ID（`<类型>:<数字>`）或一个 IPv4 为起点，生成一张初始白板——起点节点、起始时间窗、一条「以告警／IP 为起点」的活动记录
-  （`trace-board.js:64-71`、`trace-board.js:72-78`、`trace-board.js:79-85`、`trace-board.js:88-100`）。
+  （`trace-board.js:158-186`、`trace-board.js:169-176`、`trace-board.js:178-186`、`trace-board.js:188-202`）。
 - **让模型自己追**：进入一个自主循环，模型每轮从 `look`／`investigate`／`link`／`conclude` 四种动作里选一个
-  （`trace-board.js:143-149`、`trace-board.js:373`）。
+  （`trace-board.js:246-253`、`trace-board.js:515-516`）。
 - **查节点**：程序按节点类型发起牧云只读查询，把资产档案、跨类事件、同类事件、防火墙连接记录取回来，按时间窗过滤后算成资产档案与事实摘要
-  （`trace-board.js:256`、`trace-board.js:257-265`、`trace-board.js:267-275`、`trace-board.js:276-285`、`trace-board.js:286-287`、`trace-board.js:335-338`）。
-- **连关系**：模型可以给两个节点连边，但边必须带能核验的原始证据引用，且引用要覆盖两端地址（`trace-board.js:404-424`）。
-- **落盘**：整张白板存成一个 JSON 文件，进程重启后仍能读（`trace-board.js:192-205`、`trace-board.js:181-191`）。
+  （`trace-board.js:393`、`trace-board.js:394-403`、`trace-board.js:404-412`、`trace-board.js:413-421`、`trace-board.js:424`、`trace-board.js:477-480`）。
+- **连关系**：模型可以给两个节点连边，但边必须带能核验的原始证据引用，且引用要覆盖两端地址（`trace-board.js:546-566`）。
+- **落盘**：整张白板存成一个 JSON 文件，进程重启后仍能读（`trace-board.js:309-322`、`trace-board.js:297-307`）。
 
 ### 1.2 不做什么
 
-- **不下指令**：本模块只调用以 `get_` 或 `list_` 开头的查询类工具（`trace-board.js:215-221`、`trace-board.js:257-265`、
-  `trace-board.js:267-275`、`trace-board.js:276-285`、`trace-board.js:286-287`），不碰处置类接口。
+- **不下指令**：本模块只调用以 `get_` 或 `list_` 开头的查询类工具（`trace-board.js:344-355`、`trace-board.js:394-403`、
+  `trace-board.js:404-412`、`trace-board.js:413-421`、`trace-board.js:424`），不碰处置类接口。
 - **不做告警的日常判定**：告警列表怎么判由另一个智能体负责，这里只做溯源（`prompts/trace-board.md:3`）。
 - **不替人把线索说成结论**：程序画的那条「触达线索」只是同一条记录里的来源 IP 与目标主机，提示词要求 AI 自己判断它算不算真关系
-  （`trace-board.js:312-319`、`prompts/trace-board.md:12`）。
+  （`trace-board.js:452-457`、`prompts/trace-board.md:12`）。
 - **不写客户端**：本仓只含业务后端，不含客户前端和维护页面（`README.md:3`）。
 
 ## 2 公开面
@@ -38,21 +38,21 @@
 
 | 能力 | 入口 | 证据 |
 | --- | --- | --- |
-| 开一张新白板并启动追查 | `TraceBoardService.start` | `trace-board.js:206-210`、`trace-board.js:222-224` |
-| 读一张白板 | `TraceBoardService.get` | `trace-board.js:181-191` |
-| 列白板（按更新时间倒序，返回数组） | `TraceBoardService.list` | `trace-board.js:158-180` |
-| 分页列白板（回 `{ boards, total }`） | `TraceBoardService.page` | `trace-board.js:173-177` |
-| 全量摘要（`list`／`page` 共用，读目录并排序） | `TraceBoardService.summaries` | `trace-board.js:158-171` |
-| 调查一个节点 | `TraceBoardService.investigate` | `trace-board.js:234-237` |
-| 跑一轮自主追查 | `TraceBoardService.explore` | `trace-board.js:364-371` |
-| 保存白板 | `TraceBoardService.save` | `trace-board.js:192-205` |
-| 造告警起点的初始白板 | `traceBoardSeed` | `trace-board.js:64-71` |
-| 造 IP 起点的初始白板 | `traceIpSeed` | `trace-board.js:88-100` |
+| 开一张新白板并启动追查 | `TraceBoardService.start` | `trace-board.js:326-369`、`trace-board.js:358-359` |
+| 读一张白板 | `TraceBoardService.get` | `trace-board.js:297-307` |
+| 列白板（按更新时间倒序，返回数组） | `TraceBoardService.list` | `trace-board.js:294-295` |
+| 分页列白板（回 `{ boards, total }`） | `TraceBoardService.page` | `trace-board.js:282-292` |
+| 全量摘要（`list`／`page` 共用，读目录并排序） | `TraceBoardService.summaries` | `trace-board.js:268-280` |
+| 调查一个节点 | `TraceBoardService.investigate` | `trace-board.js:371-374` |
+| 跑一轮自主追查 | `TraceBoardService.explore` | `trace-board.js:505-513` |
+| 保存白板 | `TraceBoardService.save` | `trace-board.js:309-322` |
+| 造告警起点的初始白板 | `traceBoardSeed` | `trace-board.js:158-186` |
+| 造 IP 起点的初始白板 | `traceIpSeed` | `trace-board.js:188-202` |
 
 各能力的细节在第 5 节按构件逐段展开。
 
-`TraceBoardService` 的构造参数是 `toolbox`、`model`、`promptStore`、`directory` 四项，其中 `promptStore` 有默认值
-（`trace-board.js:151-155`）。白板文件名规则：入参是裸 IP 就落成 `ip:<IP>.json`，否则原样加 `.json`（`trace-board.js:157`）。
+`TraceBoardService` 的构造参数是 `toolbox`、`model`、`promptStore`、`directory`、`analysis` 五项（`analysis` 是 P003-T014 为查询并复用分析证据加的），其中 `promptStore` 有默认值
+（`trace-board.js:255-261`）。白板文件名规则：入参是裸 IP 就落成 `ip:<IP>.json`，否则原样加 `.json`（`trace-board.js:262`）。
 
 ### 2.2 HTTP 入口（接线在 `server.js`）
 
@@ -70,22 +70,22 @@
 
 ### 2.3 两个起点
 
-`start()` 接受两种目标（`trace-board.js:206-210`）：
+`start()` 接受两种目标（`trace-board.js:326-328`）：
 
 | 目标形式 | 例子 | 起点节点 | 初始时间窗 | `alert_id` |
 | --- | --- | --- | --- | --- |
-| 告警 ID | `honeypot:7` | 优先是资产 IP（取自告警资产、原始证据里的 `host_ip`，或内网目的地址），取不到才用来源 IP（`trace-board.js:64-71`） | 观测时间前 24 小时到后 48 小时（`trace-board.js:79-85`） | 告警 ID（`trace-board.js:79-85`） |
-| IPv4 | `64.177.57.21` | 这个 IP 本身（`trace-board.js:88-100`） | 最近 72 小时（`trace-board.js:88-100`） | `null`（`trace-board.js:88-100`） |
+| 告警 ID | `honeypot:7` | 优先是资产 IP（取自告警资产、原始证据里的 `host_ip`，或内网目的地址），取不到才用来源 IP（`trace-board.js:158-186`） | 观测时间前 24 小时到后 48 小时（`trace-board.js:181`） | 告警 ID（`trace-board.js:181`） |
+| IPv4 | `64.177.57.21` | 这个 IP 本身（`trace-board.js:188-202`） | 最近 72 小时（`trace-board.js:188-202`） | `null`（`trace-board.js:188-202`） |
 
-告警起点还会把告警里的 `source_ip` 与 `destination_address` 额外追加成节点（`trace-board.js:72-78`）；IP 起点只有一个节点（`trace-board.js:88-100`）。
+告警起点还会把告警里的 `source_ip` 与 `destination_address` 额外追加成节点（`trace-board.js:169-176`）；IP 起点只有一个节点（`trace-board.js:188-202`）。
 
 两处口径差异，读数据时要留意：
 
-- 告警起点的 `window.hours` 字段写的是 72，而 `since`／`until` 实际是观测时间前 24 小时到后 48 小时（`trace-board.js:79-85`）；
-  IP 起点的 `since` 就是最近 72 小时（`trace-board.js:88-100`）。
+- 告警起点的 `window.hours` 字段写的是 72，而 `since`／`until` 实际是观测时间前 24 小时到后 48 小时（`trace-board.js:181`）；
+  IP 起点的 `since` 就是最近 72 小时（`trace-board.js:188-202`）。
 - 提示词要求按白板与工具返回值为准，不要把覆盖范围说成固定的最近 72 小时（`prompts/trace-board.md:19`）。
 
-同一种目标第二次 `start()` 时不重开：进程内已有在跑的任务就直接返回现有白板（`trace-board.js:211-213`）。
+同一种目标第二次 `start()` 时不重开：进程内已有在跑的任务就直接返回现有白板（`trace-board.js:329-332`）。
 
 ### 2.4 依赖
 
@@ -103,46 +103,46 @@
 
 | 字段 | 含义 | 证据 |
 | --- | --- | --- |
-| `id` | `asset:<IP>` 或 `ip:<IP>` | `trace-board.js:64-71`、`trace-board.js:88-100` |
-| `kind` | `asset` 或 `external_ip`，按内网地址判定 | `trace-board.js:72-78`、`trace-board.js:102-110` |
-| `status` | 初始 `pending`，查完置 `done` | `trace-board.js:64-71`、`trace-board.js:333-334` |
-| `label`／`address` | 显示名与地址 | `trace-board.js:64-71` |
-| `profile` | 资产档案：名称、IP、系统、内核、分组、状态、暴露 IP、标签、最后出现时间、备注 | `trace-board.js:126-142` |
-| `findings`／`finding_count` | 本次调查每条工具结果的摘要与命中条数 | `trace-board.js:335-338`、`trace-board.js:112-125` |
-| `discovered_from` | 这个节点是从哪条证据的哪个指针发现的 | `trace-board.js:72-78`、`trace-board.js:102-110` |
-| `touched_hosts` | 外部 IP 节点在窗口内碰到过的主机 | `trace-board.js:311` |
-| `why`／`investigated_at` | 查它的理由与查完的时间 | `trace-board.js:333-334` |
+| `id` | `asset:<IP>` 或 `ip:<IP>` | `trace-board.js:158-186`、`trace-board.js:188-202` |
+| `kind` | `asset` 或 `external_ip`，按内网地址判定 | `trace-board.js:169-176`、`trace-board.js:204-213` |
+| `status` | 初始 `pending`，查完置 `done` | `trace-board.js:158-186`、`trace-board.js:475-476` |
+| `label`／`address` | 显示名与地址 | `trace-board.js:158-186` |
+| `profile` | 资产档案：名称、IP、系统、内核、分组、状态、暴露 IP、标签、最后出现时间、备注 | `trace-board.js:229-244` |
+| `findings`／`finding_count` | 本次调查每条工具结果的摘要与命中条数 | `trace-board.js:477-480`、`trace-board.js:215-227` |
+| `discovered_from` | 这个节点是从哪条证据的哪个指针发现的 | `trace-board.js:169-176`、`trace-board.js:204-213` |
+| `touched_hosts` | 外部 IP 节点在窗口内碰到过的主机 | `trace-board.js:450` |
+| `why`／`investigated_at` | 查它的理由与查完的时间 | `trace-board.js:475-476` |
 
 ### 3.2 边
 
 | 字段 | 含义 | 证据 |
 | --- | --- | --- |
-| `from`／`to` | 两端节点 ID | `trace-board.js:312-319` |
-| `rel` | 关系名；程序画的边固定写成「触达线索」 | `trace-board.js:312-319` |
-| `why` | 这条关系的理由 | `trace-board.js:312-319`、`trace-board.js:404-424` |
-| `strength` | 证据强度，不是攻击成功概率；程序边是 0.3，AI 边由模型给、夹在 0–1 | `trace-board.js:312-319`、`trace-board.js:404-424` |
-| `citations` | 原始证据引用：`evidence_id` + `pointer` + `value` | `trace-board.js:312-319`、`trace-board.js:404-424` |
-| `by` | `program`（程序画的）或 `ai`（模型连的） | `trace-board.js:312-319`、`trace-board.js:404-424` |
+| `from`／`to` | 两端节点 ID | `trace-board.js:452-457` |
+| `rel` | 关系名；程序画的边固定写成「触达线索」 | `trace-board.js:452-457` |
+| `why` | 这条关系的理由 | `trace-board.js:452-457`、`trace-board.js:546-566` |
+| `strength` | 证据强度，不是攻击成功概率；程序边是 0.3，AI 边由模型给、夹在 0–1 | `trace-board.js:452-457`、`trace-board.js:546-566` |
+| `citations` | 原始证据引用：`evidence_id` + `pointer` + `value` | `trace-board.js:452-457`、`trace-board.js:546-566` |
+| `by` | `program`（程序画的）或 `ai`（模型连的） | `trace-board.js:452-457`、`trace-board.js:546-566` |
 
 ### 3.3 白板顶层
 
 | 字段 | 含义 | 证据 |
 | --- | --- | --- |
-| `id`／`alert_id`／`run_id` | 白板 ID、来源告警 ID、本次运行 ID | `trace-board.js:79-85`、`trace-board.js:88-100` |
-| `seed` | 起点节点 ID | `trace-board.js:64-71` |
-| `status` | `running` → `done`／`failed`／`interrupted` | `trace-board.js:79-85`、`trace-board.js:225-231`、`trace-board.js:181-191` |
-| `window` | 时间窗：`since`／`until`／`hours` | `trace-board.js:79-85`、`trace-board.js:88-100` |
+| `id`／`alert_id`／`run_id` | 白板 ID、来源告警 ID、本次运行 ID | `trace-board.js:178-186`、`trace-board.js:188-202` |
+| `seed` | 起点节点 ID | `trace-board.js:158-186` |
+| `status` | `running` → `done`／`failed`／`interrupted` | `trace-board.js:178-186`、`trace-board.js:362-367`、`trace-board.js:297-307` |
+| `window` | 时间窗：`since`／`until`／`hours` | `trace-board.js:181`、`trace-board.js:188-202` |
 | `alert` | 绑定的告警：`id`／`type`／`title`／`host`／`occurred_at`；手填 IP 起的板 `type`／`occurred_at` 为 `null` | `trace-board.js:158-202` |
 | `hops` | 往回的链上的一跳：`id`／`kind`／`label`／`host`／`occurred_at`／`evidence_id`／`discovered`；告警那一跳 `kind=alert`（P003-T014） | `trace-board.js:90-94` |
 | `links` | 线：`from`／`to`／`rel`／`evidence_id`；**`from` 是更晚的一端、`to` 是更早的原因**（P003-T014） | `trace-board.js:106-118` |
 | `gaps` | 断点 `{hop_id, reason}`：断在哪一跳的左边、为什么断；旧白板的字符串缺口读取时归一成 `hop_id:null`（P003-T014） | `trace-board.js:119-120` |
 | `discovery` | 发现顺序 `{step, kind, id}`（`kind` 为 `hop`／`link`），实时追加；旧板按 hops、links 顺序补齐 | `trace-board.js:121-123` |
 | `chain_length`／`has_gaps` | 链长（hops 个数，含告警那一跳）／有没有断点（P003-T014） | `trace-board.js:124` |
-| `nodes`／`edges`／`activity` | **旧字段**：节点、边、活动流水；`activity` 不再是主数据，`nodes`／`edges` 与 `hops`／`links` 一一对应（P003-T014 起保留兼容） | `trace-board.js:79-85` |
-| `summary` | 结论摘要（AI `conclude` 写） | `trace-board.js:568-575` |
-| `investigations` | 已调查的节点数 | `trace-board.js:339-342` |
-| `model`／`focus` | 本次用的模型名与操作员给的焦点 | `trace-board.js:222-224` |
-| `origin_evidence` | 起点那条原始事件的摘要 | `trace-board.js:79-85`、`trace-board.js:112-125` |
+| `nodes`／`edges`／`activity` | **旧字段**：节点、边、活动流水；`activity` 不再是主数据，`nodes`／`edges` 与 `hops`／`links` 一一对应（P003-T014 起保留兼容） | `trace-board.js:182` |
+| `summary` | 结论摘要（AI `conclude` 写） | `trace-board.js:568-576` |
+| `investigations` | 已调查的节点数 | `trace-board.js:481-484` |
+| `model`／`focus` | 本次用的模型名与操作员给的焦点 | `trace-board.js:358-359` |
+| `origin_evidence` | 起点那条原始事件的摘要 | `trace-board.js:185`、`trace-board.js:215-227` |
 
 ## 4 关键路径
 
@@ -151,33 +151,33 @@
 1. **操作员发起**：`POST /api/trace/boards`，请求体给 `target`（告警 ID / syslog 告警 ID / IP）与可选的 `focus`（`server.js:338-352`）。已有白板在 `startOrResume` 里直接返回（200），不重查、不覆盖；没有才往下走（202）——细节见 [4.3](#43-p003-t014已有即返回与证据复用)。
 2. **路由层校验目标格式**，不合法的直接 400（`server.js:116-120`）。
 3. **服务层再校验一次**：目标要么匹配 `<类型>:<数字>`（类型要在事件类型表里），要么是 IPv4，否则抛 400「请输入有效告警 ID 或 IPv4 地址」
-   （`trace-board.js:206-210`）。
-4. **开一个取证会话**，上限 2000 次工具调用（`trace-board.js:211-213`）。
+   （`trace-board.js:326-328`）。
+4. **开一个取证会话**，上限 2000 次工具调用（`trace-board.js:329-332`）。
 5. **造初始白板**：告警起点先调 `get_<类型>_event` 取原始事件、再归一化成告警；告警分析已经落盘过原始报文时（syslog 形态）
    直接引用那份证据，不再查同一份（`trace-board.js:326-369`、`server.js:57-96`）。这个告警既没有可用资产也没有来源 IP 时抛 422
    （`trace-board.js:326-369`）。IP 起点直接造白板（`trace-board.js:188-202`）。
-6. **记下模型名与操作员焦点**，首次落盘（`trace-board.js:222-224`）。
-7. **后台开跑**：`start()` 把追查循环挂在后台并立即返回初始快照（`trace-board.js:225-231`）。
+6. **记下模型名与操作员焦点**，首次落盘（`trace-board.js:358-359`）。
+7. **后台开跑**：`start()` 把追查循环挂在后台并立即返回初始快照（`trace-board.js:362-367`）。
 8. **模型每轮给一个动作**：循环开始时载入溯源提示词与 MCP 工具目录，首轮用户消息带上告警 ID、起点、时间窗、操作员焦点与 12 次调查上限
-   （`trace-board.js:364-371`）。
-9. **动作执行**：`look`（`trace-board.js:394-399`）、`investigate`（`trace-board.js:400-403`）、`link`（`trace-board.js:404-424`）、
-   `conclude`（`trace-board.js:425-431`）；每轮结果回灌给模型（`trace-board.js:439-443`）。
-10. **收尾**：`conclude` 把状态置 `done`（`trace-board.js:425-431`）；32 轮用尽也置 `done`，并在缺口里写明有路径没查完（`trace-board.js:445-447`）。
+   （`trace-board.js:505-513`）。
+9. **动作执行**：`look`（`trace-board.js:536-541`）、`investigate`（`trace-board.js:542-544`）、`link`（`trace-board.js:546-566`）、
+   `conclude`（`trace-board.js:568-576`）；每轮结果回灌给模型（`trace-board.js:584-589`）。
+10. **收尾**：`conclude` 把状态置 `done`（`trace-board.js:568-576`）；32 轮用尽也置 `done`，并在缺口里写明有路径没查完（`trace-board.js:591-592`）。
 11. **操作员读结果**：`GET /api/trace/boards/{id}`（`server.js:253-262`）。
 
 ### 4.2 起点不同，走的路不同
 
 | | 告警起点 | IP 起点 |
 | --- | --- | --- |
-| 起点节点 | 资产优先，取不到才用来源 IP（`trace-board.js:64-71`） | 就是这个 IP（`trace-board.js:88-100`） |
-| 附带节点 | 追加 `source_ip` 与 `destination_address`（`trace-board.js:72-78`） | 无（`trace-board.js:88-100`） |
-| 时间窗 | 观测时间前 24 小时到后 48 小时（`trace-board.js:79-85`） | 最近 72 小时（`trace-board.js:88-100`） |
-| `alert_id` | 告警 ID（`trace-board.js:79-85`） | `null`（`trace-board.js:88-100`） |
-| `origin_evidence` | 起点那条事件的摘要（`trace-board.js:79-85`、`trace-board.js:112-125`） | `null`（`trace-board.js:88-100`） |
-| 节点类型 | 私有地址记 `asset`，其余记 `external_ip`（`trace-board.js:72-78`） | 同左；操作员给的是内网地址时也是资产节点（`trace-board.js:88-100`、`trace-board.js:102-110`） |
+| 起点节点 | 资产优先，取不到才用来源 IP（`trace-board.js:158-186`） | 就是这个 IP（`trace-board.js:188-202`） |
+| 附带节点 | 追加 `source_ip` 与 `destination_address`（`trace-board.js:169-176`） | 无（`trace-board.js:188-202`） |
+| 时间窗 | 观测时间前 24 小时到后 48 小时（`trace-board.js:181`） | 最近 72 小时（`trace-board.js:188-202`） |
+| `alert_id` | 告警 ID（`trace-board.js:178`） | `null`（`trace-board.js:188-202`） |
+| `origin_evidence` | 起点那条事件的摘要（`trace-board.js:185`、`trace-board.js:215-227`） | `null`（`trace-board.js:188-202`） |
+| 节点类型 | 私有地址记 `asset`，其余记 `external_ip`（`trace-board.js:169-176`） | 同左；操作员给的是内网地址时也是资产节点（`trace-board.js:188-202`、`trace-board.js:204-213`） |
 
-节点类型决定查询范围：资产节点按 `host_ip` 过滤（`trace-board.js:256`），外部 IP 节点按 `source_ip` 过滤，并额外查防火墙连接记录
-（`trace-board.js:256`、`trace-board.js:286-287`）。
+节点类型决定查询范围：资产节点按 `host_ip` 过滤（`trace-board.js:393`），外部 IP 节点按 `source_ip` 过滤，并额外查防火墙连接记录
+（`trace-board.js:393`、`trace-board.js:424`）。
 
 ### 4.3 P003-T014：已有即返回与证据复用
 
@@ -192,7 +192,7 @@
 - **详情形状**：`hops`／`links`／`gaps`／`discovery` 由 `presentBoard`（`trace-board.js:87-126`）从落盘的 `nodes`／`edges`／`gaps`／`discovery` 派生；
   `links` 的方向先按 `occurred_at` 比，时间相同或未知时按离告警的深度定：`from` 永远靠告警一侧（更晚）。
 - **列表**：`summaries` 每条给 `type`／`host`／`occurred_at`／`status`／`chain_length`／`has_gaps`／`updated_at`（`trace-board.js:75-85`），
-  `page` 先按 `statuses`／`type`／`host`／`from`／`to` 筛再切页（`trace-board.js:282-296`）。
+  `page` 先按 `statuses`／`type`／`host`／`from`／`to` 筛再切页（`trace-board.js:282-292`）。
 
 ## 5 覆盖构件
 
@@ -202,22 +202,22 @@
 
 **节点**：
 
-- 节点只有两种 `kind`：`asset` 与 `external_ip`，判据是地址算不算内网段（`trace-board.js:72-78`、`trace-board.js:102-110`、`trace-board.js:17-19`）。
-- 节点 ID 统一是 `asset:<IP>` 或 `ip:<IP>`；节点表、候选表、边两端用的是同一套 ID（`trace-board.js:64-71`、`trace-board.js:102-110`、
-  `trace-board.js:312-319`）。
-- 起始节点由起点决定（`trace-board.js:64-71`、`trace-board.js:88-100`）；告警起点还会追加 `source_ip` 与 `destination_address` 两个节点
-  （`trace-board.js:72-78`）。
+- 节点只有两种 `kind`：`asset` 与 `external_ip`，判据是地址算不算内网段（`trace-board.js:169-176`、`trace-board.js:204-213`、`trace-board.js:30-32`）。
+- 节点 ID 统一是 `asset:<IP>` 或 `ip:<IP>`；节点表、候选表、边两端用的是同一套 ID（`trace-board.js:158-186`、`trace-board.js:204-213`、
+  `trace-board.js:452-457`）。
+- 起始节点由起点决定（`trace-board.js:158-186`、`trace-board.js:188-202`）；告警起点还会追加 `source_ip` 与 `destination_address` 两个节点
+  （`trace-board.js:169-176`）。
 - 邻接地址是程序从事件行里统计出来的：扫 `host_ip`、`source_ip`、`destination_address` 三个字段，合法且不等于当前节点地址的才计数
-  （`trace-board.js:300-309`）。
-- 入图有上限：节点总数 64（`trace-board.js:102-110`）；资产节点单轮最多加 12 个邻居，按出现次数降序取前几个，超出时写一条缺口
-  （`trace-board.js:322-329`）。
+  （`trace-board.js:437-447`）。
+- 入图有上限：节点总数 64（`trace-board.js:208`）；资产节点单轮最多加 12 个邻居，按出现次数降序取前几个，超出时写一条缺口
+  （`trace-board.js:461-466`）。
 
 **边**：
 
 - 边有两类来源。程序画的边标 `by: 'program'`：同一条事件里同时有公网来源 IP 与目标主机时，记一条 `rel: '触达线索'`、强度 0.3 的边
-  （`trace-board.js:312-319`）。
-- 程序边入图要求两端节点都在图里，且同一对节点之间没有同类型的程序边（`trace-board.js:330-332`）。
-- 模型连的边标 `by: 'ai'`，校验见 5.3（`trace-board.js:404-424`）。
+  （`trace-board.js:452-457`）。
+- 程序边入图要求两端节点都在图里，且同一对节点之间没有同类型的程序边（`trace-board.js:469-473`）。
+- 模型连的边标 `by: 'ai'`，校验见 5.3（`trace-board.js:546-566`）。
 - 提示词里写明了口径：程序画的「触达线索」只是同一条记录里的来源 IP 与目标主机，是粗筛，不算 AI 确认的关系（`prompts/trace-board.md:12`）。
 
 **元素字段（契约）**。`openapi.yaml` 的 `TraceBoardNode` / `TraceBoardEdge` / `TraceBoardActivity` 按这三张表写；字段名不一致就是破坏性变更。
@@ -226,93 +226,93 @@
 
 | 字段 | 类型 | 什么时候有 | 含义 | 证据 |
 | --- | --- | --- | --- | --- |
-| `id` | string | 恒有 | `asset:<IP>` 或 `ip:<IP>` | `trace-board.js:68`、`trace-board.js:74`、`trace-board.js:106` |
-| `label` | string | 恒有 | 展示名；资产节点优先主机名，取不到才用 IP | `trace-board.js:68`、`trace-board.js:94` |
-| `address` | string（IPv4） | 恒有 | 节点地址 | `trace-board.js:69`、`trace-board.js:94` |
-| `kind` | enum `asset` / `external_ip` | 恒有 | 决定后续查询口径 | `trace-board.js:69`、`trace-board.js:108` |
-| `status` | enum `pending` / `done` | 恒有 | 建板时是 `pending`，调查收尾置 `done` | `trace-board.js:69`、`trace-board.js:334` |
-| `why` | string | 恒有 | AI 给的理由；建板时是预置句或空串，收尾时改写 | `trace-board.js:70`、`trace-board.js:334` |
-| `profile` | object | 恒有 | 资产档案；外部 IP 节点是 `{name: '外部 IP（未登记资产）', ip}` | `trace-board.js:70`、`trace-board.js:96`、`trace-board.js:292` |
-| `findings` | object[] | 恒有 | 每条工具结果的摘要，收尾时写入 | `trace-board.js:70`、`trace-board.js:335` |
-| `finding_count` | integer | 恒有 | 命中记录数（按工具类名加权，见下文） | `trace-board.js:70`、`trace-board.js:336-338` |
-| `discovered_from` | object[] | 恒有 | 这个节点从哪条证据的哪个字段发现；起点节点是空数组 | `trace-board.js:71`、`trace-board.js:76`、`trace-board.js:97`、`trace-board.js:109` |
-| `investigated_at` | string（date-time） | 调查收尾后 | 收尾时间 | `trace-board.js:334` |
-| `touched_hosts` | string[] | 调查收尾后 | 调查外部 IP 时命中的内网主机地址 | `trace-board.js:333` |
+| `id` | string | 恒有 | `asset:<IP>` 或 `ip:<IP>` | `trace-board.js:164`、`trace-board.js:171`、`trace-board.js:208` |
+| `label` | string | 恒有 | 展示名；资产节点优先主机名，取不到才用 IP | `trace-board.js:164`、`trace-board.js:195` |
+| `address` | string（IPv4） | 恒有 | 节点地址 | `trace-board.js:165`、`trace-board.js:195` |
+| `kind` | enum `asset` / `external_ip` | 恒有 | 决定后续查询口径 | `trace-board.js:165`、`trace-board.js:210` |
+| `status` | enum `pending` / `done` | 恒有 | 建板时是 `pending`，调查收尾置 `done` | `trace-board.js:165`、`trace-board.js:476` |
+| `why` | string | 恒有 | AI 给的理由；建板时是预置句或空串，收尾时改写 | `trace-board.js:166`、`trace-board.js:476` |
+| `profile` | object | 恒有 | 资产档案；外部 IP 节点是 `{name: '外部 IP（未登记资产）', ip}` | `trace-board.js:166`、`trace-board.js:197`、`trace-board.js:429` |
+| `findings` | object[] | 恒有 | 每条工具结果的摘要，收尾时写入 | `trace-board.js:166`、`trace-board.js:477` |
+| `finding_count` | integer | 恒有 | 命中记录数（按工具类名加权，见下文） | `trace-board.js:166`、`trace-board.js:478-480` |
+| `discovered_from` | object[] | 恒有 | 这个节点从哪条证据的哪个字段发现；起点节点是空数组 | `trace-board.js:168`、`trace-board.js:173`、`trace-board.js:198`、`trace-board.js:211` |
+| `investigated_at` | string（date-time） | 调查收尾后 | 收尾时间 | `trace-board.js:476` |
+| `touched_hosts` | string[] | 调查收尾后 | 调查外部 IP 时命中的内网主机地址 | `trace-board.js:475` |
 
 `findings[]` 元素固定带 `evidence_id`、`tool`、`total`、`returned`、`rows`；列表结果另有 `page_returned`，单对象结果另有 `truncated`
-（`trace-board.js:112-123`）。`discovered_from[]` 元素是 `{evidence_id, pointer}`，`pointer` 取不到时为 `null`（`trace-board.js:71`、`trace-board.js:76`、`trace-board.js:306`）。
+（`trace-board.js:215-227`）。`discovered_from[]` 元素是 `{evidence_id, pointer}`，`pointer` 取不到时为 `null`（`trace-board.js:168`、`trace-board.js:173`、`trace-board.js:443-445`）。
 
 边（`edges[]`）：
 
 | 字段 | 类型 | 含义 | 证据 |
 | --- | --- | --- | --- |
-| `from` / `to` | string | 两端节点 ID | `trace-board.js:315`、`trace-board.js:418` |
-| `rel` | string | 关系性质；程序边固定 `触达线索` | `trace-board.js:316`、`trace-board.js:418` |
-| `why` | string | 关系理由 | `trace-board.js:316`、`trace-board.js:418` |
-| `strength` | number（0–1） | 关系强度；程序边固定 0.3，AI 边出界时夹回 | `trace-board.js:317`、`trace-board.js:419` |
-| `by` | enum `program` / `ai` | 谁画的 | `trace-board.js:317`、`trace-board.js:419` |
-| `citations` | object[] | `{evidence_id, pointer, value}`；AI 边至少一条且引用值要覆盖两端地址 | `trace-board.js:317-318`、`trace-board.js:410-414` |
-| `at` | string（date-time） | 写入时间 | `trace-board.js:317`、`trace-board.js:419` |
+| `from` / `to` | string | 两端节点 ID | `trace-board.js:452`、`trace-board.js:559` |
+| `rel` | string | 关系性质；程序边固定 `触达线索` | `trace-board.js:455`、`trace-board.js:559` |
+| `why` | string | 关系理由 | `trace-board.js:455`、`trace-board.js:559` |
+| `strength` | number（0–1） | 关系强度；程序边固定 0.3，AI 边出界时夹回 | `trace-board.js:456`、`trace-board.js:561` |
+| `by` | enum `program` / `ai` | 谁画的 | `trace-board.js:456`、`trace-board.js:561` |
+| `citations` | object[] | `{evidence_id, pointer, value}`；AI 边至少一条且引用值要覆盖两端地址 | `trace-board.js:456-457`、`trace-board.js:554-559` |
+| `at` | string（date-time） | 写入时间 | `trace-board.js:456`、`trace-board.js:561` |
 
 活动（`activity[]`）：
 
 | 字段 | 类型 | 含义 | 证据 |
 | --- | --- | --- | --- |
-| `at` | string（date-time） | 发生时间 | `trace-board.js:83`、`trace-board.js:340` |
+| `at` | string（date-time） | 发生时间 | `trace-board.js:182`、`trace-board.js:482` |
 | `kind` | enum，见下 | 事件类型 | 各 push 点 |
 | `title` | string | 一句话标题 | 各 push 点 |
-| `detail` | string | 补充说明 | `trace-board.js:84`、`trace-board.js:251`、`trace-board.js:341` |
-| `node` | string | 关联节点 ID（`investigate`） | `trace-board.js:341` |
-| `edge` | integer | 关联边在 `edges` 里的下标（`link`） | `trace-board.js:421` |
-| `result` | string | 这一轮的结果摘要（`investigate`、`look`） | `trace-board.js:341`、`trace-board.js:395-396` |
+| `detail` | string | 补充说明 | `trace-board.js:184`、`trace-board.js:388`、`trace-board.js:483` |
+| `node` | string | 关联节点 ID（`investigate`） | `trace-board.js:483` |
+| `edge` | integer | 关联边在 `edges` 里的下标（`link`） | `trace-board.js:564` |
+| `result` | string | 这一轮的结果摘要（`investigate`、`look`） | `trace-board.js:483`、`trace-board.js:537-538` |
 
 `kind` 的十个取值（枚举，十种全部在代码里有 push 点）：
 
 | `kind` | 什么时候 | 证据 |
 | --- | --- | --- |
-| `seed` | 建板 | `trace-board.js:83`、`trace-board.js:96` |
-| `tool` | 一次牧云查询 | `trace-board.js:246` |
-| `tool_error` | 查询失败，或动作未过校验 | `trace-board.js:251`、`trace-board.js:435` |
-| `investigate` | 调查一个节点收尾 | `trace-board.js:340` |
-| `look` | 模型查看白板 | `trace-board.js:397` |
-| `link` | 模型连边 | `trace-board.js:420` |
-| `conclude` | 模型收尾 | `trace-board.js:429` |
-| `thinking` | 模型选下一步 | `trace-board.js:375` |
-| `model_error` | 模型输出格式错误正在重试 | `trace-board.js:383` |
-| `error` | 调查中断，或整板失败 | `trace-board.js:186`、`trace-board.js:227` |
+| `seed` | 建板 | `trace-board.js:182`、`trace-board.js:197` |
+| `tool` | 一次牧云查询 | `trace-board.js:383` |
+| `tool_error` | 查询失败，或动作未过校验 | `trace-board.js:388`、`trace-board.js:581` |
+| `investigate` | 调查一个节点收尾 | `trace-board.js:482` |
+| `look` | 模型查看白板 | `trace-board.js:540` |
+| `link` | 模型连边 | `trace-board.js:563` |
+| `conclude` | 模型收尾 | `trace-board.js:575` |
+| `thinking` | 模型选下一步 | `trace-board.js:517` |
+| `model_error` | 模型输出格式错误正在重试 | `trace-board.js:525` |
+| `error` | 调查中断，或整板失败 | `trace-board.js:304`、`trace-board.js:363` |
 
 ### 5.2 节点调查
 
-- **前置**：节点必须已在白板里；已查过的节点（`status: 'done'`）再查会抛错（`trace-board.js:234-237`）。
-- **起点节点那一次调查**会把会话里的第一条证据 `cw:1` 计入本次记录（`trace-board.js:238-239`）。
-- **工具调用有两道闸**：工具名得在 MCP 工具目录里，且会话调用数没到上限；任一不满足就跳过这次调用（`trace-board.js:240-255`）。
-- **查询失败不中断调查**：记一条 `tool_error` 活动后继续往下走（`trace-board.js:240-255`）。
-- **查询范围**按节点类型分（`trace-board.js:256`）。
-- **资产节点**先查资产档案（`list_host_assets`，取 5 条），拿到主机 ID 再查同机事件（`list_host_events`，50 条）（`trace-board.js:257-265`）。
-- **跨类事件**最多翻 30 页、每页 50 条；行数不足一页，或出现早于时间窗的行，就停下（`trace-board.js:267-275`）。
-- **分类型事件**对窗口内出现过的每种事件类型再翻最多 10 页（`trace-board.js:276-285`）。
-- **两处翻页到顶**都会往 `gaps` 写一条，说明后面还有没查到的部分（`trace-board.js:267-275`、`trace-board.js:276-285`）。
-- **外部 IP 节点**额外查防火墙连接记录（`trace-board.js:286-287`）。
-- **窗口之外的行不参与统计**（`trace-board.js:22-36`）。
-- **取行与字段抽取**：工具返回先从 `events`／`data`／`result`／`list`／`hosts` 里认出数组键（`trace-board.js:37-40`）；每一行再映射成具名字段并
-  带上 JSON Pointer，`command_line` 上限 3000 字符、其余字段上限 500 字符（`trace-board.js:41-63`）。
-- **节点收尾**：`status` 置 `done`，`why` 记 AI 给的理由（`trace-board.js:333-334`）；`findings` 存每条工具结果的摘要（`trace-board.js:335-338`）；
-  `finding_count` 只算 `list_` 开头且不属于跨类事件、资产档案、同机事件的那几类查询，外加一次单事件查询（`trace-board.js:335-338`）。
-- **交给模型的内容**按工具分组，每组最多留 3 行事实；序列化超过 30000 字符就逐行裁（`trace-board.js:343-360`）。
+- **前置**：节点必须已在白板里；已查过的节点（`status: 'done'`）再查会抛错（`trace-board.js:371-374`）。
+- **起点节点那一次调查**会把会话里的第一条证据 `cw:1` 计入本次记录（`trace-board.js:375-376`）。
+- **工具调用有两道闸**：工具名得在 MCP 工具目录里，且会话调用数没到上限；任一不满足就跳过这次调用（`trace-board.js:377-392`）。
+- **查询失败不中断调查**：记一条 `tool_error` 活动后继续往下走（`trace-board.js:377-392`）。
+- **查询范围**按节点类型分（`trace-board.js:393`）。
+- **资产节点**先查资产档案（`list_host_assets`，取 5 条），拿到主机 ID 再查同机事件（`list_host_events`，50 条）（`trace-board.js:394-403`）。
+- **跨类事件**最多翻 30 页、每页 50 条；行数不足一页，或出现早于时间窗的行，就停下（`trace-board.js:404-412`）。
+- **分类型事件**对窗口内出现过的每种事件类型再翻最多 10 页（`trace-board.js:413-421`）。
+- **两处翻页到顶**都会往 `gaps` 写一条，说明后面还有没查到的部分（`trace-board.js:404-412`、`trace-board.js:413-421`）。
+- **外部 IP 节点**额外查防火墙连接记录（`trace-board.js:424`）。
+- **窗口之外的行不参与统计**（`trace-board.js:42-45`、`trace-board.js:129-130`）。
+- **取行与字段抽取**：工具返回先从 `events`／`data`／`result`／`list`／`hosts` 里认出数组键（`trace-board.js:131-133`）；每一行再映射成具名字段并
+  带上 JSON Pointer，`command_line` 上限 3000 字符、其余字段上限 500 字符（`trace-board.js:135-156`）。
+- **节点收尾**：`status` 置 `done`，`why` 记 AI 给的理由（`trace-board.js:475-476`）；`findings` 存每条工具结果的摘要（`trace-board.js:477-480`）；
+  `finding_count` 只算 `list_` 开头且不属于跨类事件、资产档案、同机事件的那几类查询，外加一次单事件查询（`trace-board.js:477-480`）。
+- **交给模型的内容**按工具分组，每组最多留 3 行事实；序列化超过 30000 字符就逐行裁（`trace-board.js:485-500`）。
 
 ### 5.3 自主追查循环
 
-- **起点**：载入溯源提示词与 MCP 工具目录（`trace-board.js:364-371`）；系统提示词是 `prompts.trace`，对应仓内 `prompts/trace-board.md`
+- **起点**：载入溯源提示词与 MCP 工具目录（`trace-board.js:505-513`）；系统提示词是 `prompts.trace`，对应仓内 `prompts/trace-board.md`
   （`prompt-store.js:18-19`）。
-- **首轮用户消息**带：任务说明、告警 ID、目标、起点、节点列表、起点证据、时间窗、操作员焦点，以及 12 次调查上限（`trace-board.js:364-371`）。
-- **最多 32 轮**（`trace-board.js:373`）。
+- **首轮用户消息**带：任务说明、告警 ID、目标、起点、节点列表、起点证据、时间窗、操作员焦点，以及 12 次调查上限（`trace-board.js:505-513`）。
+- **最多 32 轮**（`trace-board.js:515-516`）。
 - **模型每轮只输出一个 JSON 对象**：程序解析时剥掉 markdown 代码围栏，并要求 `action` 是 `look`／`investigate`／`link`／`conclude` 之一
-  （`trace-board.js:143-149`、`prompts/trace-board.md:5-10`）。
+  （`trace-board.js:246-253`、`prompts/trace-board.md:5-10`）。
 - **解析失败**（JSON 不完整或动作不在白名单）：记一条 `model_error` 活动，把纠正指令发回模型重试；连续 3 次失败就抛错
-  （`trace-board.js:379-390`）。
-- **`look`**：返回节点 ID、状态、命中数与白板当前的边，并记一条 `look` 活动（`trace-board.js:394-399`）。
-- **`investigate`**：调查次数已达 12 时抛错，让模型转去总结现有证据与缺口（`trace-board.js:400-403`）。
-- **`link`** 有六道校验（`trace-board.js:404-424`）：
+  （`trace-board.js:521-530`）。
+- **`look`**：返回节点 ID、状态、命中数与白板当前的边，并记一条 `look` 活动（`trace-board.js:536-541`）。
+- **`investigate`**：调查次数已达 12 时抛错，让模型转去总结现有证据与缺口（`trace-board.js:542-544`）。
+- **`link`** 有六道校验（`trace-board.js:546-566`）：
 
   1. 两端节点都在白板里，且不是同一个节点；
   2. 至少一端已经调查过（`status` 是 `done`）；
@@ -321,55 +321,55 @@
   5. 引用必须覆盖两端地址；
   6. 同一对节点、同一个 `rel` 不能重复。
 
-  过校验后边的 `strength` 夹在 0–1（`trace-board.js:404-424`）。
-- **`conclude`**：至少调查过一个节点才能结束；`summary` 截断到 2500 字符，`gaps` 最多 8 条、每条 240 字符（`trace-board.js:425-431`）。
-- **动作没过校验**：把错误回灌给模型并记一条 `tool_error`；连续 5 次失败就抛错（`trace-board.js:433-438`）。
-- **消息体裁剪**：超过 70000 字符时，从第 3 条起裁到只剩最近 8 条（`trace-board.js:439-443`）。
-- **32 轮用尽**：状态置 `done`，摘要写明已达轮次上限，`gaps` 添一条「未完成的路径需继续人工核查」（`trace-board.js:445-447`）。
-- **抛错的后果**：整张白板状态置 `failed`，错误进 `gaps`，并记一条 `error` 活动（`trace-board.js:225-231`）。
+  过校验后边的 `strength` 夹在 0–1（`trace-board.js:546-566`）。
+- **`conclude`**：至少调查过一个节点才能结束；`summary` 截断到 2500 字符，`gaps` 最多 8 条、每条 240 字符（`trace-board.js:568-576`）。
+- **动作没过校验**：把错误回灌给模型并记一条 `tool_error`；连续 5 次失败就抛错（`trace-board.js:577-583`）。
+- **消息体裁剪**：超过 70000 字符时，从第 3 条起裁到只剩最近 8 条（`trace-board.js:584-589`）。
+- **32 轮用尽**：状态置 `done`，摘要写明已达轮次上限，`gaps` 添一条「未完成的路径需继续人工核查」（`trace-board.js:591-592`）。
+- **抛错的后果**：整张白板状态置 `failed`，错误进 `gaps`，并记一条 `error` 活动（`trace-board.js:362-367`）。
 
 ### 5.4 白板持久化
 
 - **目录**：`<root>/backend/.data/trace-boards`（`server.js:50-51`）；`root` 的解析规则见架构篇第 8.1 节。
-- **文件名**：入参是裸 IP 就落成 `ip:<IP>.json`，否则原样加 `.json`（`trace-board.js:157`）。
-- **写入方式**：先写 `<目标>.<UUID>.tmp`，再 `rename` 覆盖；文件权限 `0o600`；写失败先删临时文件再抛（`trace-board.js:192-205`）。
-- **落盘很频繁**：每次工具调用后（成功或失败）都存一次（`trace-board.js:240-255`）。调查收尾也存一次（`trace-board.js:339-342`），后面这几处动作执行完同样存：
-  `trace-board.js:394-399`、`trace-board.js:404-424`、`trace-board.js:425-431`、`trace-board.js:433-438`。
+- **文件名**：入参是裸 IP 就落成 `ip:<IP>.json`，否则原样加 `.json`（`trace-board.js:262`）。
+- **写入方式**：先写 `<目标>.<UUID>.tmp`，再 `rename` 覆盖；文件权限 `0o600`；写失败先删临时文件再抛（`trace-board.js:309-322`）。
+- **落盘很频繁**：每次工具调用后（成功或失败）都存一次（`trace-board.js:377-392`）。调查收尾也存一次（`trace-board.js:481-484`），后面这几处动作执行完同样存：
+  `trace-board.js:536-541`、`trace-board.js:546-566`、`trace-board.js:568-576`、`trace-board.js:577-583`。
 - **读**：`get()` 读不到文件返回 `null`；读到状态是 `running` 而进程内没有对应在跑任务时（一般是进程重启过），改写成 `interrupted`、
-  追加一条「调查已中断」活动并回写（`trace-board.js:181-191`）。
+  追加一条「调查已中断」活动并回写（`trace-board.js:297-307`）。
 - **列**：`list()` 扫目录里的 `.json`，逐个读出 `id`／`title`／`status`／`created_at`／`updated_at`，读坏的文件跳过，按 `updated_at` 倒序，
-  条数夹在 1–50（`trace-board.js:158-180`）。目录不存在时返回空数组（`trace-board.js:158-180`）。
+  条数夹在 1–50（`trace-board.js:294-295`）。目录不存在时返回空数组（`trace-board.js:294-295`）。
 - **并发读**：写入是「临时文件 + rename」，并发读不会读到写了一半的文件——仓内测试盯的就是这一条（`trace-board.test.js:8-34`）。
 
 ## 6 不变量
 
 | 编号 | 陈述 | 反例 | 依据 | 违反症状 |
 | --- | --- | --- | --- | --- |
-| R-TRACE-01 | 一条 AI 连的边要带能核验的原始引用，且引用覆盖两端地址 | 只写「A 打了 B」而不给引用 | `trace-board.js:404-424`、`agent-tools.js:71-93` | 边被拒，错误回灌给模型 |
-| R-TRACE-02 | 同一个节点只查一次 | 查完的节点再查一次 | `trace-board.js:234-237`、`trace-board.js:333-334` | 本轮调查抛错 |
-| R-TRACE-03 | 一张白板的节点数不超过 64 | 第 65 个候选节点被丢弃 | `trace-board.js:102-110` | 邻居不再被发现，缺口里有记录 |
-| R-TRACE-04 | 一次追查最多调查 12 个节点 | 第 13 次 `investigate` | `trace-board.js:400-403` | 抛错，模型被要求转去总结 |
-| R-TRACE-05 | 程序画的边只标「触达线索」，强度 0.3，来源 `program` | 把粗筛线索说成已确认关系 | `trace-board.js:312-319`、`prompts/trace-board.md:12` | 结论夸大 |
-| R-TRACE-06 | 同一对节点、同一个 `rel` 不重复连边 | 重复连一次 | `trace-board.js:404-424` | 抛错，模型收到「这条关系已存在」 |
-| R-TRACE-07 | 白板落盘是原子的，读到的是完整快照 | 读到写了一半的 JSON | `trace-board.js:192-205`、`trace-board.test.js:8-34` | 解析失败，该条白板在列表里被跳过 |
+| R-TRACE-01 | 一条 AI 连的边要带能核验的原始引用，且引用覆盖两端地址 | 只写「A 打了 B」而不给引用 | `trace-board.js:546-566`、`agent-tools.js:71-93` | 边被拒，错误回灌给模型 |
+| R-TRACE-02 | 同一个节点只查一次 | 查完的节点再查一次 | `trace-board.js:371-374`、`trace-board.js:475-476` | 本轮调查抛错 |
+| R-TRACE-03 | 一张白板的节点数不超过 64 | 第 65 个候选节点被丢弃 | `trace-board.js:208` | 邻居不再被发现，缺口里有记录 |
+| R-TRACE-04 | 一次追查最多调查 12 个节点 | 第 13 次 `investigate` | `trace-board.js:542-544` | 抛错，模型被要求转去总结 |
+| R-TRACE-05 | 程序画的边只标「触达线索」，强度 0.3，来源 `program` | 把粗筛线索说成已确认关系 | `trace-board.js:452-457`、`prompts/trace-board.md:12` | 结论夸大 |
+| R-TRACE-06 | 同一对节点、同一个 `rel` 不重复连边 | 重复连一次 | `trace-board.js:546-566` | 抛错，模型收到「这条关系已存在」 |
+| R-TRACE-07 | 白板落盘是原子的，读到的是完整快照 | 读到写了一半的 JSON | `trace-board.js:309-322`、`trace-board.test.js:8-34` | 解析失败，该条白板在列表里被跳过 |
 
 ## 7 失败面
 
 | 失败模式 | 表现 | 白板状态 | 能否重试 | 降级 |
 | --- | --- | --- | --- | --- |
-| 目标格式非法 | HTTP 400「请输入有效告警 ID 或 IPv4 地址」 | 未创建 | 改对再发 | 无（`server.js:245-251`、`trace-board.js:206-210`） |
-| 告警既无资产也无来源 IP | HTTP 422 | 未创建 | 换 IP 起点重发 | 无（`trace-board.js:215-221`） |
-| 同一白板已在跑 | 返回现有白板快照 | `running` | — | 不重开（`trace-board.js:211-213`） |
-| 工具不在 MCP 目录，或会话调用数到顶 | 该次查询被跳过 | `running` | 否 | 继续用已有结果（`trace-board.js:240-255`） |
-| 工具查询失败 | 记一条 `tool_error` 活动 | `running` | 模型可以换个工具再试 | 该工具无结果，其余照跑（`trace-board.js:240-255`） |
-| 分页翻到上限 | `gaps` 写一条 | `running`／`done` | 否 | 明写没查到的范围（`trace-board.js:267-275`、`trace-board.js:276-285`） |
-| 模型连续 3 次输出坏 JSON | 抛错 | `failed` | 重新 start | 错误进 `gaps`（`trace-board.js:379-390`、`trace-board.js:225-231`） |
-| 动作连续 5 次不通过校验 | 抛错 | `failed` | 重新 start | 错误进 `gaps`（`trace-board.js:433-438`、`trace-board.js:225-231`） |
-| 调查次数到 12 | `investigate` 抛错 | `running` | 模型转去总结 | 提示总结现有证据与缺口（`trace-board.js:400-403`） |
-| 轮次到 32 | 循环收尾 | `done` | 否 | 摘要写明已达上限，缺口记一条（`trace-board.js:445-447`） |
-| 后端进程重启 | 读到的 `running` 白板被改写 | `interrupted` | 可以重新 start | 追加一条「调查已中断」活动（`trace-board.js:181-191`） |
-| 白板目录不存在 | `list()` 返回空数组 | — | — | 无（`trace-board.js:158-180`） |
-| 白板文件损坏 | `list()` 跳过该条；`get()` 把错误抛出来 | — | — | 无（`trace-board.js:158-180`、`trace-board.js:181-191`） |
+| 目标格式非法 | HTTP 400「请输入有效告警 ID 或 IPv4 地址」 | 未创建 | 改对再发 | 无（`server.js:245-251`、`trace-board.js:326-328`） |
+| 告警既无资产也无来源 IP | HTTP 422 | 未创建 | 换 IP 起点重发 | 无（`trace-board.js:344-355`） |
+| 同一白板已在跑 | 返回现有白板快照 | `running` | — | 不重开（`trace-board.js:329-332`） |
+| 工具不在 MCP 目录，或会话调用数到顶 | 该次查询被跳过 | `running` | 否 | 继续用已有结果（`trace-board.js:377-392`） |
+| 工具查询失败 | 记一条 `tool_error` 活动 | `running` | 模型可以换个工具再试 | 该工具无结果，其余照跑（`trace-board.js:377-392`） |
+| 分页翻到上限 | `gaps` 写一条 | `running`／`done` | 否 | 明写没查到的范围（`trace-board.js:404-412`、`trace-board.js:413-421`） |
+| 模型连续 3 次输出坏 JSON | 抛错 | `failed` | 重新 start | 错误进 `gaps`（`trace-board.js:521-530`、`trace-board.js:362-367`） |
+| 动作连续 5 次不通过校验 | 抛错 | `failed` | 重新 start | 错误进 `gaps`（`trace-board.js:577-583`、`trace-board.js:362-367`） |
+| 调查次数到 12 | `investigate` 抛错 | `running` | 模型转去总结 | 提示总结现有证据与缺口（`trace-board.js:542-544`） |
+| 轮次到 32 | 循环收尾 | `done` | 否 | 摘要写明已达上限，缺口记一条（`trace-board.js:591-592`） |
+| 后端进程重启 | 读到的 `running` 白板被改写 | `interrupted` | 可以重新 start | 追加一条「调查已中断」活动（`trace-board.js:297-307`） |
+| 白板目录不存在 | `list()` 返回空数组 | — | — | 无（`trace-board.js:294-295`） |
+| 白板文件损坏 | `list()` 跳过该条；`get()` 把错误抛出来 | — | — | 无（`trace-board.js:294-295`、`trace-board.js:297-307`） |
 
 ## 8 资源与上限
 
@@ -378,23 +378,23 @@
 
 | 项 | 数值 | 来源 |
 | --- | --- | --- |
-| 一次追查的节点调查上限 | 12 | `trace-board.js:400-403`、`prompts/trace-board.md:14` |
-| 自主循环轮次上限 | 32 | `trace-board.js:373` |
-| 白板节点总数上限 | 64 | `trace-board.js:102-110` |
-| 资产节点单轮新增邻居上限 | 12 | `trace-board.js:322-329` |
-| 单次取证会话调用上限 | 2000 | `trace-board.js:211-213` |
-| 每页条数 | 50 | `trace-board.js:267-275` |
-| 跨类事件翻页上限 | 30 页 | `trace-board.js:267-275` |
-| 分类型事件翻页上限 | 10 页 | `trace-board.js:276-285` |
-| 交给模型的结果上限 | 30000 字符（超出逐行裁） | `trace-board.js:343-360` |
-| 每个工具分组保留的事实行 | 3 行 | `trace-board.js:343-360` |
-| 消息体上限 | 70000 字符，超了裁到最近 8 条 | `trace-board.js:439-443` |
-| 结论摘要上限 | 2500 字符 | `trace-board.js:425-431` |
-| 缺口清单 | 8 条，每条 240 字符 | `trace-board.js:425-431` |
-| 模型回复解析重试 | 连续 3 次失败抛错 | `trace-board.js:379-390` |
-| 动作校验失败重试 | 连续 5 次抛错 | `trace-board.js:433-438` |
-| 时间窗 | 告警起点：观测时间前 24 小时到后 48 小时；IP 起点：最近 72 小时 | `trace-board.js:79-85`、`trace-board.js:88-100` |
-| 列表返回条数 | 1–50 | `trace-board.js:158-180` |
+| 一次追查的节点调查上限 | 12 | `trace-board.js:542-544`、`prompts/trace-board.md:14` |
+| 自主循环轮次上限 | 32 | `trace-board.js:515-516` |
+| 白板节点总数上限 | 64 | `trace-board.js:208` |
+| 资产节点单轮新增邻居上限 | 12 | `trace-board.js:461-466` |
+| 单次取证会话调用上限 | 2000 | `trace-board.js:329-332` |
+| 每页条数 | 50 | `trace-board.js:404-412` |
+| 跨类事件翻页上限 | 30 页 | `trace-board.js:404-412` |
+| 分类型事件翻页上限 | 10 页 | `trace-board.js:413-421` |
+| 交给模型的结果上限 | 30000 字符（超出逐行裁） | `trace-board.js:485-500` |
+| 每个工具分组保留的事实行 | 3 行 | `trace-board.js:485-500` |
+| 消息体上限 | 70000 字符，超了裁到最近 8 条 | `trace-board.js:584-589` |
+| 结论摘要上限 | 2500 字符 | `trace-board.js:568-576` |
+| 缺口清单 | 8 条，每条 240 字符 | `trace-board.js:568-576` |
+| 模型回复解析重试 | 连续 3 次失败抛错 | `trace-board.js:521-530` |
+| 动作校验失败重试 | 连续 5 次抛错 | `trace-board.js:577-583` |
+| 时间窗 | 告警起点：观测时间前 24 小时到后 48 小时；IP 起点：最近 72 小时 | `trace-board.js:181`、`trace-board.js:188-202` |
+| 列表返回条数 | 1–50 | `trace-board.js:294-295` |
 
 ## 9 边界与未决
 
@@ -402,10 +402,10 @@
   清单与原因见 [evidence/recon/P001-T011.md 第五节](../../evidence/recon/P001-T011.md#五没查到的部分)；这四项在页面上没有断言。
 - **节点类型只有两类**：白板只支持资产与 IP 节点；操作员的焦点若是原始文件、命令或账号，按提示词要求保留在 `why` 与结论里，
   不捏造节点或查询能力（`prompts/trace-board.md:19`）。
-- **窗口字段与实际区间不一致**：告警起点的 `window.hours` 是 72，实际区间是观测时间前 24 小时到后 48 小时（见 2.3，`trace-board.js:79-85`）。
+- **窗口字段与实际区间不一致**：告警起点的 `window.hours` 是 72，实际区间是观测时间前 24 小时到后 48 小时（见 2.3，`trace-board.js:181`）。
 - **程序边不等于真关系**：数据上靠 `by` 字段分得清，但「触达线索」该不该升级成真关系由模型判断，代码不替它判断
-  （`trace-board.js:312-319`、`prompts/trace-board.md:12`）。
-- **翻页上限造成的漏查**只写进 `gaps`，不会自动续查（`trace-board.js:267-275`、`trace-board.js:276-285`）。
+  （`trace-board.js:452-457`、`prompts/trace-board.md:12`）。
+- **翻页上限造成的漏查**只写进 `gaps`，不会自动续查（`trace-board.js:404-412`、`trace-board.js:413-421`）。
 - **告警归一化不在本模块**：`normalizeAlert` 住在 `cloudwalker.js`，事件 ID 无效时它抛错（`cloudwalker.js:31-34`）。
 
 ## 10 怎么验证
