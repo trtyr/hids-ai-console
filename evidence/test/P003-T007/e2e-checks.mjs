@@ -234,6 +234,73 @@ const appendEdit = async (text) => {
   await sleep(200);
 };
 
+/* ---------------- 键盘投递：CDP Input.dispatchKeyEvent ----------------
+ * 为什么不用 agent-browser 的 `press`：整套用例跑到后半程，`press Tab` 会静默丢失——实测同一浏览器里
+ * 还有另一个 page target（chrome://newtab），窗口焦点被抢走时 document.hasFocus() 变 false，
+ * 页面连 keydown 都收不到（本席 2026-11-18 复现：整套跑 K.1 连续 2 次红、单独跑 2 次绿）。
+ * 处置：CDP 直连，每次按键前 Target.activateTarget 激活被测页，再 Input.dispatchKeyEvent 发真键盘事件；
+ * Tab 仍走 Chrome 默认的焦点移动，Enter 仍触发按钮——不是 JS 模拟 click。
+ * 判据：页面 keydown 计数必须真的 +1；重试 4 次仍收不到 → 环境错误（明确写「不是应用断言失败」）。 */
+const KBD_PROBE_JS = `(() => { if (!window.__piKbBound) { window.__piKb = 0; window.__piKbBound = true; document.addEventListener('keydown', () => { window.__piKb++; }, true); } return window.__piKb; })()`;
+const ACTIVE_JS = `(() => { const a = document.activeElement; return JSON.stringify({ tag: a?.tagName || '', label: a?.getAttribute?.('aria-label') || (a?.innerText || '').trim().slice(0, 12) }); })()`;
+async function openKeyboard() {
+  const url = ab('get', 'cdp-url').trim();
+  const ws = new WebSocket(url);
+  await new Promise((ok, no) => {
+    ws.addEventListener('open', ok, { once: true });
+    ws.addEventListener('error', () => no(new Error('连不上 agent-browser 的 CDP 端点')), { once: true });
+  });
+  let id = 0; const pend = new Map();
+  ws.addEventListener('message', (e) => {
+    const m = JSON.parse(e.data);
+    if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
+  });
+  const send = (method, params = {}, sessionId) => {
+    const msg = { id: ++id, method, params };
+    if (sessionId) msg.sessionId = sessionId;
+    ws.send(JSON.stringify(msg));
+    return new Promise((ok) => pend.set(msg.id, ok));
+  };
+  const findPage = async () => {
+    const { result: { targetInfos } } = await send('Target.getTargets');
+    const page = targetInfos.filter((t) => t.type === 'page').find((t) => /^http:\/\/127\.0\.0\.1/.test(t.url));
+    if (!page) throw new Error('找不到被测页面 target');
+    await send('Target.activateTarget', { targetId: page.targetId });
+    return page.targetId;
+  };
+  const targetId = await findPage();
+  const { result: sess } = await send('Target.attachToTarget', { targetId, flatten: true });
+  const sid = sess.sessionId;
+  await send('Page.enable', {}, sid);
+  const KEYS = { Tab: { key: 'Tab', code: 'Tab', vk: 9 }, Enter: { key: 'Enter', code: 'Enter', vk: 13 } };
+  const press = async (name) => {
+    const k = KEYS[name];
+    await findPage();
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: k.key, code: k.code, windowsVirtualKeyCode: k.vk, nativeVirtualKeyCode: k.vk }, sid);
+    if (name === 'Enter') {
+      // 按钮的 Enter 激活是 keypress 阶段触发的：只发 keyDown/keyUp 时页面收到 keydown 但不 click
+      await send('Input.dispatchKeyEvent', { type: 'char', text: '\r', unmodifiedText: '\r', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, sid);
+    }
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k.key, code: k.code, windowsVirtualKeyCode: k.vk, nativeVirtualKeyCode: k.vk }, sid);
+  };
+  return { press, close: () => ws.close() };
+}
+async function pressAndSettle(kb, name) {
+  for (let i = 0; i < 4; i++) {
+    const kd0 = ev(KBD_PROBE_JS);
+    const a0 = ev(ACTIVE_JS);
+    await kb.press(name);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 2500) {
+      const kd = ev('window.__piKb');
+      const a = ev(ACTIVE_JS);
+      if (kd > kd0 || (name === 'Tab' && a !== a0)) return JSON.parse(a);
+      await sleep(100);
+    }
+  }
+  throw new Error(`${name} 键没有被页面收到（hasFocus=${ev('document.hasFocus()')}，visibility=${ev('document.visibilityState')}，keydown 计数 ${ev('window.__piKb')}，active=${ev(ACTIVE_JS)}，tabs=${JSON.stringify(ab('tab').trim())}）——CDP 输入投递的环境问题，不是应用断言失败`);
+}
+
 const SEL = {
   q: '[data-role="filter-q"]',
   type: '[data-role="filter-type"]',
@@ -455,6 +522,48 @@ async function run() {
     eq(ui.find((t) => /^时间/.test(t.txt)).sort, 'descending', '时间列 aria-sort');
     eq(ui.find((t) => /^等级/.test(t.txt)).sort, 'none', '等级列 aria-sort');
     return `请求=${q}`;
+  });
+
+  /* ===== 键盘路径 ===== */
+  await check('K.1', '键盘路径：Tab 依次到搜索框/五个下拉/排序按钮，排序按钮 Enter 触发', async () => {
+    await resetStub();
+    // 键盘用例换一轮干净的浏览器会话：整套跑到后半程（多次 select / click 之后），这一页的 Input 投递会哑掉
+    // ——实测同一页 keydown 计数恒 0、hasFocus 仍是 true；ab close 后重开同一页面 k=1、焦点照走。
+    // 这是工具会话的投递问题，不是应用的焦点陷阱；所以键盘判据在干净会话里判，别把工具故障记成应用缺陷。
+    ab('close');
+    ab('open', `${env.webOrigin}/`);
+    ab('set', 'viewport', '1440', '900');
+    await login();
+    await ensureAlerts(8);
+    const kb = await openKeyboard();
+    try {
+      ev(KBD_PROBE_JS);
+      ab('focus', SEL.q);
+      await sleep(150);
+      eq(ev('document.activeElement?.getAttribute?.("aria-label")'), '搜索告警', '键盘路径起点：搜索框获得焦点');
+      const focusInfo = { hasFocus: ev('document.hasFocus()'), vis: ev('document.visibilityState') };
+      const chain = [];
+      const here = JSON.parse(ev(ACTIVE_JS));
+      chain.push(`${here.tag}:${here.label}`);
+      for (let i = 0; i < 10; i++) {
+        const a = await pressAndSettle(kb, 'Tab');
+        chain.push(`${a.tag}:${a.label}`);
+        if (a.tag === 'BUTTON' && /等级|时间/.test(a.label || '')) break;
+      }
+      const hasAll = ['搜索告警', '按事件类型筛选', '按等级筛选', '按研判结论筛选', '按研判状态筛选', '按时间范围筛选'].every((l) => chain.some((c) => c.includes(l)));
+      ok(hasAll, `Tab 应走到搜索框与五个下拉，实测 ${JSON.stringify(chain)}`);
+      const focused = chain[chain.length - 1];
+      ok(/BUTTON:(等级|时间)/.test(focused), `Tab 应能走到表头排序按钮，实测 ${focused}`);
+      await resetLog();
+      await pressAndSettle(kb, 'Enter');
+      await sleep(900);
+      const l = await reqLog();
+      ok(l.alerts.some((q) => /sort=(level|time)/.test(q)), `Enter 应触发排序请求，实测 ${JSON.stringify(l.alerts)}`);
+      // 键盘用例会把排序切到等级列；复位到时间列，别把状态漏给后面的用例
+      await clickSel(SEL.sortTime);
+      await sleep(600);
+      return `Tab 链=${chain.join(' → ')} 请求=${l.alerts.join(' ')}（hasFocus=${focusInfo.hasFocus} visibility=${focusInfo.vis}）`;
+    } finally { kb.close(); }
   });
 
   /* ===== A3 详情页证据链 ===== */
@@ -736,34 +845,6 @@ async function run() {
     ok(/状态不可用/.test(txt), '无研判队列时队列条应显示「状态不可用」');
     ok((await rowIds()).length === 8, '队列条降级不应影响列表');
     return '队列条：状态不可用；列表 8 条照常';
-  });
-
-  /* ===== 键盘路径 ===== */
-  await check('K.1', '键盘路径：Tab 依次到搜索框/五个下拉/排序按钮，排序按钮 Enter 触发', async () => {
-    await resetStub();
-    await ensureAlerts(8);
-    ab('focus', SEL.q);
-    await sleep(150);
-    eq(ev('document.activeElement?.getAttribute?.("aria-label")'), '搜索告警', '键盘路径起点：搜索框获得焦点');
-    const chain = [];
-    const here = JSON.parse(ev('JSON.stringify({ tag: document.activeElement?.tagName, label: document.activeElement?.getAttribute?.("aria-label") || document.activeElement?.innerText?.trim().slice(0, 12) })'));
-    chain.push(`${here.tag}:${here.label}`);
-    for (let i = 0; i < 10; i++) {
-      ab('press', 'Tab');
-      const a = JSON.parse(ev('JSON.stringify({ tag: document.activeElement?.tagName, label: document.activeElement?.getAttribute?.("aria-label") || document.activeElement?.innerText?.trim().slice(0, 12) })'));
-      chain.push(`${a.tag}:${a.label}`);
-      if (a.tag === 'BUTTON' && /等级|时间/.test(a.label || '')) break;
-    }
-    const hasAll = ['搜索告警', '按事件类型筛选', '按等级筛选', '按研判结论筛选', '按研判状态筛选', '按时间范围筛选'].every((l) => chain.some((c) => c.includes(l)));
-    ok(hasAll, `Tab 应走到搜索框与五个下拉，实测 ${JSON.stringify(chain)}`);
-    const focused = chain[chain.length - 1];
-    ok(/BUTTON:(等级|时间)/.test(focused), `Tab 应能走到表头排序按钮，实测 ${focused}`);
-    await resetLog();
-    ab('press', 'Enter');
-    await sleep(900);
-    const l = await reqLog();
-    ok(l.alerts.some((q) => /sort=(level|time)/.test(q)), `Enter 应触发排序请求，实测 ${JSON.stringify(l.alerts)}`);
-    return `Tab 链=${chain.join(' → ')} 请求=${l.alerts.join(' ')}`;
   });
 
   /* ===== 视觉作证：两种宽度 ===== */
