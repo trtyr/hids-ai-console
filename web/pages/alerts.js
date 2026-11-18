@@ -641,11 +641,15 @@ export function mountAlertsPage(options = {}) {
    * 两次请求之间记录可能变少：游标被拉回最后一页时必须跟着重拉一次，
    * 否则页脚按新 total 画、行区还是超界请求的空数组。
    * @param {boolean} [refetchOnClamp] 仅在游标真被拉回时重拉；最多一次
+   * @param {boolean} [quiet] 主机逐键取数用：已有表格时不闪骨架、不禁用筛选控件（否则打到一半输入框失焦）
    */
-  async function load(refetchOnClamp = true) {
-    state.phase = 'loading';
+  let loadSeq = 0;
+  async function load(refetchOnClamp = true, quiet = false) {
+    const seq = ++loadSeq;
+    const keepRows = quiet && state.phase !== 'loading';
+    if (!keepRows) state.phase = 'loading';
     state.fpIndex = -1;
-    paint();
+    if (!keepRows) paint();
     const [casesResult, queueResult] = await Promise.allSettled([
       listCases({
         count: state.count,
@@ -658,6 +662,8 @@ export function mountAlertsPage(options = {}) {
       }, request),
       fetchQueueStatus(request),
     ]);
+
+    if (seq !== loadSeq) return; // 逐键取数会并发：更新的那轮已经接手，这一轮的响应作废
 
     if (casesResult.status === 'fulfilled') {
       state.cases = casesResult.value.cases;
@@ -732,9 +738,18 @@ export function mountAlertsPage(options = {}) {
 
   $('refresh').addEventListener('click', () => { void load(); });
 
-  // 主机 IP：回车 / 失焦 / 搜索框自带清除都触发一次服务端查询
-  $('filter-host').addEventListener('change', () => onFilterChange('已按主机筛选'));
-  $('filter-host').addEventListener('search', () => onFilterChange('已按主机筛选'));
+  // 主机 IP：值一变就重取（§10.5），逐键取数。input / change / search 三道共用一个闸——
+  // 值没变就不发，所以一次回车（浏览器会连发 search 与 change）只会有一轮相同请求。
+  function onHostValue() {
+    const value = $('filter-host').value.trim();
+    if (value === state.filters.host) return;
+    state.filters.host = value;
+    state.offset = 0;
+    void load(true, true);
+  }
+  for (const type of ['input', 'change', 'search']) {
+    $('filter-host').addEventListener(type, onHostValue);
+  }
   for (const [role, message] of [
     ['filter-type', '已按事件类型筛选'],
     ['filter-verdict', '已按研判结论筛选'],

@@ -6,6 +6,7 @@
 //   - 主列表**不请求 /api/alerts**（牧云没配时主列表不 503）；
 //   - 队列条读不到只让队列条显示「状态不可用」，列表照常。
 import { test, beforeEach } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
 import {
@@ -324,6 +325,109 @@ test('筛选与排序全部下推给接口（结论/类型/主机/时间/sort）
   assert.match(last, /sort=verdict/);
   assert.equal(host.querySelector('[data-role="th-verdict"]').getAttribute('aria-sort'), 'descending');
   assert.equal(host.querySelector('[data-role="filter-count"]').textContent, '筛选后 1 条');
+});
+
+test('表格包裹层：类名与样式表对得上，横向滚动落在包裹层上（页面本身不横滚）', async () => {
+  const { host } = mount();
+  await flush();
+  const wrap = host.querySelector('[data-role="table-wrap"]');
+  assert.ok(wrap.classList.contains('table-wrap'), `包裹层类名应为 table-wrap，实际 ${wrap.className}`);
+  assert.ok(wrap.querySelector('table.alerts'), '表格要住在包裹层里');
+  // jsdom 不算布局：直接读样式文件，把「DOM 类名 ↔ CSS overflow-x」钉在一起（同 knowledge.test.js 的先例）
+  const css = readFileSync(new URL('../../assets/pages/alerts.css', import.meta.url), 'utf8');
+  assert.match(css, /\.table-wrap\s*\{[^}]*overflow-x:\s*auto/);
+});
+
+test('主机筛选：逐键输入各发一轮，回车不再发第二遍（复审 findings 2）', async () => {
+  const { host, calls } = mount();
+  await flush();
+  const input = host.querySelector('[data-role="filter-host"]');
+  const fire = type => input.dispatchEvent(new host.ownerDocument.defaultView.Event(type, { bubbles: true }));
+  const before = caseCalls(calls).length;
+
+  input.value = '10.';
+  fire('input');
+  await flush();
+  input.value = '10.0.0.5';
+  fire('input');
+  await flush();
+  const afterTyping = caseCalls(calls).length;
+  assert.equal(afterTyping - before, 2, '每一键一轮取数');
+  assert.match(caseCalls(calls).at(-2).url, /host=10\./);
+  assert.match(caseCalls(calls).at(-1).url, /host=10\.0\.0\.5/);
+
+  // 回车：type=search 的浏览器会连发 search + change——值没变，一条都不发
+  fire('search');
+  fire('change');
+  await flush();
+  assert.equal(caseCalls(calls).length, afterTyping, '一次回车不能再发一轮相同请求');
+
+  // 值真变了（比如粘贴后失焦）→ change 兜底仍要取一轮
+  input.value = ' 10.0.0.6 ';
+  fire('change');
+  await flush();
+  assert.equal(caseCalls(calls).length, afterTyping + 1);
+  assert.match(caseCalls(calls).at(-1).url, /host=10\.0\.0\.6/);
+});
+
+test('主机逐键取数时不清表、不禁用输入框（否则打到一半输入框失焦）', async () => {
+  let hold = false;
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const { host } = mount({
+    handler: async url => {
+      if (!hold || !String(url).startsWith('/api/agent/triage/cases')) return null;
+      await gate;
+      return respond({ total: 1, cases: [record({ host_ip: '10.0.0.9' })] });
+    },
+  });
+  await flush();
+  hold = true;
+  const input = host.querySelector('[data-role="filter-host"]');
+  input.value = '10.0.0.9';
+  input.dispatchEvent(new host.ownerDocument.defaultView.Event('input', { bubbles: true }));
+  await flush();
+
+  assert.equal(input.disabled, false, '取数中主机输入框必须还能继续输入');
+  assert.equal(rows(host).length, 1, '取数中保留上一轮的行，不闪骨架');
+  assert.equal(host.querySelector('[data-role="table-wrap"]').hasAttribute('aria-busy'), false);
+  release();
+  await flush();
+  assert.equal(text(rows(host)[0].querySelector('.col-ip')), '10.0.0.9');
+});
+
+test('主机逐键取数：先发的旧响应晚到也不许盖掉新结果', async () => {
+  const pending = [];
+  const custom = host => ({ total: 1, cases: [record({ host_ip: host })] });
+  const { host: page } = mount({
+    handler: url => {
+      const u = String(url);
+      if (!u.startsWith('/api/agent/triage/cases')) return null;
+      const value = new URL(u, 'http://stub').searchParams.get('host');
+      if (!value) return null;
+      return new Promise(resolve => {
+        pending.push({ value, done: () => resolve(respond(custom(value))) });
+      });
+    },
+  });
+  await flush();
+  const input = page.querySelector('[data-role="filter-host"]');
+  const fire = () => input.dispatchEvent(new page.ownerDocument.defaultView.Event('input', { bubbles: true }));
+
+  input.value = '10.0.0.5';
+  fire();
+  await flush();
+  input.value = '10.0.0.6';
+  fire();
+  await flush();
+  assert.deepEqual(pending.map(item => item.value), ['10.0.0.5', '10.0.0.6']);
+
+  pending[1].done();
+  await flush();
+  assert.equal(text(rows(page)[0].querySelector('.col-ip')), '10.0.0.6');
+  pending[0].done();
+  await flush();
+  assert.equal(text(rows(page)[0].querySelector('.col-ip')), '10.0.0.6', '旧响应晚到不许把表格盖回去');
 });
 
 test('分页与每页条数：offset 跟着页码走，每页 50 回第一页', async () => {

@@ -77,7 +77,8 @@
 .bulk-actions { display: flex; align-items: center; gap: 16px; }
 
 /* ---------- 表格（稿 .alerts） ---------- */
-.table-wrap { transition: opacity var(--dur) var(--ease-out); }
+/* 九列固定宽合计 1008：内容区装不下时只让包裹层横向滚，页面本身不横滚（README §15 的项目口径） */
+.table-wrap { transition: opacity var(--dur) var(--ease-out); overflow-x: auto; }
 .table-wrap.is-busy { opacity: .45; }
 
 .alerts { width: 100%; border-collapse: collapse; table-layout: fixed; }
