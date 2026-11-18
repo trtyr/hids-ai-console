@@ -243,13 +243,25 @@ paths:
     get:
       tags: [自动研判]
       summary: 获取自动研判队列汇总
+      description: |
+        队列状态 + 三个聚合：`counts`（四种状态）、`verdict_counts`（结论分布）、`type_counts`（事件类型分布）。
+        带 `since` 时三个聚合都只算「进入队列时刻（`created_at`）不早于该时刻」的记录；`initialized` / `enabled` /
+        `input_mode` / `last_error` / `last_poll_at` / `syslog` 不受 `since` 影响。
+        syslog 模式下没有轮询，`last_poll_at` 恒为 null，最后一条报文的到达时刻看 `last_received_at`。
       operationId: getTriageStatus
+      parameters:
+        - $ref: '#/components/parameters/TriageSince'
       responses:
         '200':
           description: 队列状态
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TriageSummary' }
+        '400':
+          description: since 解析不出来
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/agent/triage/cases:
     get:
@@ -924,6 +936,16 @@ components:
         time=按收到顺序倒序（默认，同老行为）；verdict=结论排序，threat 在前，依次 uncertain / false_positive / 无结论，同档按时间倒序。其他值回 400
       schema: { type: string, enum: [time, verdict], default: time }
       example: verdict
+    TriageSince:
+      name: since
+      in: query
+      required: false
+      description: |
+        聚合起点（含）：RFC3339 或秒/毫秒时间戳，与 `created_at`（记录进入队列的时刻）比，不早于它的记录才计入
+        `counts` / `verdict_counts` / `type_counts`。解析不了回 400「筛选起始时间无效：<值>」；空值等于不带筛。
+        没有 `created_at` 的旧记录在带 since 时不会被计入
+      schema: { type: string }
+      example: '2026-11-04T00:00:00Z'
     AlertId:
       name: alertId
       in: path
@@ -1262,7 +1284,7 @@ components:
       additionalProperties: true
     TriageSummary:
       type: object
-      required: [initialized, enabled, input_mode, counts]
+      required: [initialized, enabled, input_mode, since, counts, verdict_counts, type_counts]
       properties:
         initialized: { type: boolean }
         enabled: { type: boolean }
@@ -1279,15 +1301,45 @@ components:
             bind: { type: [string, 'null'], description: 绑上时的 udp://<address>:<port>；否则为 null }
             error: { type: [string, 'null'], description: 绑定失败原因（截 300 字），如 bind EADDRINUSE 127.0.0.1:15514；未失败为 null }
           additionalProperties: false
-        last_poll_at: { type: [string, 'null'] }
+        last_poll_at:
+          type: [string, 'null']
+          description: 最近一次轮询牧云的时刻；syslog 模式没有轮询，恒为 null（最后一条报文的到达时刻看 last_received_at）
+        last_received_at:
+          type: [string, 'null']
+          description: |
+            仅 input_mode=syslog 时出现；最后一条入队 syslog 报文**到达接收服务器**的时刻（接收端时钟，不是牧云事件时间），
+            重启后不丢。还没收到过任何报文时为 null；报文解析失败、MsgId 无对应研判场景、暂停期间被跳过的报文都不算收到，不推进这个值
         last_error: { type: [string, 'null'] }
+        since:
+          type: [string, 'null']
+          description: 本次聚合的起点（请求里的 since 归一成 RFC3339）；不带 since 时为 null。三个聚合都按它算
         counts:
           type: object
+          description: 四种队列状态的条数；带 since 时只算该时刻后进入队列的记录。四键恒在，没有记录的为 0
           properties:
             queued: { type: integer }
             running: { type: integer }
             done: { type: integer }
             failed: { type: integer }
+        verdict_counts:
+          type: object
+          description: |
+            结论分布。四键恒在（没有记录时为 0）。口径与 `GET /api/agent/triage/cases?verdict=` 一致：
+            记录上没有结论的算 review；记录上的结论不在三态里（历史快照里的 undetermined / needs_review 之类）同样算 review
+          required: [threat, uncertain, false_positive, review]
+          properties:
+            threat: { type: integer, description: 真实威胁 }
+            uncertain: { type: integer, description: 存疑 }
+            false_positive: { type: integer, description: 误报 }
+            review: { type: integer, description: 待研判 / 没有结论 }
+          additionalProperties: false
+        type_counts:
+          type: object
+          description: |
+            事件类型分布，键是 syslog MsgId 经 `eventTypeFor` 映射出的类型（如 revshell / honeypot）。
+            只列出现过的类型，没出现过的键不出现（空队列为 `{}`）；没有事件类型的记录（轮询入口入队、没有 input，
+            或 MsgId 不在映射表里）计入 `unknown`
+          additionalProperties: { type: integer }
     TriageCase:
       type: object
       required: [alert_id, status]
