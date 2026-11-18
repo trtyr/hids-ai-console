@@ -1,0 +1,495 @@
+/* 深度溯源页样式（P002-T005）
+ *
+ * 来源：设计稿 design/trace.html 的 <style> 块里**本页独有**的部分，逐条搬过来；
+ * 颜色一律用 assets/theme.css 的变量，本文件不新增色值。
+ * 壳的部分（.app / .rail / .nav / .bar / .content / .textbtn）在 assets/app.css 里，不在这里重复定义。
+ * 本文件由 web/pages/trace.js 首次 render 时注入（<link data-page-style="trace">）：
+ * web/index.html 与 assets/app.css 不归本卡（scope），所以不改入口。
+ *
+ * 选择器一律挂 .trace-page 前缀：这是单页应用，`.state` / `.canvas` 这类名字不能漏给别的页面。
+ *
+ * 稿上没画、本仓补的三块（都在报告里记了原因）：
+ *   .trace-tools —— 「刷新」稿在顶栏，顶栏属壳（forbidden），挪到内容区首行
+ *   .notice     —— 列表级失败的整块提示（稿只有画布内空态，没有列表失败态）
+ *   .trace-page 的负边距与高度 —— 稿的画布顶到内容区边缘；壳的 .content 有 28px 左右与 32px 底部内边距，
+ *                                 这里抵掉，画布才能通栏（app.css:509）
+ */
+
+.trace-page {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  /* 100dvh − 顶栏 52px（app.css:469）；上下边距抵掉 .content 的 32px 底部内边距（app.css:509），
+     画布才能顶到窗口底。 */
+  height: calc(100dvh - 52px);
+  margin: 0 -28px -32px;
+  min-height: 0;
+}
+
+/* ---------- 内容区首行：刷新 ---------- */
+.trace-tools {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 6px 28px;
+  border-bottom: 1px solid var(--line);
+}
+.trace-tools .textbtn:disabled .od-icon { animation: spin .8s linear infinite; }
+
+/* ---------- 列表级失败 ---------- */
+.notice {
+  grid-row: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 28px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.notice .od-icon { color: var(--danger); margin-top: 2px; }
+.notice .textbtn { margin-left: auto; flex: none; }
+
+/* ---------- 左右分栏 ---------- */
+.trace-shell {
+  grid-row: 3;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  min-height: 0;
+}
+
+/* ---------- 白板列表 ---------- */
+.trace-page .side {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  border-right: 1px solid var(--line);
+  min-height: 0;
+}
+.trace-page .side-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px 8px;
+}
+.trace-page .side-head h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: var(--text-2);
+}
+.trace-page .side-head span { font-size: 10px; color: var(--text-3); }
+
+.trace-page .new-board {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.trace-page .new-board input {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11.5px;
+}
+.trace-page .new-board input::placeholder { color: var(--input-placeholder); }
+.trace-page .new-board input:focus { outline: none; border-color: var(--accent); }
+.trace-page .new-board button {
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.trace-page .new-board button:hover:not(:disabled) { background: var(--accent-hover); }
+.trace-page .new-board button:disabled { cursor: default; opacity: .55; }
+
+.trace-page .board-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+.trace-page .board-list .muted { padding: 0 16px; }
+.trace-page .board-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 16px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: var(--text-2);
+  font-family: inherit;
+  cursor: pointer;
+}
+.trace-page .board-item:hover { background: var(--bg-hover); }
+.trace-page .board-item.is-active { background: var(--bg-active); }
+.trace-page .board-id {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.trace-page .board-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.trace-page .state { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.trace-page .state::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  background: var(--text-3);
+  flex: none;
+}
+.trace-page .state.is-running { color: var(--accent); }
+.trace-page .state.is-running::before { background: var(--accent); }
+.trace-page .state.is-done { color: var(--text-2); }
+.trace-page .state.is-failed { color: var(--danger); }
+.trace-page .state.is-failed::before { background: var(--danger); }
+
+.trace-page .side-note {
+  margin: 0;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  min-height: 40px;
+}
+
+/* ---------- 画布区 ---------- */
+.trace-page .stage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+.trace-page .stage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.trace-page .stage-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.trace-page .stage-title h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.trace-page .stage-title .meta { font-size: 10.5px; color: var(--text-3); }
+
+.trace-page .playback { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.trace-page .playback .progress {
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.trace-page .playback button {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: none;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.trace-page .playback button:hover:not(:disabled) { color: var(--text); border-color: var(--line-hover); }
+.trace-page .playback button:disabled { color: var(--text-3); cursor: default; opacity: .5; }
+.trace-page .playback button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent-line); }
+
+.trace-page .zoom { display: flex; align-items: center; gap: 4px; flex: none; }
+.trace-page .zoom button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: none;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.trace-page .zoom button:hover { color: var(--text); border-color: var(--line-hover); }
+.trace-page .zoom .level {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 26px;
+  padding: 0 6px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-page .canvas-wrap {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  min-height: 0;
+}
+.trace-page .canvas {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 24px 24px;
+  cursor: grab;
+  touch-action: none;
+  min-height: 0;
+}
+.trace-page .canvas.is-panning { cursor: grabbing; }
+.trace-page .world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.trace-page .edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.trace-page .edges line.edge { stroke: var(--line-2); stroke-width: 1.2; pointer-events: none; }
+.trace-page .edges line.edge.is-active { stroke: var(--accent); stroke-width: 1.8; }
+.trace-page .edges line.edge.is-new { animation: trace-edge-in 280ms var(--ease-out) both; }
+.trace-page .edges line.edge-hit {
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.trace-page .edges polygon.edge-arrow { fill: var(--line-2); }
+.trace-page .edges polygon.edge-arrow.is-active { fill: var(--accent); }
+.trace-page .edges text.edge-label {
+  fill: var(--text-3);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+  pointer-events: none;
+}
+.trace-page .edges text.edge-label.is-active { fill: var(--accent); }
+
+.trace-page .gnode {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  transform: translateY(-50%);
+  color: var(--text-2);
+  font-family: inherit;
+  cursor: grab;
+  white-space: nowrap;
+}
+.trace-page .gnode-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-3);
+  transition: background-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+.trace-page .gnode-label { font-size: 11px; color: var(--text-2); transition: color var(--dur) var(--ease-out); }
+.trace-page .gnode:hover .gnode-dot { background: var(--text); }
+.trace-page .gnode:hover .gnode-label { color: var(--text); }
+.trace-page .gnode.is-active .gnode-dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring); }
+.trace-page .gnode.is-active .gnode-label { color: var(--accent); }
+.trace-page .gnode.is-dragging { cursor: grabbing; }
+.trace-page .gnode.is-new { animation: trace-node-in 280ms var(--ease-out) both; }
+@keyframes trace-node-in {
+  from { opacity: 0; transform: translateY(-50%) scale(.5); }
+  to { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+@keyframes trace-edge-in { from { opacity: 0; } to { opacity: 1; } }
+
+.trace-page .canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  pointer-events: none;
+  padding: 24px;
+}
+.trace-page .canvas-empty h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.trace-page .canvas-empty p { margin: 6px 0 0; font-size: 11.5px; color: var(--text-3); max-width: 36ch; }
+
+/* ---------- 检查器 ---------- */
+.trace-page .inspector {
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  min-height: 0;
+  background: var(--bg-rail);
+}
+.trace-page .inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.trace-page .inspector-head h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: var(--text-2);
+}
+.trace-page .inspector-body { padding: 12px 16px 20px; }
+.trace-page .inspector h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.trace-page .inspector .kind { display: block; margin-top: 3px; font-size: 10px; color: var(--text-3); }
+.trace-page .inspector .summary {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.trace-page .kv { margin: 10px 0 0; padding: 0; }
+.trace-page .kv-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+.trace-page .kv-row dt { color: var(--text-3); overflow-wrap: anywhere; }
+.trace-page .kv-row dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+
+.trace-page .section-label {
+  display: block;
+  margin: 16px 0 6px;
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--text-3);
+}
+.trace-page .gaps { list-style: none; margin: 0; padding: 0; }
+.trace-page .gaps li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.trace-page .gaps li:last-child { border-bottom: 0; }
+
+.trace-page .timeline { list-style: none; margin: 0; padding: 0; }
+.trace-page .timeline li { border-bottom: 1px solid var(--line); }
+.trace-page .timeline li:last-child { border-bottom: 0; }
+.trace-page .timeline button {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  padding: 7px 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.trace-page .timeline button:hover:not(:disabled) { color: var(--text); }
+.trace-page .timeline button:disabled { color: var(--text-3); opacity: .5; cursor: default; }
+.trace-page .timeline time { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
+.trace-page .timeline .is-latest { color: var(--accent); }
+.trace-page .timeline span { overflow-wrap: anywhere; }
+.trace-page .muted { color: var(--text-3); font-size: 11px; }
+
+/* ---------- 响应式（照稿 §6） ---------- */
+@media (max-width: 1100px) {
+  .trace-page { margin: 0 -20px -24px; }
+  .trace-tools, .notice { padding-inline: 20px; }
+  .trace-shell { grid-template-columns: 210px minmax(0, 1fr); }
+  .trace-page .canvas-wrap { grid-template-columns: minmax(0, 1fr) 240px; }
+}
+
+@media (max-width: 900px) {
+  /* 稿：单列时画布 60vh，检查器落到下方，页面高度由内容决定 */
+  .trace-page { height: auto; margin: 0 -20px 0; }
+  .trace-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  .trace-page .side {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    grid-template-rows: auto auto auto;
+  }
+  .trace-page .board-list { display: flex; gap: 6px; overflow-x: auto; padding: 6px 12px 10px; }
+  .trace-page .board-item { flex: 0 0 200px; border: 1px solid var(--line); border-radius: 2px; border-left-width: 1px; }
+  .trace-page .canvas-wrap { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(320px, 60vh) auto; }
+  .trace-page .canvas { min-height: 320px; }
+  .trace-page .inspector { border-left: 0; border-top: 1px solid var(--line); max-height: 320px; }
+}
+
+@media (max-width: 620px) {
+  .trace-page { margin: 0 -14px 0; }
+  .trace-tools, .notice { padding-inline: 14px; }
+  .trace-page .stage-bar { padding: 8px 12px; }
+  .trace-page .canvas-wrap { grid-template-rows: minmax(280px, 52vh) auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trace-page *, .trace-page *::before, .trace-page *::after {
+    animation-duration: .001ms !important;
+    transition-duration: .001ms !important;
+  }
+}
