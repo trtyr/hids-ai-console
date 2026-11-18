@@ -223,3 +223,149 @@ test('列表的重复次数沿用例记录上的 repeat_count，不另造计数'
   monitor.records.get(rows[0].alert_id).repeat_count = undefined;
   assert.equal(monitor.cases().cases.find(item => item.alert_id === rows[0].alert_id).repeat_count, 1);
 });
+
+// summary() 的三个聚合只看记录本身（状态 / 结论 / MsgId 类型 / 入队时刻），搭最小记录矩阵，不跑研判。
+function summaryRecord(alertId, { status = 'done', verdict, createdAt = '2026-11-03T08:00:00.000Z', msgid } = {}) {
+  return { alert_id: alertId, status, verdict, created_at: createdAt, updated_at: createdAt,
+    ...(msgid ? { input: { raw: '', parsed: { msgid, ts: '2026-11-03T08:00:00Z', payload: {} } } } : {}) };
+}
+
+test('summary() 出结论分布、类型分布，since 只算该时刻起进入队列的记录', t => {
+  const early = '2026-11-03T08:00:00.000Z';
+  const late = '2026-11-04T09:00:00.000Z';
+  const monitor = new TriageMonitor({ file: '/tmp/hids-summary-matrix.json', service: {}, investigator: {}, history: {} });
+  // 空队列：四个结论键恒在（零值），类型分布为空对象，不给 undefined
+  assert.deepEqual(monitor.summary().counts, { queued: 0, running: 0, done: 0, failed: 0 });
+  assert.deepEqual(monitor.summary().verdict_counts, { threat: 0, uncertain: 0, false_positive: 0, review: 0 });
+  assert.deepEqual(monitor.summary().type_counts, {});
+  assert.equal(monitor.summary().since, null);
+
+  const rows = [
+    summaryRecord('syslog:revshell:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e41',
+      { verdict: 'threat', createdAt: early, msgid: 'cloudwalker-revshell' }),
+    summaryRecord('syslog:revshell:bbbbbbbbbbbbbbbb:1763396400:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e42',
+      { verdict: 'threat', createdAt: late, msgid: 'cloudwalker-revshell' }),
+    summaryRecord('syslog:webshell:cccccccccccccccc:1763400000:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43',
+      { status: 'queued', createdAt: late, msgid: 'cloudwalker-webshell' }),
+    summaryRecord('syslog:honeypot:dddddddddddddddd:1763403600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e44',
+      { status: 'failed', createdAt: late, msgid: 'cloudwalker-honeypot' }),
+    // 轮询入口入队的记录没有 input，也就没有事件类型：落 unknown，仍然计进结论分布
+    summaryRecord('honeypot:5', { verdict: 'false_positive', createdAt: late }),
+    summaryRecord('syslog:honeypot:eeeeeeeeeeeeeeee:1763398000:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e45',
+      { verdict: 'uncertain', createdAt: early, msgid: 'cloudwalker-honeypot' })
+  ];
+  for (const row of rows) monitor.records.set(row.alert_id, row);
+
+  const all = monitor.summary();
+  assert.deepEqual(all.counts, { queued: 1, running: 0, done: 4, failed: 1 });
+  assert.deepEqual(all.verdict_counts, { threat: 2, uncertain: 1, false_positive: 1, review: 2 });
+  assert.deepEqual(all.type_counts, { revshell: 2, webshell: 1, honeypot: 2, unknown: 1 });
+  assert.equal(all.since, null);
+
+  // since 只算 created_at 不早于该时刻的记录，三个聚合共用同一份记录集
+  const later = monitor.summary({ since: '2026-11-04T00:00:00.000Z' });
+  assert.equal(later.since, '2026-11-04T00:00:00.000Z');
+  assert.deepEqual(later.counts, { queued: 1, running: 0, done: 2, failed: 1 });
+  assert.deepEqual(later.verdict_counts, { threat: 1, uncertain: 0, false_positive: 1, review: 2 });
+  assert.deepEqual(later.type_counts, { revshell: 1, webshell: 1, honeypot: 1, unknown: 1 });
+
+  // 含端点：正好落在 since 上的记录也计入（4 条 late，其中 done 2 条）
+  const atLate = monitor.summary({ since: late });
+  assert.deepEqual(atLate.counts, { queued: 1, running: 0, done: 2, failed: 1 });
+  assert.equal(atLate.verdict_counts.threat, 1);
+
+  // 一个时刻都没到：全零，不因为「没有记录」把键省掉
+  const future = monitor.summary({ since: '2027-01-01T00:00:00.000Z' });
+  assert.deepEqual(future.counts, { queued: 0, running: 0, done: 0, failed: 0 });
+  assert.deepEqual(future.verdict_counts, { threat: 0, uncertain: 0, false_positive: 0, review: 0 });
+  assert.deepEqual(future.type_counts, {});
+
+  // 解析不出来的 since 不静默当成「全量」以外的窗口：退回不带筛，并把 since 回成 null
+  const bogus = monitor.summary({ since: 'not-a-time' });
+  assert.equal(bogus.since, null);
+  assert.deepEqual(bogus.counts, all.counts);
+
+  // 没有 created_at 的旧记录：不带 since 照常计，带 since 时算不进去（没有时刻可比）
+  monitor.records.set('honeypot:6', summaryRecord('honeypot:6', { verdict: 'threat' }));
+  monitor.records.get('honeypot:6').created_at = undefined;
+  assert.equal(monitor.summary().verdict_counts.threat, 3);
+  assert.equal(monitor.summary({ since: early }).verdict_counts.threat, 2);
+});
+
+test('syslog 模式的 summary 给出最后一条到达时刻，重启后不丢，失败投递不算', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-received-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-03T08:00:00.000Z') });
+  const options = { service: {}, inputMode: 'syslog', concurrency: 1,
+    history: new InvestigationStore(path.join(directory, 'results')), file: path.join(directory, 'queue.json'),
+    casesDirectory: path.join(directory, 'cases'),
+    investigator: { run: async (id, { mode }) => ({ alert_id: id, mode,
+      verdict: { verdict: 'uncertain', verdict_label: '存疑', summary: '还需核查来源', claims: [] }, validation: { ok: true } }) } };
+  const monitor = new TriageMonitor(options);
+  await monitor.start();
+
+  // 一条都没收到：last_received_at 为 null；syslog 模式没有轮询，last_poll_at 仍是 null——两个键互不替代
+  assert.equal(monitor.summary().last_received_at, null);
+  assert.equal(monitor.summary().last_poll_at, null);
+  assert.deepEqual(await monitor.attachSyslog({ start: async () => ({ address: '127.0.0.1', port: 15514 }) }),
+    { listening: true, bind: 'udp://127.0.0.1:15514', error: null });
+  // 绑定成功不等于收到过消息
+  assert.equal(monitor.summary().last_received_at, null);
+
+  const line = '<134>1 2026-11-03T08:00:00Z host app 1 cloudwalker-honeypot '
+    + 'host_ip="10.0.0.5" event_create_time="2026-11-03 08:00:00" source_ip="192.0.2.2" target_port="80"';
+  const first = await monitor.acceptSyslog(line);
+  assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:00.000Z');
+
+  // 同秒重复投递也是一条到达：时间跟上，和记录上的 updated_at 同一个时刻
+  t.mock.timers.tick(7000);
+  const duplicate = await monitor.acceptSyslog(line);
+  assert.equal(duplicate.collapsed, true);
+  assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
+  assert.equal(monitor.records.get(first.alert_id).updated_at, '2026-11-03T08:00:07.000Z');
+
+  // 解析失败 / 未知 MsgId 都不算「收到」：时钟先往前走，报错或跳过后最后到达时刻仍是原值
+  t.mock.timers.tick(5000);
+  const broken = await monitor.acceptSyslog('这不是一条 syslog 行');
+  assert.match(broken.error, /syslog 解析失败/);
+  assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
+  t.mock.timers.tick(5000);
+  assert.deepEqual(await monitor.acceptSyslog('<134>1 2026-11-03T08:00:20Z host app 1 cloudwalker-unknown-msgid host_ip="10.0.0.5"'),
+    { skipped: 'no_agent_for_msgid', msgid: 'cloudwalker-unknown-msgid' });
+  assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
+  await monitor.setEnabled(false);
+  t.mock.timers.tick(5000);
+  assert.deepEqual(await monitor.acceptSyslog(line), { skipped: 'paused' });
+  assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
+
+  // 持久化：重启后仍是同一个最后到达时刻，而不是退回 null
+  await monitor.writeChain;
+  const resumed = new TriageMonitor(options);
+  await resumed.load();
+  assert.equal(resumed.summary().last_received_at, '2026-11-03T08:00:07.000Z');
+
+  // poll 模式没有这个键（轮询用 last_poll_at），两个入口不混着给
+  const polling = new TriageMonitor({ service: { alerts: async () => ({ alerts: [], partial: false }) },
+    investigator: { run: async () => ({}) }, history: new InvestigationStore(path.join(directory, 'poll-results')),
+    file: path.join(directory, 'poll.json') });
+  await polling.load();
+  assert.equal('last_received_at' in polling.summary(), false);
+  assert.equal('interval_ms' in polling.summary(), true);
+});
+
+test('type_counts 不因 MsgId 撞上对象原型键名而冒出垃圾键', t => {
+  const monitor = new TriageMonitor({ file: '/tmp/hids-summary-proto.json', service: {}, investigator: {}, history: {} });
+  // eventTypeFor 用普通对象查表：这三个 MsgId 会取到原型上的函数 / 对象，真值但不能当类型用。
+  const msgids = ['toString', 'constructor', '__proto__', 'hasOwnProperty', 'cloudwalker-honeypot'];
+  for (const msgid of msgids) {
+    const alertId = `syslog:x:${String(msgid).padStart(16, '0')}:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e46`;
+    monitor.records.set(alertId, { alert_id: alertId, status: 'done', verdict: 'threat',
+      created_at: '2026-11-03T08:00:00.000Z', updated_at: '2026-11-03T08:00:00.000Z',
+      input: { raw: '', parsed: { msgid, ts: '2026-11-03T08:00:00Z', payload: {} } } });
+  }
+  // 只有映射表里的类型出键；原型键名的记录全落 unknown，计数不丢
+  assert.deepEqual(monitor.summary().type_counts, { honeypot: 1, unknown: 4 });
+  assert.equal(monitor.summary().verdict_counts.threat, 5);
+  // 键名只能是映射表里的类型或 unknown：没有 function/object 字样漏进键里
+  for (const key of Object.keys(monitor.summary().type_counts)) assert.match(key, /^[a-z_]+$/);
+});

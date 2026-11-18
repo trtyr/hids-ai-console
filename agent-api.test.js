@@ -228,3 +228,79 @@ test('trace board API starts and restores an alert board', async t => {
   assert.equal((await fetch(`${base}/api/trace/boards/honeypot%3A8`)).status, 404);
   assert.equal((await fetch(`${base}/api/trace/boards/bad-id`)).status, 400);
 });
+
+test('总览接口出结论分布 / 类型分布，带 since 只算该时刻后入队的记录，非法时间回 400', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-summary-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const monitor = new TriageMonitor({ file: path.join(directory, 'queue.json'), service: {}, investigator: {}, history: {} });
+  const add = (alertId, { status = 'done', verdict, createdAt, msgid }) => monitor.records.set(alertId, {
+    alert_id: alertId, status, verdict, created_at: createdAt, updated_at: createdAt,
+    ...(msgid ? { input: { raw: '', parsed: { msgid, ts: '2026-11-03T08:00:00Z', payload: {} } } } : {}) });
+  add('syslog:revshell:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e41',
+    { verdict: 'threat', createdAt: '2026-11-03T08:00:00.000Z', msgid: 'cloudwalker-revshell' });
+  add('syslog:webshell:bbbbbbbbbbbbbbbb:1763396400:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e42',
+    { verdict: 'uncertain', createdAt: '2026-11-04T09:00:00.000Z', msgid: 'cloudwalker-webshell' });
+  add('syslog:honeypot:cccccccccccccccc:1763400000:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43',
+    { status: 'queued', createdAt: '2026-11-04T10:00:00.000Z', msgid: 'cloudwalker-honeypot' });
+  add('honeypot:5', { status: 'failed', verdict: 'false_positive', createdAt: '2026-11-04T11:00:00.000Z' });
+  const server = createServer(null, null, null, null, null, monitor);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const summary = async query => (await fetch(`${base}/api/agent/triage/status${query}`)).json();
+
+  const all = await summary('');
+  assert.deepEqual(all.counts, { queued: 1, running: 0, done: 2, failed: 1 });
+  assert.deepEqual(all.verdict_counts, { threat: 1, uncertain: 1, false_positive: 1, review: 1 });
+  assert.deepEqual(all.type_counts, { revshell: 1, webshell: 1, honeypot: 1, unknown: 1 });
+  assert.equal(all.since, null);
+
+  // RFC3339 与秒级时间戳都收；含端点，三个聚合共用同一份记录集
+  const later = await summary('?since=2026-11-04T00:00:00Z');
+  assert.equal(later.since, '2026-11-04T00:00:00.000Z');
+  assert.deepEqual(later.counts, { queued: 1, running: 0, done: 1, failed: 1 });
+  assert.deepEqual(later.verdict_counts, { threat: 0, uncertain: 1, false_positive: 1, review: 1 });
+  assert.deepEqual(later.type_counts, { webshell: 1, honeypot: 1, unknown: 1 });
+  const tenOClock = Math.floor(Date.parse('2026-11-04T10:00:00Z') / 1000);
+  const atTen = await summary(`?since=${tenOClock}`);
+  assert.deepEqual(atTen.counts, { queued: 1, running: 0, done: 0, failed: 1 });
+  assert.equal(atTen.verdict_counts.review, 1);
+
+  // 非法时间 400（与 /api/alerts、/api/agent/triage/cases 同一套文案）；空值等于不带筛
+  const invalid = await fetch(`${base}/api/agent/triage/status?since=not-a-time`);
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error, '筛选起始时间无效：not-a-time');
+  const blank = await summary('?since=');
+  assert.equal(blank.since, null);
+  assert.deepEqual(blank.counts, all.counts);
+});
+
+test('总览接口在 syslog 模式透出最后一条到达时刻，poll 模式不给这个键', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-received-http-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  // 只验路由透传与键的有无：到达时刻的写入 / 持久化在 triage-monitor.test.js 里钉住，
+  // 这里不 acceptSyslog，避免后台 persist 与目录清理打架。
+  const syslog = new TriageMonitor({ service: {}, investigator: {}, history: {},
+    inputMode: 'syslog', file: path.join(directory, 'syslog.json') });
+  syslog.lastReceivedAt = '2026-11-03T08:00:00.000Z';
+  const server = createServer(null, null, null, null, null, syslog);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const body = await (await fetch(`${base}/api/agent/triage/status`)).json();
+  assert.equal(body.last_received_at, '2026-11-03T08:00:00.000Z');
+  assert.equal(body.last_poll_at, null);
+  assert.deepEqual(body.verdict_counts, { threat: 0, uncertain: 0, false_positive: 0, review: 0 });
+  assert.deepEqual(body.type_counts, {});
+  assert.equal(body.since, null);
+
+  const polling = new TriageMonitor({ service: {}, investigator: {}, history: {},
+    file: path.join(directory, 'poll.json') });
+  const pollServer = createServer(null, null, null, null, null, polling);
+  await new Promise(resolve => pollServer.listen(0, '127.0.0.1', resolve));
+  t.after(() => pollServer.close());
+  const pollBase = `http://127.0.0.1:${pollServer.address().port}`;
+  const pollBody = await (await fetch(`${pollBase}/api/agent/triage/status`)).json();
+  assert.equal('last_received_at' in pollBody, false);
+  assert.equal('interval_ms' in pollBody, true);
+});

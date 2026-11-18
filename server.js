@@ -282,7 +282,12 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         return board ? json(res, 200, board) : error(res, 404, '该告警尚无溯源白板');
       }
       if (url.pathname === '/api/agent/triage/status' && req.method === 'GET') {
-        return monitor ? json(res, 200, monitor.summary()) : error(res, 503, '自动研判尚未配置');
+        if (!monitor) return error(res, 503, '自动研判尚未配置');
+        // 总览聚合的时间起点：与 /api/alerts、/api/agent/triage/cases 同一套时间解析，非法值回 400。
+        const rawSince = url.searchParams.get('since')?.trim();
+        const since = rawSince ? parseInstant(rawSince) : null;
+        if (rawSince && !since) return error(res, 400, `筛选起始时间无效：${rawSince}`);
+        return json(res, 200, monitor.summary({ since }));
       }
       if (url.pathname === '/api/triage/rules' && req.method === 'GET') {
         try { return json(res, 200, { ...await (monitor?.ruleEngine || triageRuleEngine).readConfig(),

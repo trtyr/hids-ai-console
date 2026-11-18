@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from './syslog-input.js';
+import { eventTypes } from './cloudwalker.js';
 import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './syslog-case.js';
 
 // 结论排序的档位：threat 在前，其余同档保持时间倒序；没有结论的记录排最后。
@@ -45,6 +46,8 @@ export class TriageMonitor {
     this.initialized = false;
     this.enabled = true;
     this.lastPollAt = null;
+    // syslog 模式下没有轮询，lastPollAt 恒为 null：最后一条报文什么时候到的单独记在这里（到达时刻，不是事件时间）。
+    this.lastReceivedAt = null;
     this.lastError = null;
     this.active = 0;
     this.polling = false;
@@ -62,6 +65,7 @@ export class TriageMonitor {
       this.watermarkIds = new Set(data.watermark_ids || []);
       this.initialized = !!data.initialized;
       this.enabled = data.enabled !== false;
+      this.lastReceivedAt = data.last_received_at || null;
       this.records = new Map((data.records || []).map(record => [record.alert_id,
         record.status === 'running' ? { ...record, status: 'queued', stage: '等待重试' } : record]));
       this.dedupe = new Map(data.dedupe || []);
@@ -82,7 +86,7 @@ export class TriageMonitor {
 
   persist() {
     const snapshot = JSON.stringify({ initialized: this.initialized, enabled: this.enabled, watermark: this.watermark,
-      watermark_ids: [...this.watermarkIds],
+      watermark_ids: [...this.watermarkIds], last_received_at: this.lastReceivedAt,
       records: [...this.records.values()], dedupe: [...this.dedupe], windows: [...this.windows] });
     this.writeChain = this.writeChain.catch(() => {}).then(async () => {
       await mkdir(path.dirname(this.file), { recursive: true, mode: 0o700 });
@@ -156,12 +160,29 @@ export class TriageMonitor {
     return this.syslog;
   }
 
-  summary() {
+  // 总览聚合：三个分布共用一份记录集，带 since 时只算 created_at（进入队列的时刻）不早于它的记录。
+  // 结论四键恒在（没有结论算 review，与 cases({verdicts}) 同一口径）；类型只列出现过的键，映射不出的算 unknown。
+  summary({ since = null } = {}) {
+    const sinceAt = since ? new Date(since) : null;
+    const sinceMs = sinceAt && !Number.isNaN(sinceAt.getTime()) ? sinceAt.getTime() : null;
     const counts = { queued: 0, running: 0, done: 0, failed: 0 };
-    for (const record of this.records.values()) counts[record.status] = (counts[record.status] || 0) + 1;
+    const verdict_counts = { threat: 0, uncertain: 0, false_positive: 0, review: 0 };
+    const type_counts = {};
+    for (const record of this.records.values()) {
+      if (sinceMs != null && !(Date.parse(record.created_at) >= sinceMs)) continue;
+      counts[record.status] = (counts[record.status] || 0) + 1;
+      verdict_counts[Object.hasOwn(verdict_counts, record.verdict) ? record.verdict : 'review'] += 1;
+      // eventTypeFor 用普通对象查表：MsgId 是 toString / constructor / __proto__ 时会取到原型上的函数或对象。
+      // 只认 eventTypes 里真有的类型名，别的一律算 unknown——否则 type_counts 的键会变成函数源码。
+      const type = eventTypeFor(record.input?.parsed?.msgid);
+      const typeKey = typeof type === 'string' && Object.hasOwn(eventTypes, type) ? type : 'unknown';
+      type_counts[typeKey] = (type_counts[typeKey] || 0) + 1;
+    }
     return { initialized: this.initialized, enabled: this.enabled, input_mode: this.inputMode,
-      last_poll_at: this.lastPollAt, last_error: this.lastError, counts,
-      ...(this.inputMode === 'poll' ? { interval_ms: this.intervalMs } : { syslog: { ...this.syslog } }) };
+      since: sinceMs == null ? null : new Date(sinceMs).toISOString(),
+      last_poll_at: this.lastPollAt, last_error: this.lastError, counts, verdict_counts, type_counts,
+      ...(this.inputMode === 'poll' ? { interval_ms: this.intervalMs }
+        : { syslog: { ...this.syslog }, last_received_at: this.lastReceivedAt }) };
   }
 
   async setEnabled(enabled) {
@@ -274,10 +295,12 @@ export class TriageMonitor {
     if (sameSecond) {
       previous.delivery_count++;
       previous.event_delivery_count++;
+      // 重复投递也是一条到达：最后到达时间跟上，和记录上的 updated_at 走同一个时刻。
+      this.lastReceivedAt = new Date().toISOString();
       const record = this.records.get(previous.record_id);
       if (record) {
         record.repeat_count = previous.event_delivery_count;
-        record.updated_at = new Date().toISOString();
+        record.updated_at = this.lastReceivedAt;
         if (record.status === 'done' && record.result_alert_id) {
           const saved = await this.history.latest(record.result_alert_id, 'triage');
           if (saved) await this.history.save({ ...saved, repeat_count: record.repeat_count,
@@ -293,6 +316,7 @@ export class TriageMonitor {
     const session = sessionKey(parsed);
     const now = new Date().toISOString();
     const alertId = `syslog:${type}:${fp}:${seconds ?? 'unknown'}:${randomUUID()}`;
+    this.lastReceivedAt = now;
     this.records.set(alertId, { alert_id: alertId, input: { raw: String(line), parsed },
       occurrence_count: occurrence,
       session_key: session, status: 'queued', stage: '等待研判', detail: '已接收牧云 syslog',
