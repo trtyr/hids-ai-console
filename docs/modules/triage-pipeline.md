@@ -466,7 +466,7 @@ EOF
 | | 从暂停恢复时：游标重置为**点击那一刻的秒级时间**、`watermark_ids` 清空、`initialized` 置真，并**逐条删掉处于 `queued` 状态的记录**——暂停期间积压的任务不补跑 | `triage-monitor.js:155-162`（注释在 `triage-monitor.js:156-157`） |
 | | 恢复后 `poll` 模式会立刻再轮询一次 | `triage-monitor.js:165` |
 | `status(alertId)` | 查不到返回 `null`；返回时去掉 `input`（原始报文与解析结果），只留可见字段与步骤 | `triage-monitor.js:105-107` |
-| `cases({ count = 20, offset = 0 })` | **只列有 `input` 的记录**，也就是走 syslog 进来的那些；倒序分页 | `triage-monitor.js:111-113` |
+| `cases({ count, offset, verdicts, type, host, from, to, sort })` | **只列有 `input` 的记录**，也就是走 syslog 进来的那些；先筛后倒序分页，`total` 是过滤后条数（详见 §8.1） | `triage-monitor.js:116-128` |
 | `summary()` | `initialized`、`enabled`、`input_mode`、`last_poll_at`、`last_error`、四种状态计数；`poll` 模式额外带 `interval_ms`；`syslog` 模式带 `syslog: {listening, bind, error}`——绑定成败在这里可见，`listening:false` 等于一条 syslog 也收不到 | `triage-monitor.js:144-150` |
 | `attachSyslog(receiver)` | 启动 syslog 接收器：绑上记 `bind`（`udp://<address>:<port>`），失败记 `error`（截 300 字）且**不抛**，队列与 HTTP 继续服务 | `triage-monitor.js:133-142` |
 
