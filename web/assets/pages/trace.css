@@ -493,3 +493,239 @@
     transition-duration: .001ms !important;
   }
 }
+
+/* ============================================================================
+ * P003-T016：拆成两页 —— 列表（`.trace-list`）+ 白板（`.trace-page.trace-board`）
+ * 列表是 D015 新定的形态（稿没有），表格语言取同仓告警主列表（`assets/pages/alerts.css` 的
+ * `.filters` / `.search` / `.table-wrap` / `.pager` / `.empty-row` / `.page-error`），值逐条搬过来、
+ * 选择器挂 `.trace-list` 前缀，免得与 alerts.css 的同名全局类互相覆盖（两页共用一份 head）。
+ * ========================================================================== */
+
+/* ---------- 列表页 ---------- */
+.trace-list { display: block; }
+
+.trace-list .page-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0 10px;
+}
+.trace-list .page-total { font-size: 10.5px; color: var(--text-3); }
+.trace-list .page-total b { color: var(--text-2); font-weight: 500; font-variant-numeric: tabular-nums; }
+.trace-list .page-tools .textbtn { margin-left: auto; }
+.trace-list .page-tools .textbtn:disabled .od-icon { animation: spin .8s linear infinite; }
+
+.trace-list .notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.trace-list .notice strong { color: var(--text); font-weight: 600; }
+.trace-list .notice .textbtn { margin-left: auto; flex: none; }
+
+.trace-list .filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.trace-list .search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 260px;
+  min-width: 180px;
+}
+.trace-list .search .od-icon {
+  --od-icon-size: 14px;
+  position: absolute;
+  left: 9px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.trace-list .search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 30px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+}
+.trace-list .search input::placeholder { color: var(--text-3); }
+.trace-list .search input:hover { border-color: var(--line-hover); }
+.trace-list .search input:focus { outline: none; border-color: var(--accent); }
+.trace-list .filters select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.trace-list .filters select:hover { border-color: var(--line-hover); }
+.trace-list .filters select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.trace-list .filters select:disabled, .trace-list .search input:disabled { opacity: .55; cursor: default; }
+.trace-list .filter-count {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trace-list .table-wrap { transition: opacity var(--dur) var(--ease-out); overflow-x: auto; }
+.trace-list .table-wrap[aria-busy="true"] { opacity: .45; }
+
+.trace-boards { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.trace-boards thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--text-3);
+  text-align: left;
+  white-space: nowrap;
+}
+.trace-boards tbody tr { border-bottom: 1px solid var(--line); cursor: pointer; }
+.trace-boards tbody tr:hover { background: var(--bg-hover); }
+.trace-boards td { padding: 9px 0; font-size: 12px; color: var(--text-2); vertical-align: middle; }
+.trace-boards th + th, .trace-boards td + td { padding-left: 16px; }
+.trace-boards .col-alert { width: 34%; }
+.trace-boards .col-host { width: 16%; }
+.trace-boards .col-time, .trace-boards .col-updated { width: 17%; }
+.trace-boards .col-state { width: 92px; }
+.trace-boards .col-chain { width: 76px; }
+.trace-boards .col-gaps { width: 68px; }
+.trace-boards .col-gaps.is-gap { color: var(--warn); }
+
+.trace-list .board-link {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+.trace-list .board-link:hover .board-type { color: var(--accent); }
+.trace-list .board-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.trace-list .board-type { font-size: 12.5px; white-space: nowrap; }
+.trace-list .board-short {
+  font-size: 10.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.trace-list .cell-ip { display: block; color: var(--text-3); font-size: 11px; font-family: var(--font-mono); }
+.trace-list .cell-time { font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--text-3); white-space: nowrap; }
+.trace-list .state { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.trace-list .state::before { content: ""; width: 5px; height: 5px; background: var(--text-3); flex: none; }
+.trace-list .state.is-running { color: var(--accent); }
+.trace-list .state.is-running::before { background: var(--accent); }
+.trace-list .state.is-done { color: var(--text-2); }
+.trace-list .state.is-done::before { background: var(--text-3); }
+.trace-list .state.is-failed { color: var(--danger); }
+.trace-list .state.is-failed::before { background: var(--danger); }
+
+.trace-list .empty-row td {
+  padding: 30px 0;
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: center;
+}
+.trace-list .empty-row .textbtn { margin-left: 8px; }
+.trace-list .page-error { display: grid; gap: 6px; justify-items: center; padding: 8px 0; }
+.trace-list .page-error strong { font-size: 13px; color: var(--text); font-weight: 600; }
+.trace-list .page-error p { margin: 0; font-size: 12px; color: var(--text-2); }
+.trace-list .page-error .btn-primary { margin-top: 6px; }
+
+.trace-list .pager { display: flex; align-items: center; gap: 20px; padding: 14px 0 0; flex-wrap: wrap; }
+.trace-list .pager-info { font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.trace-list .pager-btns { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.trace-list .pager-nums { display: contents; }
+.trace-list .page-btn {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.trace-list .page-btn:hover:not(:disabled) { color: var(--text); border-color: var(--line-2); }
+.trace-list .page-btn[aria-current="page"] { color: var(--accent); border-color: var(--line-2); }
+.trace-list .page-btn:disabled { color: var(--text-disabled); cursor: default; }
+.trace-list .page-gap { min-width: 20px; text-align: center; color: var(--text-3); font-size: 11px; }
+.trace-list .pagesize { display: flex; align-items: baseline; gap: 10px; margin-left: auto; }
+.trace-list .pagesize-label { font-size: 10.5px; color: var(--text-3); }
+.trace-list .pagesize button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.trace-list .pagesize button:hover { color: var(--text); }
+.trace-list .pagesize button[aria-pressed="true"] { color: var(--accent); box-shadow: inset 0 -1px 0 var(--accent); }
+
+/* ---------- 白板页：D016 补的四块 ---------- */
+.trace-board .trace-tools { justify-content: flex-start; gap: 12px; }
+.trace-board .trace-tools [data-role="refresh"] { margin-left: auto; }
+.trace-board .board-id { font-size: 10.5px; color: var(--text-3); max-width: 40ch; }
+
+.trace-board .stage-title .is-gap { color: var(--warn); }
+.trace-board .stage-title .reason { color: var(--danger); max-width: 46ch; overflow: hidden; text-overflow: ellipsis; }
+.trace-board .stage { grid-row: 3; }
+
+/* 告警那一跳钉死在右边：点更大、用强调色，和其它跳分得开（D016「点」） */
+.trace-page .gnode.is-alert .gnode-dot { width: 11px; height: 11px; background: var(--accent); }
+.trace-page .gnode.is-alert .gnode-label { color: var(--text); }
+.trace-page .gnode-host { font-size: 10px; color: var(--text-3); }
+.trace-page .gnode.is-alert { cursor: default; }
+
+/* 断点：不点开也看得见（D016「断点」）。文字写在断了的那一跳左边，向右对齐贴住那一跳。 */
+.trace-page .gap-note {
+  position: absolute;
+  width: 170px;
+  margin: 0;
+  transform: translateY(-50%);
+  text-align: right;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--warn);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.trace-page .gap-note.is-chain { color: var(--warn); }
+
+@media (max-width: 1100px) {
+  .trace-boards .col-time, .trace-boards .col-updated { width: 15%; }
+}
+@media (max-width: 900px) {
+  .trace-list .table-wrap { overflow-x: auto; }
+  .trace-boards { min-width: 720px; }
+}

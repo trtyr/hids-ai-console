@@ -1,13 +1,13 @@
-// 溯源域 adapter —— 深度溯源页唯一发 HTTP 的地方（页面与视图里不许出现 fetch）。
+// 溯源域 adapter —— 深度溯源两页（列表 + 白板）唯一发 HTTP 的地方（页面与视图里不许出现 fetch）。
 //
 // 数据来源：形态 B · 对接已就绪后端。三个 operation 都是本仓已有的：
-//   GET  /api/trace/boards            openapi.yaml:313-329，实现 server.js:157-160 → { boards: [...] }
-//   POST /api/trace/boards            openapi.yaml:330-351，实现 server.js:161-168 → 202 TraceBoard（正文 { target }）
-//   GET  /api/trace/boards/{target}   openapi.yaml:352-370，实现 server.js:169-177 → TraceBoard
+//   GET  /api/trace/boards            openapi.yaml:456-500，实现 server.js:493-502 → { boards, total }
+//   POST /api/trace/boards            openapi.yaml:503-543，实现 server.js:503-514 → 200 已有 / 202 新建 TraceBoard
+//   GET  /api/trace/boards/{target}   openapi.yaml:544-560，实现 server.js:515-524 → TraceBoard
 //
-// 元素字段照实现（trace-board.js），不照 openapi：openapi 的 TraceBoard 只写死 id/status/nodes/edges/activity/
-// summary/gaps 七个键，nodes/edges/activity 的元素是 additionalProperties: true，元素结构由 trace-board.js 生成。
-// 接口不给的一律不造（白板列表的节点数与摘要、节点坐标、节点类型中文名都不在这里补）。
+// 白板主数据是 hops / links / gaps / discovery（D016；openapi.yaml:1778-1800）。旧字段 nodes / edges / activity
+// 后端仍留在返回里（向后兼容，`trace-board.js:126` 的 `...board`），本 adapter 不把它们当主数据，也不校验。
+// 接口不给的一律不造（跳的坐标、证据正文、工具调用都不在这里补）。
 //
 // 鉴权：HTTP Basic，每个请求都带 Authorization（凭据在内存，见 credentials.js:44）。
 
@@ -93,24 +93,36 @@ async function request(path, options = {}) {
   }
 }
 
-/** 白板的约定形状：id + 三个数组。缺一个就当回包不对（不拿默认值糊过去）。 */
+/** 白板的约定形状：id + hops / links / discovery 三个数组（gaps 可为空但必须是数组或缺失）。 */
 function asBoard(body) {
   if (!body || typeof body !== 'object' || typeof body.id !== 'string' ||
-    !Array.isArray(body.nodes) || !Array.isArray(body.edges) || !Array.isArray(body.activity)) {
+    !Array.isArray(body.hops) || !Array.isArray(body.links) || !Array.isArray(body.discovery)) {
     throw new TraceError('invalid', '白板返回的形状不对');
   }
-  return body;
+  return { ...body, gaps: Array.isArray(body.gaps) ? body.gaps : [] };
 }
 
 /**
- * 列出已保存的白板。
- * 列表项只有 id / title / status / created_at / updated_at（trace-board.js:167）——没有节点数、没有摘要。
- * @returns {Promise<{ id: string, title?: string, status?: string, created_at?: string, updated_at?: string }[]>}
+ * 列出已保存的白板（列表页的一行 = 一条溯源，D015）。
+ * 筛选与分页全部下推给接口，前端不自筛（参数口径见 openapi.yaml:456-500）：
+ *   count(1-50) / offset / status（多选，逗号分隔）/ type（事件类型名）/ host（精确）/ from / to（RFC3339 或时间戳）
+ * @param {{ count?: number, offset?: number, statuses?: string[], type?: string, host?: string, from?: string, to?: string }} [query]
+ * @returns {Promise<{ boards: object[], total: number }>} 每项是 TraceBoardSummary
  */
-export async function listTraceBoards(options = {}) {
-  const body = await request('/api/trace/boards', options);
+export async function listTraceBoards(query = {}, options = {}) {
+  const params = new URLSearchParams();
+  if (query.count !== undefined) params.set('count', String(query.count));
+  if (query.offset !== undefined) params.set('offset', String(query.offset));
+  const statuses = (query.statuses ?? []).filter(Boolean);
+  if (statuses.length) params.set('status', statuses.join(','));
+  for (const key of ['type', 'host', 'from', 'to']) {
+    if (query[key]) params.set(key, String(query[key]));
+  }
+  const search = params.toString();
+  const body = await request(`/api/trace/boards${search ? `?${search}` : ''}`, options);
   if (!body || !Array.isArray(body.boards)) throw new TraceError('invalid', '白板列表返回的形状不对');
-  return body.boards;
+  const total = Number.isSafeInteger(body.total) && body.total >= 0 ? body.total : body.boards.length;
+  return { boards: body.boards, total };
 }
 
 /**
@@ -124,7 +136,7 @@ export async function getTraceBoard(target, options = {}) {
 }
 
 /**
- * 从告警 ID 或 IPv4 启动一次溯源（202 立即返回白板，后台继续跑）。
+ * 从告警 ID 或 IPv4 启动一次溯源（已有白板回 200、新建回 202，两种情况都是整块 TraceBoard）。
  * @param {string} target 告警 ID / IPv4 / `ip:<IPv4>`
  * @returns {Promise<object>} TraceBoard（status 通常已是 running）
  */

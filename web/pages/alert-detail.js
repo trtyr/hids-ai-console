@@ -502,8 +502,10 @@ export function mountAlertDetailPage(params = [], options = {}) {
       return index === 0 ? [node] : [el(document, 'span', { class: 'dot', 'aria-hidden': 'true' }), node];
     }));
 
-    // 深度溯源：真链接，参数从第二段起传（router.js:38-46；trace 页 T005 读 params[0]）
-    $('trace').href = `#/trace/${encodeURIComponent(targetIdOf() ?? '')}`;
+    // 深度溯源：真链接，参数从第二段起传（router.js:52-60；trace-board 页读 params[0]）。
+    // 没有告警 ID（推送 ID 与牧云事件号都对不上时）退回列表，不拼一个空参数的白板链接。
+    const traceId = targetIdOf();
+    $('trace').href = traceId ? `#/trace-board/${encodeURIComponent(traceId)}` : '#/trace';
 
     const button = $('queue');
     if (state.triageError) {

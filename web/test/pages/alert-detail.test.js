@@ -641,7 +641,7 @@ test('刷新：重新发一轮取数请求并播报；深度溯源是带编码 I
   assert.ok(calls.length > first, '刷新要真的重取');
   assert.equal(calls.at(-1).url.startsWith('/api/'), true);
 
-  assert.equal(link(host, '深度溯源').getAttribute('href'), '#/trace/revshell%3A1');
+  assert.equal(link(host, '深度溯源').getAttribute('href'), '#/trace-board/revshell%3A1');
   assert.equal(link(host, '← 告警列表').getAttribute('href'), '#/alerts');
 });
 
