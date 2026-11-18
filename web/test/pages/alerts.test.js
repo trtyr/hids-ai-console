@@ -194,7 +194,7 @@ test('表格：十列齐全，每格取接口字段；空值显示「—」；�
   });
   await flush();
 
-  assert.equal(text(host.querySelector('thead')), '等级 告警 ID 告警 类型 资产 IP 研判状态 结论 时间 ↓');
+  assert.equal(text(host.querySelector('thead')), '等级 告警 ID 告警 类型 资产 IP 研判状态 结论 时间↓');
   const [first, second] = rows(host).map(cellsOf);
   assert.equal(first.length, 10);
   assert.equal(first[1], '高危');
@@ -211,19 +211,18 @@ test('表格：十列齐全，每格取接口字段；空值显示「—」；�
   assert.equal(second[8], '—', '没有 verdict_label → —（不显示 alert.verdict 的占位「待研判」）');
   assert.equal(second[7], '未研判', '没有 triage → 未研判');
   assert.equal(second[9], '—', 'createdAt 为 null → —');
-  assert.equal(host.textContent.includes('待研判'), false, '占位结论不得出现在界面上');
+  assert.equal(text(host.querySelector('tbody')).includes('待研判'), false, '占位结论不得出现在表格里（筛选下拉的选项文案不算）');
 });
 
-test('A2 负向钉：筛选/排序控件不存在（接口没有那些参数），时间列只留静态降序标记', async () => {
+test('A1/A2 正向钉：筛选条与排序按钮都在（P003-T007 后端已支持真参数），队列条仍不做「查看失败」', async () => {
   const { host } = mount();
   await flush();
 
-  assert.equal(host.querySelectorAll('select').length, 0, '不渲染类型/等级/结论/研判状态筛选');
-  assert.equal(host.querySelectorAll('input[type="search"]').length, 0, '不渲染搜索框');
-  assert.equal(buttonByName(host, '清除筛选'), undefined);
-  assert.equal(host.querySelectorAll('th button').length, 0, '表头没有排序按钮');
+  assert.equal(host.querySelectorAll('select').length, 5, '类型/等级/结论/研判状态/时间范围五个下拉');
+  assert.equal(host.querySelectorAll('input[type="search"]').length, 1, '搜索框');
+  assert.equal(host.querySelectorAll('th button[data-sort]').length, 2, '等级与时间两个排序按钮');
   assert.equal(host.querySelector('th.col-time').getAttribute('aria-sort'), 'descending');
-  assert.equal(host.textContent.includes('查看 1 条失败'), false, '队列条不渲染「查看失败」（无过滤参数）');
+  assert.equal(host.textContent.includes('查看 1 条失败'), false, '队列条不渲染「查看失败」（用研判状态筛选代替）');
 });
 
 // ---------- 分页 ----------
@@ -233,16 +232,16 @@ test('分页：请求只带 count/offset；下一页 +20；每页 50 回到第�
   await flush();
 
   const alertCalls = () => calls.filter(call => call.url.startsWith('/api/alerts')).map(call => call.url);
-  assert.deepEqual(alertCalls(), ['/api/alerts?count=20&offset=0']);
+  assert.deepEqual(alertCalls(), ['/api/alerts?count=20&offset=0&sort=time']);
   assert.equal(text(host.querySelector('[data-role="pager-info"]')), '1–1 / 45 条 · 共 3 页');
 
   buttonByName(host, '下一页').dispatchEvent(new dom.window.Event('click'));
   await flush();
-  assert.equal(alertCalls().at(-1), '/api/alerts?count=20&offset=20');
+  assert.equal(alertCalls().at(-1), '/api/alerts?count=20&offset=20&sort=time');
 
   buttonByName(host, '50').dispatchEvent(new dom.window.Event('click'));
   await flush();
-  assert.equal(alertCalls().at(-1), '/api/alerts?count=50&offset=0');
+  assert.equal(alertCalls().at(-1), '/api/alerts?count=50&offset=0&sort=time');
   assert.equal(host.querySelector('[data-role="size-50"]').getAttribute('aria-pressed'), 'true');
   assert.equal(host.querySelector('[data-role="size-20"]').getAttribute('aria-pressed'), 'false');
 
@@ -272,9 +271,9 @@ test('分页：总页数缩水时游标拉回最后一页并重拉一次（页�
   await flush();
 
   assert.deepEqual(alertCalls(), [
-    '/api/alerts?count=20&offset=0',
-    '/api/alerts?count=20&offset=380',
-    '/api/alerts?count=20&offset=280',
+    '/api/alerts?count=20&offset=0&sort=time',
+    '/api/alerts?count=20&offset=380&sort=time',
+    '/api/alerts?count=20&offset=280&sort=time',
   ], '游标被拉回后必须重拉一次，不能只改游标');
   assert.equal(text(host.querySelector('[data-role="pager-info"]')), '281–281 / 300 条 · 共 15 页');
   assert.equal(rows(host).length, 1, '行区要显示拉回后那一页的数据，不是空行');
@@ -283,7 +282,161 @@ test('分页：总页数缩水时游标拉回最后一页并重拉一次（页�
   // 游标没被改动时（正常刷新）不多打一轮
   buttonByName(host, '刷新').dispatchEvent(new dom.window.Event('click'));
   await flush();
-  assert.deepEqual(alertCalls().slice(3), ['/api/alerts?count=20&offset=280']);
+  assert.deepEqual(alertCalls().slice(3), ['/api/alerts?count=20&offset=280&sort=time']);
+});
+
+// ---------- 筛选与排序（P003-T007 回填：真参数下推） ----------
+
+const select = (host, role, value) => {
+  const node = host.querySelector(`[data-role="${role}"]`);
+  node.value = value;
+  node.dispatchEvent(new dom.window.Event('change'));
+};
+
+const alertCallsOf = calls => calls.filter(call => call.url.startsWith('/api/alerts')).map(call => call.url);
+
+test('筛选条：稿上的五个控件都在（搜索 + 类型/等级/结论/研判状态 + 时间范围），各有可访问名', async () => {
+  const { host } = mount();
+  await flush();
+  assert.ok(host.querySelector('[data-role="filter-q"]').getAttribute('aria-label'), '搜索框要有可访问名');
+  const names = ['filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']
+    .map(role => host.querySelector(`[data-role="${role}"]`).getAttribute('aria-label'));
+  assert.deepEqual(names, ['按事件类型筛选', '按等级筛选', '按研判结论筛选', '按研判状态筛选', '按时间范围筛选']);
+  const group = host.querySelector('.filters');
+  assert.equal(group.getAttribute('role'), 'group');
+});
+
+test('筛选：选类型回第一页重取，请求带 type，结果计数与清除按钮出现', async () => {
+  const { host, calls } = mount({ alertsBody: { alerts: [alert()], total: 45 } });
+  await flush();
+  buttonByName(host, '下一页').dispatchEvent(new dom.window.Event('click'));
+  await flush();
+  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=20&sort=time');
+
+  select(host, 'filter-type', 'webshell');
+  await flush();
+  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&type=webshell&sort=time', '筛选后页码回第一页');
+  assert.equal(host.querySelector('[data-role="clear-filters"]').hidden, false);
+  assert.equal(text(host.querySelector('[data-role="filter-count"]')), '筛选后 45 条');
+});
+
+test('筛选：四个下拉都映射成接口枚举（等级四档、状态含未研判、结论含待研判）', async () => {
+  const cases = [
+    ['filter-level', 'critical', 'level=critical'],
+    ['filter-verdict', 'review', 'verdict=review'],
+    ['filter-triage', 'not_queued', 'triage_status=not_queued'],
+  ];
+  for (const [role, value, expected] of cases) {
+    const { host, calls } = mount();
+    await flush();
+    select(host, role, value);
+    await flush();
+    assert.match(alertCallsOf(calls).at(-1), new RegExp(expected.replace(/_/g, '_')), `${role} 应下发 ${expected}`);
+    dom = setupDom();
+  }
+});
+
+test('筛选：搜索框回车/失焦才发请求；空值不发 q', async () => {
+  const { host, calls } = mount();
+  await flush();
+  const input = host.querySelector('[data-role="filter-q"]');
+  input.value = ' deploy ';
+  input.dispatchEvent(new dom.window.Event('change'));
+  await flush();
+  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&q=deploy&sort=time');
+
+  input.value = '';
+  input.dispatchEvent(new dom.window.Event('change'));
+  await flush();
+  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&sort=time');
+});
+
+test('筛选：时间范围只算 from（to 不传），取数时按当前时刻算', async () => {
+  const { host, calls } = mount();
+  await flush();
+  select(host, 'filter-time', '24h');
+  await flush();
+  const url = alertCallsOf(calls).at(-1);
+  const from = new URL(url, 'http://localhost').searchParams.get('from');
+  // now = 2026-11-17 09:08:07（本地时区），回看 24 小时
+  assert.equal(from, new Date(new Date(2026, 10, 17, 9, 8, 7).getTime() - 24 * 3600 * 1000).toISOString());
+  assert.equal(new URL(url, 'http://localhost').searchParams.has('to'), false, 'to 不发（闭区间不传＝到现在）');
+});
+
+test('清除筛选：控件全复位、排序回 time、焦点回搜索框、重取无参数的那一页', async () => {
+  const { host, calls } = mount();
+  await flush();
+  select(host, 'filter-level', 'high');
+  await flush();
+  buttonByName(host, '清除筛选').dispatchEvent(new dom.window.Event('click'));
+  await flush();
+
+  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&sort=time');
+  for (const role of ['filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']) {
+    assert.equal(host.querySelector(`[data-role="${role}"]`).value, '');
+  }
+  assert.equal(host.querySelector('[data-role="filter-q"]').value, '');
+  assert.equal(document.activeElement, host.querySelector('[data-role="filter-q"]'));
+  assert.equal(host.querySelector('[data-role="clear-filters"]').hidden, true);
+});
+
+test('排序：点等级走 sort=level，aria-sort 跟着换；同一列再点不发请求（接口没有方向参数）', async () => {
+  const { host, calls } = mount();
+  await flush();
+  const levelTh = host.querySelector('[data-role="th-level"]');
+  const timeTh = host.querySelector('[data-role="th-time"]');
+  assert.equal(timeTh.getAttribute('aria-sort'), 'descending');
+  assert.equal(levelTh.getAttribute('aria-sort'), 'none');
+
+  host.querySelector('[data-role="sort-level"]').dispatchEvent(new dom.window.Event('click'));
+  await flush();
+  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&sort=level');
+  assert.equal(levelTh.getAttribute('aria-sort'), 'descending');
+  assert.equal(timeTh.getAttribute('aria-sort'), 'none');
+  assert.equal(text(host.querySelector('[data-role="arrow-level"]')), '↓');
+
+  const before = alertCallsOf(calls).length;
+  host.querySelector('[data-role="sort-level"]').dispatchEvent(new dom.window.Event('click'));
+  await flush();
+  assert.equal(alertCallsOf(calls).length, before, '同一列再点不能凭空发一轮请求');
+
+  host.querySelector('[data-role="sort-time"]').dispatchEvent(new dom.window.Event('click'));
+  await flush();
+  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&sort=time');
+});
+
+test('格 2「空态」：筛选无匹配时给「没有匹配的告警」+ 清除筛选，不写成「暂无告警」', async () => {
+  const { host } = mount({ alertsBody: { alerts: [], total: 0 } });
+  await flush();
+  select(host, 'filter-triage', 'failed');
+  await flush();
+  assert.match(text(rows(host)[0]), /没有匹配的告警/);
+  const clear = buttonByName(rows(host)[0], '清除筛选');
+  assert.ok(clear, '空态要提供退出筛选的入口');
+});
+
+test('格 3「partial」：truncated 真时提示只统计了扫描窗口，假时不出现', async () => {
+  const truncated = mount({ alertsBody: { alerts: [alert()], total: 500, truncated: true } });
+  await flush();
+  const notice = truncated.host.querySelector('[data-role="truncated"]');
+  assert.equal(notice.hidden, false);
+  assert.match(text(notice), /只统计了扫描窗口/);
+
+  dom = setupDom();
+  const plain = mount({ alertsBody: { alerts: [alert()], total: 3 } });
+  await flush();
+  assert.equal(plain.host.querySelector('[data-role="truncated"]').hidden, true);
+});
+
+test('格 6「disabled」：加载中筛选控件与刷新都禁用', async () => {
+  const { host } = mount();
+  // 不 flush：停在加载中
+  for (const role of ['filter-q', 'filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']) {
+    assert.equal(host.querySelector(`[data-role="${role}"]`).disabled, true, `${role} 加载中应禁用`);
+  }
+  assert.equal(host.querySelector('[data-role="refresh"]').disabled, true);
+  await flush();
+  assert.equal(host.querySelector('[data-role="filter-q"]').disabled, false);
 });
 
 // ---------- 可访问名 ----------

@@ -9,9 +9,9 @@ import { allByRole, byRole, setupDom, text } from './dom.js';
 let shell = null;
 let signOuts = 0;
 
-function mount() {
+function mount(identity = null) {
   signOuts = 0;
-  shell = mountShell({ onSignOut: () => { signOuts += 1; } });
+  shell = mountShell({ onSignOut: () => { signOuts += 1; }, identity });
   document.body.append(shell.element);
   return shell;
 }
@@ -42,14 +42,37 @@ test('setRoute：只有当前项带 aria-current="page"，顶栏标题跟着换'
   assert.equal(text(next[0]), '知识库');
 });
 
-test('A3：会话接口没有账号名/角色 → 壳里不出现任何账号名或角色', () => {
+test('A5：会话报回账号名与角色时，侧栏底部显示账号区（头像 + 名字 + 角色）', () => {
+  mount({ user: 'ops', role: 'operator' });
+  const rail = byRole(document, 'navigation').closest('aside');
+  const copy = text(rail);
+  assert.match(copy, /ops/);
+  assert.match(copy, /值守账号/);
+  const who = rail.querySelector('[data-role="who"]');
+  assert.equal(who.hidden, false);
+  assert.equal(text(who.querySelector('[data-role="who-avatar"]')), 'O');
+});
+
+test('A5：没有身份（服务端未配密码 → user=null）时账号区不渲染，不编名字', () => {
   mount();
   const rail = byRole(document, 'navigation').closest('aside');
   const copy = text(rail);
-  assert.doesNotMatch(copy, /账号|角色|值守|admin/);
-  assert.equal(rail.querySelector('.avatar, .who'), null);
+  assert.doesNotMatch(copy, /值守|admin/);
+  assert.equal(rail.querySelector('[data-role="who"]').hidden, true);
   // 底栏只剩退出登录这一个动作
   assert.ok(byRole(document, 'button', '退出登录'));
+});
+
+test('A5：role 是机器值，未知值原样显示（不编中文）；role 缺失时不画角色行', () => {
+  mount({ user: 'audit', role: 'auditor' });
+  const rail = byRole(document, 'navigation').closest('aside');
+  assert.equal(text(rail.querySelector('[data-role="who-name"]')), 'audit');
+  assert.equal(text(rail.querySelector('[data-role="who-role"]')), 'auditor');
+
+  setupDom();
+  mount({ user: 'ops', role: null });
+  const again = byRole(document, 'navigation').closest('aside');
+  assert.equal(again.querySelector('[data-role="who-role"]').hidden, true);
 });
 
 test('退出登录：点一下回调一次', () => {

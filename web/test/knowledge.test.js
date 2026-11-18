@@ -1,4 +1,4 @@
-// src/knowledge.js —— 知识库 adapter：两个只读 operation 的归一与错误、本机草稿、纯文本工具
+// src/knowledge.js —— 知识库 adapter：目录/单页/保存三个 operation 的归一与错误、纯文本工具
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -17,6 +17,7 @@ import {
   saveDraft,
   splitBody,
   stripFrontMatter,
+  updatePage,
   wordCount,
 } from '../src/knowledge.js';
 
@@ -99,6 +100,67 @@ test('listPages：没有凭据 → unauthorized，且不发请求', async () => 
   const { fetchImpl, calls } = stubFetch({ '/api/wiki/pages': { body: DIRECTORY } });
   await assert.rejects(listPages({ fetchImpl }), error => error.kind === 'unauthorized');
   assert.equal(calls.length, 0);
+});
+
+/* ---------------- 保存到服务器 ---------------- */
+
+test('updatePage：PUT 路径与正文逐字照契约（content + expected_revision），回包用新 revision', async () => {
+  const saved = { ...PAGE, revision: 'ffffffffffffffff', content: `${PAGE.content}\n## 新增\n` };
+  const { fetchImpl, calls } = stubFetch({ '/api/wiki/pages/common%2FGEN-12.md': { body: saved } });
+  const page = await updatePage('common/GEN-12.md', saved.content, 'c9dacfa538de0828', { fetchImpl });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, '/api/wiki/pages/common%2FGEN-12.md');
+  assert.equal(calls[0].init.method, 'PUT');
+  assert.match(calls[0].init.headers.Authorization, /^Basic /);
+  assert.match(calls[0].init.headers['Content-Type'], /application\/json/);
+  assert.deepEqual(JSON.parse(calls[0].init.body), { content: saved.content, expected_revision: 'c9dacfa538de0828' });
+  assert.equal(page.revision, 'ffffffffffffffff');
+  assert.equal(page.content, saved.content);
+});
+
+test('updatePage：409 归 conflict（不丢编辑内容的提示靠它），错误正文是服务端原话', async () => {
+  const { fetchImpl } = stubFetch({
+    '/api/wiki/pages/common%2FGEN-12.md': { status: 409, body: { error: '知识库页面已更新，请刷新后再提交' } },
+  });
+  await assert.rejects(updatePage('common/GEN-12.md', 'x', 'c9dacfa538de0828', { fetchImpl }), error => {
+    assert.ok(error instanceof KnowledgeError);
+    assert.equal(error.kind, 'conflict');
+    assert.equal(error.status, 409);
+    return true;
+  });
+});
+
+test('updatePage：400 带服务端原话（正文不合规时不能只剩「服务返回 400」）', async () => {
+  const { fetchImpl } = stubFetch({
+    '/api/wiki/pages/common%2FGEN-12.md': { status: 400, body: { error: '判据需要 evidence 或 source 出处' } },
+  });
+  await assert.rejects(updatePage('common/GEN-12.md', 'x', 'c9dacfa538de0828', { fetchImpl }), error => {
+    assert.equal(error.kind, 'http');
+    assert.equal(error.message, '判据需要 evidence 或 source 出处');
+    return true;
+  });
+});
+
+test('updatePage：401 / 连不上 / 200 但不是 JSON → unauthorized / network / invalid', async () => {
+  const unauthorized = stubFetch({ '/api/wiki/pages/common%2FGEN-12.md': { status: 401, body: { error: 'x' } } });
+  await assert.rejects(updatePage('common/GEN-12.md', 'x', 'c9dacfa538de0828', { fetchImpl: unauthorized.fetchImpl }),
+    error => error.kind === 'unauthorized');
+
+  const offline = stubFetch({ '/api/wiki/pages/common%2FGEN-12.md': new TypeError('fetch failed') });
+  await assert.rejects(updatePage('common/GEN-12.md', 'x', 'c9dacfa538de0828', { fetchImpl: offline.fetchImpl }),
+    error => error.kind === 'network');
+
+  const broken = { fetchImpl: async () => ({ status: 200, ok: true, json: async () => { throw new Error('boom'); } }) };
+  await assert.rejects(updatePage('common/GEN-12.md', 'x', 'c9dacfa538de0828', broken), error => error.kind === 'invalid');
+});
+
+test('updatePage：正文为空 / revision 不是 16 位十六进制 → invalid，一条请求都不发', async () => {
+  for (const [content, revision] of [['', 'c9dacfa538de0828'], ['x', ''], ['x', 'c9dac'], ['x', 'r-index']]) {
+    const { fetchImpl, calls } = stubFetch({ '/api/wiki/pages/common%2FGEN-12.md': { body: PAGE } });
+    await assert.rejects(updatePage('common/GEN-12.md', content, revision, { fetchImpl }), error => error.kind === 'invalid');
+    assert.equal(calls.length, 0);
+  }
 });
 
 /* ---------------- 单页 ---------------- */

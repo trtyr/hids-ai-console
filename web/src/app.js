@@ -12,6 +12,8 @@ const themeToggle = document.querySelector('[data-theme-toggle]');
 
 let shell = null;
 let untrackHash = null;
+/** 登录时 /api/session 报回来的身份（user + role）；退出登录时清空 */
+let identity = null;
 
 function showLogin() {
   if (untrackHash) { untrackHash(); untrackHash = null; }
@@ -24,6 +26,7 @@ function showLogin() {
     onAuthenticate: async credentials => {
       const session = await probeSession(credentials);
       setCredentials(credentials);
+      identity = { user: session.user, role: session.role };
       return session;
     },
     onSuccess: () => {
@@ -37,7 +40,7 @@ function showLogin() {
 }
 
 function showShell() {
-  shell = mountShell({ onSignOut: signOut, themeToggle });
+  shell = mountShell({ onSignOut: signOut, themeToggle, identity });
 
   function syncRoute() {
     const { page, params } = routeFromHash(window.location.hash);
@@ -54,6 +57,7 @@ function showShell() {
 
 function signOut() {
   clearCredentials();
+  identity = null;
   if (window.location.hash) {
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
   }

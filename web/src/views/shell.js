@@ -1,8 +1,9 @@
 // 壳视图：196px 侧栏 + 52px 顶栏 + 内容槽。结构与断点来自设计稿 overview.html。
 //
-// 账号区：稿里侧栏底部有「头像 + 账号名 + 角色」一块。会话接口（openapi.yaml:32-40 的
-// GET /api/session）只返回 { authenticated: true }，没有账号名也没有角色，所以这一块**不渲染**——
-// 不编名字、不拿输入框里的账号名充当身份（A3）。侧栏底部只留「退出登录」。
+// 账号区（稿 `alerts.html:920-932` 的 `.who`）：头像 + 账号名 + 角色。
+// 身份只从 `/api/session` 的 `user` / `role` 来（P003-T006 起有这两个字段，server.js:208-214）：
+//   user 为 null（服务端没配密码）→ 整块不渲染，不编名字；
+//   role 是机器值，`operator` 显示成稿上的「值守账号」，未知值原样显示。
 
 import { NAV_PAGES, hashFor } from '../router.js';
 
@@ -33,6 +34,8 @@ const ICONS = {
     <path d="M11.4 10h5.2M14 7.4 16.6 10 14 12.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />`,
 };
 
+const ROLE_LABEL = { operator: '值守账号' };
+
 const NAV = NAV_PAGES.map(page => `
   <a class="nav-item" href="${hashFor(page.id)}" data-route="${page.id}">
     <svg class="od-icon" viewBox="0 0 20 20" aria-hidden="true">${ICONS[page.id] ?? ''}</svg>
@@ -53,6 +56,13 @@ const TEMPLATE = `
     <nav class="nav" aria-label="主导航">${NAV}</nav>
 
     <div class="rail-foot">
+      <div class="who" data-role="who" hidden>
+        <span class="avatar" data-role="who-avatar" aria-hidden="true"></span>
+        <span class="who-meta">
+          <span class="who-name mono" data-role="who-name"></span>
+          <span class="who-role" data-role="who-role"></span>
+        </span>
+      </div>
       <button type="button" class="nav-item" data-role="signout">
         <svg class="od-icon" viewBox="0 0 20 20" aria-hidden="true">${ICONS.signout}</svg>
         <span class="label">退出登录</span>
@@ -71,9 +81,11 @@ const TEMPLATE = `
 
 /**
  * 挂载壳。
- * @param {{ onSignOut: () => void, themeToggle?: Element | null }} options
+ * @param {{ onSignOut: () => void, themeToggle?: Element | null,
+ *   identity?: { user: string|null, role: string|null } | null }} options
+ *   identity 来自 `GET /api/session`；user 为空时账号区整块不渲染。
  */
-export function mountShell({ onSignOut, themeToggle }) {
+export function mountShell({ onSignOut, themeToggle, identity = null }) {
   const host = document.createElement('div');
   host.innerHTML = TEMPLATE;
   const $ = role => host.querySelector(`[data-role="${role}"]`);
@@ -88,6 +100,17 @@ export function mountShell({ onSignOut, themeToggle }) {
   }
 
   $('signout').addEventListener('click', onSignOut);
+
+  // 账号区：只在接口真的报了 user 时出现（不拿输入框里的账号名冒充身份）
+  const user = typeof identity?.user === 'string' && identity.user.trim() ? identity.user.trim() : null;
+  if (user) {
+    const role = typeof identity.role === 'string' && identity.role.trim() ? identity.role.trim() : null;
+    $('who').hidden = false;
+    $('who-avatar').textContent = [...user][0].toUpperCase();
+    $('who-name').textContent = user;
+    $('who-role').textContent = role ? (ROLE_LABEL[role] ?? role) : '';
+    $('who-role').hidden = role === null;
+  }
 
   /** @param {{ id: string, title: string }} page */
   function setRoute(page) {

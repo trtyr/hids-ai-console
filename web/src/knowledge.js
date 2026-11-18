@@ -1,28 +1,24 @@
 // 知识库页的数据 adapter —— 本页唯一发 HTTP 的地方（页面文件里不许出现 fetch）。
 //
-// 数据来源：形态 B（对接已就绪后端）。只读四样，逐条对过账（evidence/recon/P002-T007.md §2.3）：
+// 数据来源：形态 B（对接已就绪后端），三个 operation 逐条对过账：
 //
 //   GET /api/wiki/pages                      → { pages: [ {path,id,title,status,updated,revision,characters} ] }
-//                                              openapi.yaml:432-451（只钉了 id/path/title/status；
-//                                              其余在 wiki-store.js:26-28 的 metadata() 里，additionalProperties）
+//                                              openapi.yaml 的 /api/wiki/pages；实现 server.js:322-337
 //   GET /api/wiki/pages/{pagePath}           → 上面七个字段 + content（整篇 Markdown，含 --- 头部元数据）
-//                                              openapi.yaml:452-466；实现 server.js:241-248
-//   400 / 404 / 503                          → {error: "…"}（404 的正文含服务端绝对路径，不外露给用户）
+//                                              openapi.yaml:452-466；实现 server.js:343-345
+//   PUT /api/wiki/pages/{pagePath}           → 保存到服务器（P003-T002 / D003 选 A：控制台 Basic + expected_revision）
+//                                              正文 { content, expected_revision }，200 回更新后的页面对象；
+//                                              409 版本过期、400 正文不合规、404 页面不存在；实现 server.js:346-352 → wiki-store.js:159-188
+//   400 / 404 / 503                          → {error: "…"}（错误正文只取 "error" 字样，不外露服务端路径）
 //
-// **只有这两个只读 operation。**写能力全在 /api/wiki/health 与 /api/wiki/sessions* 上，
-// 它们要 X-Prompt-Admin-Token（server.js:250），而控制台的凭据只有 Basic（credentials.js）——
-// 实测一律 503「尚未配置知识库管理员凭据」，所以本 adapter 没有 POST，页面也不做「提交审核」入口。
-//
-// 本文件另外管两件事：
-//   1. 本机草稿（`hids-wiki-drafts`）——接口没有更新页面的能力，编辑只落本机，界面上如实标注；
-//   2. 纯文本工具（front matter / 分节 / Markdown 渲染）——不碰 DOM，单测可直接跑。
+// 本文件另外管纯文本工具（front matter / 分节 / Markdown 渲染）——不碰 DOM，单测可直接跑。
 
 import { authorizationHeader } from './credentials.js';
 
 /** 归一后的错误：kind ∈ unauthorized | http | network | invalid */
 export class KnowledgeError extends Error {
   /**
-   * @param {'unauthorized'|'http'|'network'|'invalid'} kind
+   * @param {'unauthorized'|'conflict'|'http'|'network'|'invalid'} kind
    * @param {string} message
    * @param {{ status?: number|null, cause?: unknown }} [detail]
    */
@@ -181,6 +177,80 @@ export function saveDraft(pagePath, draft, options = {}) {
     }
   }
   return { persisted, drafts };
+}
+
+/* ============================================================
+   保存到服务器（P003-T002；D003 选 A）
+   ============================================================ */
+
+/** 非 2xx 时尽量取服务端原话（{error}）——但没有就不编，用调用方给的兑底文案 */
+async function errorText(response, fallback) {
+  try {
+    const body = await response.json();
+    if (isPlainObject(body) && typeof body.error === 'string' && body.error.trim()) return body.error.trim();
+  } catch {
+    // 正文不是 JSON 就用兑底
+  }
+  return fallback;
+}
+
+/**
+ * 把整篇正文写回服务器。
+ *
+ * 正文要连 front matter 一起发（`wiki-store.js:24-30` 的 metadata 从头部拿 id/title/status/revision），
+ * `expected_revision` 是当前页面版本（`GET` 回的 `revision`，16 位十六进制），不匹配服务端回 409。
+ *
+ * @param {string} pagePath 形如 `common/GEN-12.md`
+ * @param {string} content 整篇 Markdown（含 --- 头部）
+ * @param {string} expectedRevision 当前 revision；缺失/格式不对不发请求
+ * @param {{ fetchImpl?: typeof fetch, baseUrl?: string }} [options]
+ * @returns {Promise<object>} 更新后的页面对象（含新的 revision / content / updated）
+ * @throws {KnowledgeError} kind ∈ unauthorized | conflict（409）| http | network | invalid
+ */
+export async function updatePage(pagePath, content, expectedRevision, options = {}) {
+  const path = stringOrNull(pagePath);
+  if (!path) throw new KnowledgeError('invalid', '页面路径为空');
+  if (typeof content !== 'string' || !content.trim()) throw new KnowledgeError('invalid', '正文为空');
+  if (typeof expectedRevision !== 'string' || !/^[0-9a-f]{16}$/.test(expectedRevision)) {
+    throw new KnowledgeError('invalid', '缺少有效的页面版本，请刷新后重试');
+  }
+
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const baseUrl = options.baseUrl ?? '';
+  const header = requireHeader();
+
+  let response;
+  try {
+    response = await fetchImpl(`${baseUrl}/api/wiki/pages/${encodeURIComponent(path)}`, {
+      method: 'PUT',
+      headers: { Authorization: header, Accept: 'application/json', 'Content-Type': 'application/json' },
+      credentials: 'omit',
+      cache: 'no-store',
+      body: JSON.stringify({ content, expected_revision: expectedRevision }),
+    });
+  } catch (cause) {
+    throw new KnowledgeError('network', '连接不上服务', { cause });
+  }
+
+  if (response.status === 401) throw new KnowledgeError('unauthorized', '登录已失效', { status: 401 });
+  if (response.status === 409) {
+    // 版本过期是「别人先改了」，不是故障：页面要把当前编辑内容留着，让用户刷新后重编辑
+    throw new KnowledgeError('conflict', '知识库页面已更新，请刷新后再提交', { status: 409 });
+  }
+  if (!response.ok) {
+    throw new KnowledgeError('http', await errorText(response, `服务返回 ${response.status}`), { status: response.status });
+  }
+
+  let body;
+  try {
+    body = await response.json();
+  } catch (cause) {
+    throw new KnowledgeError('invalid', '协议返回的不是 JSON', { status: response.status, cause });
+  }
+  if (!isPlainObject(body) || typeof body.content !== 'string') {
+    throw new KnowledgeError('invalid', '保存结果没有返回正文，无法确认已落盘', { status: response.status });
+  }
+  return { ...normalizeSummary({ ...body, path: stringOrNull(body.path) ?? path }), content: body.content };
 }
 
 /* ============================================================

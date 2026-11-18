@@ -1,21 +1,30 @@
-// 页面：告警列表（P002-T003）
+// 页面：告警列表（P002-T003 / P003-T007 回填筛选与排序）
 //
 // 视觉与结构照设计稿 `design/alerts.html`（左侧导航 + 顶栏由壳提供，本文件只写内容区），
 // 字段与操作全部来自本仓接口（adapter 在 `web/src/alerts.js`，页面里没有 fetch）。
 //
-// 稿上有、接口没有 → 藏掉并记进 topics/backend-findings.md（A2）：
-//   1) 筛选条（搜索 / 类型 / 等级 / 结论 / 研判状态 / 结果计数 / 清除筛选）
-//      —— GET /api/alerts 只认 count 与 offset（server.js:337-339），前端自筛当前页会把它画成全量筛选。
-//   2) 等级排序、时间排序按钮 —— 接口没有 sort；时间倒序是接口自己的合并顺序（cloudwalker.js:143），只保留静态箭头。
-//   3) 队列条「查看 N 条失败」—— 需要按研判状态过滤，同样没有参数。
-//   4) 抽屉「场景」行 —— 接口只有 scenario（= 事件类型中文名），与「事件类型」重复，不单列。
-//   5) 证据来源按分类拆条 —— 接口只有 verified_facts / evidence_sources 两个数量。
+// P003-T007 回填（后端 T001 已支持）：筛选条（搜索 / 类型 / 等级 / 结论 / 研判状态 / 时间范围）
+// 与「等级 / 时间」排序全部换成真参数下推，不再前端自筛；`truncated` 扫描窗口提示照实显示。
+// 稿没有的三处按缺项处理并记账（报告「稿→码对照表」与 web/README.md）：
+//   1) 时间范围：稿 `alerts.html:990-1038` 没有这个控件（`alerts-notes.md:125` 列为待补）——
+//      群主拍板（P003-T007）加一个与旁边四个下拉同款的 select：全部时间 / 近 24 小时 / 近 7 天 / 近 30 天，
+//      选中只算 `from = now - N`，`to` 不传（接口闭区间，不传＝到现在）。
+//   2) 等级筛选稿三档（高/中/低），接口四档 → 补「严重」（同页等级列本来就会显示「严重」）。
+//   3) 研判状态稿四档，接口另有 not_queued → 补「未研判」（同页状态列本来就会显示「未研判」）。
+//   4) `truncated: true` 的扫描窗口提示复用同页部分失败提示条的样式（`.notice`）。
 //
-// 「缺失证据」不在上面：TriageCase schema 没列这个键（openapi.yaml:803-816，additionalProperties: true），
-// 但实现返回体里有（triage-monitor.js:108；done 态由 :385 从 verdict 填值），稿也画了（alerts.html:1139）——
-// 按实现渲染，见 paintDrawer。
+// 接口没有方向参数：`sort` 只有 `time` / `level`，两者都是固定降序。稿的「同列再点切换升降序」只做降序，
+// `aria-sort` 只报 `descending`，不伪造升序结果。
 //
-// 「共 N 条 · 更新时间 · 刷新」在稿里位于顶栏，但顶栏属壳（web/src/views/shell.js，本卡 forbidden），
+// 稿上有、接口仍没有 → 藏掉（A2）：
+//   1) 队列条「查看 N 条失败」——按研判状态筛可以手动选「失败」，不做一键跳转。
+//   2) 抽屉「场景」行 —— 接口只有 scenario（= 事件类型中文名），与「事件类型」重复，不单列。
+//   3) 抽屉「证据来源」按分类拆条 —— 抽屉只有两个数量；条目级证据在详情页（T007 已接）。
+//
+// 「缺失证据」不在上面：TriageCase schema 没列这个键（additionalProperties: true），
+// 但实现返回体里有（triage-monitor.js:108），稿也画了（alerts.html:1139）——按实现渲染。
+//
+// 「共 N 条 · 更新时间 · 刷新」在稿里位于顶栏，但顶栏属壳（web/src/views/shell.js），
 // 所以落在内容区首行——只挪位置，不动壳。
 
 import { AlertsError, enqueueTriage, fetchTriageSummary, listAlerts, setTriageEnabled } from '../src/alerts.js';
@@ -31,6 +40,23 @@ const VERDICT_CLASS = { 真实威胁: 'verdict-threat', 存疑: 'verdict-uncerta
 // critical 与 high 同用危险色（稿没有更重的色）。
 const LEVEL_DOT = { low: 'sq-low', medium: 'sq-mid', high: 'sq-high', critical: 'sq-high' };
 const INPUT_MODE_LABEL = { syslog: 'Syslog 推入', poll: '轮询拉取' };
+
+// 筛选条取值（稿 `alerts.html:999-1035`；接口枚举见 server.js:121-124）。
+// 稿的等级三档、研判状态四档之外补的两项在文件头第 2、3 条记账。
+const TYPE_OPTIONS = [
+  ['brute_force', '暴力破解'], ['network_audit', '网络审计'], ['webshell', '网站后门'],
+  ['suspicious_operation', '可疑操作'], ['abnormal_login', '异常登录'], ['malware', '恶意程序'],
+  ['honeypot', '蜜罐'], ['elevation_process', '提权进程'], ['revshell', '反弹 Shell'],
+  ['memory_webshell', '内存马'], ['memory_security', '内存安全'],
+];
+const LEVEL_OPTIONS = [['critical', '严重'], ['high', '高'], ['medium', '中'], ['low', '低']];
+const VERDICT_OPTIONS = [['threat', '真实威胁'], ['uncertain', '存疑'], ['false_positive', '误报'], ['review', '待研判']];
+const TRIAGE_OPTIONS = [['not_queued', '未研判'], ['queued', '排队中'], ['running', '研判中'], ['done', '完成'], ['failed', '失败']];
+// 时间范围（稿缺项，群主拍板加：只算 from，to 不传）：值 → 回看的毫秒数
+const TIME_OPTIONS = [['24h', '近 24 小时', 24 * 60 * 60 * 1000], ['7d', '近 7 天', 7 * 24 * 60 * 60 * 1000],
+  ['30d', '近 30 天', 30 * 24 * 60 * 60 * 1000]];
+// 扫描窗口上限（cloudwalker.js:184 的 MAX_SCAN）——truncated 时总数只含窗口内匹配
+const SCAN_LIMIT = 500;
 // 没有结论时按研判状态说实话（不把失败写成「研判中」）
 const NO_VERDICT_COPY = {
   not_queued: '未研判', queued: '排队中，暂无结论', running: '研判中，暂无结论',
@@ -60,6 +86,16 @@ const TEMPLATE = `
     <span><strong>部分类型查询失败</strong>，总数只合计成功的类型；<span data-role="partial-reason">—</span></span>
   </div>
 
+  <div class="notice" data-role="truncated" hidden>
+    <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 2.4 14.4 13.6H1.6z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+      <path d="M8 6.4v3.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+      <circle cx="8" cy="11.6" r=".7" fill="currentColor" />
+    </svg>
+    <span><strong>筛选结果只统计了扫描窗口</strong>：单次最多扫 <span class="mono" data-role="scan-limit">500</span> 条原始事件，
+      总数只含窗口内的匹配；请缩小时间范围或加类型条件。</span>
+  </div>
+
   <div class="queuestrip" data-role="queue" role="group" aria-label="自动研判队列">
     <span class="qstate" data-role="qstate"><i class="dot" aria-hidden="true"></i>自动研判 <b data-role="qstate-text">—</b></span>
     <span class="qmeta">输入 <b data-role="qmode">—</b></span>
@@ -71,6 +107,44 @@ const TEMPLATE = `
     </span>
     <span class="qmeta" data-role="qerror" hidden></span>
     <button type="button" class="textbtn" data-role="queue-toggle">暂停</button>
+  </div>
+
+  <div class="filters" role="group" aria-label="筛选与排序">
+    <div class="search">
+      <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4" />
+        <path d="M10.2 10.2 13.4 13.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+      </svg>
+      <input type="search" data-role="filter-q" placeholder="搜索标题、ID 或资产" aria-label="搜索告警" />
+    </div>
+
+    <select data-role="filter-type" aria-label="按事件类型筛选">
+      <option value="">全部类型</option>
+      ${TYPE_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+    </select>
+
+    <select data-role="filter-level" aria-label="按等级筛选">
+      <option value="">全部等级</option>
+      ${LEVEL_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+    </select>
+
+    <select data-role="filter-verdict" aria-label="按研判结论筛选">
+      <option value="">全部结论</option>
+      ${VERDICT_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+    </select>
+
+    <select data-role="filter-triage" aria-label="按研判状态筛选">
+      <option value="">全部研判</option>
+      ${TRIAGE_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+    </select>
+
+    <select data-role="filter-time" aria-label="按时间范围筛选">
+      <option value="">全部时间</option>
+      ${TIME_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+    </select>
+
+    <button type="button" class="textbtn" data-role="clear-filters" hidden>清除筛选</button>
+    <span class="filter-count" data-role="filter-count"></span>
   </div>
 
   <div class="bulkbar" data-role="bulkbar" hidden>
@@ -87,7 +161,9 @@ const TEMPLATE = `
       <thead>
         <tr>
           <th scope="col" class="col-check"><input type="checkbox" data-role="select-all" aria-label="全选当前页" /></th>
-          <th scope="col" class="col-level">等级</th>
+          <th scope="col" class="col-level" data-role="th-level" aria-sort="none">
+            <button type="button" class="th-sort" data-role="sort-level" data-sort="level">等级<span class="arrow" data-role="arrow-level"></span></button>
+          </th>
           <th scope="col" class="col-id">告警 ID</th>
           <th scope="col" class="col-title">告警</th>
           <th scope="col" class="col-type">类型</th>
@@ -95,7 +171,9 @@ const TEMPLATE = `
           <th scope="col" class="col-ip">IP</th>
           <th scope="col" class="col-state">研判状态</th>
           <th scope="col" class="col-verdict">结论</th>
-          <th scope="col" class="col-time" aria-sort="descending">时间 ↓</th>
+          <th scope="col" class="col-time" data-role="th-time" aria-sort="descending">
+            <button type="button" class="th-sort" data-role="sort-time" data-sort="time">时间<span class="arrow is-active" data-role="arrow-time">↓</span></button>
+          </th>
         </tr>
       </thead>
       <tbody data-role="rows"></tbody>
@@ -268,6 +346,10 @@ export function mountAlertsPage(options = {}) {
     total: 0,
     partial: false,
     partialErrors: {},
+    truncated: false,
+    // 筛选与排序：全部下推给接口（server.js:129-152），前端不再自筛
+    filters: { q: '', type: '', level: '', verdict: '', triage: '', time: '' },
+    sort: 'time',
     phase: 'loading', // loading | ready | error
     error: null,
     summary: null,
@@ -302,6 +384,37 @@ export function mountAlertsPage(options = {}) {
     if (!state.partial) return;
     const reasons = Object.entries(state.partialErrors).map(([type, reason]) => `${type}：${reason}`);
     $('partial-reason').textContent = reasons.length ? reasons.join('；') : '未返回失败原因';
+  }
+
+  /** 扫描窗口被截断：总数只含窗口内匹配（cloudwalker.js:182-188）——不把「只扫了 500 条」画成「一共就这些」 */
+  function paintTruncated() {
+    $('truncated').hidden = !state.truncated;
+  }
+
+  /** 有筛选或非默认排序时才算「筛选态」：清除按钮、结果计数、空态文案都看它 */
+  function filtersActive() {
+    const { q, type, level, verdict, triage, time } = state.filters;
+    return Boolean(q || type || level || verdict || triage || time) || state.sort !== 'time';
+  }
+
+  function paintFilters() {
+    $('clear-filters').hidden = !filtersActive();
+    // 稿的结果计数是「N / 全部条数」，但接口不回未筛选总量——只说筛选后有几条
+    $('filter-count').textContent = filtersActive() && state.phase === 'ready' ? `筛选后 ${state.total} 条` : '';
+    const disabled = state.phase === 'loading';
+    for (const role of ['filter-q', 'filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']) {
+      $(role).disabled = disabled;
+    }
+  }
+
+  /** 表头排序：接口只有 sort=time|level（都是降序），aria-sort 只报 descending，不伪造升序 */
+  function paintSort() {
+    $('th-level').setAttribute('aria-sort', state.sort === 'level' ? 'descending' : 'none');
+    $('th-time').setAttribute('aria-sort', state.sort === 'time' ? 'descending' : 'none');
+    $('arrow-level').textContent = state.sort === 'level' ? '↓' : '';
+    $('arrow-level').classList.toggle('is-active', state.sort === 'level');
+    $('arrow-time').textContent = state.sort === 'time' ? '↓' : '';
+    $('arrow-time').classList.toggle('is-active', state.sort === 'time');
   }
 
   function paintQueue() {
@@ -422,7 +535,9 @@ export function mountAlertsPage(options = {}) {
       return;
     }
     if (!state.alerts.length) {
-      body.replaceChildren(messageRow(state.total === 0 ? '暂无告警。' : '本页没有告警，请回到上一页。'));
+      body.replaceChildren(filtersActive()
+        ? messageRow('没有匹配的告警。', { label: '清除筛选', onClick: () => { clearFilters(); } })
+        : messageRow(state.total === 0 ? '暂无告警。' : '本页没有告警，请回到上一页。'));
       return;
     }
     body.replaceChildren(...state.alerts.map((alert, index) => rowElement(alert, index)));
@@ -473,6 +588,9 @@ export function mountAlertsPage(options = {}) {
   function paint() {
     paintToolbar();
     paintNotice();
+    paintTruncated();
+    paintFilters();
+    paintSort();
     paintQueue();
     paintTable();
     paintPager();
@@ -618,11 +736,27 @@ export function mountAlertsPage(options = {}) {
    * 否则页脚按新 `total` 画、行区还是超界请求的空数组（「281–300 / 300 条」+「本页没有告警」）。
    * @param {boolean} [refetchOnClamp] 仅在游标真被拉回时重拉；重拉最多一次，防止数据连续缩水时空转
    */
+  /** 时间范围 → `from`（只算 from；`to` 不传＝到现在）。每次取数时按当前时刻重算 */
+  function fromOf() {
+    const option = TIME_OPTIONS.find(([value]) => value === state.filters.time);
+    return option ? new Date(now().getTime() - option[2]).toISOString() : undefined;
+  }
+
   async function load(refetchOnClamp = true) {
     state.phase = 'loading';
     paint();
     const [alertsResult, summaryResult] = await Promise.allSettled([
-      listAlerts({ count: state.count, offset: state.offset }, request),
+      listAlerts({
+        count: state.count,
+        offset: state.offset,
+        q: state.filters.q,
+        type: state.filters.type,
+        level: state.filters.level,
+        verdict: state.filters.verdict,
+        triageStatus: state.filters.triage,
+        from: fromOf(),
+        sort: state.sort,
+      }, request),
       fetchTriageSummary(request),
     ]);
 
@@ -631,6 +765,7 @@ export function mountAlertsPage(options = {}) {
       state.total = alertsResult.value.total;
       state.partial = alertsResult.value.partial;
       state.partialErrors = alertsResult.value.errors;
+      state.truncated = alertsResult.value.truncated;
       state.phase = 'ready';
       state.error = null;
       state.updatedAt = now();
@@ -647,6 +782,7 @@ export function mountAlertsPage(options = {}) {
       state.total = 0;
       state.partial = false;
       state.partialErrors = {};
+      state.truncated = false;
     }
 
     if (summaryResult.status === 'fulfilled') {
@@ -670,9 +806,71 @@ export function mountAlertsPage(options = {}) {
     void load();
   }
 
+  /* ---------- 筛选 / 排序 ---------- */
+
+  /** DOM 控件 → state（只读一次，避免每个分支各拼一套） */
+  function readFilters() {
+    state.filters = {
+      q: $('filter-q').value.trim(),
+      type: $('filter-type').value,
+      level: $('filter-level').value,
+      verdict: $('filter-verdict').value,
+      triage: $('filter-triage').value,
+      time: $('filter-time').value,
+    };
+  }
+
+  /** 筛选条件一变就回第一页重取（设计稿 §4：筛选重置页码，不清空已选告警） */
+  function onFilterChange(message) {
+    readFilters();
+    state.offset = 0;
+    closeDrawer();
+    announce(message);
+    void load();
+  }
+
+  function clearFilters() {
+    for (const role of ['filter-q', 'filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']) {
+      $(role).value = '';
+    }
+    state.filters = { q: '', type: '', level: '', verdict: '', triage: '', time: '' };
+    state.sort = 'time';
+    state.offset = 0;
+    closeDrawer();
+    $('filter-q').focus();
+    announce('已清除筛选');
+    void load();
+  }
+
   // ---------- 事件 ----------
 
   $('refresh').addEventListener('click', () => { void load(); });
+
+  // 搜索框：回车 / 失焦（change）与搜索框自带清除（search）都触发一次服务端查询
+  $('filter-q').addEventListener('change', () => onFilterChange('已按关键词筛选'));
+  $('filter-q').addEventListener('search', () => onFilterChange('已按关键词筛选'));
+  for (const [role, message] of [
+    ['filter-type', '已按事件类型筛选'],
+    ['filter-level', '已按等级筛选'],
+    ['filter-verdict', '已按研判结论筛选'],
+    ['filter-triage', '已按研判状态筛选'],
+    ['filter-time', '已按时间范围筛选'],
+  ]) {
+    $(role).addEventListener('change', () => onFilterChange(message));
+  }
+  $('clear-filters').addEventListener('click', clearFilters);
+
+  // 表头排序：接口只有 sort=time|level，同一列再点不会变成升序（没有参数可发）
+  for (const name of ['level', 'time']) {
+    $(`sort-${name}`).addEventListener('click', () => {
+      if (state.sort === name) return;
+      state.sort = name;
+      state.offset = 0;
+      closeDrawer();
+      announce(name === 'level' ? '已按等级降序排序' : '已按时间降序排序');
+      void load();
+    });
+  }
 
   $('prev-page').addEventListener('click', () => goToPage(Math.floor(state.offset / state.count)));
   $('next-page').addEventListener('click', () => goToPage(Math.floor(state.offset / state.count) + 2));
