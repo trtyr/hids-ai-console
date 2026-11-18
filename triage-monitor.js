@@ -8,6 +8,10 @@ import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSysl
 // 结论排序的档位：threat 在前，其余同档保持时间倒序；没有结论的记录排最后。
 const verdictRanks = Object.freeze({ threat: 0, uncertain: 1, false_positive: 2 });
 
+// 人工登记的误报（误报入口写的就是 verdict=false_positive + decision_source=human）：重跑不覆盖结论区。
+// AI 自己判出的 false_positive 不算——那种重跑仍旧按这次研判覆盖。
+const humanFalsePositive = record => record.verdict === 'false_positive' && record.decision_source === 'human';
+
 // 研判记录里的证据条目只外露这四个字段：args 可能带原始事件内容，不外露。
 const evidenceItems = entries => (Array.isArray(entries) ? entries : [])
   .map(({ evidence_id, tool, fetched_at, sha256 }) => ({ evidence_id, tool, fetched_at, sha256 }));
@@ -212,9 +216,14 @@ export class TriageMonitor {
     if (existing && !retry) return this.status(alertId);
     if (existing?.status === 'running') return this.status(alertId);
     const now = new Date().toISOString();
+    // 人工登记的误报结论（verdict / verdict_label / summary）跟着记录走进新一轮：run() 收尾靠它认出这条不该被覆盖。
+    // 不带上来的话，重排这一下就把误报标记抹掉了，后面根本认不出「已标误报」。
+    const keepVerdict = !!existing && humanFalsePositive(existing);
     this.records.set(alertId, { alert_id: alertId,
       ...(existing?.input ? { input: existing.input, occurrence_count: existing.occurrence_count,
         session_key: existing.session_key, repeat_count: existing.repeat_count } : {}),
+      ...(keepVerdict ? { verdict: existing.verdict, verdict_label: existing.verdict_label,
+        summary: existing.summary, decision_source: existing.decision_source, feedback: existing.feedback } : {}),
       status: 'queued', stage: '等待研判', detail: '已进入自动研判队列',
       created_at: existing?.created_at || now, updated_at: now, steps: existing?.steps || [], attempts: existing?.attempts || 0 });
     await this.persist();
@@ -440,11 +449,17 @@ export class TriageMonitor {
       record.result_alert_id = saved.alert_id;
       if (record.input) this.rememberWindow(record);
       record.status = 'done'; record.stage = '研判完成';
-      record.detail = saved.verdict?.summary || '研判记录已保存';
-      record.decision_source = saved.decision_source || 'ai';
+      // A1：人工登记过误报的记录，重跑不覆盖结论区（verdict / verdict_label / summary / decision_source），
+      // 报告、证据、缺证、下一步照常按这次研判刷新。
+      if (!humanFalsePositive(record)) {
+        record.decision_source = saved.decision_source || 'ai';
+        record.verdict = saved.verdict?.verdict; record.verdict_label = saved.verdict?.verdict_label;
+        record.summary = saved.verdict?.summary;
+      }
+      // detail 跟 summary 走：没保结论时与新研判的 summary 同源（与改前一致），保了结论时跟着保留的那份。
+      record.detail = record.summary || '研判记录已保存';
       record.rule_id = saved.rule_evaluation?.rule?.id || null;
-      record.verdict = saved.verdict?.verdict; record.verdict_label = saved.verdict?.verdict_label;
-      record.summary = saved.verdict?.summary; record.saved_at = saved.saved_at;
+      record.saved_at = saved.saved_at;
       record.report = saved.verdict?.report || null;
       record.missing_evidence = saved.verdict?.missing_evidence || [];
       record.next_actions = saved.verdict?.next_actions || [];

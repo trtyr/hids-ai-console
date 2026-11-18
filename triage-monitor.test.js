@@ -369,3 +369,141 @@ test('type_counts 不因 MsgId 撞上对象原型键名而冒出垃圾键', t =>
   // 键名只能是映射表里的类型或 unknown：没有 function/object 字样漏进键里
   for (const key of Object.keys(monitor.summary().type_counts)) assert.match(key, /^[a-z_]+$/);
 });
+
+// 误报入口（server.js:618-624，本卡不改它）写的就是这五项。单测照它的写法登记，再走重跑。
+const markFalsePositive = (record, reason = '运维的蜜罐探针，不是攻击', who = '值班分析员') => Object.assign(record,
+  { verdict: 'false_positive', verdict_label: '误报', decision_source: 'human',
+    detail: `人工登记误报（${who}）：${reason}`,
+    feedback: { reason, who, recorded_at: '2026-11-19T01:00:00.000Z' } });
+
+const triageVerdict = (verdict, verdictLabel, summary, evidenceId) => ({
+  verdict: { verdict, verdict_label: verdictLabel, summary, report: `${summary}的报告`,
+    missing_evidence: [`缺${summary}`], next_actions: [`办${summary}`] },
+  evidence: [{ evidence_id: evidenceId, tool: 'get_honeypot_event', args: {}, fetched_at: '2026-11-19T01:00:01.000Z',
+    sha256: 'c'.repeat(64) }],
+  validation: { ok: true } });
+
+const waitDone = async (monitor, alertId) => {
+  for (let n = 0; n < 100 && monitor.status(alertId)?.status !== 'done'; n++) await new Promise(resolve => setTimeout(resolve, 5));
+  await monitor.writeChain;
+  return monitor.status(alertId);
+};
+
+test('A1 已标误报的记录重跑不覆盖结论三件，报告与证据照常刷新', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-false-positive-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const history = new InvestigationStore(path.join(directory, 'results'));
+  // 第一次判存疑，重跑判真实威胁：结论区必须留着，其余字段必须换掉
+  const results = [triageVerdict('uncertain', '存疑', '首判存疑', 'cw:1'),
+    triageVerdict('threat', '真实威胁', '重跑认为是真实威胁', 'cw:2')];
+  const runs = [];
+  const monitor = new TriageMonitor({ file: path.join(directory, 'queue.json'), concurrency: 1, history,
+    service: { alerts: async () => ({ alerts: [], partial: false }) },
+    investigator: { run: async (id, { mode }) => { runs.push(id); return { alert_id: id, mode, ...results[runs.length - 1] }; } } });
+  await monitor.load();
+  await monitor.enqueue('honeypot:11');
+  const first = await waitDone(monitor, 'honeypot:11');
+  assert.equal(first.verdict, 'uncertain');
+  // 走误报入口：结论改误报，summary 不动（入口只写 verdict / verdict_label / decision_source / detail / feedback）
+  markFalsePositive(monitor.records.get('honeypot:11'));
+  assert.equal(monitor.status('honeypot:11').summary, '首判存疑');
+
+  await monitor.enqueue('honeypot:11', { retry: true });
+  const requeued = monitor.records.get('honeypot:11');
+  // 重排没把误报标记抹掉（抹掉的话 run() 收尾根本认不出这条已标误报）
+  assert.equal(requeued.verdict, 'false_positive');
+  assert.equal(requeued.feedback.reason, '运维的蜜罐探针，不是攻击');
+
+  const after = await waitDone(monitor, 'honeypot:11');
+  assert.equal(after.attempts, 2);
+  // 结论区原样：三件 + 来源 + 登记理由
+  assert.equal(after.verdict, 'false_positive');
+  assert.equal(after.verdict_label, '误报');
+  assert.equal(after.summary, '首判存疑');
+  assert.equal(after.decision_source, 'human');
+  assert.deepEqual(after.feedback, { reason: '运维的蜜罐探针，不是攻击', who: '值班分析员',
+    recorded_at: '2026-11-19T01:00:00.000Z' });
+  assert.equal(after.detail, '首判存疑');
+  // 不是整块跳过：这次研判的报告、缺证、下一步、证据、存盘时刻都换成了新的
+  assert.equal(after.report, '重跑认为是真实威胁的报告');
+  assert.deepEqual(after.missing_evidence, ['缺重跑认为是真实威胁']);
+  assert.deepEqual(after.next_actions, ['办重跑认为是真实威胁']);
+  assert.equal(after.evidence.length, 1);
+  assert.equal(after.evidence[0].evidence_id, 'cw:2');
+  assert.equal(after.saved_at, (await history.latest('honeypot:11', 'triage')).saved_at);
+  assert.equal(runs.length, 2);
+});
+
+test('A1 记录上已是 false_positive 时直接跑 run() 也不覆盖结论', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-false-positive-direct-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const monitor = new TriageMonitor({ file: path.join(directory, 'queue.json'), concurrency: 1,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    service: { alerts: async () => ({ alerts: [], partial: false }) },
+    investigator: { run: async (id, { mode }) => ({ alert_id: id, mode, ...triageVerdict('threat', '真实威胁', 'AI 说是威胁', 'cw:3') }) } });
+  await monitor.load();
+  const record = { alert_id: 'honeypot:12', status: 'done', stage: '研判完成', created_at: '2026-11-19T00:00:00.000Z',
+    updated_at: '2026-11-19T00:00:00.000Z', steps: [], attempts: 1, summary: '人工确认过是探针' };
+  markFalsePositive(record);
+  monitor.records.set(record.alert_id, record);
+  await monitor.run(record);
+  const after = monitor.status('honeypot:12');
+  assert.equal(after.verdict, 'false_positive');
+  assert.equal(after.verdict_label, '误报');
+  assert.equal(after.summary, '人工确认过是探针');
+  assert.equal(after.decision_source, 'human');
+  assert.equal(after.report, 'AI 说是威胁的报告');
+});
+
+test('A1 钉子：AI 自己判出的误报不算人工登记，重跑仍按这次研判覆盖', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-false-positive-ai-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const results = [triageVerdict('false_positive', '误报', 'AI 首判误报', 'cw:4'),
+    triageVerdict('threat', '真实威胁', 'AI 重跑改判威胁', 'cw:5')];
+  const runs = [];
+  const monitor = new TriageMonitor({ file: path.join(directory, 'queue.json'), concurrency: 1,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    service: { alerts: async () => ({ alerts: [], partial: false }) },
+    investigator: { run: async (id, { mode }) => { runs.push(id); return { alert_id: id, mode, ...results[runs.length - 1] }; } } });
+  await monitor.load();
+  await monitor.enqueue('honeypot:13');
+  const first = await waitDone(monitor, 'honeypot:13');
+  assert.equal(first.verdict, 'false_positive');
+  assert.equal(first.decision_source, 'ai');
+
+  await monitor.enqueue('honeypot:13', { retry: true });
+  const after = await waitDone(monitor, 'honeypot:13');
+  assert.equal(runs.length, 2);
+  assert.equal(after.verdict, 'threat');
+  assert.equal(after.verdict_label, '真实威胁');
+  assert.equal(after.summary, 'AI 重跑改判威胁');
+  assert.equal(after.decision_source, 'ai');
+});
+
+test('A2 没标误报的记录重跑仍按现在的方式写回', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-retry-plain-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const results = [triageVerdict('uncertain', '存疑', '首判存疑', 'cw:6'),
+    triageVerdict('threat', '真实威胁', '重跑认定为威胁', 'cw:7')];
+  const runs = [];
+  const monitor = new TriageMonitor({ file: path.join(directory, 'queue.json'), concurrency: 1,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    service: { alerts: async () => ({ alerts: [], partial: false }) },
+    investigator: { run: async (id, { mode }) => { runs.push(id); return { alert_id: id, mode, ...results[runs.length - 1] }; } } });
+  await monitor.load();
+  await monitor.enqueue('honeypot:14');
+  assert.equal((await waitDone(monitor, 'honeypot:14')).verdict, 'uncertain');
+
+  await monitor.enqueue('honeypot:14', { retry: true });
+  // 没标误报的照旧在重排时把上一次的结论清掉
+  assert.equal(monitor.records.get('honeypot:14').verdict, undefined);
+  const after = await waitDone(monitor, 'honeypot:14');
+  assert.equal(after.attempts, 2);
+  assert.equal(after.verdict, 'threat');
+  assert.equal(after.verdict_label, '真实威胁');
+  assert.equal(after.summary, '重跑认定为威胁');
+  assert.equal(after.decision_source, 'ai');
+  assert.equal(after.detail, '重跑认定为威胁');
+  assert.equal(after.report, '重跑认定为威胁的报告');
+  assert.equal(after.evidence[0].evidence_id, 'cw:7');
+});

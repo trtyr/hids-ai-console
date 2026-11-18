@@ -461,6 +461,7 @@ EOF
 | `enqueue(alertId, { retry })` | 已有记录且不是重试 → 直接返回现状；正在跑 → 直接返回 | `triage-monitor.js:176-177` |
 | | `syslog:` 前缀但没有原始报文 → 抛 404「该 syslog 告警的原始报文不存在，无法重试」 | `triage-monitor.js:171-174` |
 | | 其余情况重新排队，`created_at` 沿用原值 | `triage-monitor.js:179-183` |
+| | 原记录是**人工登记过的误报**（`verdict='false_positive'` 且 `decision_source='human'`）时，新记录带上 `verdict` / `verdict_label` / `summary` / `decision_source` / `feedback`——不带上去的话重排这一下就把误报标记抹掉了 | `triage-monitor.js:219-226` |
 | `setEnabled(enabled)` | 非布尔 → 抛 400「enabled 必须为布尔值」 | `triage-monitor.js:153` |
 | | 开关切换会让 `pollEpoch` 加一，用来作废在途的一轮轮询 | `triage-monitor.js:154`、`triage-monitor.js:224` |
 | | 从暂停恢复时：游标重置为**点击那一刻的秒级时间**、`watermark_ids` 清空、`initialized` 置真，并**逐条删掉处于 `queued` 状态的记录**——暂停期间积压的任务不补跑 | `triage-monitor.js:155-162`（注释在 `triage-monitor.js:156-157`） |
@@ -631,6 +632,8 @@ md 行 -> 重复投递：2 次
 研判记录存好后，`run()` 把结论相关字段回填到队列记录上（`triage-monitor.js:403-415`）：`verdict`、`verdict_label`、`summary`、`saved_at`、`report`、`missing_evidence`、`next_actions`、`evidence_refs`（取前 10 条引用的 `evidence_id` 与 `pointer`，`triage-monitor.js:412-414`）、`verified_facts`、`evidence_sources`。
 
 其中后两个来自 `evidenceSummary()`（`triage-monitor.js:11-16`）：只统计带 `citations` 的事实，且要求 `validation.ok` 或 `validation.removed_unverified_facts` 为真，否则 `verified_facts` 记 0；`evidence_sources` 是去重后的证据编号个数。
+
+**人工登记过误报的记录是例外**（`verdict='false_positive'` 且 `decision_source='human'`，`triage-monitor.js:13`）：`verdict` / `verdict_label` / `summary` / `decision_source` 保留原值，`detail` 跟着保留的那份 `summary` 走（`triage-monitor.js:452-460`）；`report` / `missing_evidence` / `next_actions` / `evidence_refs` / `evidence` / `saved_at` / `verified_facts` / `evidence_sources` 照常按这次研判刷新。AI 自己判出的 `false_positive` 不走这条例外。
 
 ## 8 对外契约
 

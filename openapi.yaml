@@ -337,6 +337,10 @@ paths:
       tags: [自动研判]
       summary: 手动入队或重试指定告警
       operationId: retryTriage
+      description: |
+        重试一条已完成 / 失败的记录：状态回到 `queued`，`attempts` 加 1，`created_at` 沿用原值。
+        **人工登记过误报的记录**（`verdict=false_positive` 且 `decision_source=human`）重跑只刷新 `report` / `evidence` / `saved_at` 等，
+        `verdict` / `verdict_label` / `summary` / `decision_source` 与 `feedback` 原样保留；AI 自己判出的 `false_positive` 不在此列，照常被这次研判覆盖。
       responses:
         '202':
           description: 已接受任务；正在运行的任务不会重复启动
@@ -1509,7 +1513,7 @@ components:
         verdict:
           type: [string, 'null']
           enum: [threat, uncertain, false_positive, null]
-          description: 机器可读结论；人工登记误报后就是 `false_positive`
+          description: 机器可读结论；人工登记误报后就是 `false_positive`，此后重试也不会被那次研判改回去
         decision_source:
           type: [string, 'null']
           description: 结论来源；人工登记误报后是 `human`，研判产出是 `ai`／`rule`
