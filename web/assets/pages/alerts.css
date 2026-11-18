@@ -115,6 +115,86 @@
 .col-state { width: 76px; }
 .col-verdict { width: 84px; }
 .col-time { width: 142px; text-align: right; }
+.col-time .th-sort { justify-content: flex-end; }
+
+/* ---------- 筛选条（稿 alerts.html:269-320） ---------- */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 260px;
+  min-width: 180px;
+}
+.search .od-icon {
+  --od-icon-size: 14px;
+  position: absolute;
+  left: 9px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 30px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+}
+.search input::placeholder { color: var(--text-3); }
+.search input:hover { border-color: var(--line-hover); }
+.search input:focus { outline: none; border-color: var(--accent); }
+
+.filters select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.filters select:hover { border-color: var(--line-hover); }
+.filters select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.filters select:disabled, .search input:disabled { opacity: .55; cursor: default; }
+
+.filter-count {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- 表头排序（稿 alerts.html:412-426） ---------- */
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.th-sort:hover { color: var(--text); }
+.th-sort .arrow { font-size: 9px; color: var(--text-3); }
+.th-sort .arrow.is-active { color: var(--accent); }
 
 .alerts input[type="checkbox"] {
   -webkit-appearance: none;
@@ -504,6 +584,10 @@
   .alerts th + th, .alerts td + td { padding-left: 12px; }
   .page-tools .textbtn { min-height: 40px; }
   .drawer { width: 100%; border-left: 0; }
+  /* 筛选条：稿 alerts.html:829-831，窄屏搜索框独占一行、计数另起一行 */
+  .filters { gap: 6px; }
+  .search { flex: 1 1 100%; }
+  .filter-count { width: 100%; margin-left: 0; }
 }
 
 @media (max-width: 620px) {

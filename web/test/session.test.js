@@ -23,10 +23,10 @@ function fetchReturning(status, body, { json = true } = {}) {
   return { fetchImpl, calls };
 }
 
-test('200 且 authenticated=true → 解析为已认证', async () => {
+test('200 且 authenticated=true → 解析为已认证，身份字段缺了就落 null', async () => {
   const { fetchImpl, calls } = fetchReturning(200, { authenticated: true });
   const session = await probeSession(CREDENTIALS, { fetchImpl });
-  assert.deepEqual(session, { authenticated: true });
+  assert.deepEqual(session, { authenticated: true, user: null, role: null });
   // 请求形状：打本仓会话接口，凭据走 Basic，别处不许出现其它路径
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, '/api/session');
@@ -77,8 +77,20 @@ test('200 但 authenticated 不是 true → invalid（不靠 200 就放行）', 
   });
 });
 
-test('返回体只取 authenticated，不臆造账号名/角色字段', async () => {
-  const { fetchImpl } = fetchReturning(200, { authenticated: true });
+test('200 带回 user/role 时逐字透传（壳的账号区只认这两个键）', async () => {
+  const { fetchImpl } = fetchReturning(200, { authenticated: true, user: 'ops', role: 'operator' });
   const session = await probeSession(CREDENTIALS, { fetchImpl });
-  assert.deepEqual(Object.keys(session), ['authenticated']);
+  assert.deepEqual(session, { authenticated: true, user: 'ops', role: 'operator' });
+});
+
+test('服务端没配密码（user/role 都是 null）→ 原样回 null，不补默认账号', async () => {
+  const { fetchImpl } = fetchReturning(200, { authenticated: true, user: null, role: null });
+  const session = await probeSession(CREDENTIALS, { fetchImpl });
+  assert.deepEqual(session, { authenticated: true, user: null, role: null });
+});
+
+test('user/role 不是字符串（脏回包）→ 当没有，不把对象/数字当账号名', async () => {
+  const { fetchImpl } = fetchReturning(200, { authenticated: true, user: 42, role: {} });
+  const session = await probeSession(CREDENTIALS, { fetchImpl });
+  assert.deepEqual(session, { authenticated: true, user: null, role: null });
 });

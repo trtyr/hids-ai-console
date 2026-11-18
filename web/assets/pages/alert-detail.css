@@ -240,8 +240,8 @@
 .detail-page .step-time { font-size: 10px; color: var(--text-3); padding-top: 1px; text-align: right; }
 .detail-page .step-time b { display: block; font-weight: 400; color: var(--text-2); }
 
-/* 证据来源（稿的分组折叠在这里变成一个平铺列表：接口没有分组与事实文本） */
-.detail-page .ev-list { list-style: none; margin: 0; padding: 0; }
+/* 证据来源（P003-T007：按 evidence[] 逐条列出，按 tool 分组折叠——稿 alert-detail.html:407-441） */
+.detail-page .ev-list { list-style: none; margin: 0 0 6px; padding: 0; }
 .detail-page .ev-item {
   display: grid;
   grid-template-columns: 60px minmax(0, 1fr) auto;
@@ -254,6 +254,34 @@
 .detail-page .ev-id { color: var(--text-3); font-size: 10.5px; padding-top: 1px; }
 .detail-page .ev-fact { color: var(--text); overflow-wrap: anywhere; }
 .detail-page .ev-time { color: var(--text-3); font-size: 10px; padding-top: 1px; }
+
+.detail-page .ev-group { border-bottom: 1px solid var(--line); }
+.detail-page .ev-group:last-child { border-bottom: 0; }
+.detail-page .ev-group summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-2);
+  list-style: none;
+}
+.detail-page .ev-group summary::-webkit-details-marker { display: none; }
+.detail-page .ev-group summary::after {
+  content: "›";
+  font-size: 14px;
+  color: var(--text-3);
+  transform: rotate(90deg);
+  transition: transform var(--dur) var(--ease-out);
+}
+.detail-page .ev-group[open] summary::after { transform: rotate(-90deg); }
+.detail-page .ev-count { margin-left: auto; font-size: 10px; color: var(--text-3); }
+
+/* 引用与证据条目对不上时看得见（不沉默、也不冒充对得上） */
+.detail-page .claim-ref .is-missing { color: var(--danger); }
+.detail-page .claim-missing { font-size: 10.5px; color: var(--danger); }
 
 /* 核验与复核 */
 .detail-page .review-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 0 40px; }

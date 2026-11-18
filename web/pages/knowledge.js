@@ -1,11 +1,14 @@
 // 页面：知识库（设计稿 wiki.html）
 //
 // 两屏一壳：条目列表（搜索 / 分类筛选 / 表格）→ 条目页（标题、元信息、目录、分节正文、
-// 右侧条目信息与相关条目、接口字段），可切「编辑」页签改本机草稿。
+// 右侧条目信息与相关条目、接口字段），可切「编辑」页签改正文并**保存到服务器**。
 //
-// 数据：`web/src/knowledge.js`（本页唯一发 HTTP 的地方），只用两个只读 operation：
+// 数据：`web/src/knowledge.js`（本页唯一发 HTTP 的地方），三个 operation：
 //   GET /api/wiki/pages            → 目录（path/id/title/status/updated/revision/characters）
 //   GET /api/wiki/pages/{pagePath} → 单页 + content
+//   PUT /api/wiki/pages/{pagePath} → 保存（content + expected_revision；P003-T002/D003 选 A）
+// P003-T007 起编辑不再落本机草稿：保存走 PUT，页面拿响应的 revision 更新本地版本；
+// 版本过期（409）不丢编辑内容，提示刷新后重编辑。
 // 稿上有、接口没有的区块照 A2 藏掉（清单见报告「稿→码对照表」与 web/README.md）：
 //   标签体系（无 tags 字段）、列表的摘要与分节列（列表接口没有正文）、提交审核入口
 //   （POST /api/wiki/sessions 要管理员令牌，控制台没有，实测 503）。
@@ -19,11 +22,10 @@ import {
   formatClock,
   getPage,
   listPages,
-  loadDrafts,
   renderMarkdown,
-  saveDraft,
   splitBody,
   stripFrontMatter,
+  updatePage,
   wordCount,
 } from '../src/knowledge.js';
 
@@ -51,7 +53,7 @@ const ICON_WARN = `
 // 静态骨架：不含任何接口数据，只有一处 innerHTML（同 P002-T002 的做法）
 const TEMPLATE = `
 <div class="k-bar">
-  <span class="k-total">共 <b data-role="total">—</b> 条 · <b data-role="drafts">0</b> 份本地草稿</span>
+  <span class="k-total">共 <b data-role="total">—</b> 条</span>
   <span class="sep-v" aria-hidden="true"></span>
   <p class="stamp"><b class="mono" data-role="stamp">—</b> 更新</p>
   <span class="sep-v" aria-hidden="true"></span>
@@ -182,14 +184,14 @@ const TEMPLATE = `
     <div class="k-field">
       <label for="knowledge-edit-body">正文 · Markdown</label>
       <textarea id="knowledge-edit-body" data-role="edit-body" spellcheck="false"></textarea>
-      <p class="k-hint">用 ## 分节；支持 - 列表、**加粗**、\`代码\`、&gt; 引用、| 表格、\`\`\` 代码块，以及 [[编号]] 条目内链。保存只写入本机草稿——接口没有写回页面的能力。</p>
+      <p class="k-hint">用 ## 分节；支持 - 列表、**加粗**、\`代码\`、&gt; 引用、| 表格、\`\`\` 代码块，以及 [[编号]] 条目内链。保存会把整篇正文写回服务器（带当前页面版本，版本过期会让你刷新后重编辑）。</p>
     </div>
 
     <div class="k-editor-foot">
       <span><span data-role="word-count">0</span> 字 · <span data-role="draft-state">—</span></span>
       <span class="k-foot-actions">
         <button type="button" class="k-btn-ghost" data-role="revert" disabled>撤销修改</button>
-        <button type="button" class="k-btn-primary" data-role="save" disabled>保存草稿</button>
+        <button type="button" class="k-btn-primary" data-role="save" disabled>保存到服务器</button>
       </span>
     </div>
   </div>
@@ -197,8 +199,8 @@ const TEMPLATE = `
 
 <dialog class="k-dialog" data-role="discard" aria-labelledby="knowledge-discard-title">
   <div class="k-dialog-head">
-    <h2 id="knowledge-discard-title">这份草稿还没保存</h2>
-    <p>离开会丢掉当前修改。先保存到本机，还是直接放弃？</p>
+    <h2 id="knowledge-discard-title">这篇正文还没保存</h2>
+    <p>离开会丢掉当前修改。先保存到服务器，还是直接放弃？</p>
   </div>
   <div class="k-dialog-actions">
     <button type="button" class="k-btn-primary" data-kdiscard="save">保存并离开</button>
@@ -264,7 +266,6 @@ export const page = {
     const $ = role => host.querySelector(`[data-role="${role}"]`);
     const ui = {
       total: $('total'),
-      drafts: $('drafts'),
       stamp: $('stamp'),
       refresh: $('refresh'),
       notice: $('notice'),
@@ -318,7 +319,6 @@ export const page = {
 
     const state = {
       pages: [],
-      drafts: loadDrafts(),
       loading: true,
       error: null,
       loadedAt: null,
@@ -327,6 +327,7 @@ export const page = {
       filters: { q: '', cat: '' },
       currentPath: null,
       entry: null, // { page, working, baseline, loading, error }
+      saving: false, // 保存请求在飞：按钮禁用，避免连点两次 PUT
       pendingNav: null, // 页内导航：确认后要执行的动作
       leave: null, // 页面级离开（侧栏导航 / 后退）：{ href } | { signout } | { history: true }
       lastFocus: null,
@@ -464,7 +465,6 @@ export const page = {
 
     function renderCounts() {
       ui.total.textContent = String(state.pages.length);
-      ui.drafts.textContent = String(Object.keys(state.drafts).length);
       ui.stamp.textContent = state.loadedAt ? formatClock(state.loadedAt) : '—';
     }
 
@@ -553,8 +553,6 @@ export const page = {
       ui.headPath.textContent = path;
       ui.copy.disabled = false;
 
-      const saved = state.drafts[path];
-
       if (entry.loading) {
         setNotice(ui.entryNotice, null);
         ui.entryTitle.textContent = row?.title ?? path;
@@ -613,7 +611,8 @@ export const page = {
       ui.headSections.textContent = `${parts.sections.length} 节`;
       ui.headChars.textContent = `${wordCount(body)} 字`;
       ui.headUpdated.textContent = `最后修改 ${row?.updated ?? '—'}`;
-      ui.headSource.textContent = `正文来源：${saved ? '本地草稿' : '接口正文'}`;
+      // 正文可能是接口拿的、也可能是刚保存回服务器的：都是服务器上的那一版，未落盘的改动由「有未保存修改」表达
+      ui.headSource.textContent = '正文来源：服务器正文';
       ui.headDirty.hidden = !isDirty();
 
       const resolve = target => findPage(state.pages, target, { fromPath: path });
@@ -692,7 +691,6 @@ export const page = {
     }
 
     function renderInfo(row, parts) {
-      const saved = state.drafts[state.currentPath];
       const rows = [
         ['编号', row?.id ?? '—', true],
         ['路径', state.currentPath, true],
@@ -703,7 +701,6 @@ export const page = {
         ['修订', row?.revision ?? '—', true],
         ['最后修改', row?.updated ?? '—'],
       ];
-      if (saved?.savedAt) rows.push(['草稿保存', formatClock(new Date(saved.savedAt))]);
       ui.info.replaceChildren(...rows.map(([key, value, mono]) => {
         const wrap = document.createElement('div');
         wrap.className = 'k-kv-row';
@@ -785,9 +782,8 @@ export const page = {
         const pageData = await getPage(path);
         if (!isCurrent() || state.currentPath !== minePath || state.entry !== entry) return;
         entry.page = pageData;
-        const draft = state.drafts[path];
-        const body = draft ? draft.body : stripFrontMatter(pageData.content ?? '');
-        const title = (draft?.title || pageData.title || path).trim();
+        const body = stripFrontMatter(pageData.content ?? '');
+        const title = (pageData.title || path).trim();
         entry.working = { title, body };
         entry.baseline = CLONE(entry.working);
         entry.loading = false;
@@ -848,11 +844,11 @@ export const page = {
       }
       const dirty = isDirty();
       const body = entry.working.body;
+      const revision = typeof entry.page?.revision === 'string' && /^[0-9a-f]{16}$/.test(entry.page.revision);
       ui.wordCount.textContent = String(wordCount(body));
-      ui.draftState.replaceChildren(dirty
-        ? text('未保存', 'is-dirty')
-        : document.createTextNode(state.drafts[state.currentPath] ? '本地草稿已保存' : '尚未保存到本机'));
-      ui.save.disabled = !dirty;
+      if (dirty) ui.draftState.replaceChildren(text('未保存的修改', 'is-dirty'));
+      else ui.draftState.replaceChildren(document.createTextNode(revision ? '已保存到服务器' : '尚未修改'));
+      ui.save.disabled = !dirty || !revision || state.saving;
       ui.revert.disabled = !dirty;
       ui.headDirty.hidden = !dirty;
       ui.headChars.textContent = `${wordCount(body)} 字`;
@@ -875,19 +871,84 @@ export const page = {
       }
     }
 
-    function persistDraft(announceResult) {
-      if (!state.currentPath || !state.entry?.working || !isDirty()) return false;
-      const { persisted, drafts } = saveDraft(state.currentPath, state.entry.working);
-      state.drafts = drafts;
-      state.entry.baseline = CLONE(state.entry.working);
-      renderEntry();
-      renderCounts();
-      updateFoot();
-      if (announceResult) {
-        toast(persisted ? '草稿已保存到本机' : '草稿只保存在本次会话里，浏览器存储不可用');
-        announce(persisted ? '草稿已保存到本机' : '草稿只保存在本次会话里');
+    /**
+     * 拼回整篇 Markdown：原来的 front matter + 编辑区正文。
+     * 服务端要求 id/status 不变、evidence/source 仍在（wiki-store.js:159-188），所以头部整段原样带回去；
+     * 标题改过就把 `title:` 那一行改写（标题存在头部元数据里，正文里不重复）。
+     */
+    function composeContent(entry) {
+      const source = String(entry.page?.content ?? '');
+      const body = entry.working.body;
+      if (!source.startsWith('---\n')) return body;
+      const end = source.indexOf('\n---\n', 3);
+      if (end < 0) return body;
+      const head = source.slice(0, end + 5);
+      const originalTitle = String(entry.page?.title ?? '').trim();
+      const title = entry.working.title.trim();
+      let nextHead = head;
+      if (title && title !== originalTitle) {
+        // 页面可能没有 title 行（metadata() 会退回一级标题），那就补一行在头部开头
+        nextHead = /^title:.*$/m.test(head)
+          ? head.replace(/^title:.*$/m, `title: ${title}`)
+          : head.replace(/^---\n/, `---\ntitle: ${title}\n`);
       }
-      return persisted;
+      return `${nextHead}${body}`;
+    }
+
+    /** 保存失败 → 结果条：409 是「别人先改了」，正文留着，给刷新入口；其余照实说 */
+    function showSaveError(error) {
+      ui.entryNotice.dataset.tone = 'danger';
+      const wrap = document.createElement('span');
+      wrap.append(text(error?.kind === 'conflict'
+        ? '知识库页面已被别人更新，当前修改还留在编辑器里；刷新正文会丢掉它们。'
+        : `保存失败：${error?.message ?? '未知错误'}`));
+      if (error?.kind === 'conflict') {
+        const reload = document.createElement('button');
+        reload.type = 'button';
+        reload.className = 'textbtn';
+        reload.dataset.kreload = '1';
+        reload.textContent = '刷新正文';
+        wrap.append(reload);
+      }
+      ui.entryNotice.replaceChildren(warnIcon(), wrap);
+      ui.entryNotice.hidden = false;
+    }
+
+    /**
+     * 保存到服务器（PUT，带 expected_revision）。
+     * @returns {Promise<boolean>} true = 已落盘；false = 没保存（正文与脏标记都留着）
+     */
+    async function saveToServer(announceResult) {
+      const entry = state.entry;
+      if (!state.currentPath || !entry?.working || !isDirty() || state.saving) return false;
+      state.saving = true;
+      updateFoot();
+      let saved = false;
+      try {
+        const page = await updatePage(state.currentPath, composeContent(entry), entry.page?.revision ?? '');
+        if (!isCurrent() || state.entry !== entry) return true;
+        entry.page = page;
+        entry.baseline = CLONE(entry.working);
+        setNotice(ui.entryNotice, null);
+        renderEntry();
+        saved = true;
+      } catch (error) {
+        if (!isCurrent() || state.entry !== entry) return false;
+        showSaveError(error);
+        if (announceResult) {
+          const message = error?.kind === 'conflict' ? '页面已被别人更新，请刷新后重试' : `保存失败：${error?.message ?? '未知错误'}`;
+          toast(message);
+          announce(message);
+        }
+      } finally {
+        state.saving = false;
+        if (isCurrent() && state.entry === entry) updateFoot();
+      }
+      if (saved && announceResult) {
+        toast('已保存到服务器');
+        announce('已保存到服务器');
+      }
+      return saved;
     }
 
     /* ---------- 弹窗 ---------- */
@@ -1037,6 +1098,11 @@ export const page = {
 
     ui.entryNotice.addEventListener('click', event => {
       if (event.target.closest('[data-kretry]') && state.currentPath) loadEntry(state.currentPath);
+      // 409 之后「刷新正文」：用服务器上的最新版本重取（会覆盖手里的修改，按钮文案已经说清楚）
+      if (event.target.closest('[data-kreload]') && state.currentPath) {
+        setNotice(ui.entryNotice, null);
+        void loadEntry(state.currentPath);
+      }
     });
 
     ui.copy.addEventListener('click', () => {
@@ -1092,7 +1158,7 @@ export const page = {
       updateFoot();
     });
 
-    ui.save.addEventListener('click', () => { persistDraft(true); });
+    ui.save.addEventListener('click', () => { void saveToServer(true); });
 
     ui.revert.addEventListener('click', () => {
       const entry = state.entry;
@@ -1100,7 +1166,7 @@ export const page = {
       entry.working = CLONE(entry.baseline);
       fillEditor();
       updateFoot();
-      toast('已撤销到上次保存的草稿');
+      toast('已撤销到上次保存的版本');
     });
 
     ui.discard.addEventListener('click', event => {
@@ -1116,17 +1182,27 @@ export const page = {
         closeDialog(ui.discard);
         return;
       }
-      // 先把「正在离开」的旗立上：persistDraft → updateFoot → syncLeaveGuard 不该再去 history.back()，
+      // 先把「正在离开」的旗立上：saveToServer → updateFoot → syncLeaveGuard 不该再去 history.back()，
       // 否则它会把刚跳走的导航拉回守卫条目上。
       if (leave) guardLeaving = true;
-      if (kind === 'save') persistDraft(false);
       if (kind === 'drop' && state.entry) {
         state.entry.working = CLONE(state.entry.baseline);
         state.mode = 'read';
       }
       closeDialog(ui.discard, false);
-      if (leave) performLeave(leave);
-      else if (typeof next === 'function') next();
+      const proceed = async () => {
+        // 「保存并离开」：保存没成功就不离开（正文留着，结果条给原因），不假装存了再把人带走
+        if (kind === 'save' && isDirty()) {
+          const ok = await saveToServer(false);
+          if (!ok) {
+            guardLeaving = false;
+            return;
+          }
+        }
+        if (leave) performLeave(leave);
+        else if (typeof next === 'function') next();
+      };
+      void proceed();
     });
 
     // Esc 关闭走浏览器原生的 cancel → close，绕过了 closeDialog()：收尾要在这里做一份，
@@ -1279,7 +1355,7 @@ export const page = {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         if (state.mode !== 'edit' || !isDirty()) return;
         event.preventDefault();
-        persistDraft(true);
+        void saveToServer(true);
       }
     });
 

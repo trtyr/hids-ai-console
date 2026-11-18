@@ -1,10 +1,12 @@
 // 会话 adapter —— 全前端唯一发 HTTP 的地方（组件里不许出现 fetch）。
 //
-// 数据来源：形态 B · openapi.yaml（GET /api/session，getSession）+ server.js:134 的实现。
-//   200 → { authenticated: true }                （openapi.yaml:32-40，只此一个字段）
+// 数据来源：形态 B · openapi.yaml（GET /api/session，getSession）+ server.js:208-214 的实现。
+//   200 → { authenticated: true, user, role }    （P003-T006 起带回身份）
+//         user：Basic 账号名，没配账号名时是 admin；服务端没配密码时 user / role 都是 null
+//         role：机器值，目前只有 operator（匿名态为 null）
 //   401 → 非 JSON 正文「需要登录后访问」+ WWW-Authenticate: Basic（server.js:70-74）
 //   鉴权 → HTTP Basic，每个请求都校验（server.js:58-68 / :130）
-// 会话接口没有账号名、没有角色字段 → 返回体里也没有，界面上就不显示（A3）。
+// 身份只认这三个键：接口不回的名字不猜（不拿输入框里的账号名充当身份）。
 
 import { authorizationHeader, base64 } from './credentials.js';
 
@@ -23,13 +25,18 @@ export class SessionError extends Error {
   }
 }
 
+/** 身份字段归一：非空字符串才算有值，其余（缺键 / null / 空串）都落成 null，不补默认名字 */
+function identity(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 /**
  * 用一对账号密码校验业务访问身份。
- * 解析成功（200 且 authenticated === true）返回 { authenticated: true }，其余一律抛 SessionError。
+ * 解析成功（200 且 authenticated === true）返回 { authenticated: true, user, role }，其余一律抛 SessionError。
  *
  * @param {{ user: string, password: string }} credentials
  * @param {{ fetchImpl?: typeof fetch, baseUrl?: string }} [options]
- * @returns {Promise<{ authenticated: true }>}
+ * @returns {Promise<{ authenticated: true, user: string|null, role: string|null }>}
  */
 export async function probeSession(credentials, options = {}) {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
@@ -67,5 +74,5 @@ export async function probeSession(credentials, options = {}) {
   if (!body || body.authenticated !== true) {
     throw new SessionError('invalid', '会话接口未确认身份', { status: response.status });
   }
-  return { authenticated: true };
+  return { authenticated: true, user: identity(body.user), role: identity(body.role) };
 }

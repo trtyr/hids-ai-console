@@ -43,8 +43,8 @@ HIDS_API_ORIGIN=http://127.0.0.1:19880 HIDS_WEB_PORT=13300 node web/serve.js
 
 | 项 | 值 | 出处 |
 | --- | --- | --- |
-| operation | `GET /api/session`（`getSession`，无参数） | `openapi.yaml:26-41`，实现 `server.js:134` |
-| 成功体 | `{ "authenticated": true }`——**只有这一个字段** | `openapi.yaml:32-40` |
+| operation | `GET /api/session`（`getSession`，无参数） | `server.js:208-214` |
+| 成功体 | `{ authenticated: true, user, role }`（P003-T006 起带回身份：`user` 是 Basic 账号名、`role` 目前只有 `operator`；服务端未配密码时两者为 `null`） | `server.js:208-214` |
 | 失败体 | `401`，正文是纯文本「需要登录后访问」，带 `WWW-Authenticate: Basic`（**不是 JSON**） | `server.js:70-74` |
 | 鉴权 | HTTP Basic，**每个请求**都校验 | `server.js:58-68`、`:130` |
 
@@ -61,15 +61,16 @@ HIDS_API_ORIGIN=http://127.0.0.1:19880 HIDS_WEB_PORT=13300 node web/serve.js
 `web/src/session.js` —— `adapter 之外出现 fetch 即缺陷`。
 
 ```js
-probeSession(credentials, options?) → Promise<{ authenticated: true }>
+probeSession(credentials, options?) → Promise<{ authenticated: true, user: string|null, role: string|null }>
 // credentials: { user: string, password: string }
+// user/role：非空字符串原样透传，缺键/null/脏类型一律落 null（不补默认名字）
 // options: { fetchImpl?: typeof fetch, baseUrl?: string }   // 单测注入用
 // 失败一律抛 SessionError：kind ∈ 'unauthorized' | 'http' | 'network' | 'invalid'，附 status（可能为 null）
 ```
 
 | 场景 | HTTP | 结果 |
 | --- | --- | --- |
-| 凭据正确 | 200 `{authenticated:true}` | resolve `{ authenticated: true }` |
+| 凭据正确 | 200 `{authenticated:true, user, role}` | resolve `{ authenticated: true, user, role }`（缺身份字段时两者 `null`） |
 | 账号或密码错 | 401 | `SessionError{kind:'unauthorized', status:401}` |
 | 服务异常 | 5xx / 其它非 2xx | `SessionError{kind:'http', status:<码>}` |
 | 连不上 | fetch 抛 | `SessionError{kind:'network'}` |
@@ -150,14 +151,19 @@ export const page = {
 - 页内取数走 `web/src/` 的 adapter（一个领域一个文件），**页面文件里不许出现 `fetch`**。
 - 未接接口前一律用 `src/views/placeholder.js` 的占位，不放假表格假数字。
 
-### A3：屏幕上的账号名与角色
+### 账号区（A5，P003-T007 回填）
 
-会话接口只返回 `authenticated`，没有账号名、也没有角色（`openapi.yaml:32-40`）。
-所以壳里**不渲染账号名与角色**——不编一个名字，也不拿登录框里输入的账号名充当身份。
+`GET /api/session` 自 P003-T006 起回 `{ authenticated, user, role }`（`server.js:208-214`：
+`user` 是 Basic 账号名，没配账号名时落 `admin`；服务端没配密码时两者都是 `null`；`role` 目前只有 `operator`）。
 
-- 侧栏底栏只有「退出登录」一个动作，没有头像 / 姓名 / 角色块。
-- 断言方式：侧栏可见文本里不出现 `账号` / `角色` / `admin` 这类身份字样，也没有头像节点。
-- 将来接口真的返回身份字段时，再按新字段加渲染分支，并在本文件记一行。
+壳的账号区照稿渲染（`alerts.html:920-932` 的 `.who`）：头像（账号名首字母）+ 账号名 + 角色。
+
+- 身份由 `app.js` 在登录成功时从 `probeSession` 的返回里取，传给 `mountShell({ identity })`；退出登录时清空。
+- **`user` 为 `null` 时整块不渲染**——服务端未配密码时没有账号可报，不编名字、也不拿输入框里的账号名冒充身份。
+- `role` 映射：`operator` → 「值守账号」（稿上的文案）；未知值原样显示；`role` 为 `null` 时不画角色行。
+- 样式在 `assets/app.css` 的 `.who / .avatar / .who-name / .who-role`（稿 `alerts.html:172-186`）；
+  ≤1100px 只留头像，≤900px 整块隐藏（稿 `alerts.html:785,813`）。
+- 断言：`web/test/session.test.js`（`user`/`role` 透传与脏回包落 `null`）、`web/test/shell.test.js`（有身份 / 无身份 / 未知角色三种）。
 
 ## 5. 占位页（`src/views/placeholder.js`）
 
@@ -296,12 +302,29 @@ formatDateTime(iso|null) → 'YYYY-MM-DD HH:mm:ss'  // 空给 '—'，解析不�
 
 | 用途 | operation | 出处 | 成功体 |
 | --- | --- | --- | --- |
-| 列表 / 分页 | `GET /api/alerts?count&offset` | `openapi.yaml:134-157`；`server.js:335-345` | `alerts[]`、`total`、`totals`、`errors`、`partial`（+ `query`、`note`，本页不渲染） |
+| 列表 / 分页 / 筛选 / 排序 | `GET /api/alerts?count&offset&type&level&q&from&to&sort&triage_status&verdict` | `server.js:440-457`（参数校验 `alertQuery`，`:129-152`）；`cloudwalker.js:107-188` | `alerts[]`、`total`、`totals`、`errors`、`partial`、`truncated`（+ `query`、`note`，本页不渲染） |
 | 队列汇总 | `GET /api/agent/triage/status` | `openapi.yaml:178-189`；`server.js:178-180` | `initialized`、`enabled`、`input_mode`、`counts{queued,running,done,failed}`、`last_poll_at`、`last_error` |
 | 暂停 / 恢复 | `PUT /api/agent/triage/control` | `openapi.yaml:211-234`；`server.js:213-219` | 正文 `{ enabled: boolean }`（`additionalProperties: false`）→ 同上 `TriageSummary` |
 | 入队 / 重试 | `POST /api/agent/triage/{alertId}` | `openapi.yaml:235-260`；`server.js:220-231` | 202 `TriageCase` |
 
-`count` 只接受 1–50、`offset` ≥ 0（`server.js:339`，越界 400）；页面只给 20 / 50 两档。
+`count` 只接受 1–50、`offset` ≥ 0（`server.js:443`，越界 400）；页面只给 20 / 50 两档。
+
+**筛选 / 排序参数（P003-T007 回填，接口 P003-T001 已支持）**——页面把下拉值直接下推，不在前端自筛：
+
+| 控件 | 参数 | 取值（页面 → 接口） | 非法值 |
+| --- | --- | --- | --- |
+| 搜索 | `q` | 原样（服务端对 id/title/asset/source/target/account/command 包含匹配） | — |
+| 类型 | `type` | 11 个事件类型键（稿上的中文名 → `brute_force` … `memory_security`） | 400 |
+| 等级 | `level` | 严重/高/中/低 → `critical` / `high` / `medium` / `low` | 400 |
+| 结论 | `verdict` | 真实威胁/存疑/误报/待研判 → `threat` / `uncertain` / `false_positive` / `review` | 400 |
+| 研判状态 | `triage_status` | 未研判/排队中/研判中/完成/失败 → `not_queued` / `queued` / `running` / `done` / `failed` | 400 |
+| 时间范围 | `from` | 近 24 小时 / 近 7 天 / 近 30 天 → `now - N` 的 ISO 时刻；**`to` 不传**（闭区间不传＝到现在） | 400 |
+| 表头排序 | `sort` | `time`（默认）/ `level`，两者都是接口固定降序（**没有方向参数**） | 400 |
+
+- 筛选值一变就回第一页重取（`offset = 0`），已选告警不清空（稿 §4）。
+- `truncated: true` 表示研判侧筛选只扫了 500 条原始事件（`cloudwalker.js:182-188`），此时 `total` 只含窗口内匹配，
+  页面用一条提示条说明（见 10.3「partial」格）。
+- 空串 / 未选的筛选参数**不发**（不把 `type=` 当非法值发给服务端）。
 
 **告警行字段**（`normalizeAlert`，`cloudwalker.js:31-56`）——页面用到的就是这些，别的不画：
 
@@ -322,8 +345,9 @@ formatDateTime(iso|null) → 'YYYY-MM-DD HH:mm:ss'  // 空给 '—'，解析不�
 ### 10.2 adapter 契约（`web/src/alerts.js`，本页唯一 HTTP 处）
 
 ```js
-listAlerts({ count, offset }, { fetchImpl?, baseUrl? })
-  → { alerts, total, totals, errors, partial }
+listAlerts({ count, offset, type?, level?, verdict?, triageStatus?, q?, from?, to?, sort? }, { fetchImpl?, baseUrl? })
+  → { alerts, total, totals, errors, partial, truncated }
+  // triageStatus 在查询串里落成 triage_status；空串参数不发
 fetchTriageSummary({ fetchImpl?, baseUrl? })        → TriageSummary
 setTriageEnabled(enabled, { fetchImpl?, baseUrl? }) → TriageSummary
 enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // alertId 会被 encodeURIComponent
@@ -346,11 +370,12 @@ enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // ale
 | 格 | 触发 | 界面 | 可断言的形状 |
 | --- | --- | --- | --- |
 | 加载中 | 首次 render / 刷新 / 翻页 | 表内一行「正在读取告警…」，`.table-wrap` 带 `aria-busy="true"`、降透明，刷新按钮 `disabled` | 刷新 disabled；取到数据后 `aria-busy` 移除 |
-| 空 | `total === 0` | 表内一行「暂无告警。」 | 上一页/下一页/全选都 `disabled`；共 N 条 显示 0 |
+| 空 | `total === 0` | 无筛选时表内一行「暂无告警。」；有筛选时「没有匹配的告警。」+「清除筛选」按钮 | 上一页/下一页/全选都 `disabled`；共 N 条 显示 0；空态按钮能退出筛选 |
 | 部分失败 | 回包 `partial: true` | 表格上方提示条：`部分类型查询失败，总数只合计成功的类型；<type>：<原因>；…` | 提示条 `[data-role="partial"]` 去掉 `hidden`；原因逐类列出 |
+| 部分失败（扫描窗口） | 回包 `truncated: true` | 同一位置的提示条：`筛选结果只统计了扫描窗口：单次最多扫 500 条原始事件…` | `[data-role="truncated"]` 去掉 `hidden`；`false` 时 `hidden` |
 | 错误 | 列表请求抛 `AlertsError` | 表位置换成 `role="alert"` 区块：标题按 kind、正文、`重试` 按钮 | 文案区分 401/503/502/网络；服务端原文不出现 |
 | 超长内容 | 标题或 ID 很长 | 单行截断（CSS `text-overflow: ellipsis`），`title` 属性给全文 | `textContent` 与 `title` 都是完整原值 |
-| 禁用 | 队列暂停 / 任务排队中 / 空页 | 队列开关变「恢复」、`qstate` 加 `is-paused`；抽屉底部按钮 `disabled` 且文案换成当前状态；翻页到头禁用 | 见 `web/test/pages/alerts.test.js` |
+| 禁用 | 队列暂停 / 任务排队中 / 空页 / 加载中 | 队列开关变「恢复」、`qstate` 加 `is-paused`；抽屉底部按钮 `disabled` 且文案换成当前状态；翻页到头禁用；**加载中筛选控件与刷新都 `disabled`** | 见 `web/test/pages/alerts.test.js` |
 
 队列状态接口单独失败时**只降级队列条**（「状态不可用」、计数全「—」、开关隐藏、右侧一行失败原因），列表照常显示。
 
@@ -359,6 +384,10 @@ enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // ale
 | 动作 | 后果 |
 | --- | --- |
 | 刷新 | 重新取列表 + 队列；成功后「更新时间」换成本地时刻 |
+| 搜索框（`change` / `search`） | 回车、失焦或点搜索框自带清除 → `q` 下推、回第一页、`aria-live` 播报 |
+| 类型 / 等级 / 结论 / 研判状态 / 时间范围下拉 | `change` 即下推对应参数、回第一页；有筛选时出现「清除筛选」与结果计数（`筛选后 N 条`） |
+| 清除筛选 | 控件全复位、排序回 `time`、回第一页重取、焦点回搜索框 |
+| 点「等级」/「时间」表头 | 换 `sort` 并回第一页重取；当前排序列 `aria-sort="descending"` + `↓`，另一列 `none`。**同一列再点不发请求**（接口没有方向参数，不伪造升序） |
 | 上一页 / 下一页 / 页码 | 换 `offset = (页-1) × count` 重新取数；页数 = `ceil(total / count)` |
 | 每页 20 / 50 | 换 `count` 并回到第一页 |
 | 勾行 / 全选当前页 | 出现批量条「已选 N 条」；选择跨页保留；表头复选框 `indeterminate` 表示部分选中 |
@@ -372,8 +401,11 @@ enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // ale
 
 ### 10.5 可访问性
 
-- **表格是语义表格**：真 `<table>` + `<caption class="sr-only">`（`pages/alerts.js:86`，「告警列表，时间倒序；点标题或告警 ID 查看摘要，可勾选后批量重新研判」），
-  表头十列都是 `<th scope="col">`（`:88-98`）；时间列 `aria-sort="descending"` 是**静态**标记（接口没有 `sort`，见 9.6-2）。
+- **表格是语义表格**：真 `<table>` + `<caption class="sr-only">`（「告警列表，时间倒序；点标题或告警 ID 查看摘要，可勾选后批量重新研判」），
+  表头十列都是 `<th scope="col">`；等级与时间两列各有一个 `.th-sort` 按钮（原生 `<button>`，Tab 可达、Enter / Space 触发），
+  `aria-sort` 由当前 `sort` 决定（`descending` / `none`），箭头 `↓` 只在当前列。
+- **筛选条**：`.filters` 是 `role="group" aria-label="筛选与排序"`；搜索框 `aria-label="搜索告警"`，
+  五个下拉各自 `aria-label`（按事件类型 / 等级 / 研判结论 / 研判状态 / 时间范围筛选）。
 - **可访问名**（每个控件都能被单独点名，不靠上下文猜）：全选 `aria-label="全选当前页"`（`:89`）；行内复选框 `选择告警 <id>`（`:363`）；
   复制 `aria-label="复制告警 ID"`（`:128`）；关闭 `aria-label="关闭摘要"`（`:141`）；
   两个具名分组 `role="group"`：队列条「自动研判队列」（`:63`）、每页条数「每页条数」（`:112`）——**无 role 的 `div` 上 `aria-label` 不会被读屏暴露**，所以这两个补了 role。
@@ -394,22 +426,23 @@ enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // ale
 
 已全部记进 `~/.plantree/hids-ai-console/plans/002-frontend/topics/backend-findings.md` 的「P002-T003」一节，这里只列清单：
 
-1. **筛选条**（搜索 / 类型 / 等级 / 结论 / 研判状态 / 结果计数 / 清除筛选）：`GET /api/alerts` 只认 `count` 与 `offset`。
-   前端自筛当前页会把它画成「全量筛选」，所以整条不渲染。
-2. **等级排序 / 时间排序按钮**：接口没有 `sort`。时间列保留静态「↓」+ `aria-sort="descending"`（接口本身就是时间倒序合并，`cloudwalker.js:143`）。
-3. **队列条「查看 N 条失败」**：需要按研判状态过滤，同样没有参数。失败数仍然显示（`counts.failed` 是真的）。
+1. ~~**筛选条**~~ **已回填（P003-T007）**：`GET /api/alerts` 自 P003-T001 起认 `type/level/q/from/to/sort/triage_status/verdict`，
+   整条按稿渲染并下推（含稿上没有的时间范围，取值见 10.1）。
+2. ~~**等级排序 / 时间排序按钮**~~ **已回填（P003-T007）**：`sort=time|level` 两个按钮都接真参数；
+   稿的「同列再点切换升降序」只有降序可用，见 10.1 最后一行。
+3. **队列条「查看 N 条失败」**：一键跳转没做——研判状态下拉里选「失败」就是等价操作；失败数仍然显示（`counts.failed` 是真的）。
 4. **抽屉「场景」行**：接口只有 `scenario`（= 事件类型中文名），与「事件类型」重复。
 5. ~~**抽屉「缺失证据」**~~ **已渲染**：`TriageCase` schema 没列这个键（`openapi.yaml:803-816`，`additionalProperties: true` 允许），
    但实现返回体里有（`triage-monitor.js:108`，done 态由 `:385` 从 `verdict.missing_evidence` 填值），稿也画了（`alerts.html:1139`）——
    按实现渲染：`done` 且有值才显示，文案「缺失证据：A、B」，空数组与未研判 `hidden`。
    稿只放了空 `<p>`、没写文案，文案按最近邻取（同页「已验证事实 N 条」的标签式写法），记账在 `coding-reports/P002-T003.md`。
-6. **证据来源按分类拆条**：只有 `verified_facts` / `evidence_sources` 两个数量，没有条目级数据。
+6. **抽屉的证据来源按分类拆条**：抽屉只有 `verified_facts` / `evidence_sources` 两个数量；条目级证据在详情页（11.6，P003-T007 已接）。
 
 页脚「完整证据链…可在详情页查看」保留；详情页在 T004。
 
 ### 10.7 样式与落点
 
-- `assets/pages/alerts.css`：只写本页独有的块（队列条 / 批量条 / 表格 / 分页 / 抽屉 / 遮罩 / 空态 / 错误态），
+- `assets/pages/alerts.css`：只写本页独有的块（筛选条 / 表头排序 / 队列条 / 批量条 / 表格 / 分页 / 抽屉 / 遮罩 / 空态 / 错误态），
   壳的部分（`.app/.rail/.bar/.content/.textbtn/.placeholder`）留在 `app.css`，不重复定义；颜色只用 `theme.css` 变量。
 - **样式由页面模块注入**：`pages/alerts.js` 首次 `render` 时往 `<head>` 插 `<link data-page-style="alerts">`（重复 render 不重复插）。
   原因：`web/index.html` 与 `assets/app.css` 不在本卡 scope 里，入口不能改。
@@ -426,6 +459,7 @@ enqueueTriage(alertId, { fetchImpl?, baseUrl? })    → TriageCase        // ale
 | --- | --- |
 | 没有数据（`total === 0`） | 表内一行「暂无告警。」；上一页/下一页/全选 `disabled`；「共 0 条」 |
 | 部分类型查不到（回包 `partial: true`） | 表格上方提示条逐类列出原因；总数只合计成功的类型；页面照常可用 |
+| 扫描窗口被截断（回包 `truncated: true`） | 提示条说明总数只含窗口内匹配，并建议缩小时间范围或加类型条件；列表照常可用 |
 | 列表请求失败 | 表位置换 `role="alert"` 块：按 `kind` 分四类文案（登录已失效 / 接口不可用 / 无法连接 / 返回异常+状态码 / 返回格式异常）+「重试」按钮；刷新按钮恢复可用 |
 | 队列状态单独失败 | **只降级队列条**：状态「状态不可用」、四个计数全是「—」、开关隐藏、右侧一行失败原因；列表与分页不受影响 |
 | 慢网 / 超时 | **前端不设超时**（`src/alerts.js` 用 `fetch` 的默认行为，没有 `AbortController`）：请求未返回前保持加载态，刷新按钮 `disabled`；用户可重试但不能中途取消 |
@@ -511,7 +545,9 @@ getTraceBoard(target, options?)              → Promise<TraceBoard | null>   //
 3. 概况条「证据缺口 `validation.gaps`」→ 用 `missing_evidence.length`；字段缺席时显示「—」。
 4. 依据条目的「已证实 / 存疑」徽标 → `claims[]` 只有 `text` + `citations[]`，改画「引用 N 处证据」+ `evidence_id`。
 5. 步骤的工具名与耗时 → `steps[]` 元素只有 `{ stage, detail, at }`。
-6. 证据来源的分类分组与事实文本 → 只有数量 + `evidence[]`（`evidence_id / tool / fetched_at`），平铺。
+6. ~~证据来源的分类分组与事实文本~~ **P003-T007 已回填条目**：接口给 `evidence[]` 条目
+   （`evidence_id / tool / fetched_at / sha256`，`triage-monitor.js:8-9,103-108`），按 `tool` 分组折叠渲染；
+   条目没有事实文本，第三列显示 sha256 前 12 位。分类名不编（稿的「进程树 / 命令行…」在接口里没有对应字段）。
 7. 核验的「证据覆盖 / 核验时间」、复核的「复核人 / 时间 / 结论 / 备注」→ `review` 是模型独立复核，没有人工复核字段。
 8. 稿的「ID 不存在」页 → 接口没有 404（未知 ID 走 502），只有 400 按「没有这条告警」处理。
 9. 头部「场景」行（稿映射 `scenario`）→ 与「类型」重复，不单列。
@@ -525,6 +561,22 @@ getTraceBoard(target, options?)              → Promise<TraceBoard | null>   //
   （单测钉 `host.querySelectorAll('h1').length === 0`）；每个区块是 `<section aria-labelledby>` + `<h2>`；概况条是 `<dl>`；
   步骤/依据是 `<ol>`，缺口/证据/实体是 `<ul>`；原始事件是 `<details><summary>`（键盘原生可达）。
 - 状态不只靠颜色：等级有文字、结论有文字、必查证据状态有文字。
+
+### 11.7 证据链：`evidence[]` 与 claim 的 citation 对账（P003-T007 回填）
+
+数据来源优先级：`triage.evidence[]`（`TriageCase`，P003-T003 起恒为数组）→ `investigation.evidence[]`（老记录）→ 空。
+导出函数（`pages/alert-detail.js`，单测可直接调）：`evidenceOf(triage, investigation)`、`groupEvidence(items)`、`evidenceIdsOf(items)`。
+
+| 界面元素 | 字段 | 断言要点 |
+| --- | --- | --- |
+| 证据来源区块标题右侧 | `共 N 条`（列表出的条目数）；只有数量没有条目时 `N 个来源`（`evidence_sources`） | 有条目时不再写「接口只返回来源数量」 |
+| 分组 `<details class="ev-group">` | 组名 = `tool`（缺失时「未标注工具」），右侧 `N 条` | 组数 = 不同 tool 数；**前两组默认 `open`**，其余收起 |
+| 条目 `<li class="ev-item">` | `evidence_id` / `sha256`（前 12 位，`title` 给全值）/ `fetched_at`（本地 `HH:MM:SS`） | 条数 = `evidence[]` 长度；不补事实文本 |
+| claim 的引用编号 | `citations[].evidence_id`（去重） | 与条目里出现过的 `evidence_id` 求差集：对不上的编号加 `.is-missing`（危险色 + title 说明），并在该条 claim 里写「N 处引用在证据条目中找不到」 |
+| 证据来源脚注 `[data-role="evidence-note"]` | 差集总数 | 差集 > 0 时显示「N 处引用在证据条目中找不到（证据链不完整）。」；差集 0 且有条目时 `hidden` |
+
+稿 → 码：`alert-detail.html:797-801`（区块）、`:407-441`（分组 / 条目样式）、`:1199-1215`（分组折叠 + 组名 + 条数）→
+`pages/alert-detail.js` 的 `paintEvidence()` / `paintClaims()` + `assets/pages/alert-detail.css` 的 `.ev-group` / `.ev-item` / `.claim-ref .is-missing`。
 
 ## 12. 深度溯源页（`pages/trace.js` + `src/trace.js`，P002-T005）
 
@@ -736,32 +788,38 @@ saveRules({ config, expectedRevision, token, ...options }) → { config, revisio
 ## 14. 知识库页（`pages/knowledge.js` + `src/knowledge.js`）
 
 两屏一壳：**条目列表**（搜索 / 分类筛选 / 表格）→ **条目页**（标题、元信息、目录、分节正文、
-右侧条目信息与相关条目、接口字段；「条目 / 编辑」两个页签）。数据全部只读。
+右侧条目信息与相关条目、接口字段；「条目 / 编辑」两个页签）。读只读接口，编辑**保存到服务器**（P003-T007 / D003 选 A）。
 
-### 14.1 数据来源：形态 B（本仓真接口，只用两个只读 operation）
+### 14.1 数据来源：形态 B（本仓真接口，两个只读 + 一个写）
 
 | operation | 用途 | 回包字段 | 出处 |
 | --- | --- | --- | --- |
 | `GET /api/wiki/pages`（`listWikiPages`） | 目录 | `pages[]: { path, id, title, status, updated, revision, characters }` | `openapi.yaml:432-451`；实现 `server.js:234-240` |
-| `GET /api/wiki/pages/{pagePath}`（`getWikiPage`） | 单页 + 正文 | 同上七字段 + `content`（整篇 Markdown，**含 `---` 头部元数据**） | `openapi.yaml:452-466`；实现 `server.js:241-248` |
+| `GET /api/wiki/pages/{pagePath}`（`getWikiPage`） | 单页 + 正文 | 同上七字段 + `content`（整篇 Markdown，**含 `---` 头部元数据**） | `server.js:343-345`（`wiki-store.js:75-84`） |
+| `PUT /api/wiki/pages/{pagePath}`（`updateWikiPage`，P003-T002） | 保存正文 | 正文 `{ content, expected_revision }` → 200 回更新后的页面对象（含新 `revision`） | `server.js:346-352` → `wiki-store.js:159-188` |
 
 - 文档只钉了 `id / path / title / status` 四个字段（`openapi.yaml:858-865`，`additionalProperties: true`）；
   `updated / revision / characters / content` 是服务器侧 `wiki-store.js:26-28` 的 `metadata()` 真的回来的，逐条实测过
   （`evidence/recon/P002-T007.md` §2.4）。**字段按实现取，接口定义补全后换成明确解析，别再靠读实现。**
-- 错误：`400` 路径编码无效；`404` 正文 `{"error":"ENOENT: no such file or directory, open '/…/wiki/…md'"}`——
-  **含服务端绝对路径，前端不显示原文**，只按状态码给中文文案；`503`「尚未配置知识库管理员凭据」只出现在
+- 错误：`400` 路径编码无效；`404` 正文可能含服务端绝对路径——**前端不显示原文**，保存失败只显示服务端给的 `error` 文案
+  （`wiki-store.js:159-188` 的校验文案，如「判据需要 evidence 或 source 出处」）；`503`「尚未配置知识库管理员凭据」只出现在
   `health` / `sessions` 一族，本页不用它们（见 §9.6）。
-- 写能力：本仓**没有**「更新页面」的接口。编辑只落本机（§9.3），界面上如实标注「正文来源：本地草稿」。
+- 写能力（P003-T002 / D003 选 A）：`PUT` 走控制台 Basic 账号 + `expected_revision` 防覆盖。
+  正文要带 `---` 头部元数据一起发（`id` / `status` / `evidence` 都在里面），服务端还会校验正文 1–30000 字、
+  `id` 不变、状态只能是 `active/draft/deprecated`、必须有 `evidence` 或 `source` 出处。
+- 编辑**不再落本机草稿**（`hids-wiki-drafts` 那套从页面退场；adapter 里的 `loadDrafts/saveDraft` 仍导出，供旧调用与单测）。
 
 ### 14.2 adapter 契约（`src/knowledge.js`，adapter 之外出现 `fetch` 即缺陷）
 
 ```js
 listPages(options?) → Promise<{ pages: PageSummary[] }>
 getPage(pagePath, options?) → Promise<PageSummary & { content: string }>
+updatePage(pagePath, content, expectedRevision, options?) → Promise<PageSummary & { content: string }>
 // options: { fetchImpl?: typeof fetch, baseUrl?: string }   // 单测注入用
 // PageSummary = { path, id, title, status, updated, revision, characters }
 //   path 是唯一必需字段；其余缺失时是 null（界面显「—」，不补默认状态/标题）
-// 失败一律抛 KnowledgeError：kind ∈ 'unauthorized' | 'http' | 'network' | 'invalid'，附 status（可能为 null）
+// 失败一律抛 KnowledgeError：kind ∈ 'unauthorized' | 'conflict' | 'http' | 'network' | 'invalid'，附 status（可能为 null）
+// updatePage 的正文逐字是 { content, expected_revision }；content 为空 / revision 不是 16 位十六进制 → invalid，且不发请求
 ```
 
 | 场景 | HTTP | 结果 |
@@ -769,18 +827,20 @@ getPage(pagePath, options?) → Promise<PageSummary & { content: string }>
 | 目录正常 | 200 `{pages:[…]}` | resolve `{ pages }` |
 | 单页正常 | 200（含 `content`） | resolve 页面对象；`content` 不是字符串 → `invalid` |
 | 凭据失效 | 401 | `KnowledgeError{kind:'unauthorized', status:401}`，**不发第二次请求** |
+| 保存时版本过期 | 409 | `KnowledgeError{kind:'conflict', status:409}`——文件头不改，页面把编辑内容留着 |
+| 保存时正文不合规 | 400 | `KnowledgeError{kind:'http', status:400}`，`message` 是服务端原话（不透路径） |
 | 页面不存在 | 404 | `KnowledgeError{kind:'http', status:404}` |
 | 服务异常 | 其余非 2xx | `KnowledgeError{kind:'http', status:<码>}` |
 | 连不上 | fetch 抛 | `KnowledgeError{kind:'network'}` |
 | 200 但不是 JSON / `pages` 不是数组 | 200 | `KnowledgeError{kind:'invalid'}` |
 
-**本机草稿**（同文件，接口没有写回页面的能力）：
+**本机草稿**（`DRAFTS_KEY` / `loadDrafts` / `saveDraft` 仍导出，但页面不再使用；P003-T007 起保存走服务器）：
 
 ```js
 DRAFTS_KEY = 'hids-wiki-drafts'                 // localStorage：{ [pagePath]: { title, body, savedAt } }
 loadDrafts(storage?) → drafts
 saveDraft(pagePath, { title, body }, { storage?, now? }) → { persisted, drafts }
-// persisted=false 表示没写进本机存储（配额/隐私模式）——界面提示「没能存到本机」，不假装已落盘
+// persisted=false 表示没写进本机存储（配额/隐私模式）
 ```
 
 ### 14.3 状态矩阵（六格，稿只画了其中两格）
@@ -793,7 +853,7 @@ saveDraft(pagePath, { title, body }, { storage?, now? }) → { persisted, drafts
 | partial | 目录读到了、单条正文失败（404/5xx） | 条目页局部 notice 带原因与「重试」，列出仍在（面包屑可回列表） | notice 含「（404）」且不含服务端路径；点重试成功后正文出现 |
 | error | 目录请求失败（401/5xx/连不上） | 顶部 notice：401 →「登录已失效…」；5xx →「服务返回异常（<码>），目录读取失败。」；网络 →「连不上研判服务…」 | 401 时文案不含服务端正文；重试可恢复。**口径**：刷新失败时**保留上一轮已取到的目录**（只是旧数据，不是假数据），不清空列表；只有「首次加载就失败」才是 0 行——按「清空」判红会误伤 |
 | long-content | 189 条目录 / 超长标题 / 超长正文 | 表行不截断数据（靠 CSS 折行与 `overflow-wrap:anywhere`），正文列 `max-width:74ch` | 200 条目录全渲染；长标题 `textContent` 完整；长正文整段保留 |
-| disabled | 刚进编辑页签 / 加载中 | 「保存草稿」「撤销修改」禁用；加载中刷新/搜索/分类禁用 | 改一个字后两个按钮启用；加载中刷新禁用 |
+| disabled | 刚进编辑页签 / 加载中 / 保存中 / 页面没有 revision | 「保存到服务器」「撤销修改」禁用；加载中刷新/搜索/分类禁用；保存请求在飞时保存禁用 | 改一个字后两个按钮启用；`revision` 不是 16 位十六进制时保存恒禁用（保存不了就不给死按钮） |
 
 ### 14.4 交互与事件
 
@@ -807,14 +867,16 @@ saveDraft(pagePath, { title, body }, { storage?, now? }) → { persisted, drafts
 | 小节右侧「编辑」 | 切到编辑页签并把光标定位到该节标题那一行 |
 | 正文里的 `[[编号]]` / `[文字](相对路径)` | 解析到目录里的条目就跳过去；未建的标红虚线、不跳 |
 | 「条目 / 编辑」分段 | 切页签；未保存修改留在编辑视图里 |
-| 「保存草稿」 | 写 `hids-wiki-drafts`，刷新字数/分节/来源标注/草稿计数；写不进去则提示「没能存到本机」 |
-| 「撤销修改」 | 回到上次保存的草稿 |
-| `Ctrl/⌘+S` | 编辑页签下等同「保存草稿」 |
+| 「保存到服务器」 | `PUT /api/wiki/pages/{path}`：`content` = 原 front matter + 编辑区正文（标题改过就改写头部 `title:` 行），`expected_revision` = 页面当前 `revision`。成功 → 用响应更新 `revision`/正文，脏标记清掉，脚注转「已保存到服务器」，toast + `aria-live` 播报 |
+| 保存失败（409 版本过期） | 编辑内容与脏标记都留着；结果条写「知识库页面已被别人更新，当前修改还留在编辑器里；刷新正文会丢掉它们。」+「刷新正文」按钮（点它重取服务器版本） |
+| 保存失败（400/401/5xx/连不上） | 结果条写「保存失败：<原因>」；400 显示服务端原话 |
+| 「撤销修改」 | 回到上次保存（服务器版）的基线 |
+| `Ctrl/⌘+S` | 编辑页签下等同「保存到服务器」 |
 | 「复制路径」 | 写剪贴板 + toast；无 clipboard 时退回 `execCommand`，再失败提示手动复制 |
 | 「刷新」 | 重取目录；**有未保存修改时不重取正文**（草稿不被接口数据盖掉），toast 说明保留 |
-| 有未保存修改时离开条目 | 原生 `<dialog>`：保存并离开 / 放弃修改 / 取消 |
-| 有未保存修改时离开**页面**（壳侧栏导航 / 「退出登录」/ 浏览器后退） | 同一个 `<dialog>` 三选一；取消后留在编辑页签、草稿不动 |
-| 有未保存修改时关标签页 / 刷新 | 浏览器原生 `beforeunload` 拦一次；草稿存好或撤销后自动摘掉 |
+| 有未保存修改时离开条目 | 原生 `<dialog>`：保存并离开（先 PUT，成功才走；失败留在原地）/ 放弃修改 / 取消 |
+| 有未保存修改时离开**页面**（壳侧栏导航 / 「退出登录」/ 浏览器后退） | 同一个 `<dialog>` 三选一；取消后留在编辑页签、编辑内容不动 |
+| 有未保存修改时关标签页 / 刷新 | 浏览器原生 `beforeunload` 拦一次；保存到服务器成功或撤销后自动摘掉 |
 
 **页面级离开守卫怎么实现的（壳禁改，全在 `pages/knowledge.js` 的闭包里）**
 
@@ -822,7 +884,7 @@ saveDraft(pagePath, { title, body }, { storage?, now? }) → { persisted, drafts
 | --- | --- | --- |
 | 壳侧栏导航（`views/shell.js:36-38` 的 `a.nav-item[href="#/…"]`）与「退出登录」 | `document` **捕获阶段** `click`：命中且 `isDirty()` → `preventDefault()` + `stopPropagation()` + 开同一个 `data-role="discard"` 弹窗；放行后「导航」写 `location.hash`、「退出登录」把点击交回壳的按钮 | 脏态点一次导航：`defaultPrevented=true`、`location.hash` 不变、`dialog.open=true`；选「取消」后哈希与编辑内容都不动；选「放弃修改」后哈希变成目标路由 |
 | 浏览器后退 | 脏时 `history.pushState` 压一条**同 URL 的守卫条目**；后退只会在同 URL 上 `popstate`（无 `hashchange` → 页面不被 `app.js` 重建，草稿还在）→ 弹窗；放行时 `history.go(-2)` | 脏态 `window.dispatchEvent(new Event('popstate'))` → 弹窗且视图不动；`history.state.knowledgeUnsavedGuard === true` |
-| 关标签页 / 刷新 | 脏时挂 `beforeunload`（`preventDefault` + `returnValue=''`），脏标记消失时摘掉 | 脏态派发 `beforeunload`（`cancelable`）→ `defaultPrevented=true`；保存草稿后再派发 → `false` |
+| 关标签页 / 刷新 | 脏时挂 `beforeunload`（`preventDefault` + `returnValue=''`），脏标记消失时摘掉 | 脏态派发 `beforeunload`（`cancelable`）→ `defaultPrevented=true`；保存到服务器后再派发 → `false` |
 
 - 脏标记翻转的两个收口是 `updateFoot()` 与 `showIndex()`，两处都调 `syncLeaveGuard()`；弹窗动作分两路：页内导航走 `state.pendingNav`，页面级离开走 `state.leave`，二者互斥，Esc 关闭时一起清。
 - 页面模块没有 unmount 钩子（`router.js` 的 page 契约只有 `render`）→ 监听器靠 `MutationObserver`（host 被换掉时）与事件里的 `host.isConnected`（兜底）自净；旧页不会在后台继续拦导航。
@@ -842,9 +904,9 @@ saveDraft(pagePath, { title, body }, { storage?, now? }) → { persisted, drafts
 | --- | --- |
 | 标签下拉 / 分类标签增删 / 条目页「分类」标签组 | 目录与单页回包都没有 `tags` 字段；「分类」改显真实目录名（`common` / `webshell` …） |
 | 列表的**摘要**与**分节**列 | 列表接口不返正文，要算就得逐条取 189 个页面；只藏这两列，其余四列都是真字段 |
-| 顶栏「共 N 条 · N 份本地草稿 · 更新时间 · 刷新」 | 顶栏归壳（`views/shell.js` 禁改）→ 落在内容区顶部一行 |
+| 顶栏「共 N 条 · N 份本地草稿 · 更新时间 · 刷新」 | 顶栏归壳 → 落在内容区顶部一行；**「N 份本地草稿」随 A4 退场**（保存改到服务器后没有本地草稿可数），只留「共 N 条 · 更新时间 · 刷新」 |
 | 「提交审核」按钮与弹窗 | `POST /api/wiki/sessions` 要 `X-Prompt-Admin-Token`（`server.js:250`），控制台凭据只有 Basic → 实测一律 `503`；不放死按钮 |
-| 「正文来源：示例草稿（接口未定义）」 | 接口**有** `content`：正文照接口渲染，标注改成「接口正文 / 本地草稿」 |
+| 「正文来源：示例草稿（接口未定义）」 | 接口**有** `content`，且编辑可保存回服务器：标注为「正文来源：服务器正文」，未落盘的改动由「有未保存修改」表达 |
 | 稿的四个中文分类（通用口径 / 案件复盘 / 规则说明 / 值守交接） | 真实目录是 18 个英文键，不编中文名；分类选项由目录数据生成 |
 | `/api/wiki/health`、维护会话、重放、发布 | 不在本页面出现（都要管理员令牌） |
 
@@ -867,7 +929,8 @@ saveDraft(pagePath, { title, body }, { storage?, now? }) → { persisted, drafts
 
 ### 14.8 已知边界（这一版故意没做）
 
-- 编辑只在本机，没有「已保存到服务器」（接口不存在）。刷新页面后草稿还在（localStorage），但换浏览器就没了。
+- ~~编辑只在本机~~ **P003-T007 起保存到服务器**（PUT + `expected_revision`）；刷新后看到的是服务器上的那一版。
+- 没有「提交审核」入口：`POST /api/wiki/sessions` 要管理员令牌，控制台只有 Basic（§14.6）。
 - 目录不分页：`GET /api/wiki/pages` 一次回全部（本仓 189 条），表格整段渲染；要分页得后端加参数。
 - 服务端的 `q` 参数没接：本地过滤零延迟且不被 50 条截断（`server.js:238-239`）。
 - 401 只提示不自动登出：登出逻辑在 `app.js`（禁改），本页不重复实现。

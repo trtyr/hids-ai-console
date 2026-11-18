@@ -10,7 +10,9 @@
 //   3) 概况条「证据缺口 validation.gaps」→ 没有 gaps 字段，用 missing_evidence.length。
 //   4) 依据条目的「已证实 / 存疑」徽标 → claims[] 只有 text + citations[]，不编状态；改画引用的 evidence_id。
 //   5) 步骤的工具名与耗时 → steps[] 元素只有 { stage, detail, at }。
-//   6) 证据来源的分类分组与事实文本 → 接口只有数量 + evidence[]（evidence_id / tool / fetched_at）。
+//   6) 证据来源的分类分组与事实文本 → 接口给的是 evidence[] 条目（evidence_id / tool / fetched_at / sha256），
+//      分组以 tool 为组名（不编稿上的「进程树/命令行」分类）；条目没有事实文本，第三列显示 sha256 前 12 位。
+//      P003-T007 起按 evidence[] 逐条渲染，并把 claims[].citations[].evidence_id 与条目对账。
 //   7) 核验的「证据覆盖 / 核验时间」、复核的「复核人 / 时间 / 结论 / 备注」→ review 是模型独立复核，
 //      没有人工复核字段；只画 assessment / concerns / missing_evidence。
 //   8) 稿的「ID 不存在」页 → 接口没有 404：未知事件 ID 走 502；只有 400（ID/类型无效）按「没有这条告警」处理。
@@ -245,6 +247,34 @@ export function claimsOf(investigation) {
       return { text: claim.text, refs };
     });
 }
+
+/**
+ * 证据条目（P003-T007）。来源优先级：研判记录 `triage.evidence[]`（server.js:220-231 的 TriageCase，恒为数组）
+ * → 研判结果 `investigation.evidence[]`（老记录）。两个都没有就是空数组。
+ * 条目只留实现真给的四个键（triage-monitor.js:8-9），不补分类与事实文本。
+ */
+export function evidenceOf(triage, investigation) {
+  const rows = Array.isArray(triage?.evidence) && triage.evidence.length
+    ? triage.evidence
+    : (Array.isArray(investigation?.evidence) ? investigation.evidence : []);
+  return rows.filter(item => item && typeof item === 'object');
+}
+
+/** 按工具分组：稿是「分组折叠 + 组名 + 条数」，接口只有 tool 可以当组名，不编分类 */
+export function groupEvidence(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const tool = typeof item.tool === 'string' && item.tool.trim() ? item.tool.trim() : '未标注工具';
+    if (!groups.has(tool)) groups.set(tool, []);
+    groups.get(tool).push(item);
+  }
+  return [...groups.entries()].map(([tool, rows]) => ({ tool, rows }));
+}
+
+/** 条目里出现过的 evidence_id（claim 的 citation 对账用） */
+export const evidenceIdsOf = items => new Set(items
+  .map(item => item.evidence_id)
+  .filter(id => typeof id === 'string' && id));
 
 /** 所需证据：五值 status 原样映射成中文 + 语气（ok / missing），reason 进 title */
 export function requiredEvidenceOf(investigation) {
@@ -484,20 +514,32 @@ export function mountAlertDetailPage(params = [], options = {}) {
     block.hidden = claims.length === 0;
     if (!claims.length) return;
 
+    const known = evidenceIdsOf(evidenceOf(state.triage, state.investigation));
     const failed = state.investigation?.validation?.ok === false;
     $('claims-meta').textContent = `${claims.length} 条${failed ? ' · 校验未通过' : ''}`;
-    $('claims').replaceChildren(...claims.map((claim, index) => el(document, 'li', { class: 'claim' }, [
-      el(document, 'span', { class: 'claim-idx mono', text: pad2(index + 1) }),
-      el(document, 'span', {}, [
-        el(document, 'span', { class: 'claim-text', text: claim.text }),
-        el(document, 'span', { class: 'claim-meta' }, [
-          el(document, 'span', { class: `claim-state ${claim.refs.length ? 'is-confirmed' : 'is-plain'}`, text: claim.refs.length ? `引用 ${claim.refs.length} 处证据` : '未引用证据' }),
-          claim.refs.length
-            ? el(document, 'span', { class: 'claim-ref mono', text: claim.refs.slice(0, 4).join(' · ') + (claim.refs.length > 4 ? ' …' : '') })
-            : null,
+    $('claims').replaceChildren(...claims.map((claim, index) => {
+      const missing = claim.refs.filter(id => !known.has(id));
+      return el(document, 'li', { class: 'claim' }, [
+        el(document, 'span', { class: 'claim-idx mono', text: pad2(index + 1) }),
+        el(document, 'span', {}, [
+          el(document, 'span', { class: 'claim-text', text: claim.text }),
+          el(document, 'span', { class: 'claim-meta' }, [
+            el(document, 'span', { class: `claim-state ${claim.refs.length ? 'is-confirmed' : 'is-plain'}`, text: claim.refs.length ? `引用 ${claim.refs.length} 处证据` : '未引用证据' }),
+            claim.refs.length
+              ? el(document, 'span', { class: 'claim-ref mono' }, claim.refs.slice(0, 4).map(id => el(document, 'span', {
+                // 与证据条目对不上的引用要看得见：不沉默也不冒充对得上
+                class: known.has(id) ? '' : 'is-missing',
+                title: known.has(id) ? '' : '证据条目里没有这条 evidence_id',
+                text: id,
+              })))
+              : null,
+            missing.length
+              ? el(document, 'span', { class: 'claim-missing', text: `${missing.length} 处引用在证据条目中找不到` })
+              : null,
+          ]),
         ]),
-      ]),
-    ])));
+      ]);
+    }));
   }
 
   function paintGaps() {
@@ -551,26 +593,50 @@ export function mountAlertDetailPage(params = [], options = {}) {
   }
 
   function paintEvidence() {
-    const evidence = Array.isArray(state.investigation?.evidence) ? state.investigation.evidence : [];
+    const evidence = evidenceOf(state.triage, state.investigation);
+    const groups = groupEvidence(evidence);
     const count = state.triage?.evidence_sources;
     const block = $('evidence-block');
     block.hidden = evidence.length === 0 && !Number.isSafeInteger(count);
     if (block.hidden) return;
 
-    // 计数用研判记录里的 evidence_sources；读不到时退回「列出来的条目数」，不写「暂无」又不给列表
-    const shownCount = Number.isSafeInteger(count) ? count : evidence.length;
-    $('evidence-meta').textContent = `${shownCount} 个来源`;
-    $('evidence').replaceChildren(...evidence
-      .filter(item => item && typeof item === 'object')
-      .map(item => el(document, 'li', { class: 'ev-item' }, [
+    // 计数以实际列出的条目为准（接口早先只有 number 时退回 evidence_sources）
+    $('evidence-meta').textContent = evidence.length ? `共 ${evidence.length} 条` : `${count} 个来源`;
+    $('evidence').replaceChildren(...groups.map((group, index) => {
+      const rows = group.rows.map(item => el(document, 'li', { class: 'ev-item' }, [
         el(document, 'span', { class: 'ev-id mono', text: item.evidence_id ?? '—' }),
-        el(document, 'span', { class: 'ev-fact', text: typeof item.tool === 'string' ? item.tool : '—' }),
-        el(document, 'span', { class: 'ev-time mono', text: formatClock(item.fetched_at) }),
-      ])));
+        el(document, 'span', {
+          class: 'ev-fact mono',
+          text: typeof item.sha256 === 'string' && item.sha256 ? `sha256 ${item.sha256.slice(0, 12)}` : '—',
+          title: typeof item.sha256 === 'string' ? item.sha256 : '',
+        }),
+        el(document, 'span', { class: 'ev-time mono', text: item.fetched_at ? formatClock(item.fetched_at) : '—' }),
+      ]));
+      const details = el(document, 'details', { class: 'ev-group' }, [
+        el(document, 'summary', {}, [
+          el(document, 'span', { text: group.tool }),
+          el(document, 'span', { class: 'ev-count mono', text: `${group.rows.length} 条` }),
+        ]),
+        el(document, 'ul', { class: 'ev-list' }, rows),
+      ]);
+      // 稿：前两组默认展开，其余收起（alert-detail.html:1209）
+      if (index < 2) details.setAttribute('open', '');
+      return details;
+    }));
 
+    // 证据链完整性：claim 里引用、但条目里找不到的 evidence_id 数
+    const known = evidenceIdsOf(evidence);
+    const dangling = new Set();
+    for (const claim of claimsOf(state.investigation)) for (const id of claim.refs) if (!known.has(id)) dangling.add(id);
     const noteEl = $('evidence-note');
-    noteEl.hidden = evidence.length > 0;
-    noteEl.textContent = noteEl.hidden ? '' : '接口只返回来源数量，没有条目明细。';
+    noteEl.hidden = evidence.length > 0 && dangling.size === 0;
+    if (noteEl.hidden) {
+      noteEl.textContent = '';
+    } else if (!evidence.length) {
+      noteEl.textContent = '接口只返回了证据来源数量，没有条目明细。';
+    } else {
+      noteEl.textContent = `${dangling.size} 处引用在证据条目中找不到（证据链不完整）。`;
+    }
   }
 
   function paintReview() {

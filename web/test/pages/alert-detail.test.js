@@ -444,18 +444,60 @@ test('研判步骤：只有 stage / detail / at（真键），没有工具名与
   assert.doesNotMatch(visibleText(host), /0\.4s|6\.8s/);
 });
 
-test('证据来源：条目来自 evidence[]（evidence_id / tool / fetched_at），不按分类分组', async () => {
+test('证据来源：按 evidence[] 逐条渲染，按 tool 分组折叠（组名 + 条数），不编稿上的分类', async () => {
   const { host } = mount();
   await flush();
 
+  const groups = [...host.querySelectorAll('details.ev-group')];
+  assert.equal(groups.length, 2, '每个 tool 一组');
+  assert.match(text(groups[0].querySelector('summary')), /list_host_events/);
+  assert.match(text(groups[0].querySelector('summary')), /1 条/);
   const rows = [...host.querySelectorAll('.ev-item')];
   assert.equal(rows.length, 2);
   assert.match(text(rows[0]), /cw:2/);
-  assert.match(text(rows[0]), /list_host_events/);
-  assert.match(text(rows[1]), /list_firewall_connection_records/);
-  assert.equal(text(region(host, 'evidence-meta')), '6 个来源');
-  assert.equal(host.querySelectorAll('.ev-group, details.ev-group').length, 0);
-  assert.doesNotMatch(visibleText(host), /进程类|网络类/);
+  assert.match(text(rows[0]), /sha256 abc/, '条目没有事实文本，第三列给 sha256');
+  assert.match(text(rows[1]), /cw:4/);
+  assert.equal(text(region(host, 'evidence-meta')), '共 2 条');
+  assert.doesNotMatch(visibleText(host), /进程类|网络类/, '不编设计稿上的证据分类');
+});
+
+test('证据来源：优先用研判记录里的 evidence[]（TriageCase），其次才是研判结果', async () => {
+  const { host } = mount({
+    triageRecord: triage({
+      evidence: [{ evidence_id: 'cw:9', tool: 'read_file', fetched_at: iso(2026, 10, 13, 9, 45, 0), sha256: 'ffff' }],
+    }),
+  });
+  await flush();
+  const rows = [...host.querySelectorAll('.ev-item')];
+  assert.equal(rows.length, 1, '有 triage.evidence 时不再回落到 investigation.evidence');
+  assert.match(text(rows[0]), /cw:9/);
+  assert.match(text(host.querySelector('details.ev-group summary')), /read_file/);
+});
+
+test('证据链对账：claim 的 citation 与条目对得上时不出告警文案', async () => {
+  const { host } = mount();
+  await flush();
+  assert.equal(host.querySelectorAll('.claim-ref .is-missing').length, 0);
+  assert.equal(region(host, 'evidence-note').hidden, true);
+});
+
+test('证据链对账：citation 引用的 evidence_id 不在条目里时，标红并给出缺失条数', async () => {
+  const { host } = mount({
+    investigationBody: investigation({
+      verdict: {
+        verdict: 'threat', verdict_label: '真实威胁', summary: 's', report: 'r',
+        claims: [{ text: '引用了不存在的证据', citations: [{ evidence_id: 'cw:99', pointer: '/x', value: 1 }] }],
+        missing_evidence: [],
+      },
+    }),
+  });
+  await flush();
+  const missing = [...host.querySelectorAll('.claim-ref .is-missing')];
+  assert.equal(missing.length, 1, '对不上的引用要看得见');
+  assert.equal(text(missing[0]), 'cw:99');
+  assert.match(text(region(host, 'claims')), /1 处引用在证据条目中找不到/);
+  assert.equal(region(host, 'evidence-note').hidden, false);
+  assert.match(text(region(host, 'evidence-note')), /证据链不完整/);
 });
 
 test('核验与复核：只画 validation / review 的真键，没有复核人/复核时间', async () => {

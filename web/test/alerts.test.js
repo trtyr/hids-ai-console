@@ -38,9 +38,42 @@ test('listAlerts：请求 GET /api/alerts?count&offset，带 Basic 头，回包�
   assert.equal(fetchImpl.calls[0].url, 'http://h/api/alerts?count=50&offset=100');
   assert.equal(fetchImpl.calls[0].init.method, 'GET');
   assert.match(fetchImpl.calls[0].init.headers.Authorization, /^Basic /);
-  assert.deepEqual(Object.keys(result).sort(), ['alerts', 'errors', 'partial', 'total', 'totals']);
+  assert.deepEqual(Object.keys(result).sort(), ['alerts', 'errors', 'partial', 'total', 'totals', 'truncated']);
   assert.equal(result.total, 347);
   assert.equal(result.partial, false);
+  assert.equal(result.truncated, false, '回包没有 truncated 时当 false，不能当 true 吓人');
+});
+
+test('listAlerts：筛选与排序参数逐字进查询串（server.js:129-152 的名字）', async () => {
+  const fetchImpl = fakeFetch(respond({ alerts: [], total: 0 }));
+  await listAlerts({
+    count: 20, offset: 40, type: 'webshell', level: 'critical', verdict: 'threat',
+    triageStatus: 'done', q: 'deploy', from: '2026-11-16T00:00:00.000Z', to: '2026-11-17T00:00:00.000Z', sort: 'level',
+  }, { fetchImpl });
+  const url = fetchImpl.calls[0].url;
+  assert.match(url, /count=20/);
+  assert.match(url, /offset=40/);
+  assert.match(url, /type=webshell/);
+  assert.match(url, /level=critical/);
+  assert.match(url, /verdict=threat/);
+  assert.match(url, /triage_status=done/);
+  assert.match(url, /q=deploy/);
+  assert.match(url, /from=2026-11-16T00%3A00%3A00.000Z/);
+  assert.match(url, /to=2026-11-17T00%3A00%3A00.000Z/);
+  assert.match(url, /sort=level/);
+});
+
+test('listAlerts：空串 / 未传的筛选不发（不把 type= 当滤条件发给服务端）', async () => {
+  const fetchImpl = fakeFetch(respond({ alerts: [], total: 0 }));
+  await listAlerts({ type: '', q: '  ', sort: 'time' }, { fetchImpl });
+  const url = fetchImpl.calls[0].url;
+  assert.equal(url, '/api/alerts?count=20&offset=0&sort=time');
+});
+
+test('listAlerts：truncated 透传（扫描窗口 500 条上限，页面靠它提示总数只含窗口）', async () => {
+  const fetchImpl = fakeFetch(respond({ alerts: [], total: 500, truncated: true }));
+  const result = await listAlerts({}, { fetchImpl });
+  assert.equal(result.truncated, true);
 });
 
 test('listAlerts：不给分页参数时用接口默认 count=20 offset=0', async () => {

@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 
 import { page } from '../../pages/knowledge.js';
 import { clearCredentials, setCredentials } from '../../src/credentials.js';
-import { DRAFTS_KEY } from '../../src/knowledge.js';
 import { allByRole, byRole, setupDom, text } from '../dom.js';
 
 const DIRECTORY = {
@@ -42,10 +41,22 @@ const PAGE_GEN07 = {
   content: '---\nid: GEN-07\n---\n\n核验步骤。\n\n## 步骤\n\n按序核对。\n',
 };
 
+/** 保存成功的回包：服务端把整篇正文连同新 revision 回给我们（server.js:346-352 → wiki-store.js 的 get） */
+function savedPage(init) {
+  const body = JSON.parse(init.body);
+  return {
+    body: {
+      ...PAGE_GEN12, title: /^title:\s*(.+)$/m.test(body.content) ? /^title:\s*(.+)$/m.exec(body.content)[1] : PAGE_GEN12.title,
+      revision: 'ffffffffffffffff', characters: body.content.length, content: body.content,
+    },
+  };
+}
+
 function routesFor(overrides = {}) {
   return {
     '/api/wiki/pages': { body: DIRECTORY },
     '/api/wiki/pages/common%2FGEN-12.md': { body: PAGE_GEN12 },
+    'PUT /api/wiki/pages/common%2FGEN-12.md': (init) => savedPage(init),
     '/api/wiki/pages/common%2FGEN-07.md': { body: PAGE_GEN07 },
     '/api/wiki/pages/webshell%2FWS-01.md': { body: PAGE_WS01 },
     ...overrides,
@@ -59,8 +70,9 @@ function stubFetch() {
   calls = [];
   globalThis.fetch = async (url, init = {}) => {
     calls.push({ url: String(url), init });
+    const target = `${init?.method === 'PUT' ? 'PUT ' : ''}${String(url)}`;
     const hit = Object.keys(table)
-      .filter(key => String(url).endsWith(key))
+      .filter(key => target.endsWith(key))
       .sort((a, b) => b.length - a.length)[0];
     if (hit === undefined) throw new Error(`未桩的请求：${url}`);
     const route = typeof table[hit] === 'function' ? table[hit](init, calls) : table[hit];
@@ -97,7 +109,7 @@ const entryView = () => host.querySelector('[data-role="view-entry"]');
 const editor = () => host.querySelector('[data-role="editor"]');
 const search = () => host.querySelector('#knowledge-q');
 const categorySelect = () => host.querySelector('#knowledge-cat');
-const saveButton = () => byRole(host, 'button', '保存草稿');
+const saveButton = () => byRole(host, 'button', '保存到服务器');
 const revertButton = () => byRole(host, 'button', '撤销修改');
 const bodyTextarea = () => host.querySelector('#knowledge-edit-body');
 const titleInput = () => host.querySelector('#knowledge-edit-title');
@@ -113,11 +125,13 @@ function typeIn(node, value) {
 
 beforeEach(() => {
   setupDom();
-  globalThis.localStorage = window.localStorage;
   setCredentials({ user: 'hids', password: 'hids-2026' });
   table = routesFor();
   stubFetch();
 });
+
+/** 发过的 PUT（保存到服务器） */
+const puts = () => calls.filter(call => call.init?.method === 'PUT');
 
 /* ---------------- loading ---------------- */
 
@@ -308,7 +322,7 @@ test('条目：标题/面包屑/头信息/条目信息/相关条目/接口字段
   assert.equal(text(host.querySelector('[data-role="head-id"]')), 'GEN-12');
   assert.equal(text(host.querySelector('[data-role="head-path"]')), 'common/GEN-12.md');
   assert.equal(text(host.querySelector('[data-role="head-sections"]')), '2 节');
-  assert.equal(text(host.querySelector('[data-role="head-source"]')), '正文来源：接口正文');
+  assert.equal(text(host.querySelector('[data-role="head-source"]')), '正文来源：服务器正文');
   assert.match(text(host.querySelector('[data-role="head-updated"]')), /最后修改 2026-11-09/);
 
   const info = text(host.querySelector('[data-role="info"]'));
@@ -368,27 +382,60 @@ test('disabled：刚进编辑页签时保存/撤销禁用，改一个字后启�
   typeIn(titleInput(), '研判通则（改）');
   assert.equal(saveButton().disabled, false);
   assert.equal(revertButton().disabled, false);
-  assert.equal(text(host.querySelector('[data-role="draft-state"]')), '未保存');
+  assert.equal(text(host.querySelector('[data-role="draft-state"]')), '未保存的修改');
 });
 
-test('保存草稿：写进本机存储，来源标注变「本地草稿」，草稿计数 +1，保存按钮回到禁用', async () => {
+test('保存到服务器：PUT 带整篇正文 + expected_revision，成功后按钮禁用、状态回「已保存到服务器」', async () => {
   await mount();
   click(byRole(host, 'button', '研判通则'));
   await settle();
   click(byRole(host, 'button', '编辑'));
   typeIn(titleInput(), '研判通则（改）');
   click(saveButton());
+  await settle();
 
-  const stored = JSON.parse(window.localStorage.getItem(DRAFTS_KEY));
-  assert.equal(stored['common/GEN-12.md'].title, '研判通则（改）');
-  assert.equal(typeof stored['common/GEN-12.md'].savedAt, 'number');
-  assert.equal(saveButton().disabled, true);
-  assert.equal(text(host.querySelector('[data-role="drafts"]')), '1');
+  const put = puts()[0];
+  assert.ok(put, '保存必须真的发 PUT');
+  assert.match(put.url, /\/api\/wiki\/pages\/common%2FGEN-12\.md$/);
+  const body = JSON.parse(put.init.body);
+  assert.equal(body.expected_revision, 'c9dacfa538de0828', '用页面当前 revision 防覆盖');
+  assert.match(body.content, /^---\n/, '正文要带 front matter 回去（id/status/evidence 都在里面）');
+  assert.match(body.content, /^title: 研判通则（改）$/m, '改过的标题写回头部 title 行');
+  assert.match(body.content, /## 判断顺序/, '编辑区正文整篇发出去');
 
-  click(byRole(host, 'button', '条目'));
-  assert.equal(text(host.querySelector('[data-role="head-source"]')), '正文来源：本地草稿');
-  assert.equal(text(byRole(host, 'heading', '研判通则（改）')), '研判通则（改）');
-  assert.match(text(host.querySelector('[data-role="toast"]')), /草稿已保存到本机/);
+  assert.equal(saveButton().disabled, true, '保存成功后没有未保存改动');
+  assert.equal(text(host.querySelector('[data-role="draft-state"]')), '已保存到服务器');
+  assert.match(text(host.querySelector('[data-role="toast"]')), /已保存到服务器/);
+  assert.equal(text(host.querySelector('[data-role="head-source"]')), '正文来源：服务器正文');
+});
+
+test('保存到服务器：409 版本过期 → 正文留着、给「刷新正文」入口，不假装保存成功', async () => {
+  table['PUT /api/wiki/pages/common%2FGEN-12.md'] = { status: 409, body: { error: '知识库页面已更新，请刷新后再提交' } };
+  await mount();
+  click(byRole(host, 'button', '研判通则'));
+  await settle();
+  click(byRole(host, 'button', '编辑'));
+  typeIn(bodyTextarea(), '别人也在改');
+  click(saveButton());
+  await settle();
+
+  assert.equal(bodyTextarea().value, '别人也在改', '失败不丢编辑内容');
+  assert.equal(saveButton().disabled, false, '仍是未保存状态');
+  assert.equal(entryNotice().hidden, false);
+  assert.match(text(entryNotice()), /已被别人更新/);
+  assert.ok(byRole(host, 'button', '刷新正文'), '409 要给刷新入口');
+});
+
+test('保存到服务器：400 服务端原话要显示出来（正文不合规时不是「服务返回 400」）', async () => {
+  table['PUT /api/wiki/pages/common%2FGEN-12.md'] = { status: 400, body: { error: '判据需要 evidence 或 source 出处' } };
+  await mount();
+  click(byRole(host, 'button', '研判通则'));
+  await settle();
+  click(byRole(host, 'button', '编辑'));
+  typeIn(bodyTextarea(), '删掉出处的正文');
+  click(saveButton());
+  await settle();
+  assert.match(text(entryNotice()), /判据需要 evidence 或 source 出处/);
 });
 
 test('撤销修改：退回上次保存的基线，保存按钮重新禁用', async () => {
@@ -402,6 +449,7 @@ test('撤销修改：退回上次保存的基线，保存按钮重新禁用', as
   click(revertButton());
   assert.equal(bodyTextarea().value, PAGE_GEN12.content.replace(/^---\n[\s\S]*?\n---\n\n/, ''));
   assert.equal(saveButton().disabled, true);
+  assert.equal(text(host.querySelector('[data-role="draft-state"]')), '已保存到服务器');
 });
 
 test('离开未保存：点面包屑先确认；放弃修改回列表，保存并离开落草稿再回列表', async () => {
@@ -423,10 +471,10 @@ test('离开未保存：点面包屑先确认；放弃修改回列表，保存�
   click(byRole(host, 'button', '知识库'));
   click(byRole(host, 'button', '放弃修改'));
   assert.equal(indexView().hidden, false);
-  assert.equal(JSON.parse(window.localStorage.getItem(DRAFTS_KEY) ?? '{}')['common/GEN-12.md'], undefined);
+  assert.equal(puts().length, 0, '放弃修改不许偷偷写服务器');
 });
 
-test('保存并离开：草稿落盘后回列表', async () => {
+test('保存并离开：PUT 成功后才回列表；保存失败就留在页面上', async () => {
   await mount();
   click(byRole(host, 'button', '研判通则'));
   await settle();
@@ -435,8 +483,26 @@ test('保存并离开：草稿落盘后回列表', async () => {
 
   click(byRole(host, 'button', '知识库'));
   click(byRole(host, 'button', '保存并离开'));
+  await settle();
   assert.equal(indexView().hidden, false);
-  assert.equal(JSON.parse(window.localStorage.getItem(DRAFTS_KEY))['common/GEN-12.md'].title, '保存再走');
+  assert.equal(puts().length, 1);
+  assert.match(JSON.parse(puts()[0].init.body).content, /^title: 保存再走$/m);
+});
+
+test('保存并离开：PUT 失败（409）时不离开，正文留在页面上', async () => {
+  table['PUT /api/wiki/pages/common%2FGEN-12.md'] = { status: 409, body: { error: '知识库页面已更新，请刷新后再提交' } };
+  await mount();
+  click(byRole(host, 'button', '研判通则'));
+  await settle();
+  click(byRole(host, 'button', '编辑'));
+  typeIn(titleInput(), '保存再走');
+
+  click(byRole(host, 'button', '知识库'));
+  click(byRole(host, 'button', '保存并离开'));
+  await settle();
+  assert.equal(indexView().hidden, true, '没保存成功就不许走');
+  assert.equal(editor().hidden, false);
+  assert.match(text(entryNotice()), /已被别人更新/);
 });
 
 /* ---------------- 其它交互 ---------------- */
@@ -619,8 +685,9 @@ test('脏态点侧栏导航选「保存并离开」：草稿先落盘再跳', as
   pressClick(sidebarLink('#/alerts'));
   click(byRole(host, 'button', '保存并离开'));
 
-  const stored = JSON.parse(window.localStorage.getItem(DRAFTS_KEY));
-  assert.equal(stored['common/GEN-12.md'].title, '未保存的改法');
+  await settle();
+  assert.equal(puts().length, 1, '保存并离开要先 PUT');
+  assert.match(JSON.parse(puts()[0].init.body).content, /^title: 未保存的改法$/m);
   assert.equal(window.location.hash, '#/alerts');
 });
 
@@ -677,9 +744,10 @@ test('脏态关页面/刷新会被 beforeunload 拦一次，保存草稿后不�
   assert.equal(blocked.defaultPrevented, true);
 
   click(saveButton());
+  await settle();
   const afterSave = new window.Event('beforeunload', { cancelable: true });
   window.dispatchEvent(afterSave);
-  assert.equal(afterSave.defaultPrevented, false, '草稿已存本机，不再拦');
+  assert.equal(afterSave.defaultPrevented, false, '已保存到服务器，不再拦');
 
   // 保存后守卫条目也退掉了（jsdom 的 history.back() 是排队执行的）：history 里不再带守卫标记
   await settle();
