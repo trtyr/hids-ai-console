@@ -135,13 +135,31 @@ paths:
     get:
       tags: [告警]
       summary: 分页获取牧云告警
+      description: |
+        11 类牧云事件按事件时间倒序合并后分页。筛选项全部可选：一个都不带时行为与只有 count/offset 的请求一致，
+        total 为各类事件总数之和。
+
+        过滤顺序固定为：type 下推（只查该类）→ 合并 → level / q / from / to 过滤 → offset/count 切页；
+        此时 total 是过滤后条数。triage_status / verdict 要等研判记录挂上之后才能判，所以服务端逐页扫描后再过滤、再切页，
+        total 是匹配条数。
+
+        带 level / q / from / to 或 sort=level 时单次请求最多扫描 500 条原始事件（研判侧筛选同样最多扫 500 条）；
+        扫到上限仍未到流末时返回 truncated=true，此时 total 只统计扫描窗口内的匹配。
       operationId: listAlerts
       parameters:
         - $ref: '#/components/parameters/Count'
         - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/AlertType'
+        - $ref: '#/components/parameters/AlertLevel'
+        - $ref: '#/components/parameters/AlertQuery'
+        - $ref: '#/components/parameters/AlertFrom'
+        - $ref: '#/components/parameters/AlertTo'
+        - $ref: '#/components/parameters/AlertSort'
+        - $ref: '#/components/parameters/TriageStatus'
+        - $ref: '#/components/parameters/Verdict'
       responses:
         '200':
-          description: 按时间合并各类事件；partial 为 true 时 errors 包含部分类型失败原因
+          description: 合并后的告警页；partial 为 true 时 errors 包含部分类型失败原因，truncated 为 true 时 total 只覆盖扫描窗口
           content:
             application/json:
               schema:
@@ -149,10 +167,25 @@ paths:
                 required: [alerts, total, totals, errors, partial]
                 properties:
                   alerts: { type: array, items: { $ref: '#/components/schemas/Alert' } }
-                  total: { type: integer }
+                  total:
+                    type: integer
+                    description: 不带 level/q/from/to/triage_status/verdict 时为各类事件 total 之和；带筛选时为过滤后的条数
                   totals: { type: object, additionalProperties: { type: integer } }
                   errors: { type: object, additionalProperties: { type: string } }
                   partial: { type: boolean }
+                  truncated:
+                    type: boolean
+                    description: 扫描窗口被截断（仅带筛选或 sort=level 时可能为 true）；为 true 时 total 不是全量精确值
+              examples:
+                filtered:
+                  value:
+                    alerts: [{ id: 'webshell:1', title: WebShell, createdAt: '2026-11-01T08:00:00Z', asset: db-1,
+                      level: 严重, levelKey: critical, verdict: 待研判, verdictKey: review, triage: null }]
+                    total: 1
+                    totals: { webshell: 1 }
+                    errors: {}
+                    partial: false
+                    truncated: false
         '400': { $ref: '#/components/responses/BadRequest' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/alerts/{alertId}:
@@ -739,6 +772,65 @@ components:
       name: offset
       in: query
       schema: { type: integer, minimum: 0, default: 0 }
+    AlertType:
+      name: type
+      in: query
+      required: false
+      description: 事件类型；只查询该类事件，totals 与 total 只含该类。不在枚举内回 400
+      schema:
+        type: string
+        enum: [webshell, malware, revshell, memory_webshell, brute_force, abnormal_login, elevation_process,
+          network_audit, suspicious_operation, honeypot, memory_security]
+      example: webshell
+    AlertLevel:
+      name: level
+      in: query
+      required: false
+      description: 风险等级，逗号分隔可多选；既收 levelKey（low/medium/high/critical）也收 1–4 序号。其他值回 400
+      schema: { type: string }
+      example: 'high,critical'
+    AlertQuery:
+      name: q
+      in: query
+      required: false
+      description: 关键字，大小写不敏感；对 id / title / asset / source / target / account / command 做包含匹配
+      schema: { type: string }
+      example: shell
+    AlertFrom:
+      name: from
+      in: query
+      required: false
+      description: 起始时间（含）。RFC3339 或秒/毫秒时间戳；解析不了回 400。没有事件时间的告警在带时间筛选时被排除
+      schema: { type: string }
+      example: '2026-11-01T00:00:00Z'
+    AlertTo:
+      name: to
+      in: query
+      required: false
+      description: 结束时间（含），格式同 from；晚于 from 之外的情况（to 早于 from）回 400
+      schema: { type: string }
+      example: '2026-11-02T00:00:00Z'
+    AlertSort:
+      name: sort
+      in: query
+      required: false
+      description: time=事件时间倒序（默认，同老行为）；level=等级降序，同级按事件时间倒序。其他值回 400
+      schema: { type: string, enum: [time, level], default: time }
+      example: level
+    TriageStatus:
+      name: triage_status
+      in: query
+      required: false
+      description: 研判状态，逗号分隔可多选；没有研判记录的告警算 not_queued。其他值回 400
+      schema: { type: string }
+      example: 'queued,running'
+    Verdict:
+      name: verdict
+      in: query
+      required: false
+      description: 研判结论，逗号分隔可多选；研判记录没有结论（或根本没有记录）的告警算 review。其他值回 400
+      schema: { type: string }
+      example: threat
     AlertId:
       name: alertId
       in: path
@@ -782,6 +874,14 @@ components:
         asset: { type: string }
         assetIp: { type: string }
         level: { type: string }
+        levelKey:
+          type: string
+          enum: [low, medium, high, critical, unknown]
+          description: 机器可读等级；level 下的 1–4 分别对应 low/medium/high/critical，其他值为 unknown
+        verdict: { type: string, description: 中文结论展示值；未研判为「待研判」 }
+        verdictKey:
+          type: string
+          description: 机器可读结论；未研判为 review，研判记录有结论时为 threat / uncertain / false_positive
         triage: { oneOf: [{ $ref: '#/components/schemas/TriageCase' }, { type: 'null' }] }
       additionalProperties: true
     TriageSummary:

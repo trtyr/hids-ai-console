@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { RpcClient } from './rpc-client.js';
-import { CloudwalkerGateway, eventTypes } from './cloudwalker.js';
+import { CloudwalkerGateway, eventTypes, parseInstant } from './cloudwalker.js';
 import { createAgentToolboxFromEnv, TriageEvidenceToolbox } from './agent-tools.js';
 import { ApiEvidenceToolbox } from './api-tools.js';
 import { createModelFromEnv } from './model-client.js';
@@ -108,6 +108,71 @@ function validTraceTarget(value) {
   if (validAlertId(value)) return true;
   const address = String(value || '').replace(/^ip:/, '');
   return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(address) && address.split('.').every(part => Number(part) <= 255);
+}
+// /api/alerts 的筛选词表：等级既收 levelKey 也收 1-4 序号，统一落成秩再下推。
+const levelFilters = Object.freeze({ '1': 1, low: 1, '2': 2, medium: 2, '3': 3, high: 3, '4': 4, critical: 4 });
+const triageStatusFilters = new Set(['not_queued', 'queued', 'running', 'done', 'failed']);
+const verdictFilters = new Set(['review', 'threat', 'uncertain', 'false_positive']);
+// 研判状态 / 结论要挂完 triage 才能判，只能翻页扫；单次请求最多扫这么多条。
+const TRIAGE_SCAN_LIMIT = 500;
+const paramList = (params, name) => params.getAll(name).flatMap(value => value.split(',')).map(value => value.trim()).filter(Boolean);
+
+// 解析 /api/alerts 的查询参数：非法值给 400 文案，合法值落成下推给网关的形态。
+function alertQuery(params) {
+  const type = params.get('type')?.trim() || undefined;
+  if (type && !Object.hasOwn(eventTypes, type)) return { error: `筛选事件类型无效：${type}` };
+  const level = [];
+  for (const value of paramList(params, 'level')) {
+    const rank = levelFilters[value.toLowerCase()];
+    if (!rank) return { error: `筛选等级无效：${value}` };
+    if (!level.includes(rank)) level.push(rank);
+  }
+  const from = params.get('from')?.trim();
+  const to = params.get('to')?.trim();
+  const fromTime = from ? parseInstant(from) : null;
+  const toTime = to ? parseInstant(to) : null;
+  if (from && !fromTime) return { error: `筛选起始时间无效：${from}` };
+  if (to && !toTime) return { error: `筛选结束时间无效：${to}` };
+  if (fromTime && toTime && fromTime > toTime) return { error: '筛选起始时间晚于结束时间' };
+  const sort = params.get('sort')?.trim() || 'time';
+  if (sort !== 'time' && sort !== 'level') return { error: `排序方式无效：${sort}` };
+  const statuses = paramList(params, 'triage_status');
+  for (const value of statuses) if (!triageStatusFilters.has(value)) return { error: `筛选研判状态无效：${value}` };
+  const verdicts = paramList(params, 'verdict');
+  for (const value of verdicts) if (!verdictFilters.has(value)) return { error: `筛选结论无效：${value}` };
+  return { query: { type, level: level.length ? level : undefined, q: params.get('q')?.trim() || undefined,
+    from: fromTime || undefined, to: toTime || undefined, sort }, statuses, verdicts };
+}
+
+// 研判侧筛选：逐页拉取、挂 triage 后过滤，翻到流末或扫描上限后再切页。
+// 没有研判记录的告警按 not_queued / review 参与筛选（与 TriageCase.status 口径一致）。
+async function triageFilteredAlerts(service, monitor, query, { statuses, verdicts, count, offset }) {
+  const collected = [];
+  let envelope = null;
+  let pageOffset = 0;
+  let scanned = 0;
+  let truncated = false;
+  for (;;) {
+    const page = await service.alerts({ ...query, count: 50, offset: pageOffset });
+    envelope ??= page;
+    const rows = page.alerts || [];
+    if (!rows.length) break;
+    for (const alert of rows) {
+      scanned += 1;
+      const triage = monitor ? monitor.status(alert.id) : null;
+      const status = triage?.status || 'not_queued';
+      const verdict = triage?.verdict || alert.verdictKey || 'review';
+      if (statuses.length && !statuses.includes(status)) continue;
+      if (verdicts.length && !verdicts.includes(verdict)) continue;
+      collected.push({ ...alert, triage });
+    }
+    pageOffset += rows.length;
+    if (pageOffset >= Number(page.total) || scanned >= TRIAGE_SCAN_LIMIT) {
+      truncated = scanned >= TRIAGE_SCAN_LIMIT && pageOffset < Number(page.total);
+      break;
+    }
+  }
+  return { ...envelope, alerts: collected.slice(offset, offset + count), total: collected.length, truncated };
 }
 export function createServer(service = gateway, toolbox = apiToolbox, investigator = agent, history = investigationStore, prompts = promptStore, monitor = service === gateway ? triageMonitor : null, knowledge = null,
   access = { user: process.env.HIDS_BASIC_AUTH_USER, password: process.env.HIDS_BASIC_AUTH_PASSWORD }, boardService = service === gateway ? traceBoard : null,
@@ -337,8 +402,13 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const count = Number(url.searchParams.get('count') || 20);
         const offset = Number(url.searchParams.get('offset') || 0);
         if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0) return error(res, 400, '分页参数无效');
-        const result = await service.alerts({ count, offset });
-        if (monitor) result.alerts = result.alerts.map(alert => ({ ...alert, triage: monitor.status(alert.id) }));
+        const filters = alertQuery(url.searchParams);
+        if (filters.error) return error(res, 400, filters.error);
+        const triageFiltered = filters.statuses.length > 0 || filters.verdicts.length > 0;
+        const result = triageFiltered
+          ? await triageFilteredAlerts(service, monitor, filters.query, { statuses: filters.statuses, verdicts: filters.verdicts, count, offset })
+          : await service.alerts({ count, offset, ...filters.query });
+        if (monitor && !triageFiltered) result.alerts = result.alerts.map(alert => ({ ...alert, triage: monitor.status(alert.id) }));
         return json(res, 200, result);
       }
       let decodedPath;
