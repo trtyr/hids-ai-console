@@ -4,7 +4,7 @@
 
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
-- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。
+- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
 ## 1. 模块职责与边界
@@ -63,9 +63,10 @@
 
 ### 3.1 路由表
 
-31 条「路径 + 方法」组合。「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
+35 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
 
-> 源码里与路径有关的分支条件也是 31 行（`grep -c "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` → `31`），但两者不是同一个单位：`/api/agent/triage/{alertId}` 一行分支给出 GET 与 POST 两条组合（`server.js:307-314`），`server.js:321` 那行只是 `/api/wiki/` 的分组入口，不算一条组合。
+> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。
+> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 35 行），不是组合数：一行可以给出多条组合（`server.js:633` 的 `/api/agent/triage/{alertId}` 给 GET 与 POST 两条），也有行不算组合（`server.js:647` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
 
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
@@ -82,10 +83,14 @@
 | GET | `/api/triage/rules` | 200 | 读取失败回 502 | `server.js:265-269` |
 | POST | `/api/triage/rules/validate` | 200 `{valid:true,count}` | 正文不是对象 / 缺 `config` 键回 400「请求正文缺少 config」；`config` 不是合法规则集回 400「规则集格式无效」 | `server.js:270-279` |
 | PUT | `/api/triage/rules` | 200 | 需规则管理员令牌 | `server.js:280-291` |
+| GET | `/api/rules` | 200 `{count, rules}`（Rego 规则库） | 规则库读取失败回 502 | `server.js:559-562` |
+| POST | `/api/rules/evaluate` | 200 `{count, matched}` | 正文不是对象回 400；求值失败回 502 | `server.js:563-569` |
+| GET | `/api/rules/{id}` | 200 / 404 | id 不合格式回 400；规则库读取失败回 502 | `server.js:570-578` |
 | GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:292-299` |
 | PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503 | `server.js:300-306` |
 | GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:307-315` |
-| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503 | `server.js:307-315` |
+| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503 | `server.js:633-641` |
+| POST | `/api/agent/triage/{alertId}/false-positive` | 202（结论已落盘为误报，两个维护者开始） | 无研判队列回 503；理由不符格式回 400；无此案件回 404；研判未完成回 409 | `server.js:597-632` |
 | GET | `/api/agent/prompts` | 200 | — | `server.js:316-318` |
 | GET | `/api/wiki/pages` | 200 `{pages, total}`，接 `count`／`offset` | 分页参数不合法回 400 | `server.js:322-334` |
 | GET | `/api/wiki/pages/{path}` | 200 / 404 | — | `server.js:340-343` |
@@ -120,10 +125,58 @@
 | 校验函数 | 接受什么 | 用在哪 | 出处 |
 | --- | --- | --- | --- |
 | `validAlertId` | `<小写类型>:<正整数>`，类型须在事件类型表里，序号须是安全整数 | `GET /api/agent/investigations/{alertId}`（`mode=deep` 时）、单条告警路由的类型段 | `server.js:102-105` |
-| `validTriageId` | `validAlertId`，或 syslog 形态 `syslog:<类型>:<16 位十六进制>:<数字或 unknown>:<36 位 UUID>` | `GET/POST /api/agent/triage/{alertId}`、`GET /api/agent/investigations/{alertId}`（`mode=triage` 时） | `server.js:106-108` |
+| `validTriageId` | `validAlertId`，或 syslog 形态 `syslog:<类型>:<16 位十六进制>:<数字或 unknown>:<36 位 UUID>` | `GET/POST /api/agent/triage/{alertId}`、`POST /api/agent/triage/{alertId}/false-positive`、`GET /api/agent/investigations/{alertId}`（`mode=triage` 时） | `server.js:312` |
 | `validTraceTarget` | 告警 ID，或去掉 `ip:` 前缀后的 IPv4（每段 ≤ 255） | 溯源白板三条路由 | `server.js:116-185` |
 
 解码失败与校验失败给的是不同的文案：解码失败回「告警 ID 编码无效」，校验失败回「告警 ID 无效」或「告警 ID 或研判模式无效」。
+
+### 3.4 误报登记与两个维护者（P003-T013）
+
+**关键路径**：`server.js:597-632`（路由）、`:209-250`（两个维护者的编排）、`:145-177`（规则维护者）、`:193-205`（wiki 维护目标）。
+
+**入口**：`POST /api/agent/triage/{alertId}/false-positive`，正文 `{reason, who?}`。「分析员把这一条判成误报」只走这一个入口：
+理由必填（10 到 4000 字），登记人省略时取业务账号名，没配 Basic 认证时是 `operator`（登记人至少 2 字）。
+
+**先结论，后维护**（A1）：路由先改记录——`verdict=false_positive`、`verdict_label=误报`、`decision_source=human`、
+`feedback{reason,who,recorded_at}`，`await monitor.persist()` 落盘之后才回 202（写结论在 `server.js:618-624`，起维护在 `server.js:626`）。
+两个维护者这时才开始跑，响应不等它们；维护还没跑完时 `GET /api/agent/triage/{alertId}` 已经是误报。
+
+| 情况 | 状态 | 正文 |
+| --- | --- | --- |
+| 结论已落盘，维护开始 / 已在跑 | 202 | `{alert_id, verdict, feedback, maintenance}` |
+| 理由短于 10 字或长于 4000、登记人短于 2 字、正文不是对象、ID 编码或格式无效 | 400 | 对应文案 |
+| 没有这条研判记录 | 404 | 找不到这条研判案件 |
+| 记录 `status !== 'done'`（还在排队或跑着） | 409 | 研判还没结束，不能登记误报 |
+| 研判队列未配置 | 503 | 自动研判尚未配置 |
+
+`409` 的边界只在「已完成」上登记。**没做的是**「重跑不再覆盖人工结论」：`TriageMonitor.run()` 收尾无条件写
+`record.verdict`（`triage-monitor.js:446`），所以重跑一条已登记误报的告警会把结论改回 AI 那次的结论——这条不在本卡改（见本卡报告的「未决」）。
+
+**两个维护者都不是跑研判的那个 Agent**（A3）：
+
+| 维护者 | 用什么 | 改什么 | `updated` 的含义 |
+| --- | --- | --- | --- |
+| 规则维护者 | 模型 + `prompts/rule-maintenance.md`（`prompt-store.js:18` 的 `coreFiles.rule`） | `rules/` 下**一份** `.rego`：改已有的那条，或新增一条 | 那一份文件已写入，并通过 `RuleStore` 解析与整库装载 |
+| wiki 维护者 | `WikiWorkbench` + `prompts/knowledge-maintenance.md` | 一页方法论（判据页） | 页面已通过 `publishBundle` 的发布前检查写进去（响应给 `page` / `revision`） |
+
+规则维护者两道校验：临时目录里 `new RuleStore(目录).read(id)`（`server.js:120-128`）拦子集外语法与 id/package 不一致；
+写盘后（临时文件 + `rename`）再 `new RuleStore(目录).list()`（`server.js:131-138`）拦重复 id。过不了就不写，目录里不留临时文件，
+已有规则一字不动。它一次只碰一个文件：已有规则的 id 住在别的文件名里时，改的就是那份文件（`server.js:169-172`）。
+
+wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.create` + 一轮 `reply`），再把草案用 `publishBundle` 写进判据页；
+只出草案、页没写上就算 `failed`。选页口径与 `POST /api/wiki/sessions` 共用 `wikiFeedbackTarget`（`server.js:193-205`）：
+优先分析时引用过的判据页，其次本场景第一页。审计字段里 `reviewer` 记登记人、`note` 记他给的理由。
+
+**状态词表只有三个**（A4）：`updating` / `updated` / `failed`，总态与单边态同一套（`server.js:106-109`）：
+
+- 还有一边在跑 → 总态 `updating`；
+- 都收尾后，任一边 `failed` → 总态 `failed`；
+- 否则 `updated`。
+
+失败只写 `maintenance.rule.error` / `maintenance.wiki.error`（各截 300 字），**`verdict` 与 `feedback` 一个字节都不动**。
+维护状态随记录一起 `persist()`，所以 `GET /api/agent/triage/{alertId}` 能读到同一组字段。同一轮维护还在本进程里跑时再次登记只回当前进度，
+不重起一轮（`server.js:615`）；挡它的是 `runningMaintenance` 集合（`server.js:459`）——**不是**记录上的 `maintenance.status`：
+进程重启后记录会停在 `updating`，拿那个当锁会把案件永久锁死。重启后的残留不挡重新登记，但也不会自动恢复（见本卡报告「未决」）。
 
 ## 4. Basic 认证
 
@@ -286,7 +339,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 | --- | --- | --- |
 | 8192（缺省） | `PUT /api/agent/triage/control`、`POST /api/wiki/sessions`、`POST /api/agent/investigations` | `server.js:300-305`、`server.js:355-382`、`server.js:406-430` |
 | 100000 | `POST /api/triage/rules/validate`、`PUT /api/triage/rules` | `server.js:270-278`、`server.js:280-290` |
-| 12000 | `POST /api/wiki/sessions/{id}/messages` | `server.js:383-404` |
+| 12000 | `POST /api/wiki/sessions/{id}/messages`、`POST /api/agent/triage/{alertId}/false-positive` | `server.js:383-404`、`server.js:597-632` |
 | 8192（显式传值） | `POST /api/wiki/sessions/{id}/publish` | `server.js:383-404` |
 
 ### 8.2 正文形状
@@ -310,7 +363,7 @@ F2 POST /api/agent/investigations 正文 8192 字节 | 400 | {"error":"请求正
 
 ### 9.1 与 `openapi.yaml` 的关系
 
-对外 HTTP 契约在 `openapi.yaml`，声明 35 条路径（`grep -c '^  /' openapi.yaml` → `35`）。它与 `server.js` 的路由是**分开维护的两份文本**，改路由时两边都要动（这条在 [architecture.md](../architecture.md) 第 11.3 节也记着）。本页只描述 `server.js` 实际跑出来的行为；两边逐条比对不是本卡做的事。
+对外 HTTP 契约在 `openapi.yaml`，声明 39 条路径（`grep -c '^  /' openapi.yaml` → `39`，P003-T013 提交时）。它与 `server.js` 的路由是**分开维护的两份文本**，改路由时两边都要动（这条在 [architecture.md](../architecture.md) 第 11.3 节也记着）。本页只描述 `server.js` 实际跑出来的行为；两边逐条比对不是本卡做的事。
 
 ### 9.2 状态码用得不太齐的地方（只陈述现状）
 

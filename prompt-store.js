@@ -15,8 +15,8 @@ const wikiSop = {
   abnormal_login: 'abnormal-login/AL-11.md', network_audit: 'net/NA-09.md'
 };
 const defaultOverrideFile = process.env.HIDS_PROMPT_STORE_FILE || path.join(defaults, '.data', 'prompt-overrides.json');
-const coreFiles = { triage: 'triage.md', deep: 'deep-investigation.md', trace: 'trace-board.md', knowledge: 'knowledge-maintenance.md', knowledge_reuse: 'knowledge-reuse.md', cross: 'cross-scenario.md' };
-const coreNames = { triage: '通用系统提示词', deep: '单告警深查', trace: '溯源白板', knowledge: '知识库维护', knowledge_reuse: '知识经验复用', cross: '跨场景关联' };
+const coreFiles = { triage: 'triage.md', deep: 'deep-investigation.md', trace: 'trace-board.md', knowledge: 'knowledge-maintenance.md', knowledge_reuse: 'knowledge-reuse.md', cross: 'cross-scenario.md', rule: 'rule-maintenance.md' };
+const coreNames = { triage: '通用系统提示词', deep: '单告警深查', trace: '溯源白板', knowledge: '知识库维护', knowledge_reuse: '知识经验复用', cross: '跨场景关联', rule: 'Rego 规则维护' };
 
 function revisionOf(prompts) {
   return createHash('sha256').update(JSON.stringify(prompts)).digest('hex').slice(0, 16);
