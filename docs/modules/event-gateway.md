@@ -309,6 +309,49 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 `{ connected: true, eventTypes: [...11 个类型键...], transport: '牧云 /rpc' }`（`cloudwalker.js:81`）。
 失败时异常照常往上抛（`cloudwalker.js:80`），不会返回 `connected: false`。
 
+### 8.3 `detail` 的字段随事件类型变化
+
+> 本小节的行号对**当前 HEAD**。本页前文行号还停在 `35530d8`（`cloudwalker.js` 已被 P003-T001 改过），旧行号复位不在本卡范围。
+
+列表与详情接口里 `alert.detail` 是**字符串**（一句固定文案，`cloudwalker.js:54`、`cloudwalker.js:213`）；
+而 `GET /api/alerts/{alertId}` 返回的顶层 `detail` 是**牧云原始事件对象**（`raw.event || raw`，`cloudwalker.js:203`、`cloudwalker.js:215`）。
+后者**没有固定结构**：本仓不裁字段、不归一化，字段名与含义随事件类型变。
+
+- 同一个键在不同类型里含义不同：`type` 在 `network_audit` 是网络类型，在 `suspicious_operation` 是连接类型，在 `honeypot` 是蜜罐类型（`triage-rules.js:36-46`）。
+- 没有的键就是没有，不是空值：下游要按类型取键，不能假设 11 类都有同一套字段（`triage-rules.js:36-46`）。
+- 身份校验：`event_id ?? id` 必须是正安全整数且等于请求的事件号，否则按 404 处理（`cloudwalker.js:204-207`）。
+
+**通用可读键（10 个）**：详情证据函数只挑这 10 个，其余字段不展示（`cloudwalker.js:68-81`）：
+
+| 键 | 用法 |
+| --- | --- |
+| `cmdline` / `shell_cmdline` | 拼成「命令行：…」，截 500 字 |
+| `process_path` | 「进程路径：…」，截 500 字 |
+| `uname` | 「执行用户：…」 |
+| `remote_addr` / `local_addr` | 「远端地址 / 本地地址」 |
+| `file_path` | 「文件路径」 |
+| `description` | 「描述」 |
+| `process_tree` | 数组；只取节点数，不取内容 |
+| `cmdlines` | 数组；只取条数 |
+
+**按类型命中的原生键**（规则预筛的映射表，`triage-rules.js:36-46`）：
+
+| `event_type` | 原生键 |
+| --- | --- |
+| `webshell` / `malware` | `path`、`sha256`、`detect_reason` |
+| `revshell` | `local_addr`、`remote_addr`、`shell_cmdline`、`process_path` |
+| `memory_webshell` | `server_name`、`class_name`、`sha256`、`detect_reason` |
+| `elevation_process` | `exepath`、`cmdline`、`origin_uid`、`target_uid`、`privilege_escalation_type` |
+| `suspicious_operation` | `ssh_client_ip`、`type`、`rule_name`、`path`、`cmdline`、`uname`、`session_id` |
+| `honeypot` | `source_ip`、`address`、`type`、`time_aix`/`time_axis`（数组，行里有 `source_ip`） |
+| `memory_security` | `plugin_id`、`strategy_id`、`origin_method`、`detect_reason` |
+| `network_audit` | `local_addr`、`target`、`type`、`process_path`、`cmdline`、`reference`、`uname` |
+| `abnormal_login` | `login_ip`、`login_username`、`auth_type`、`rule_subject`、`login_abnormal_type` |
+| `brute_force` | 从 `time_aix`/`time_axis` 行里取 `source_ip` |
+
+另外 `normalizeAlert` 还会从 `host_view` / `host` 里取 `host_ip`、`host_name`，回退到 `row.host_ip`、`row.host_name`（`cloudwalker.js:35`、`cloudwalker.js:49`）。
+contract 写在哪：`openapi.yaml` 的 `AlertDetail` schema（`additionalProperties: true`，字段清单只是提示，不是约束）。
+
 ## 9 依赖
 
 - **上游**：`CloudwalkerGateway` 靠构造参数拿 RPC 客户端（`cloudwalker.js:77`），`RpcClient` 靠构造参数拿

@@ -315,6 +315,41 @@ updated: 2026-11-17
 写盘格式固定为两空格缩进加末尾一个换行（triage-rules.js:247）。
 目录权限 `0o700`、文件权限 `0o600`（triage-rules.js:248、250）。
 
+**规则集结构（RuleSet）**。`GET /api/triage/rules` 的 `config`、`PUT /api/triage/rules` 与 `POST /api/triage/rules/validate` 的请求体 `config`，都是这个结构；
+`openapi.yaml` 的 `RuleSet` / `RuleSetRule` / `RuleSetCondition` 按这三层写。三层都**不接受表外的键**（`triage-rules.js:129`、`triage-rules.js:82-83`、`triage-rules.js:91-92`）。
+
+顶层：
+
+| 字段 | 类型 | 必填 | 取值 / 约束 | 依据 |
+| --- | --- | --- | --- | --- |
+| `schema_version` | integer | 是 | 只能是 `1`；其它值整份报「规则集格式无效」 | `triage-rules.js:127` |
+| `enabled` | boolean | 是 | 总开关；`false` 时 `evaluate` 直接回 `disabled` | `triage-rules.js:127`、`triage-rules.js:269` |
+| `rules` | array | 是 | 最多 200 条，空数组合法；同一份里 `id` 不得重复 | `triage-rules.js:128`、`triage-rules.js:131-135` |
+
+`rules[]` 元素（元数据）：
+
+| 字段 | 类型 | 必填 | 取值 / 约束 | 依据 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 | `^[A-Za-z0-9_-]{3,64}$` | `triage-rules.js:73` |
+| `enabled` | boolean | 是 | 单条开关 | `triage-rules.js:75` |
+| `action` | enum | 是 | `observe` / `review_false_positive` / `classify_false_positive` | `triage-rules.js:35`、`triage-rules.js:74` |
+| `event_type` | enum | 是 | 11 类事件之一（§2 的表） | `triage-rules.js:9-21`、`triage-rules.js:74` |
+| `host_id` | integer | 是 | 安全整数且 ≥ 1 | `triage-rules.js:75` |
+| `reason` | string | 是 | 去空白后非空 | `triage-rules.js:76` |
+| `approved_by` | string | 是 | 去空白后非空 | `triage-rules.js:76` |
+| `source_alert_id` | string | 条件必填 | `action=review_false_positive` 时必填；非空时必须形如 `<event_type>:<正整数>` | `triage-rules.js:77-79` |
+| `valid_from` | string | 是 | `^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$`，且早于 `expires_at` | `triage-rules.js:61-62`、`triage-rules.js:80-81` |
+| `expires_at` | string | 是 | 同上格式 | `triage-rules.js:61-62`、`triage-rules.js:80-81` |
+| `conditions` | array | 是 | 条数在「该类型必需字段数」与「可用字段数」之间 | `triage-rules.js:85-86` |
+
+`conditions[]` 元素：
+
+| 字段 | 类型 | 必填 | 取值 / 约束 | 依据 |
+| --- | --- | --- | --- | --- |
+| `field` | enum | 是 | 属于该 `event_type` 的可用字段（`triage-rules.js:9-21`）；同一规则内不重复 | `triage-rules.js:89-90` |
+| `operator` | enum | 是 | `equals` / `cidr`（只限 `source_ip`，IPv4 /24–/32）/ `lte`（只限 `failure_count`，1–200） | `triage-rules.js:94-108` |
+| `value` | string \| integer | 是 | 随 `field` 与 `operator` 变：IP 类要求合法 IP 且不是 `0.0.0.0`/`::`，数值类要求非负整数（`abnormal_type` 只收 1、2、3），其余是非空字符串且 ≤ 512 字 | `triage-rules.js:94-100` |
+
 **示例文件**。模块自带一份示例规则集 `triage-rules.example.json`，路径写死为「与本模块同一个目录」
 （triage-rules.js:7）。本模块读文件只有三处：规则集文件（triage-rules.js:225）
 与示例文件（triage-rules.js:228、235）。

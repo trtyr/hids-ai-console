@@ -224,7 +224,7 @@ paths:
                 required: [alert, detail]
                 properties:
                   alert: { $ref: '#/components/schemas/Alert' }
-                  detail: { type: object, additionalProperties: true }
+                  detail: { $ref: '#/components/schemas/AlertDetail' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404':
           description: 牧云可达但没有这条事件（ID 不存在或已不可见）
@@ -454,7 +454,7 @@ paths:
               type: object
               required: [config, expected_revision]
               properties:
-                config: { type: object, additionalProperties: true }
+                config: { $ref: '#/components/schemas/RuleSet' }
                 expected_revision: { type: [string, 'null'], pattern: '^[0-9a-f]{16}$' }
       responses:
         '200': { $ref: '#/components/responses/JsonObject' }
@@ -474,7 +474,7 @@ paths:
               type: object
               required: [config]
               properties:
-                config: { type: object, additionalProperties: true }
+                config: { $ref: '#/components/schemas/RuleSet' }
       responses:
         '200':
           description: 校验通过
@@ -519,7 +519,11 @@ paths:
           description: 相对路径，如 common/GEN-12.md；斜杠需 URL 编码
           schema: { type: string }
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 一页的元数据与含 frontmatter 的全文
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WikiPage' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
   /api/wiki/health:
@@ -885,6 +889,289 @@ components:
       schema: { type: string, const: '1' }
       description: 写入请求还会校验 Origin 和 Sec-Fetch-Site
   schemas:
+    ClaimCitation:
+      type: object
+      description: 一条证据引用，指向本次取证记录里的某个原始字段（`agent-tools.js:79-90` 逐条核：证据存在、pointer 是 JSON Pointer、字段能解出、值相等）。
+      required: [evidence_id, pointer, value]
+      properties:
+        evidence_id:
+          type: string
+          description: 本次取证会话里的证据编号，形如 cw:1；syslog 未匹配旁路固定为 syslog:1
+          examples: [cw:1, syslog:1]
+        pointer:
+          type: string
+          pattern: '^/'
+          description: 相对该证据原始返回的 JSON Pointer，必须以 / 开头；~ 与 / 按 RFC 6901 转义
+          examples: ['/facts/source_ip/value']
+        value:
+          description: 该 Pointer 处的原始值（任意 JSON 类型）；校验要求与证据原文逐值相等，语义相近不算通过
+      additionalProperties: true
+    Claim:
+      type: object
+      description: 一条已核验事实。claims 里每条都必须带至少一条可用引用，否则在降级时被剔除。
+      required: [text, citations]
+      properties:
+        text: { type: string, description: 事实的自然语言描述 }
+        citations:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/ClaimCitation' }
+      additionalProperties: true
+    TriageStep:
+      type: object
+      description: 研判任务的一步进度，按发生顺序追加；只保留最近 80 条（超出时丢最早的）。
+      required: [stage, detail, at]
+      properties:
+        stage: { type: string, description: 阶段名，如 关联事件、规则评估、AI 分析、完成研判 }
+        detail: { type: string, description: 这一阶段的说明；规则评估阶段写命中或跳过的原因 }
+        at: { type: string, format: date-time, description: 写入时间（UTC ISO 串） }
+      additionalProperties: false
+    TriageEvidence:
+      type: object
+      description: 研判记录里的证据条目。只给四个字段，工具入参不外露；未配置研判或记录仍在排队时是空数组。
+      required: [evidence_id, tool, fetched_at, sha256]
+      properties:
+        evidence_id: { type: string }
+        tool: { type: string }
+        fetched_at: { type: string, format: date-time }
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: 证据原始内容的 SHA-256，64 位小写十六进制
+      additionalProperties: false
+    EvidenceRecord:
+      type: object
+      description: 研判记录里保存的取证条目，比 TriageEvidence 多一个 args（实际传的参数）。
+      required: [evidence_id, tool, args, fetched_at, sha256]
+      properties:
+        evidence_id: { type: string, examples: [cw:1] }
+        tool: { type: string, description: 取证工具名 }
+        args: { type: object, additionalProperties: true, description: 本次实际传给工具的参数（原样回写，模型没有直接持有） }
+        fetched_at: { type: string, format: date-time }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$', description: '对 {name,args,result} 序列化后的 SHA-256' }
+      additionalProperties: false
+    Validation:
+      type: object
+      description: 引用校验结果；核的是 claims 与 evidence_facts 里的 citations 能否从取证记录解出且值相等。
+      required: [ok, errors]
+      properties:
+        ok: { type: boolean, description: 全部引用都通过时为 true }
+        errors:
+          type: array
+          items: { type: string }
+          description: 失败明细；ok 为 true 时是空数组
+        removed_unverified_facts:
+          type: boolean
+          description: 只在两次退回修订仍不通过、已删掉未通过校验的事实后出现，恒为 true
+      additionalProperties: false
+    Review:
+      type: object
+      description: 独立复核结果；客户经验复用与未匹配 syslog 两条捷径不跑完整复核，但有固定取值。
+      required: [assessment, concerns, missing_evidence]
+      properties:
+        assessment:
+          type: string
+          enum: [supported, needs_revision, unavailable, knowledge_reuse]
+          description: |
+            supported = 复核支持原结论；needs_revision = 要求按质疑重出结论；
+            unavailable = 复核没跑成（模型报错，或 syslog 未匹配到牧云事件）；
+            knowledge_reuse = 走了客户经验复用捷径，没有跑独立复核。
+            实现只把 supported 当通过，其余取值（含枚举外的值）一律按未通过处理。
+        concerns: { type: array, items: { type: string }, description: 复核提出的质疑 }
+        missing_evidence: { type: array, items: { type: string }, description: 复核认为还缺的证据 }
+      additionalProperties: true
+    RequiredEvidence:
+      type: object
+      description: 常规研判的一个必查项及其执行结果；深度研判返回空数组。
+      required: [id, label, tool, scope, status]
+      properties:
+        id:
+          type: string
+          enum: [related_events, command_history, network_connections, source_history, authorization, file_invocation]
+          description: 必查项标识；authorization 与 file_invocation 当前固定不可用
+        label: { type: string, description: 中文名，如 同主机关联事件 }
+        tool: { type: string, description: 计划调用的工具名 }
+        scope: { type: string, description: 这次查询的边界说明（例如当前返回页不能代表全部历史） }
+        status:
+          type: string
+          enum: [records_returned, empty_page, source_unavailable, missing_identifier, query_failed]
+          description: |
+            五个取值互不混同：records_returned = 查到记录；empty_page = 查了但当前页为空；
+            source_unavailable = 没有可用数据源；missing_identifier = 原始事件缺少主机或来源标识；
+            query_failed = 查询抛错，或接口没返回可确认数量的列表。
+        reason: { type: string, description: 原因说明；records_returned 也可能带（例如接口报告部分类型查询失败） }
+        args: { type: object, additionalProperties: true, description: 实际调用参数；source_unavailable 与 missing_identifier 没有这个键 }
+        evidence_id: { type: string, description: 查到记录时的证据编号 }
+        returned_count: { type: integer, description: 当前页返回条数 }
+        total_reported: { type: [integer, 'null'], description: 平台自报总数；接口没给时为 null }
+        platform_total_consistent: { type: boolean, description: 平台自报总数与当前返回是否自洽 }
+      additionalProperties: false
+    TraceBoardNode:
+      type: object
+      description: 白板节点。kind 决定后续查询口径：asset 按 host_ip 查，external_ip 按 source_ip 查并额外查防火墙连接记录。
+      required: [id, label, address, kind, status]
+      properties:
+        id: { type: string, pattern: '^(asset|ip):', description: 资产节点 asset:<IP>，外部或来源节点 ip:<IP> }
+        label: { type: string, description: 展示名；资产节点优先主机名 }
+        address: { type: string, format: ipv4 }
+        kind: { type: string, enum: [asset, external_ip] }
+        status: { type: string, enum: [pending, done], description: pending 待查；done 已调查 }
+        why: { type: string, description: AI 给出继续追这个节点的理由；调查收尾时写入 }
+        profile:
+          type: object
+          additionalProperties: true
+          description: 资产档案，字段来自命中的主机行（name、ip、os 等）；外部 IP 节点只有 name 与 ip
+        findings:
+          type: array
+          description: 每条工具结果的摘要，调查收尾时写入
+          items:
+            type: object
+            required: [evidence_id, tool, total, returned, rows]
+            properties:
+              evidence_id: { type: string }
+              tool: { type: string }
+              total: { type: [integer, 'null'], description: 平台自报总数；单对象结果记 1，没有总数记 null }
+              returned: { type: integer, description: 落在时间窗内的行数 }
+              page_returned: { type: integer, description: 本页原始行数；只有列表结果有 }
+              truncated: { type: boolean, description: 结果被上下文裁剪过；只有单对象结果有 }
+              rows: { type: array, items: { type: object, additionalProperties: true } }
+            additionalProperties: false
+        finding_count: { type: integer, description: 命中记录数 }
+        investigated_at: { type: string, format: date-time, description: 收尾时间；未调查没有这个键 }
+        touched_hosts: { type: array, items: { type: string }, description: 调查外部 IP 时命中的内网主机地址 }
+        discovered_from:
+          type: array
+          description: 这个节点从哪条证据的哪个字段发现；起点节点是空数组
+          items:
+            type: object
+            required: [evidence_id, pointer]
+            properties:
+              evidence_id: { type: string }
+              pointer: { type: [string, 'null'], description: 原始字段的 JSON Pointer；取不到时为 null }
+      additionalProperties: false
+    TraceBoardEdge:
+      type: object
+      description: 白板关系。by=program 是程序按同一事件记录画的粗筛线索，by=ai 是模型连的关系。
+      required: [from, to, rel, why, strength, by, citations, at]
+      properties:
+        from: { type: string, description: 起点节点 ID，与节点 id 同一套编号 }
+        to: { type: string, description: 终点节点 ID }
+        rel: { type: string, description: 关系性质；程序边固定为 触达线索 }
+        why: { type: string, description: 关系理由 }
+        strength: { type: number, minimum: 0, maximum: 1, description: 关系强度；程序边固定 0.3 }
+        by: { type: string, enum: [program, ai] }
+        citations:
+          type: array
+          minItems: 1
+          description: AI 边的引用必须覆盖两端地址；程序边是同一记录里的来源 IP 与目标主机两个字段
+          items: { $ref: '#/components/schemas/ClaimCitation' }
+        at: { type: string, format: date-time }
+      additionalProperties: false
+    TraceBoardActivity:
+      type: object
+      description: 白板活动流水，按发生顺序追加。kind 的取值见枚举。
+      required: [at, kind, title]
+      properties:
+        at: { type: string, format: date-time }
+        kind:
+          type: string
+          enum: [seed, tool, tool_error, investigate, look, link, conclude, thinking, model_error, error]
+          description: |
+            seed = 建板；tool = 一次牧云查询；tool_error = 查询或动作校验失败；investigate = 调查一个节点；
+            look = 模型查看白板；link = 模型连边；conclude = 模型收尾；thinking = 模型选下一步；
+            model_error = 模型输出格式错误正在重试；error = 调查中断或整板失败。
+        title: { type: string }
+        detail: { type: string }
+        node: { type: string, description: 关联的节点 ID（investigate 等） }
+        edge: { type: integer, description: 关联的边在 edges 里的下标（link） }
+        result: { type: string, description: 这一轮的结果摘要（investigate、look） }
+      additionalProperties: false
+    RuleSetCondition:
+      type: object
+      description: 一条条件。字段可用范围随 event_type 变化；条件条数落在「该类型必需字段数」与「该类型可用字段数」之间。
+      required: [field, operator, value]
+      properties:
+        field:
+          type: string
+          enum: [source_ip, destination_ip, network_type, process_path, command_line, detection_reference,
+                 user_name, auth_type, rule_subject, abnormal_type, auth_service, success_count, failure_count,
+                 file_path, sha256, shell_command, server_name, class_name, origin_uid, target_uid,
+                 privilege_escalation_type, connection_type, rule_name, session_id, honeypot_address,
+                 honeypot_type, plugin_id, strategy_id, origin_method]
+          description: 该事件类型可用的字段；同一规则内不重复
+        operator:
+          type: string
+          enum: [equals, cidr, lte]
+          description: cidr 只允许 source_ip（IPv4 /24 至 /32）；lte 只允许 failure_count（1 至 200）
+        value:
+          oneOf: [{ type: string, maxLength: 512 }, { type: integer, minimum: 0 }]
+          description: equals 的 IP 类字段要求合法 IP 且不是 0.0.0.0 或 ::；sha256 要求 64 位十六进制
+      additionalProperties: false
+    RuleSetRule:
+      type: object
+      required: [id, enabled, action, event_type, host_id, reason, approved_by, valid_from, expires_at, conditions]
+      properties:
+        id: { type: string, pattern: '^[A-Za-z0-9_-]{3,64}$' }
+        enabled: { type: boolean }
+        action:
+          type: string
+          enum: [observe, review_false_positive, classify_false_positive]
+          description: 只有这三种；规则只产生建议，不产生处置动作
+        event_type:
+          type: string
+          enum: [webshell, malware, revshell, memory_webshell, brute_force, abnormal_login, elevation_process,
+                 network_audit, suspicious_operation, honeypot, memory_security]
+        host_id: { type: integer, minimum: 1, description: 只对这一台主机生效 }
+        source_alert_id:
+          type: string
+          pattern: '^[a-z_]+:[1-9][0-9]*$'
+          description: action=review_false_positive 时必填；非空时必须形如 <event_type>:<正整数>
+        reason: { type: string, description: 去空白后非空 }
+        approved_by: { type: string, description: 去空白后非空 }
+        valid_from: { type: string, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$', description: UTC ISO 串，且必须早于 expires_at }
+        expires_at: { type: string, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$' }
+        conditions:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/RuleSetCondition' }
+      additionalProperties: false
+    RuleSet:
+      type: object
+      description: 规则集文件内容。顶层只有这三个键，多一个键整份判为无效。
+      required: [schema_version, enabled, rules]
+      properties:
+        schema_version: { type: integer, const: 1, description: 只接受 1；其它值整份判为无效 }
+        enabled: { type: boolean, description: false 时不进入规则评估，evaluate 直接回 disabled }
+        rules:
+          type: array
+          maxItems: 200
+          description: 规则 ID 不得重复；空数组合法
+          items: { $ref: '#/components/schemas/RuleSetRule' }
+      additionalProperties: false
+    AlertDetail:
+      type: object
+      description: |
+        牧云原始事件对象（`raw.event || raw`），本仓不裁字段、不归一化成固定结构——**字段随事件类型变化**，同一键在不同类型里含义也不同
+        （例如 `type` 在 network_audit 是网络类型，在 suspicious_operation 是连接类型）。消费方只按需读键，不假设字段齐全。
+
+        通用可读键（详情证据只挑这 10 个，见 `cloudwalker.js:68-81`）：
+        `cmdline` / `shell_cmdline` / `process_path` / `uname` / `remote_addr` / `local_addr` / `file_path` / `description` /
+        `process_tree`（数组，只取节点数）/ `cmdlines`（数组，只取条数）。
+
+        按事件类型读到的原生键（规则预筛的映射表，见 `triage-rules.js:36-46`）：
+        - `webshell` / `malware`：`path`、`sha256`、`detect_reason`
+        - `revshell`：`local_addr`、`remote_addr`、`shell_cmdline`、`process_path`
+        - `memory_webshell`：`server_name`、`class_name`、`sha256`、`detect_reason`
+        - `elevation_process`：`exepath`、`cmdline`、`origin_uid`、`target_uid`、`privilege_escalation_type`
+        - `suspicious_operation`：`ssh_client_ip`、`type`、`rule_name`、`path`、`cmdline`、`uname`、`session_id`
+        - `honeypot`：`source_ip`、`address`、`type`、`time_aix`/`time_axis`（数组，含 `source_ip`）
+        - `memory_security`：`plugin_id`、`strategy_id`、`origin_method`、`detect_reason`
+        - `network_audit`：`local_addr`、`target`、`type`、`process_path`、`cmdline`、`reference`、`uname`
+        - `abnormal_login`：`login_ip`、`login_username`、`auth_type`、`rule_subject`、`login_abnormal_type`
+        - `brute_force`：从 `time_aix`/`time_axis` 行里取 `source_ip`
+
+        身份校验：`event_id ?? id` 必须是正的安全整数且等于请求的事件号，否则按 404（牧云可达但没有这条事件）处理。
+      additionalProperties: true
     TypedAlertId:
       type: string
       pattern: '^[a-z_]+:[1-9][0-9]*$'
@@ -955,17 +1242,14 @@ components:
           description: |
             本次研判实际取到的证据条目，按取证顺序；只给四个字段，工具入参（args）不外露。
             未配置研判或记录仍在排队时是空数组。
-          items:
-            type: object
-            required: [evidence_id, tool, fetched_at, sha256]
-            properties:
-              evidence_id: { type: string }
-              tool: { type: string }
-              fetched_at: { type: string, format: date-time }
-              sha256:
-                type: string
-                description: 证据原始内容的 SHA-256，64 位小写十六进制
-        steps: { type: array, items: { type: object, additionalProperties: true } }
+          items: { $ref: '#/components/schemas/TriageEvidence' }
+        steps:
+          type: array
+          description: |
+            研判步骤流水，按发生顺序；只保留最近 80 条。
+            只出现在单条查询 GET /api/agent/triage/{alertId} 的响应里；列表 GET /api/agent/triage/cases 的每一项没有这个键。
+            未入队、排队中、失败的记录是空数组。
+          items: { $ref: '#/components/schemas/TriageStep' }
       additionalProperties: true
     Investigation:
       type: object
@@ -981,40 +1265,86 @@ components:
             verdict_label: { type: string, enum: [真实威胁, 存疑, 误报] }
             report: { type: string, maxLength: 300 }
             summary: { type: string }
-            claims: { type: array, items: { type: object, additionalProperties: true } }
-            missing_evidence: { type: array, items: { type: string } }
+            claims:
+              type: array
+              description: 已核验事实；常规研判下未通过校验的条目会被删掉，条数可以变少。
+              items: { $ref: '#/components/schemas/Claim' }
+            missing_evidence:
+              type: array
+              description: 证据缺口，纯字符串数组；常规研判会把必查项缺口去重后并进来。
+              items: { type: string }
           additionalProperties: true
-        review: { type: object, additionalProperties: true }
-        validation: { type: object, additionalProperties: true }
+        review: { $ref: '#/components/schemas/Review' }
+        validation: { $ref: '#/components/schemas/Validation' }
+        evidence:
+          type: array
+          description: 本次取证会话的全部记录，按取证顺序；syslog 未匹配旁路固定一条 syslog:1。
+          items: { $ref: '#/components/schemas/EvidenceRecord' }
         trace: { type: array, items: { type: object, additionalProperties: true } }
-        required_evidence: { type: array, items: { type: object, additionalProperties: true } }
+        required_evidence:
+          type: array
+          description: 常规研判的必查项；深度研判与客户经验复用捷径为空数组。
+          items: { $ref: '#/components/schemas/RequiredEvidence' }
       additionalProperties: true
     TraceBoard:
       type: object
       properties:
         id: { type: string }
-        status: { type: string }
-        nodes: { type: array, items: { type: object, additionalProperties: true } }
-        edges: { type: array, items: { type: object, additionalProperties: true } }
-        activity: { type: array, items: { type: object, additionalProperties: true } }
+        alert_id: { type: [string, 'null'] }
+        title: { type: string }
+        seed: { type: string, description: 起点节点 ID }
+        status:
+          type: string
+          enum: [running, done, failed, interrupted]
+          description: 进程重启后读到 running 而未在跑的任务会被改写成 interrupted
+        nodes: { type: array, items: { $ref: '#/components/schemas/TraceBoardNode' } }
+        edges: { type: array, items: { $ref: '#/components/schemas/TraceBoardEdge' } }
+        activity: { type: array, items: { $ref: '#/components/schemas/TraceBoardActivity' } }
         summary: { type: string }
         gaps: { type: array, items: { type: string } }
+        investigations: { type: integer, description: 已调查的节点数 }
+        window:
+          type: object
+          properties:
+            since: { type: string, format: date-time }
+            until: { type: string, format: date-time }
+            hours: { type: integer, description: 口径提示值；告警起点实际是观测前 24 小时到后 48 小时 }
+        model: { type: [string, 'null'] }
+        focus: { type: string }
+        origin_evidence: { type: [object, 'null'], additionalProperties: true }
       additionalProperties: true
     RuleSetResponse:
       type: object
       properties:
-        config: { type: object, additionalProperties: true }
+        config: { $ref: '#/components/schemas/RuleSet' }
         revision: { type: [string, 'null'] }
         writable: { type: boolean }
       additionalProperties: true
     WikiPageSummary:
       type: object
+      description: 知识库页面元数据（不含正文）。浏览接口一次返回目录下全部页，含 deprecated 页。
+      required: [path, id, title, status, updated, revision, characters]
       properties:
-        id: { type: string }
-        path: { type: string }
-        title: { type: string }
-        status: { type: string }
+        path: { type: string, description: 相对 wiki 根目录的路径，如 common/GEN-12.md }
+        id: { type: string, description: frontmatter 的 id；缺省取文件名 }
+        title: { type: string, description: frontmatter 的 title；缺省取一级标题 }
+        status:
+          type: string
+          enum: [active, draft, deprecated, reference]
+          description: frontmatter 的 status；缺这个字段时读作 reference。写入（PUT）只接受 active、draft、deprecated
+        updated: { type: string, description: frontmatter 的 updated（YYYY-MM-DD）；缺省是空串，不是 null }
+        revision: { type: string, pattern: '^[0-9a-f]{16}$', description: 正文全文 SHA-256 的前 16 位十六进制 }
+        characters: { type: integer, description: 正文全文（含 frontmatter）长度，按 UTF-16 码元计：一个汉字算 1，一个基本平面外字符算 2 }
       additionalProperties: true
+    WikiPage:
+      description: 单个知识库页面：元数据加全文。
+      allOf:
+        - $ref: '#/components/schemas/WikiPageSummary'
+        - type: object
+          required: [content]
+          properties:
+            content: { type: string, description: 含 frontmatter 的完整 Markdown 正文 }
+          additionalProperties: true
     MaintenanceIdentity:
       type: object
       required: [user, role]
