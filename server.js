@@ -454,6 +454,9 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
     }
     return executor.run(alertId, onProgress ? { mode, onProgress } : { mode });
   };
+  // 本进程里正在跑维护的告警：重复登记靠它挡，不靠记录上的 maintenance.status——进程重启后记录会停在 updating，
+  // 拿那个当日志会把这个案件永久锁死在 updating。
+  const runningMaintenance = new Set();
   return http.createServer(async (req, res) => {
     if (!hasAccess(req, access)) return requireAccess(res);
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -607,8 +610,9 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const record = monitor.records.get(alertId);
         if (!record) return error(res, 404, '找不到这条研判案件');
         if (record.status !== 'done') return error(res, 409, '研判还没结束，不能登记误报');
-        // 同一轮维护还在跑：不再起第二轮，直接把当前进度回给调用方（重复点击不该让维护者跑两遍）。
-        if (record.maintenance?.status === 'updating') return json(res, 202, falsePositiveView(record));
+        // 同一轮维护还在本进程里跑：不再起第二轮，直接把当前进度回给调用方（重复点击不该让维护者跑两遍）。
+        // 记录上的 maintenance.status 可能是重启前的残留，所以这重只看在跑的集合。
+        if (runningMaintenance.has(alertId)) return json(res, 202, falsePositiveView(record));
         // A1：先把结论与理由写死并落盘，再回 202——两个维护者还在排队时，这一条已经是误报。
         const at = new Date().toISOString();
         record.verdict = 'false_positive'; record.verdict_label = '误报'; record.decision_source = 'human';
@@ -619,10 +623,11 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         record.updated_at = at;
         await monitor.persist?.();
         // 后台跑两个维护者：失败只写 maintenance，不回滚 verdict；响应不等它们。
+        runningMaintenance.add(alertId);
         void maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMaintainer }).catch(cause => {
           record.maintenance.status = 'failed';
           record.maintenance.error = String(cause?.message || cause).slice(0, 300);
-        });
+        }).finally(() => runningMaintenance.delete(alertId));
         return json(res, 202, falsePositiveView(record));
       }
       if (url.pathname.startsWith('/api/agent/triage/')) {

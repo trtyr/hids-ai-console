@@ -66,7 +66,7 @@
 35 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
 
 > 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。
-> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 35 行），不是组合数：一行可以给出多条组合（`server.js:628` 的 `/api/agent/triage/{alertId}` 给 GET 与 POST 两条），也有行不算组合（`server.js:642` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
+> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 35 行），不是组合数：一行可以给出多条组合（`server.js:633` 的 `/api/agent/triage/{alertId}` 给 GET 与 POST 两条），也有行不算组合（`server.js:647` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
 
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
@@ -83,14 +83,14 @@
 | GET | `/api/triage/rules` | 200 | 读取失败回 502 | `server.js:265-269` |
 | POST | `/api/triage/rules/validate` | 200 `{valid:true,count}` | 正文不是对象 / 缺 `config` 键回 400「请求正文缺少 config」；`config` 不是合法规则集回 400「规则集格式无效」 | `server.js:270-279` |
 | PUT | `/api/triage/rules` | 200 | 需规则管理员令牌 | `server.js:280-291` |
-| GET | `/api/rules` | 200 `{count, rules}`（Rego 规则库） | 规则库读取失败回 502 | `server.js:556-559` |
-| POST | `/api/rules/evaluate` | 200 `{count, matched}` | 正文不是对象回 400；求值失败回 502 | `server.js:560-566` |
-| GET | `/api/rules/{id}` | 200 / 404 | id 不合格式回 400；规则库读取失败回 502 | `server.js:567-575` |
+| GET | `/api/rules` | 200 `{count, rules}`（Rego 规则库） | 规则库读取失败回 502 | `server.js:559-562` |
+| POST | `/api/rules/evaluate` | 200 `{count, matched}` | 正文不是对象回 400；求值失败回 502 | `server.js:563-569` |
+| GET | `/api/rules/{id}` | 200 / 404 | id 不合格式回 400；规则库读取失败回 502 | `server.js:570-578` |
 | GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:292-299` |
 | PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503 | `server.js:300-306` |
 | GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:307-315` |
-| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503 | `server.js:628-636` |
-| POST | `/api/agent/triage/{alertId}/false-positive` | 202（结论已落盘为误报，两个维护者开始） | 无研判队列回 503；理由不符格式回 400；无此案件回 404；研判未完成回 409 | `server.js:594-627` |
+| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503 | `server.js:633-641` |
+| POST | `/api/agent/triage/{alertId}/false-positive` | 202（结论已落盘为误报，两个维护者开始） | 无研判队列回 503；理由不符格式回 400；无此案件回 404；研判未完成回 409 | `server.js:597-632` |
 | GET | `/api/agent/prompts` | 200 | — | `server.js:316-318` |
 | GET | `/api/wiki/pages` | 200 `{pages, total}`，接 `count`／`offset` | 分页参数不合法回 400 | `server.js:322-334` |
 | GET | `/api/wiki/pages/{path}` | 200 / 404 | — | `server.js:340-343` |
@@ -132,13 +132,13 @@
 
 ### 3.4 误报登记与两个维护者（P003-T013）
 
-**关键路径**：`server.js:594-627`（路由）、`:209-250`（两个维护者的编排）、`:145-177`（规则维护者）、`:193-205`（wiki 维护目标）。
+**关键路径**：`server.js:597-632`（路由）、`:209-250`（两个维护者的编排）、`:145-177`（规则维护者）、`:193-205`（wiki 维护目标）。
 
 **入口**：`POST /api/agent/triage/{alertId}/false-positive`，正文 `{reason, who?}`。「分析员把这一条判成误报」只走这一个入口：
 理由必填（10 到 4000 字），登记人省略时取业务账号名，没配 Basic 认证时是 `operator`（登记人至少 2 字）。
 
 **先结论，后维护**（A1）：路由先改记录——`verdict=false_positive`、`verdict_label=误报`、`decision_source=human`、
-`feedback{reason,who,recorded_at}`，`await monitor.persist()` 落盘之后才回 202（写结论在 `server.js:614-620`，起维护在 `server.js:622`）。
+`feedback{reason,who,recorded_at}`，`await monitor.persist()` 落盘之后才回 202（写结论在 `server.js:618-624`，起维护在 `server.js:626`）。
 两个维护者这时才开始跑，响应不等它们；维护还没跑完时 `GET /api/agent/triage/{alertId}` 已经是误报。
 
 | 情况 | 状态 | 正文 |
@@ -174,8 +174,9 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 - 否则 `updated`。
 
 失败只写 `maintenance.rule.error` / `maintenance.wiki.error`（各截 300 字），**`verdict` 与 `feedback` 一个字节都不动**。
-维护状态随记录一起 `persist()`，所以 `GET /api/agent/triage/{alertId}` 能读到同一组字段；还在 `updating` 时再次登记只回当前进度，
-不重起一轮（`server.js:611`）。
+维护状态随记录一起 `persist()`，所以 `GET /api/agent/triage/{alertId}` 能读到同一组字段。同一轮维护还在本进程里跑时再次登记只回当前进度，
+不重起一轮（`server.js:615`）；挡它的是 `runningMaintenance` 集合（`server.js:459`）——**不是**记录上的 `maintenance.status`：
+进程重启后记录会停在 `updating`，拿那个当锁会把案件永久锁死。重启后的残留不挡重新登记，但也不会自动恢复（见本卡报告「未决」）。
 
 ## 4. Basic 认证
 
@@ -338,7 +339,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 | --- | --- | --- |
 | 8192（缺省） | `PUT /api/agent/triage/control`、`POST /api/wiki/sessions`、`POST /api/agent/investigations` | `server.js:300-305`、`server.js:355-382`、`server.js:406-430` |
 | 100000 | `POST /api/triage/rules/validate`、`PUT /api/triage/rules` | `server.js:270-278`、`server.js:280-290` |
-| 12000 | `POST /api/wiki/sessions/{id}/messages`、`POST /api/agent/triage/{alertId}/false-positive` | `server.js:383-404`、`server.js:594-627` |
+| 12000 | `POST /api/wiki/sessions/{id}/messages`、`POST /api/agent/triage/{alertId}/false-positive` | `server.js:383-404`、`server.js:597-632` |
 | 8192（显式传值） | `POST /api/wiki/sessions/{id}/publish` | `server.js:383-404` |
 
 ### 8.2 正文形状

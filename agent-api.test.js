@@ -720,3 +720,26 @@ test('A4 维护失败只改 maintenance，误报结论不变；一边成一败�
   assert.equal(visible.maintenance.status, 'failed');
   assert.equal(visible.maintenance.wiki.revision, 'rev-3');
 });
+
+test('A4 记录停在 updating 但本进程没有在跑的维护时，重新登记会重起一轮', async t => {
+  const caseDir = await caseDirectory(t);
+  const stale = falsePositiveCase(caseDir, { verdict: 'false_positive', verdict_label: '误报', decision_source: 'human',
+    feedback: { reason: '运维的蜜罐探针，不是攻击', who: '值班分析员', recorded_at: '2026-11-18T04:00:00.000Z' },
+    maintenance: { status: 'updating', updated_at: '2026-11-18T04:00:00.000Z',
+      rule: { status: 'updating' }, wiki: { status: 'updating' } } });
+  const monitor = falsePositiveMonitor([stale]);
+  let ruleCalls = 0;
+  const ruleMaintainer = { maintain: async () => { ruleCalls += 1;
+    return { id: 'honeypot_probe', file: 'honeypot_probe.rego', name: '蜜罐诱捕', action: 'update' }; } };
+  const wikiAgent = { create: async () => { throw new Error('知识维护端不可用'); } };
+  const server = createServer(null, null, null, null, null, monitor, null, undefined, null, null,
+    null, wikiAgent, null, null, null, ruleMaintainer);
+  const base = await listen(t, server);
+
+  assert.equal((await reportFalsePositive(base)).status, 202);
+  await waitFor(() => monitor.records.get(SYSLOG_ALERT).maintenance.status !== 'updating', '重起的维护收尾');
+  assert.equal(ruleCalls, 1);
+  assert.equal(monitor.records.get(SYSLOG_ALERT).maintenance.rule.status, 'updated');
+  assert.equal(monitor.records.get(SYSLOG_ALERT).maintenance.wiki.status, 'failed');
+  assert.equal(monitor.records.get(SYSLOG_ALERT).verdict, 'false_positive');
+});
