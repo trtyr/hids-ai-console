@@ -28,6 +28,10 @@ paths:
       tags: [状态]
       summary: 校验业务访问身份
       operationId: getSession
+      description: |
+        通过 Basic 认证后回账号与角色，供控制台壳显示"账号 + 角色"。
+        业务侧只有一套 Basic 账号，角色固定为 `operator`（值守操作员）；管理员权限属于维护端令牌那条线，不在业务 API 内。
+        未配置 `HIDS_BASIC_AUTH_PASSWORD`（Basic 认证未启用）时任何人都能访问，没有账号可报，`user` 与 `role` 都是 null。
       responses:
         '200':
           description: 已通过业务访问认证，或未启用 Basic 认证
@@ -35,9 +39,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [authenticated]
+                required: [authenticated, user, role]
                 properties:
                   authenticated: { type: boolean, const: true }
+                  user: { type: [string, 'null'], description: 业务 Basic 账号名；未启用 Basic 认证时为 null }
+                  role: { type: [string, 'null'], enum: [operator, null], description: 固定 operator；未启用 Basic 认证时为 null }
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
   /api/status:
     get:
@@ -373,6 +379,11 @@ paths:
       tags: [深度研判]
       summary: 列出已保存的溯源白板
       operationId: listTraceBoards
+      description: |
+        按更新时间倒序分页。先判白板服务有没有配（没配回 503），再判分页参数（不合法回 400「分页参数无效」）。
+      parameters:
+        - $ref: '#/components/parameters/Count'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: 白板摘要列表
@@ -380,9 +391,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [boards]
+                required: [boards, total]
                 properties:
                   boards: { type: array, items: { $ref: '#/components/schemas/TraceBoard' } }
+                  total: { type: integer, description: 切页前的白板总数 }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [深度研判]
@@ -492,11 +505,17 @@ paths:
       tags: [知识库]
       summary: 浏览已发布知识库页面
       operationId: listWikiPages
+      description: |
+        不带 `count` 时照旧返回全部页面（向后兼容：控制台知识库页现在一次取全量），此时 `offset` 仍可用来跳过前 N 条。
+        分页顺序是「筛选 → 切页 → 算 total」：先按 `q` 过滤（有查询词时最多 50 条），再按 `offset` / `count` 切页，`total` 是切页前的条数。
+        分页参数不合法回 400「分页参数无效」。
       parameters:
         - name: q
           in: query
           schema: { type: string }
           description: 标题、编号或路径筛选；有查询词时最多 50 条
+        - $ref: '#/components/parameters/WikiPageCount'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: 页面目录
@@ -504,9 +523,13 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [pages]
+                required: [pages, total]
                 properties:
                   pages: { type: array, items: { $ref: '#/components/schemas/WikiPageSummary' } }
+                  total:
+                    type: integer
+                    description: 切页前的条数；带 q 时是过滤后（且被 50 条上限截断后）的条数
+        '400': { $ref: '#/components/responses/BadRequest' }
   /api/wiki/pages/{pagePath}:
     get:
       tags: [知识库]
@@ -801,6 +824,11 @@ components:
       name: offset
       in: query
       schema: { type: integer, minimum: 0, default: 0 }
+    WikiPageCount:
+      name: count
+      in: query
+      description: 每页条数。不带这个参数时返回全部页面（向后兼容），只有显式传才切页
+      schema: { type: integer, minimum: 1, maximum: 50 }
     AlertType:
       name: type
       in: query

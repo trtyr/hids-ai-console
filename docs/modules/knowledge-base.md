@@ -318,6 +318,19 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 写入面（`PUT /api/wiki/pages/{pagePath}` 与发布流程）只接受前三个：状态不在 `active` / `draft` / `deprecated` 里就抛 400
 （`wiki-store.js:167`、`wiki-store.js:214`、`wiki-store.js:253`）。
 
+### 7.2 列表分页（`GET /api/wiki/pages`）
+
+列表走 `browse()`（一次读全部页的元数据，含 `deprecated`），分页在 HTTP 层做（`server.js:322-333`）：
+
+| 参数 | 缺省 | 合法域 | 违反时 | 依据 |
+| --- | --- | --- | --- | --- |
+| `q` | 无 | 任意字符串，匹配 `id` / `title` / `path`（小写包含） | ——（无匹配就回空数组） | `server.js:329-332` |
+| `count` | **不切页，返回全部** | 1 到 50 的安全整数 | 400「分页参数无效」 | `server.js:324-328` |
+| `offset` | 0 | 大于等于 0 的安全整数 | 400「分页参数无效」 | `server.js:326-328` |
+
+响应固定是 `{ pages, total }`：`total` 是切页前的条数，带 `q` 时是过滤后（且被 50 条上限截断后）的条数。顺序是「过滤 → 切页」，所以 `total` 与页内条数能对上。
+`count` 缺省不切页是为了向后兼容：控制台知识库页现在一次取全量，默认 20 会让它静默少显示（D002 只加不改）。
+
 ## 8 不变量
 
 | 编号 | 陈述 | 反例 | 依据 | 违反症状 |

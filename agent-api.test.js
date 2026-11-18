@@ -130,7 +130,7 @@ test('trace board API starts and restores an alert board', async t => {
   const calls = [];
   const boardService = { start: async (id, focus) => { calls.push({ id, focus }); return board; },
     get: async id => id === 'honeypot:7' ? board : null,
-    list: async () => [{ id: 'honeypot:7', title: '蜜罐调查', status: 'running' }] };
+    page: async () => ({ boards: [{ id: 'honeypot:7', title: '蜜罐调查', status: 'running' }], total: 1 }) };
   const server = createServer(null, null, null, null, null, null, null, {}, boardService);
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
@@ -141,7 +141,7 @@ test('trace board API starts and restores an alert board', async t => {
   assert.deepEqual(await started.json(), board);
   assert.deepEqual(calls, [{ id: 'honeypot:7', focus: '追查来源' }]);
   assert.deepEqual(await (await fetch(`${base}/api/trace/boards`)).json(),
-    { boards: [{ id: 'honeypot:7', title: '蜜罐调查', status: 'running' }] });
+    { boards: [{ id: 'honeypot:7', title: '蜜罐调查', status: 'running' }], total: 1 });
   assert.deepEqual(await (await fetch(`${base}/api/trace/boards/honeypot%3A7`)).json(), board);
   assert.equal((await fetch(`${base}/api/trace/boards/honeypot%3A8`)).status, 404);
   assert.equal((await fetch(`${base}/api/trace/boards/bad-id`)).status, 400);
