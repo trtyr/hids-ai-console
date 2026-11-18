@@ -321,6 +321,8 @@ export class TraceBoardService {
     return board;
   }
   // A1：从一条告警（或 IP）创建溯源。已有白板直接返回那条，不重查事件、不覆盖。
+  // 已知旧账：同一新目标的并发 POST 仍是 check-then-act（读盘与建板之间没有锁），两个请求可能各建一次、后写覆盖前写；
+  // 单进程里 running 只挡住已经进 explore 的那一个。本轮不改（P003-T014 复审 minor）。
   async startOrResume(target, focus = '') {
     const spec = traceTarget(target);
     if (!spec) throw Object.assign(new Error('请输入有效告警 ID 或 IPv4 地址'), { status: 400 });

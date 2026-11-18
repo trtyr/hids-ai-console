@@ -463,8 +463,8 @@ paths:
               description: target 优先；兼容 alert_id 和 ip 字段
               properties:
                 target: { type: string, description: "例如 revshell:1、syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43、172.16.221.41 或 ip:172.16.221.41" }
-                alert_id: { $ref: '#/components/schemas/TypedAlertId' }
-                ip: { type: string, format: ipv4 }
+                alert_id: { type: string, description: "告警 ID；与 target 同一套校验，也收 syslog 形态" }
+                ip: { type: string, format: ipv4, description: "IPv4 地址；也接受 ip: 前缀写法（与 target 同一套校验）" }
                 focus: { type: string }
       responses:
         '200':
@@ -483,11 +483,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '502':
-          description: 建板过程出错（取告警详情或启动调查失败），正文 `{error}`
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/BackendError' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/trace/boards/{target}:
     get:

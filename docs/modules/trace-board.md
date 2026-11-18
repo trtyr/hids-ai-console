@@ -154,8 +154,8 @@
    （`trace-board.js:206-210`）。
 4. **开一个取证会话**，上限 2000 次工具调用（`trace-board.js:211-213`）。
 5. **造初始白板**：告警起点先调 `get_<类型>_event` 取原始事件、再归一化成告警；告警分析已经落盘过原始报文时（syslog 形态）
-   直接引用那份证据，不再查同一份（`trace-board.js:324-367`、`server.js:57-96`）。这个告警既没有可用资产也没有来源 IP 时抛 422
-   （`trace-board.js:324-367`）。IP 起点直接造白板（`trace-board.js:188-202`）。
+   直接引用那份证据，不再查同一份（`trace-board.js:326-369`、`server.js:57-96`）。这个告警既没有可用资产也没有来源 IP 时抛 422
+   （`trace-board.js:326-369`）。IP 起点直接造白板（`trace-board.js:188-202`）。
 6. **记下模型名与操作员焦点**，首次落盘（`trace-board.js:222-224`）。
 7. **后台开跑**：`start()` 把追查循环挂在后台并立即返回初始快照（`trace-board.js:225-231`）。
 8. **模型每轮给一个动作**：循环开始时载入溯源提示词与 MCP 工具目录，首轮用户消息带上告警 ID、起点、时间窗、操作员焦点与 12 次调查上限
@@ -181,7 +181,7 @@
 
 ### 4.3 P003-T014：已有即返回与证据复用
 
-- **入口**：`TraceBoardService.startOrResume`（`trace-board.js:324-367`）。目标先解析成三种之一——牧云告警 `<类型>:<id>`、syslog 告警 ID、
+- **入口**：`TraceBoardService.startOrResume`（`trace-board.js:326-369`）。目标先解析成三种之一——牧云告警 `<类型>:<id>`、syslog 告警 ID、
   IPv4；正在跑或已有落盘白板时 `get` 之后返回 `{created:false}`，不重新取事件；只有都没有才建板并进追查循环。
   `start` 保留旧签名，返回白板本身。HTTP 层按 `created` 回 200 / 202（`server.js:338-352`）。
 - **证据复用（A4）**：`createAnalysisProvider`（`server.js:57-96`）顺着研判记录（`InvestigationStore`，记录上有 `case_dir`）
