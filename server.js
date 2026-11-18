@@ -65,6 +65,8 @@ function hasAccess(req, access) {
 }
 function requireAccess(res) {
   res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="HIDS AI Console", charset="UTF-8"',
+    // 正文是纯文本：openapi.yaml 的 BusinessUnauthorized 只声明 text/plain，不声明 Content-Type 会让调用方当二进制猜。
+    'Content-Type': 'text/plain; charset=utf-8',
     'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   res.end('需要登录后访问');
 }
@@ -258,8 +260,11 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname === '/api/triage/rules/validate' && req.method === 'POST') {
         try {
           const body = await readJSON(req, 100000);
-          validateRuleSet(body.config);
-          return json(res, 200, { valid: true, count: body.config.rules.length });
+          // 先判正文形状再读 config.rules：正文可能是 null / 数组 / 缺 config，直接读会抛 TypeError
+          // 并把英文内部文案回给调用方。
+          if (!body || typeof body !== 'object' || Array.isArray(body) || !Object.hasOwn(body, 'config'))
+            return error(res, 400, '请求正文缺少 config');
+          return json(res, 200, { valid: true, count: validateRuleSet(body.config).rules.length });
         } catch (cause) { return error(res, 400, cause.message); }
       }
       if (url.pathname === '/api/triage/rules' && req.method === 'PUT') {
@@ -465,8 +470,10 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     if (triageInputMode === 'syslog') {
       const receiver = new SyslogReceiver({ host: process.env.HIDS_SYSLOG_HOST || '127.0.0.1',
         port: Number(process.env.HIDS_SYSLOG_PORT || 15514), onLine: line => triageMonitor.acceptSyslog(line) });
-      const address = await receiver.start();
-      console.log(`牧云 syslog 接收：udp://${address.address}:${address.port}`);
+      // 绑定失败（端口被占 / 权限不足）只打日志会让队列静默收不到消息：状态记进 summary()。
+      const { listening, bind, error } = await triageMonitor.attachSyslog(receiver);
+      if (listening) console.log(`牧云 syslog 接收：${bind}`);
+      else console.error(`牧云 syslog 接收启动失败：${error}`);
     }
   }).catch(error => console.error(`自动研判启动失败：${error.message}`));
 }
