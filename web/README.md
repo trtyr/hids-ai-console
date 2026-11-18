@@ -731,3 +731,144 @@ saveRules({ config, expectedRevision, token, ...options }) → { config, revisio
 - **`origin` / `error` 两个键不渲染**：实现会返回它们（`triage-rules.js:223-238`，配置坏时会退回示例并带 `error`），稿上没有对应区块。
 - **没有 409 自动合并**：冲突只能「刷新后重编辑」。
 - 稿的「知识库未定稿占位 + 导航拦截」不实现：导航与占位属壳。
+
+
+## 14. 知识库页（`pages/knowledge.js` + `src/knowledge.js`）
+
+两屏一壳：**条目列表**（搜索 / 分类筛选 / 表格）→ **条目页**（标题、元信息、目录、分节正文、
+右侧条目信息与相关条目、接口字段；「条目 / 编辑」两个页签）。数据全部只读。
+
+### 14.1 数据来源：形态 B（本仓真接口，只用两个只读 operation）
+
+| operation | 用途 | 回包字段 | 出处 |
+| --- | --- | --- | --- |
+| `GET /api/wiki/pages`（`listWikiPages`） | 目录 | `pages[]: { path, id, title, status, updated, revision, characters }` | `openapi.yaml:432-451`；实现 `server.js:234-240` |
+| `GET /api/wiki/pages/{pagePath}`（`getWikiPage`） | 单页 + 正文 | 同上七字段 + `content`（整篇 Markdown，**含 `---` 头部元数据**） | `openapi.yaml:452-466`；实现 `server.js:241-248` |
+
+- 文档只钉了 `id / path / title / status` 四个字段（`openapi.yaml:858-865`，`additionalProperties: true`）；
+  `updated / revision / characters / content` 是服务器侧 `wiki-store.js:26-28` 的 `metadata()` 真的回来的，逐条实测过
+  （`evidence/recon/P002-T007.md` §2.4）。**字段按实现取，接口定义补全后换成明确解析，别再靠读实现。**
+- 错误：`400` 路径编码无效；`404` 正文 `{"error":"ENOENT: no such file or directory, open '/…/wiki/…md'"}`——
+  **含服务端绝对路径，前端不显示原文**，只按状态码给中文文案；`503`「尚未配置知识库管理员凭据」只出现在
+  `health` / `sessions` 一族，本页不用它们（见 §9.6）。
+- 写能力：本仓**没有**「更新页面」的接口。编辑只落本机（§9.3），界面上如实标注「正文来源：本地草稿」。
+
+### 14.2 adapter 契约（`src/knowledge.js`，adapter 之外出现 `fetch` 即缺陷）
+
+```js
+listPages(options?) → Promise<{ pages: PageSummary[] }>
+getPage(pagePath, options?) → Promise<PageSummary & { content: string }>
+// options: { fetchImpl?: typeof fetch, baseUrl?: string }   // 单测注入用
+// PageSummary = { path, id, title, status, updated, revision, characters }
+//   path 是唯一必需字段；其余缺失时是 null（界面显「—」，不补默认状态/标题）
+// 失败一律抛 KnowledgeError：kind ∈ 'unauthorized' | 'http' | 'network' | 'invalid'，附 status（可能为 null）
+```
+
+| 场景 | HTTP | 结果 |
+| --- | --- | --- |
+| 目录正常 | 200 `{pages:[…]}` | resolve `{ pages }` |
+| 单页正常 | 200（含 `content`） | resolve 页面对象；`content` 不是字符串 → `invalid` |
+| 凭据失效 | 401 | `KnowledgeError{kind:'unauthorized', status:401}`，**不发第二次请求** |
+| 页面不存在 | 404 | `KnowledgeError{kind:'http', status:404}` |
+| 服务异常 | 其余非 2xx | `KnowledgeError{kind:'http', status:<码>}` |
+| 连不上 | fetch 抛 | `KnowledgeError{kind:'network'}` |
+| 200 但不是 JSON / `pages` 不是数组 | 200 | `KnowledgeError{kind:'invalid'}` |
+
+**本机草稿**（同文件，接口没有写回页面的能力）：
+
+```js
+DRAFTS_KEY = 'hids-wiki-drafts'                 // localStorage：{ [pagePath]: { title, body, savedAt } }
+loadDrafts(storage?) → drafts
+saveDraft(pagePath, { title, body }, { storage?, now? }) → { persisted, drafts }
+// persisted=false 表示没写进本机存储（配额/隐私模式）——界面提示「没能存到本机」，不假装已落盘
+```
+
+### 14.3 状态矩阵（六格，稿只画了其中两格）
+
+| 格 | 触发 | 界面 | 断言要点（已写成测试） |
+| --- | --- | --- | --- |
+| 默认 / loading | 进页面、点刷新 | 根节点 `aria-busy="true"`、表格一行「正在读取知识库…」、刷新与搜索/分类禁用 | `aria-busy` 是 `true`；`刷新`.disabled；`#knowledge-q`.disabled |
+| empty（筛选无结果） | 搜索或分类筛到 0 条 | 「没有匹配的条目」+「换个关键词，或点「清除筛选」回到全部条目。」+ 出现「清除筛选」 | 空态 `hidden=false`；点清除后行数恢复 |
+| empty（目录为空） | 接口回 `pages: []` | 「知识库还没有条目」+「目录接口返回的 pages 是空的。」 | 文案可断言；顶部计数 `0` |
+| partial | 目录读到了、单条正文失败（404/5xx） | 条目页局部 notice 带原因与「重试」，列出仍在（面包屑可回列表） | notice 含「（404）」且不含服务端路径；点重试成功后正文出现 |
+| error | 目录请求失败（401/5xx/连不上） | 顶部 notice：401 →「登录已失效…」；5xx →「服务返回异常（<码>），目录读取失败。」；网络 →「连不上研判服务…」 | 401 时文案不含服务端正文；重试可恢复。**口径**：刷新失败时**保留上一轮已取到的目录**（只是旧数据，不是假数据），不清空列表；只有「首次加载就失败」才是 0 行——按「清空」判红会误伤 |
+| long-content | 189 条目录 / 超长标题 / 超长正文 | 表行不截断数据（靠 CSS 折行与 `overflow-wrap:anywhere`），正文列 `max-width:74ch` | 200 条目录全渲染；长标题 `textContent` 完整；长正文整段保留 |
+| disabled | 刚进编辑页签 / 加载中 | 「保存草稿」「撤销修改」禁用；加载中刷新/搜索/分类禁用 | 改一个字后两个按钮启用；加载中刷新禁用 |
+
+### 14.4 交互与事件
+
+| 动作 | 后果 |
+| --- | --- |
+| 行标题（`<button>`）或整行点击 | 打开条目页（先取正文；有未保存修改先弹确认） |
+| 搜索框输入 / 分类下拉 | 即时本地过滤，右侧 `N / M 条`；有筛选时出现「清除筛选」 |
+| 面包屑「知识库」 | 回列表并保留当前筛选，焦点落搜索框（首次进页面不抢焦点） |
+| 面包屑分类项 / 条目页「分类」链接 | 回列表并按该分类筛选 |
+| 目录项 | 滚动到对应小节（`scrollIntoView`） |
+| 小节右侧「编辑」 | 切到编辑页签并把光标定位到该节标题那一行 |
+| 正文里的 `[[编号]]` / `[文字](相对路径)` | 解析到目录里的条目就跳过去；未建的标红虚线、不跳 |
+| 「条目 / 编辑」分段 | 切页签；未保存修改留在编辑视图里 |
+| 「保存草稿」 | 写 `hids-wiki-drafts`，刷新字数/分节/来源标注/草稿计数；写不进去则提示「没能存到本机」 |
+| 「撤销修改」 | 回到上次保存的草稿 |
+| `Ctrl/⌘+S` | 编辑页签下等同「保存草稿」 |
+| 「复制路径」 | 写剪贴板 + toast；无 clipboard 时退回 `execCommand`，再失败提示手动复制 |
+| 「刷新」 | 重取目录；**有未保存修改时不重取正文**（草稿不被接口数据盖掉），toast 说明保留 |
+| 有未保存修改时离开条目 | 原生 `<dialog>`：保存并离开 / 放弃修改 / 取消 |
+| 有未保存修改时离开**页面**（壳侧栏导航 / 「退出登录」/ 浏览器后退） | 同一个 `<dialog>` 三选一；取消后留在编辑页签、草稿不动 |
+| 有未保存修改时关标签页 / 刷新 | 浏览器原生 `beforeunload` 拦一次；草稿存好或撤销后自动摘掉 |
+
+**页面级离开守卫怎么实现的（壳禁改，全在 `pages/knowledge.js` 的闭包里）**
+
+| 离开路径 | 拦法 | 可断言点 |
+| --- | --- | --- |
+| 壳侧栏导航（`views/shell.js:36-38` 的 `a.nav-item[href="#/…"]`）与「退出登录」 | `document` **捕获阶段** `click`：命中且 `isDirty()` → `preventDefault()` + `stopPropagation()` + 开同一个 `data-role="discard"` 弹窗；放行后「导航」写 `location.hash`、「退出登录」把点击交回壳的按钮 | 脏态点一次导航：`defaultPrevented=true`、`location.hash` 不变、`dialog.open=true`；选「取消」后哈希与编辑内容都不动；选「放弃修改」后哈希变成目标路由 |
+| 浏览器后退 | 脏时 `history.pushState` 压一条**同 URL 的守卫条目**；后退只会在同 URL 上 `popstate`（无 `hashchange` → 页面不被 `app.js` 重建，草稿还在）→ 弹窗；放行时 `history.go(-2)` | 脏态 `window.dispatchEvent(new Event('popstate'))` → 弹窗且视图不动；`history.state.knowledgeUnsavedGuard === true` |
+| 关标签页 / 刷新 | 脏时挂 `beforeunload`（`preventDefault` + `returnValue=''`），脏标记消失时摘掉 | 脏态派发 `beforeunload`（`cancelable`）→ `defaultPrevented=true`；保存草稿后再派发 → `false` |
+
+- 脏标记翻转的两个收口是 `updateFoot()` 与 `showIndex()`，两处都调 `syncLeaveGuard()`；弹窗动作分两路：页内导航走 `state.pendingNav`，页面级离开走 `state.leave`，二者互斥，Esc 关闭时一起清。
+- 页面模块没有 unmount 钩子（`router.js` 的 page 契约只有 `render`）→ 监听器靠 `MutationObserver`（host 被换掉时）与事件里的 `host.isConnected`（兜底）自净；旧页不会在后台继续拦导航。
+- 边界：确认离开后历史栈里仍留一条同 URL 的守卫条目（浏览器不允许删历史项），所以「离开 → 再进知识库 → 后退」会先回到知识库而不是上一页；不影响正确性，也不产生空白页。
+
+### 14.5 可访问性
+
+- 表格有 `<caption>` 与 `scope="col"`；行标题是 `<button>`（键盘可达，可访问名＝条目标题）。
+- 搜索框、分类下拉各有 `sr-only` `<label for>`；分段切换用 `aria-pressed`。
+- 通知条 `role="alert"`；另有一处 `role="status" aria-live="polite"` 播报「正在读取 / 已更新 / 失败」。
+- 条目页 `<h1 tabindex="-1">`：打开条目与小节跳转后焦点落到标题上；dialog 关闭后焦点回原控件。
+- 深/浅两套由 `theme.js` 切换，本页颜色全部走 `theme.css` 变量。
+
+### 14.6 稿上有、接口没有 → 藏掉（A2，明细见 `topics/backend-findings.md` 的 P002-T007 节）
+
+| 稿上区块 | 为什么不画 |
+| --- | --- |
+| 标签下拉 / 分类标签增删 / 条目页「分类」标签组 | 目录与单页回包都没有 `tags` 字段；「分类」改显真实目录名（`common` / `webshell` …） |
+| 列表的**摘要**与**分节**列 | 列表接口不返正文，要算就得逐条取 189 个页面；只藏这两列，其余四列都是真字段 |
+| 顶栏「共 N 条 · N 份本地草稿 · 更新时间 · 刷新」 | 顶栏归壳（`views/shell.js` 禁改）→ 落在内容区顶部一行 |
+| 「提交审核」按钮与弹窗 | `POST /api/wiki/sessions` 要 `X-Prompt-Admin-Token`（`server.js:250`），控制台凭据只有 Basic → 实测一律 `503`；不放死按钮 |
+| 「正文来源：示例草稿（接口未定义）」 | 接口**有** `content`：正文照接口渲染，标注改成「接口正文 / 本地草稿」 |
+| 稿的四个中文分类（通用口径 / 案件复盘 / 规则说明 / 值守交接） | 真实目录是 18 个英文键，不编中文名；分类选项由目录数据生成 |
+| `/api/wiki/health`、维护会话、重放、发布 | 不在本页面出现（都要管理员令牌） |
+
+### 14.7 样式与令牌
+
+- `assets/pages/knowledge.css`：稿 `wiki.html:66-545` 里本页用到的块；**所有选择器挂在 `.knowledge` 下**
+  （`app.css` 里 `.field` 已被登录页占用，裸写会改到登录页）。
+- 颜色只用 `theme.css` 变量；字号/间距照稿的 px（稿 `:root` 只有颜色 token，同 P002-T001 记的一笔）。
+- 样式表不能在 `index.html` 里挂（不在本卡 scope）：页面首次 `render` 时注入 `<link data-page-style="knowledge">`（同 P002-T002）。
+- 稿没画、但真正文里有的：**管道表格**（99 个文件）与**围栏代码块**（36 个文件）按同一套 token 补了样式（`.md-table` / `pre.code`）。
+- **表格包裹层的类名两边必须同名**：`renderMarkdown` 生成 `<div class="k-table-wrap">`，样式挂在 `.k-table-wrap`（`overflow-x:auto` 是窄屏兜底）。
+  两边不同名过一次（生成 `table-wrap`），窄屏宽单元格会把整页撑到 1791px；现在 `web/test/pages/knowledge.test.js` 有一条对拔断言：
+  既查 DOM 里的包裹层类名，也读 `knowledge.css` 源码查出 `.k-table-wrap { … overflow-x: auto }`，改名就红。
+- **稿与实现的两处偏差（记账在案，非疏漏）**：
+  | 稿 | 实现 | 为什么 |
+  | --- | --- | --- |
+  | 标题只认 `###` / `####`（`wiki.html:1346`） | `#{1,4}` 一律渲染成 `h3` | 真正文带一级篇名（如 `# GEN-12 · 研判通则`），页面的 `h1` 已被接口 `title` 占住，篇名行归 `h3` 不重复主标题 |
+  | 条目头的「N 字」 | 正文去掉 front matter 后**去空白**计数（稿 `wiki.html:1569` 的公式） | 接口的 `characters` 含 `---` 头部元数据（GEN-12：接口 1028 / 界面 779），两个口径都能对上游，界面照稿 |
+  | 断点 1180 / 1100 / 900 / 620（`wiki.html:497-544`） | 页面侧 1180 / 900 / 620 三档 | 1100 那一档在稿里全是壳（侧栏收成图标栏）的规则，`app.css` 已有且本卡禁改壳；本页行为无缺口 |
+
+### 14.8 已知边界（这一版故意没做）
+
+- 编辑只在本机，没有「已保存到服务器」（接口不存在）。刷新页面后草稿还在（localStorage），但换浏览器就没了。
+- 目录不分页：`GET /api/wiki/pages` 一次回全部（本仓 189 条），表格整段渲染；要分页得后端加参数。
+- 服务端的 `q` 参数没接：本地过滤零延迟且不被 50 条截断（`server.js:238-239`）。
+- 401 只提示不自动登出：登出逻辑在 `app.js`（禁改），本页不重复实现。
+- 头部元数据（`applies_to` / `refs` / `evidence` / `used` / `failed`）不进正文视图，在「接口字段」折叠面板里看原样回包。
