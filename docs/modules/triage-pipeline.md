@@ -333,7 +333,7 @@ EOF
 
 ### 5.1 状态与落盘
 
-队列状态全在内存里，共 15 个字段（`triage-monitor.js:36-52`）：`dedupe`、`windows`、`acceptChain`、`records`、`watermark`、`watermarkIds`、`initialized`、`enabled`、`lastPollAt`、`lastError`、`active`、`polling`、`pollEpoch`、`timer`、`writeChain`。
+队列状态全在内存里，共 16 个字段（`triage-monitor.js:36-52`）：`dedupe`、`windows`、`acceptChain`、`records`、`watermark`、`watermarkIds`、`initialized`、`enabled`、`lastPollAt`、`lastError`、`active`、`polling`、`pollEpoch`、`timer`、`writeChain`、`syslog`（`{listening, bind, error}`，绑定成败都记在这里，`summary()` 才看得出收不到消息）。
 
 `persist()`（`triage-monitor.js:80-91`）把其中 7 项写成一份 JSON 快照：`initialized`、`enabled`、`watermark`、`watermark_ids`、`records`、`dedupe`、`windows`（`triage-monitor.js:81-83`）。
 
