@@ -4,6 +4,11 @@
 # 行为测与视觉截图同引擎，报告里注明。
 # 前置：没有。本脚本自己起桩后端（evidence/test/P003-T016/stub-api.mjs + stub-trace.mjs）与 web/serve.js，跑完收进程。
 # 判据全部来自 web/README.md §4 / §12（+ 任务卡 A1–A5）与 openapi.yaml 的形状；不看实现源码。
+# 断言纪律（P003-T016 审计 reject_test 后补）：
+#   1) 可见性：凡说「有按钮」都数 offsetParent≠null && rect>0 的那个；hidden/display:none 的存在性不算（visn 助手）
+#   2) 正向锚点：白板断言先等顶栏状态/链长/点数，再数输入框；白板没画出来时 A5 三条否定断言必须红
+#   3) 不等 sleep 等状态：异步一律 waitfor/waitcl 轮询；0.3s 短停只用于停在瞬时态（loading）上取样
+#   4) 恢复路径用真鼠标坐标（realclick 助手），el.click() 点 display:none 的按钮也能“恢复”，那不算用户能点
 set -uo pipefail
 cd "$(dirname "$0")/../../.." || exit 1
 API=http://127.0.0.1:18106
@@ -58,9 +63,39 @@ login(){ timeout 60 agent-browser fill "input[type=text]" hids >/dev/null 2>&1
   timeout 60 agent-browser press Enter >/dev/null 2>&1
   waitfor "document.querySelector('h1')?.textContent" "总览" 15000; }
 rows(){ ev "document.querySelectorAll('table tbody tr').length"; }
+# 可见性探针：offsetParent 非空 + rect 有尺寸 + visibility 不是 hidden（display:none 的 hidden 按钮一律不算“可见”）
+visn(){ ev "((txt)=>{const vis=e=>e.offsetParent!==null&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0&&getComputedStyle(e).visibility!=='hidden';return [...document.querySelectorAll('button,a')].filter(b=>b.textContent.trim()===txt&&vis(b)).length})('$1')"; }
+# 白板页正向锚点：重放控件存在且已禁用（README §12.4：播到最新才禁用）；用它替掉「第 N / M 步」这类实现自造串
+PB_PAUSE_TEXT="(()=>{const b=[...document.querySelectorAll('.playback button')].find(x=>['暂停','继续'].includes(x.textContent.trim()));return b?b.textContent.trim():''})()"
+PB_PAUSEDONE="(()=>{const b=[...document.querySelectorAll('.playback button')].find(x=>['暂停','继续'].includes(x.textContent.trim()));return !!b&&b.disabled===true&&document.querySelectorAll('.gnode').length===4})()"
+PAUSE_STATE="(()=>{const bs=[...document.querySelectorAll('.playback button')];const p=bs.find(b=>['暂停','继续'].includes(b.textContent.trim()));const g=bs.find(b=>b.textContent.trim()==='跳到最新');return JSON.stringify({t:p?p.textContent.trim():'',d:p?p.disabled:null,latest:g?g.disabled:null,nodes:document.querySelectorAll('.gnode').length})})()"
+realclick(){ # $1 = 回 {x,y} 的 JS 表达式；用真鼠标坐标点（不走 el.click()，disabled/遮挡都骗不过去）
+  local box x y
+  box=$(ev "$1")
+  x=$(printf '%s' "$box" | python3 -c 'import json,sys
+s=sys.stdin.read().strip()
+try:
+    d=json.loads(s)
+    print(d["x"] if isinstance(d,dict) and "x" in d else -1)
+except Exception:
+    print(-1)')
+  y=$(printf '%s' "$box" | python3 -c 'import json,sys
+s=sys.stdin.read().strip()
+try:
+    d=json.loads(s)
+    print(d["y"] if isinstance(d,dict) and "y" in d else -1)
+except Exception:
+    print(-1)')
+  if [ "$x" = "-1" ] || [ "$y" = "-1" ]; then printf 'NORECT %s\n' "$box"; return 1; fi
+  timeout 30 agent-browser mouse move "$x" "$y" >/dev/null 2>&1
+  timeout 30 agent-browser mouse down >/dev/null 2>&1
+  timeout 30 agent-browser mouse up >/dev/null 2>&1
+  return 0; }
 
 # --- 进程：桩后端 + 前端 -------------------------------------------------
 echo "== 起桩后端与前端 =="
+# 上一轮残留会绑不上端口、curl 却仍然通（等于对旧进程跑），先查再起
+if ss -ltn 2>/dev/null | grep -qE ':(18106|13016)[[:space:]]'; then echo "端口 18106/13016 已被占用，先清理再跑"; exit 1; fi
 node evidence/test/P003-T016/stub-api.mjs 18106 > /tmp/t016-stub.log 2>&1 &
 STUB=$!
 HIDS_API_ORIGIN=$API HIDS_WEB_PORT=13016 node web/serve.js > /tmp/t016-web.log 2>&1 &
@@ -93,7 +128,7 @@ has "A1 中断" "中断" "$(ev "[...document.querySelectorAll('table tbody tr')]
 # 键盘路径：焦点进第一个行链接，回车进白板
 timeout 60 agent-browser eval "(()=>{const a=document.querySelector('table tbody tr a');a.focus();return document.activeElement===a})()" >/dev/null 2>&1
 timeout 30 agent-browser press Enter >/dev/null 2>&1
-waitcl "location.hash" "#/trace-board/" 8000 && ok "A1 键盘 Tab→Enter 能在行链接上进白板" || no "A1 键盘回车" "#/trace-board/" "$(ev "location.hash")"
+waitcl "location.hash" "#/trace-board/" 8000 && ok "A1 焦点在行链接上按回车能进白板（只验回车，没验 Tab 焦点顺序）" || no "A1 行链接回车" "#/trace-board/" "$(ev "location.hash")"
 waitfor "document.querySelector('h1')?.textContent" "深度溯源" 8000 || true
 chk "A1 白板页仍叫「深度溯源」（壳标题）" "$(ev "document.querySelector('h1')?.textContent")" "深度溯源"
 
@@ -130,14 +165,14 @@ ctl '{"traceBoard":"422"}'
 nav '#/alerts' '#/trace-board/'
 sleep 0.2
 timeout 60 agent-browser eval "location.hash='#/trace-board/'+encodeURIComponent('no-asset:8');'ok'" >/dev/null 2>&1
-sleep 1.5
+waitcl "document.querySelector('.canvas')?.textContent" "这条告警没有可用资产" 10000 || true
 has "A2 422：白板错误态带服务端原话（不假装有白板）" "这条告警没有可用资产" "$(ev "document.querySelector('.canvas')?.textContent.replace(/\s+/g,' ').trim()")"
 ctl '{"traceBoard":"ok"}'
 
 echo
 echo "== A3 白板：告警在右 / 原因往左 / 可拖 / 位置记住 / 不能加点加线 =="
 nav '#/alerts' '#/trace-board/revshell%3A1'
-waitcl "document.querySelector('.playback')?.textContent" "第 7 / 7 步" 15000 || true
+waitfor "$PB_PAUSEDONE" "true" 15000 || true
 leftof(){ ev "(()=>{const ns=[...document.querySelectorAll('.gnode')];const pick=(i)=>{const n=ns[i];if(!n)return 'NONE';const m=/left:\s*(-?[\d.]+)px/.exec(n.getAttribute('style')||'');return m?m[1]:'NO-STYLE'};return JSON.stringify({alert:pick(0),h2:pick(1),h3:pick(2),h4:pick(3),n:ns.length})})()" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(",".join(str(d[k]) for k in ("alert","h2","h3","h4","n")))'; }
 waitcl "document.querySelector('h1')?.textContent" "深度溯源" 8000 >/dev/null 2>&1
 POS=$(leftof); echo "      位置：$POS"
@@ -181,7 +216,7 @@ if waitfor "document.querySelector('h1')?.textContent" "登录" 10000; then
   login >/dev/null 2>&1
 fi
 timeout 60 agent-browser eval "location.hash='#/trace-board/'+encodeURIComponent('revshell:1');'ok'" >/dev/null 2>&1
-waitcl "document.querySelector('.playback')?.textContent" "第 7 / 7 步" 15000 || true
+waitfor "$PB_PAUSEDONE" "true" 15000 || true
 RELOADED_LEFT=$(leftof | cut -d, -f2)
 KEPT=$(python3 -c "print('yes' if abs(float('$RELOADED_LEFT')-float('$STORED_LEFT'))<=1.5 else 'no:$RELOADED_LEFT vs $STORED_LEFT')")
 chk "A3 刷新后拖过的位置不弹回（存 $STORED_LEFT，读到 $RELOADED_LEFT）" "$KEPT" "yes"
@@ -205,10 +240,12 @@ chk "A4 进行中：跟随仍可用" "$(ev "[...document.querySelectorAll('.play
 GAIN=$(waitcl "document.querySelectorAll('.gnode').length" "3" 9000 && echo yes || echo no)
 chk "A4 进行中：5s 轮询后新的一跳自己长出来（2→3）" "$GAIN" "yes"
 chk "A4 进行中：线也跟着长（1→2）" "$(ev "document.querySelectorAll('svg [role=button]').length")" "2"
-# 完成态：重放到第 4/7 步暂停 → 「继续」可点 → 接着播 → 播完才禁
+# 完成态：先等自动播完（正向锚点）→ 点「重放」走到中途 → 暂停 → 「继续」可点 → 点它必须真的接着播 → 播完才禁
 nav '#/alerts' '#/trace-board/revshell%3A1'
-PAUSE_STATE="(()=>{const bs=[...document.querySelectorAll('.playback button')];const p=bs.find(b=>['暂停','继续'].includes(b.textContent.trim()));const g=bs.find(b=>b.textContent.trim()==='跳到最新');return JSON.stringify({prog:(document.querySelector('.playback')?.textContent.replace(/\s+/g,' ').trim().match(/第 \d+ \/ \d+ 步/)||[''])[0],t:p?p.textContent.trim():'',d:p?p.disabled:null,latest:g?g.disabled:null})})()"
-waitcl "document.querySelector('.playback')?.textContent" "第 4 / 7 步" 15000 || true
+waitcl "document.querySelector('.stage-title')?.textContent" "已完成" 15000 && ok "A4 白板画出来（顶栏状态「已完成」= 正向锚点）" || no "A4 正向锚点" "顶栏写「已完成」" "$(ev "document.querySelector('.stage-title')?.textContent")"
+waitfor "$PB_PAUSEDONE" "true" 15000 && ok "A4 打开已完成白板：自动按 discovery 播到最新（播完才禁用）" || no "A4 自动播完" "重放控件 disabled=true" "$(ev "$PAUSE_STATE")"
+clicktext "重放" >/dev/null
+waitfor "document.querySelectorAll('.gnode').length" "2" 8000 && ok "A4 点「重放」从头播（跳数又长到 2）" || no "A4 重放" "跳数回到 2" "$(ev "$PAUSE_STATE")"
 clicktext "暂停" >/dev/null
 sleep 0.3
 S1=$(ev "$PAUSE_STATE"); echo "      暂停后：$S1"
@@ -216,22 +253,23 @@ has "A4 暂停后按钮文本变「继续」" '"t":"继续"' "$S1"
 has "A4 暂停中「继续」可点（disabled=false，第一轮的死按钮）" '"d":false' "$S1"
 sleep 2
 S2=$(ev "$PAUSE_STATE")
-chk "A4 暂停中进度真的停住（2s 不动）" "$S2" "$S1"
+chk "A4 暂停中真的停住（2s 后按钮与跳数都不动）" "$S2" "$S1"
+PAUSED_NODES=$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["nodes"])' "$S1")
+# 审计点的关键：不许只比前后快照。点之前先钉住「可点」，再真点，再等按钮文本回「暂停」（README §12.4），最后等播完
+chk "A4 点「继续」之前按钮确实可点（disabled=false）" "$(ev "(()=>{const b=[...document.querySelectorAll('.playback button')].find(x=>x.textContent.trim()==='继续');return b?b.disabled:'NO-BTN'})()")" "false"
 clicktext "继续" >/dev/null
-sleep 1
-S3=$(ev "$PAUSE_STATE"); echo "      继续后：$S3"
-[ "$S3" != "$S1" ] && ok "A4 点「继续」接着播（进度往前）" || no "A4 继续接着播" "进度变化" "$S3"
-waitcl "document.querySelector('.playback')?.textContent" "第 7 / 7 步" 15000 || true
+waitcl "$PB_PAUSE_TEXT" "暂停" 4000 && ok "A4 点「继续」后按钮文本回「暂停」（真的接上播，不是死按钮）" || no "A4 点「继续」接着播" "4s 内按钮文本回到「暂停」" "$(ev "$PAUSE_STATE")"
+waitfor "$PB_PAUSEDONE" "true" 15000 && ok "A4 继续之后一路播到最新（4 跳），此时才禁用" || no "A4 继续后播完" "4 跳且「继续」disabled=true" "$(ev "$PAUSE_STATE")"
+chk "A4 继续后跳数比暂停时多（$PAUSED_NODES → 4）" "$(ev "document.querySelectorAll('.gnode').length>$PAUSED_NODES")" "true"
 S4=$(ev "$PAUSE_STATE"); echo "      播完：$S4"
 has "A4 播完（count>=steps.length）「继续」才禁用" '"t":"继续","d":true' "$S4"
 has "A4 播完「跳到最新」一起禁用" '"latest":true' "$S4"
 chk "A4 播完 4 跳 3 线" "$(ev "document.querySelectorAll('.gnode').length")" "4"
 # 再点重放：从头来，「暂停」可点
 clicktext "重放" >/dev/null
-sleep 0.3
-S5=$(ev "$PAUSE_STATE"); echo "      重放后：$S5"
-has "A4 再点「重放」又从头播（按钮回「暂停」且可点）" '"t":"暂停","d":false' "$S5"
-waitcl "document.querySelector('.playback')?.textContent" "第 7 / 7 步" 15000 || true
+waitcl "$PB_PAUSE_TEXT" "暂停" 4000 && ok "A4 再点「重放」又从头播（按钮回「暂停」且可点）" || no "A4 再点重放" "按钮文本回「暂停」" "$(ev "$PAUSE_STATE")"
+has "A4 重放后按钮可点" '"d":false' "$(ev "$PAUSE_STATE")"
+waitfor "$PB_PAUSEDONE" "true" 15000 || true
 # 断点不点开也看得见（没有点任何节点）
 GAP=$(ev "JSON.stringify([...document.querySelectorAll('.gap-note')].map(e=>({t:e.textContent.trim(),title:e.getAttribute('title'),pe:getComputedStyle(e).pointerEvents})))")
 has "A4 断点写在图上（不点开也看得见）" "上一步没有了" "$GAP"
@@ -267,15 +305,22 @@ has "A4 中断：顶栏写中断与原因" "中断：进程序号变了" "$(ev "
 
 echo
 echo "== A5 没有对话输入框 =="
-nv(){ nav '#/alerts' "$1"; sleep 0.8; }
-nv '#/trace-board/revshell%3A1'
+nav '#/alerts' '#/trace-board/revshell%3A1'
+# 正向锚点：先把「白板页真的渲染出来了」钉住，再数输入框；否则路由坏了/停在别的页也会“没有输入框”
+waitcl "document.querySelector('.stage-title')?.textContent" "已完成" 15000 && ok "A5 前置正向锚点：白板页已渲染（顶栏写状态「已完成」）" || no "A5 前置正向锚点" "顶栏写「已完成」" "$(ev "document.querySelector('.stage-title')?.textContent")"
+waitcl "document.querySelector('.stage-title')?.textContent" "链长 4 跳" 15000 && ok "A5 前置：顶栏链长 = hops 个数（4 跳）" || no "A5 前置链长" "链长 4 跳" "$(ev "document.querySelector('.stage-title')?.textContent")"
+waitfor "document.querySelectorAll('.gnode').length" "4" 15000 && ok "A5 前置：白板真的画出 4 个跳（点）" || no "A5 前置 4 个跳" "4 个点" "$(ev "document.querySelectorAll('.gnode').length")"
 chk "A5 白板页 input/textarea 计数 0" "$(ev "document.querySelectorAll('input,textarea').length")" "0"
 chk "A5 白板页 contenteditable 计数 0" "$(ev "document.querySelectorAll('[contenteditable=true]').length")" "0"
 chk "A5 白板页没有「发送/提问」按钮" "$(ev "[...document.querySelectorAll('button')].filter(b=>/发送|提问|对话|问一句/.test(b.textContent)).length")" "0"
+# 对照：同一个探针在列表页必须数得出筛选输入框，白板页的 0 才不是“探针不灵”
+nav '#/alerts' '#/trace'
+waitfor "document.querySelectorAll('table tbody tr').length" "8" 12000 || true
+chk "A5 对照：列表页数得出筛选输入框（探针有牙齿）" "$(ev "document.querySelectorAll('input,textarea').length>=1")" "true"
 
 echo
 echo "== 六格 · 列表页 =="
-# loading
+# loading（这里的 0.3s 是故意停在瞬时态上取样，不是等异步结束）
 ctl '{"delayMs":1500}'
 nav '#/alerts' '#/trace'
 sleep 0.3
@@ -287,15 +332,15 @@ ctl '{"delayMs":0}'
 # empty
 ctl '{"traceList":"empty"}'
 nav '#/alerts' '#/trace'
-sleep 1
-has "列表 empty：无筛选空态文案" "暂无溯源" "$(ev "document.querySelector('table tbody')?.textContent")"
+waitcl "document.querySelector('table tbody')?.textContent" "暂无溯源" 10000 && ok "列表 empty：空态第一句「暂无溯源」" || no "列表 empty 第一句" "暂无溯源" "$(ev "document.querySelector('table tbody')?.textContent")"
+has "列表 empty：第二句「从告警列表点某一行的『溯源』…」（README §12.3 要求两句都在）" "从告警列表点某一行的" "$(ev "document.querySelector('table tbody')?.textContent")"
 chk "列表 empty：分页两键都禁用" "$(ev "[...document.querySelectorAll('button')].filter(b=>/上一页|下一页/.test(b.textContent)).every(b=>b.disabled)")" "true"
 # empty + 有筛选
 timeout 60 agent-browser eval "(()=>{const s=[...document.querySelectorAll('.filters select')][0];s.value='failed';s.dispatchEvent(new Event('change',{bubbles:true}));return 'ok'})()" >/dev/null 2>&1
-sleep 0.8
+waitcl "document.querySelector('table tbody')?.textContent" "没有匹配的溯源" 10000 || true
 has "列表 empty（有筛选）：改为「没有匹配」" "没有匹配的溯源" "$(ev "document.querySelector('table tbody')?.textContent")"
 has "列表 empty（有筛选）：给「清除筛选」" "清除筛选" "$(ev "document.querySelector('table tbody')?.textContent")"
-clicktext "清除筛选" >/dev/null; sleep 0.8
+clicktext "清除筛选" >/dev/null
 ctl '{"traceList":"ok"}'
 nav '#/alerts' '#/trace'
 waitfor "document.querySelectorAll('table tbody tr').length" "8" 12000 >/dev/null 2>&1
@@ -306,18 +351,22 @@ ctl '{"traceList":"503"}'
 nav '#/alerts' '#/trace'
 waitcl "document.querySelector('.page-error')?.textContent" "溯源列表读取失败" 8000 && ok "列表 error：整块错误 + 服务端原话" || no "列表 error" "读取失败文案" "$(ev "document.querySelector('table tbody')?.textContent")"
 chk "列表 error：role=alert" "$(ev "document.querySelector('.page-error')?.getAttribute('role')")" "alert"
+# README §12.3 错误格：表格内 .page-error + 「重试」——这个「重试」必须是可见可点的，用可见性探针钉住
+chk "列表 error：.page-error 里有 1 个可见「重试」" "$(ev "(()=>{const vis=e=>e.offsetParent!==null&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;return [...document.querySelectorAll('.page-error button,.page-error a')].filter(b=>b.textContent.trim()==='重试'&&vis(b)).length})()")" "1"
 ctl '{"traceList":"ok"}'
-clicktext "重试" >/dev/null
+realclick "(()=>{const vis=e=>e.offsetParent!==null&&e.getBoundingClientRect().width>0;const b=[...document.querySelectorAll('.page-error button,.page-error a')].find(x=>x.textContent.trim()==='重试'&&vis(x));if(!b)return 'NONE';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)})})()" >/dev/null || echo "      [诊断] 列表 error 的「重试」拿不到坐标"
 waitfor "document.querySelectorAll('table tbody tr').length" "8" 12000 >/dev/null 2>&1 && ok "列表 error：点「重试」再发一轮并渲染" || no "列表 重试" "8 行" "$(rows)"
 # partial：已有数据刷新失败
 ctl '{"traceList":"503"}'
 clicktext "刷新" >/dev/null
-sleep 1
-chk "列表 partial：.notice role=alert 可见" "$(ev "document.querySelector('.notice')?.getAttribute('role')")" "alert"
+waitcl "document.querySelector('.notice')?.textContent" "刷新失败" 10000 || true
+chk "列表 partial：.notice role=alert" "$(ev "document.querySelector('.notice')?.getAttribute('role')")" "alert"
+chk "列表 partial：notice 真的可见（hidden=false，README §12.3 断言要点）" "$(ev "document.querySelector('.notice')?.hidden")" "false"
 has "列表 partial：写明是刷新失败下表示上一次结果" "刷新失败" "$(ev "document.querySelector('.notice')?.textContent")"
 chk "列表 partial：行数保持 8 条" "$(rows)" "8"
 ctl '{"traceList":"ok"}'
-clicktext "刷新" >/dev/null; sleep 1
+clicktext "刷新" >/dev/null
+waitfor "document.querySelectorAll('table tbody tr').length" "8" 12000 >/dev/null 2>&1
 # long-content
 LONGROW="(()=>{const r=[...document.querySelectorAll('table tbody tr')].find(r=>{const a=r.querySelector('a');return a&&a.getAttribute('href').includes('long')});if(!r)return 'NOROW';const span=r.cells[1].querySelector('span')||r.cells[1];const idspan=r.cells[0].querySelector('.board-short');return JSON.stringify({host:span.textContent,hostTitle:span.getAttribute('title'),id:idspan?idspan.textContent:'',idTitle:idspan?idspan.getAttribute('title'):''})})()"
 LR=$(ev "$LONGROW"); echo "      长内容行：$LR"
@@ -333,7 +382,7 @@ chk "列表 disabled：单页时「上一页」「下一页」都禁用" "$(ev "
 # 筛选下推
 resetlog
 timeout 60 agent-browser eval "(()=>{const s=[...document.querySelectorAll('.filters select')][0];s.value='failed';s.dispatchEvent(new Event('change',{bubbles:true}));return 'ok'})()" >/dev/null 2>&1
-sleep 1
+waitfor "document.querySelectorAll('table tbody tr').length" "1" 10000 || true
 chk "列表 筛选下推 status=failed（offset 回 0）" "$(hits 'status=failed' GET)" "1"
 chk "列表 筛选后 1 行（失败那条）" "$(rows)" "1"
 has "列表 筛选下推带 offset=0" "offset=0" "$(curl -s "$API/__ctl/log" | python3 -c 'import json,sys;print([r["path"] for r in json.load(sys.stdin)["requests"] if "status=" in r["path"]][-1])')"
@@ -342,7 +391,7 @@ sleep 1
 
 echo
 echo "== 六格 · 白板页 =="
-# loading
+# loading（同样：0.3s 是停在瞬时态上取样）
 ctl '{"delayMs":1500}'
 nav '#/alerts' '#/trace-board/revshell%3A1'
 sleep 0.3
@@ -353,37 +402,47 @@ waitcl "document.querySelectorAll('.gnode').length" "1" 12000 || true
 ctl '{"delayMs":0}'
 # empty done / empty running
 nav '#/alerts' '#/trace-board/empty%3A1'
-waitcl "document.querySelector('.canvas')?.textContent" "这条链没有跳" 8000 && ok "白板 empty（已完成）：「这条链没有跳」" || no "白板 empty" "这条链没有跳" "$(ev "document.querySelector('.canvas')?.textContent")"
+waitcl "document.querySelector('.canvas')?.textContent" "这条链没有跳" 8000 && ok "白板 empty（已完成）：第一句「这条链没有跳」" || no "白板 empty 第一句" "这条链没有跳" "$(ev "document.querySelector('.canvas')?.textContent")"
+has "白板 empty（已完成）：第二句「接口没有返回链上的跳。」（README §12.4 要求两句）" "接口没有返回链上的跳" "$(ev "document.querySelector('.canvas')?.textContent")"
 chk "白板 empty：重放/跳到最新禁用（不启动）" "$(ev "[...document.querySelectorAll('.playback button')].filter(b=>['重放','跳到最新'].includes(b.textContent.trim())).every(b=>b.disabled)")" "true"
 nav '#/alerts' '#/trace-board/empty-running%3A1'
-waitcl "document.querySelector('.canvas')?.textContent" "还没有跳" 8000 && ok "白板 empty（进行中）：「还没有跳 / 任务在跑…」" || no "白板 empty 进行中" "还没有跳" "$(ev "document.querySelector('.canvas')?.textContent")"
+waitcl "document.querySelector('.canvas')?.textContent" "还没有跳" 8000 && ok "白板 empty（进行中）：第一句「还没有跳」" || no "白板 empty 进行中第一句" "还没有跳" "$(ev "document.querySelector('.canvas')?.textContent")"
+has "白板 empty（进行中）：第二句「任务在跑，新的一跳会自己从左边长出来。」" "任务在跑，新的一跳会自己从左边长出来" "$(ev "document.querySelector('.canvas')?.textContent")"
 # partial：已有白板刷新失败，链保持
 nav '#/alerts' '#/trace-board/revshell%3A1'
-waitcl "document.querySelector('.playback')?.textContent" "第 7 / 7 步" 15000 || true
+waitfor "$PB_PAUSEDONE" "true" 15000 || true
 BEFORE_NODES=$(ev "document.querySelectorAll('.gnode').length")
 ctl '{"traceBoard":"fail"}'
 clicktext "刷新" >/dev/null
-sleep 1
+waitcl "document.querySelector('.notice')?.textContent" "白板读取失败" 10000 || true
 chk "白板 partial：.notice role=alert（刷新失败）" "$(ev "document.querySelector('.notice')?.getAttribute('role')")" "alert"
+chk "白板 partial：notice 真的可见（hidden=false）" "$(ev "document.querySelector('.notice')?.hidden")" "false"
+chk "白板 partial：刷新失败时「重试」是可见的（同一探针的正向对照）" "$(visn 重试)" "1"
 chk "白板 partial：链保持原样（节点数不变）" "$(ev "document.querySelectorAll('.gnode').length")" "$BEFORE_NODES"
-# error：首屏 GET+POST 都失败
+# error：首屏失败（GET 直接失败这条路；404→POST 422 那条在 A2）
 nav '#/alerts' '#/trace-board/revshell%3A1'
-sleep 1.2
-has "白板 error：画布「白板读取失败」+ 服务端原话" "白板读取失败" "$(ev "document.querySelector('.canvas')?.textContent.replace(/\s+/g,' ').trim()")"
-has "白板 error：服务端原话带出来" "模型没配置" "$(ev "document.querySelector('.canvas')?.textContent.replace(/\s+/g,' ').trim()")"
-chk "白板 error：给「重试」按钮" "$(ev "[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='重试')")" "true"
+waitcl "document.querySelector('.canvas')?.textContent" "白板读取失败" 10000 || true
+has "白板 error：画布「白板读取失败」" "白板读取失败" "$(ev "document.querySelector('.canvas')?.textContent.replace(/\s+/g,' ').trim()")"
+has "白板 error：服务端原话带出来（画布里可见）" "模型没配置" "$(ev "document.querySelector('.canvas')?.textContent.replace(/\s+/g,' ').trim()")"
+# README §12.4 错误格写「画布…+『重试』」。实测：DOM 里有一个「重试」，但它是 hidden 的（rect 0×0、offsetParent null），
+# 页面上没有任何可见「重试」。这里只断言可见性，不替文档圆场（见报告 finding）
+chk "白板 error：DOM 里的「重试」不可见（rect 0×0 / offsetParent null）" "$(ev "(()=>{const bs=[...document.querySelectorAll('button,a')].filter(b=>b.textContent.trim()==='重试');return JSON.stringify(bs.map(b=>{const r=b.getBoundingClientRect();return {w:Math.round(r.width),h:Math.round(r.height),op:b.offsetParent!==null}}))})()")" '[{"w":0,"h":0,"op":false}]'
+chk "白板 error：可见「重试」数量 = 0" "$(visn 重试)" "0"
+chk "白板 error：可见恢复入口是顶栏「刷新」= 1（README:641 承诺的画布内重试没有兑现）" "$(visn 刷新)" "1"
+chk "白板 error：顶栏「刷新」可点（disabled=false）" "$(ev "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='刷新'&&x.offsetParent!==null);return b?b.disabled:'NO-BTN'})()")" "false"
+# 恢复路径走真鼠标坐标（el.click() 点 hidden 按钮也能“恢复”，那不算用户能点）
 ctl '{"traceBoard":"ok"}'
-clicktext "重试" >/dev/null
-waitcl "document.querySelectorAll('.gnode').length" "1" 10000 && ok "白板 error：点重试恢复画板" || no "白板 重试恢复" "节点出现" "$(ev "document.querySelector('.canvas')?.textContent")"
+realclick "(()=>{const vis=e=>e.offsetParent!==null&&e.getBoundingClientRect().width>0;const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='刷新'&&vis(x));if(!b)return 'NONE';const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)})})()" >/dev/null || echo "      [诊断] 顶栏「刷新」拿不到坐标"
+waitfor "document.querySelectorAll('.gnode').length>0" "true" 12000 && ok "白板 error：真鼠标点可见的「刷新」能恢复画板" || no "白板 error 恢复" "真鼠标点「刷新」后节点出现" "$(ev "document.querySelector('.canvas')?.textContent.replace(/\s+/g,' ').trim().slice(0,80)")"
 # 没带目标：不发请求
 resetlog
 nav '#/alerts' '#/trace-board/'
-sleep 1
+waitcl "document.querySelector('.canvas')?.textContent" "没有指定这一条" 10000 || true
 has "白板 error：没带目标写「没有指定这一条」" "没有指定这一条" "$(ev "document.querySelector('.canvas')?.textContent")"
 chk "白板 error：没带目标不发请求" "$(hits '/api/trace/' '*')" "0"
 # long-content
 nav '#/alerts' '#/trace-board/long%3A1'
-waitcl "document.querySelector('.playback')?.textContent" "第 7 / 7 步" 15000 || true
+waitfor "$PB_PAUSEDONE" "true" 15000 || true
 LONGOK=$(ev "(()=>{const l=[...document.querySelectorAll('.gnode-label')];const want='反弹 shell 外联 192.0.2.2:4444，父进程是 /usr/sbin/sshd -D，祖父进程是 systemd，再往上就查不到启动命令了';return JSON.stringify({n:l.length,allFull:l.every(x=>x.textContent.includes(want)),gapTitle:(document.querySelector('.gap-note')?.getAttribute('title')||'').includes('再往回只能靠人工问运维'),gapText:(document.querySelector('.gap-note')?.textContent||'').includes('再往回只能靠人工问运维')})})()")
 has "白板 long-content：超长标签全文进 .gnode-label（4 跳全中）" '"allFull":true' "$LONGOK"
 has "白板 long-content：断点原因全文在 title" '"gapTitle":true' "$LONGOK"
@@ -402,22 +461,25 @@ nav '#/alerts' '#/trace'
 waitfor "document.querySelectorAll('table tbody tr').length" "8" 10000 >/dev/null 2>&1
 shot "$SHOTS/1440-trace-list.png"
 nav '#/trace' '#/trace-board/revshell%3A1'
-waitcl "document.querySelector('.playback')?.textContent" "第 4 / 7 步" 15000 || true
-clicktext "暂停" >/dev/null; sleep 0.3
+waitfor "$PB_PAUSEDONE" "true" 15000 || true
+clicktext "重放" >/dev/null
+waitfor "document.querySelectorAll('.gnode').length" "2" 8000 || true
+clicktext "暂停" >/dev/null
+waitcl "$PB_PAUSE_TEXT" "继续" 4000 || true
 shot "$SHOTS/1440-trace-board-paused.png"
 clicktext "继续" >/dev/null
-waitcl "document.querySelector('.playback')?.textContent" "第 7 / 7 步" 15000 || true
+waitfor "$PB_PAUSEDONE" "true" 15000 || true
 shot "$SHOTS/1440-trace-board-done.png"
 nav '#/alerts' '#/trace-board/honeypot%3A2'
 waitfor "document.querySelectorAll('.gnode').length>0" "true" 8000 || true
 shot "$SHOTS/1440-trace-board-running.png"
 ctl '{"traceBoard":"fail"}'
 nav '#/alerts' '#/trace-board/revshell%3A1'
-sleep 1.2
+waitcl "document.querySelector('.canvas')?.textContent" "白板读取失败" 10000 || true
 shot "$SHOTS/1440-trace-board-error.png"
 ctl '{"traceBoard":"ok"}'
 nav '#/alerts' '#/trace-board/long%3A1'
-waitcl "document.querySelector('.playback')?.textContent" "第 7 / 7 步" 15000 || true
+waitfor "$PB_PAUSEDONE" "true" 15000 || true
 shot "$SHOTS/1440-trace-board-long.png"
 # 390 视口
 timeout 30 agent-browser set viewport 390 844 >/dev/null 2>&1
@@ -429,7 +491,7 @@ chk "390 列表：表格在包裹层里横滚（overflow-x auto）" "$(ev "getCo
 chk "390 列表：包裹层可滚（scrollWidth > clientWidth）" "$(ev "document.querySelector('.table-wrap').scrollWidth>document.querySelector('.table-wrap').clientWidth")" "true"
 shot "$SHOTS/390-trace-list.png"
 nav '#/trace' '#/trace-board/revshell%3A1'
-waitcl "document.querySelector('.playback')?.textContent" "第 7 / 7 步" 15000 || true
+waitfor "$PB_PAUSEDONE" "true" 15000 || true
 chk "390 白板：页面无整页横向溢出" "$(ev "document.documentElement.scrollWidth<=document.documentElement.clientWidth")" "true"
 chk "390 白板：四个点都在（没被挤没）" "$(ev "document.querySelectorAll('.gnode').length")" "4"
 shot "$SHOTS/390-trace-board.png"

@@ -15,7 +15,7 @@ PASS  A1 四值状态都在列表里（进行中/已完成/失败/中断）
 PASS  A1 已完成
 PASS  A1 失败
 PASS  A1 中断
-PASS  A1 键盘 Tab→Enter 能在行链接上进白板
+PASS  A1 焦点在行链接上按回车能进白板（只验回车，没验 Tab 焦点顺序）
 PASS  A1 白板页仍叫「深度溯源」（壳标题）
 
 == A2 入口：告警列表「溯源」/ 告警详情「深度溯源」/ 404 后自动创建 ==
@@ -53,18 +53,23 @@ PASS  A4 进行中：重放/暂停/跳到最新三键 hidden（D016）
 PASS  A4 进行中：跟随仍可用
 PASS  A4 进行中：5s 轮询后新的一跳自己长出来（2→3）
 PASS  A4 进行中：线也跟着长（1→2）
-      暂停后：{"prog":"第 4 / 7 步","t":"继续","d":false,"latest":false}
+PASS  A4 白板画出来（顶栏状态「已完成」= 正向锚点）
+PASS  A4 打开已完成白板：自动按 discovery 播到最新（播完才禁用）
+PASS  A4 点「重放」从头播（跳数又长到 2）
+      暂停后：{"t":"继续","d":false,"latest":false,"nodes":2}
 PASS  A4 暂停后按钮文本变「继续」
 PASS  A4 暂停中「继续」可点（disabled=false，第一轮的死按钮）
-PASS  A4 暂停中进度真的停住（2s 不动）
-      继续后：{"prog":"第 5 / 7 步","t":"暂停","d":false,"latest":false}
-PASS  A4 点「继续」接着播（进度往前）
-      播完：{"prog":"第 7 / 7 步","t":"继续","d":true,"latest":true}
+PASS  A4 暂停中真的停住（2s 后按钮与跳数都不动）
+PASS  A4 点「继续」之前按钮确实可点（disabled=false）
+PASS  A4 点「继续」后按钮文本回「暂停」（真的接上播，不是死按钮）
+PASS  A4 继续之后一路播到最新（4 跳），此时才禁用
+PASS  A4 继续后跳数比暂停时多（2 → 4）
+      播完：{"t":"继续","d":true,"latest":true,"nodes":4}
 PASS  A4 播完（count>=steps.length）「继续」才禁用
 PASS  A4 播完「跳到最新」一起禁用
 PASS  A4 播完 4 跳 3 线
-      重放后：{"prog":"第 0 / 7 步","t":"暂停","d":false,"latest":false}
 PASS  A4 再点「重放」又从头播（按钮回「暂停」且可点）
+PASS  A4 重放后按钮可点
 PASS  A4 断点写在图上（不点开也看得见）
 PASS  A4 断点原因全文在 title
 PASS  A4 断点不可点（pointer-events:none，不挡拖拽）
@@ -81,23 +86,30 @@ PASS  A4 失败：画出来的链不清掉（4 跳）
 PASS  A4 中断：顶栏写中断与原因
 
 == A5 没有对话输入框 ==
+PASS  A5 前置正向锚点：白板页已渲染（顶栏写状态「已完成」）
+PASS  A5 前置：顶栏链长 = hops 个数（4 跳）
+PASS  A5 前置：白板真的画出 4 个跳（点）
 PASS  A5 白板页 input/textarea 计数 0
 PASS  A5 白板页 contenteditable 计数 0
 PASS  A5 白板页没有「发送/提问」按钮
+PASS  A5 对照：列表页数得出筛选输入框（探针有牙齿）
 
 == 六格 · 列表页 ==
 PASS  列表 loading：table-wrap aria-busy=true
 PASS  列表 loading：骨架文案「正在读取溯源…」
 PASS  列表 loading：刷新 + 四个筛选全禁用
-PASS  列表 empty：无筛选空态文案
+PASS  列表 empty：空态第一句「暂无溯源」
+PASS  列表 empty：第二句「从告警列表点某一行的『溯源』…」（README §12.3 要求两句都在）
 PASS  列表 empty：分页两键都禁用
 PASS  列表 empty（有筛选）：改为「没有匹配」
 PASS  列表 empty（有筛选）：给「清除筛选」
 PASS  列表 清除筛选后回到全部 8 条
 PASS  列表 error：整块错误 + 服务端原话
 PASS  列表 error：role=alert
+PASS  列表 error：.page-error 里有 1 个可见「重试」
 PASS  列表 error：点「重试」再发一轮并渲染
-PASS  列表 partial：.notice role=alert 可见
+PASS  列表 partial：.notice role=alert
+PASS  列表 partial：notice 真的可见（hidden=false，README §12.3 断言要点）
 PASS  列表 partial：写明是刷新失败下表示上一次结果
 PASS  列表 partial：行数保持 8 条
       长内容行：{"host":"10.0.0.5.node-with-a-very-long-hostname.intranet.example.corp.internal","hostTitle":"10.0.0.5.node-with-a-very-long-hostname.intranet.example.corp.internal","id":"long:1","idTitle":"long:1"}
@@ -116,15 +128,22 @@ PASS  列表 筛选下推带 offset=0
 PASS  白板 loading：.canvas aria-busy=true
 PASS  白板 loading：「正在读取白板…」
 PASS  白板 loading：刷新禁用
-PASS  白板 empty（已完成）：「这条链没有跳」
+PASS  白板 empty（已完成）：第一句「这条链没有跳」
+PASS  白板 empty（已完成）：第二句「接口没有返回链上的跳。」（README §12.4 要求两句）
 PASS  白板 empty：重放/跳到最新禁用（不启动）
-PASS  白板 empty（进行中）：「还没有跳 / 任务在跑…」
+PASS  白板 empty（进行中）：第一句「还没有跳」
+PASS  白板 empty（进行中）：第二句「任务在跑，新的一跳会自己从左边长出来。」
 PASS  白板 partial：.notice role=alert（刷新失败）
+PASS  白板 partial：notice 真的可见（hidden=false）
+PASS  白板 partial：刷新失败时「重试」是可见的（同一探针的正向对照）
 PASS  白板 partial：链保持原样（节点数不变）
-PASS  白板 error：画布「白板读取失败」+ 服务端原话
-PASS  白板 error：服务端原话带出来
-PASS  白板 error：给「重试」按钮
-PASS  白板 error：点重试恢复画板
+PASS  白板 error：画布「白板读取失败」
+PASS  白板 error：服务端原话带出来（画布里可见）
+PASS  白板 error：DOM 里的「重试」不可见（rect 0×0 / offsetParent null）
+PASS  白板 error：可见「重试」数量 = 0
+PASS  白板 error：可见恢复入口是顶栏「刷新」= 1（README:641 承诺的画布内重试没有兑现）
+PASS  白板 error：顶栏「刷新」可点（disabled=false）
+PASS  白板 error：真鼠标点可见的「刷新」能恢复画板
 PASS  白板 error：没带目标写「没有指定这一条」
 PASS  白板 error：没带目标不发请求
 PASS  白板 long-content：超长标签全文进 .gnode-label（4 跳全中）
@@ -152,4 +171,4 @@ PASS  390 白板：四个点都在（没被挤没）
 PASS  截图 390-trace-board.png
 
 == 汇总 ==
-PASS=124 FAIL=0
+PASS=145 FAIL=0
