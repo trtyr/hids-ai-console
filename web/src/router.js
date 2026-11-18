@@ -9,15 +9,19 @@
 
 import { page as alertDetail } from '../pages/alert-detail.js';
 import { page as alerts } from '../pages/alerts.js';
+import { page as alertsDemo } from '../pages/alerts-demo.js';
 import { page as knowledge } from '../pages/knowledge.js';
 import { page as overview } from '../pages/overview.js';
 import { page as rules } from '../pages/rules.js';
 import { page as trace } from '../pages/trace.js';
 
-/** 全部页面。顺序即侧栏顺序（navLabel 为空的不进侧栏）。 */
-export const PAGES = [overview, alerts, alertDetail, trace, rules, knowledge];
+/**
+ * 全部页面。顺序即侧栏顺序（navLabel 为空的不进侧栏）。
+ * `alerts-demo` 是牧云现查的单独入口（D020：标成演示）；主列表是 `alerts`（研判记录）。
+ */
+export const PAGES = [overview, alerts, alertsDemo, alertDetail, trace, rules, knowledge];
 
-/** 侧栏上的入口：总览 / 告警 / 深度溯源 / 规则 / 知识库 */
+/** 侧栏上的入口：总览 / 告警 / 牧云现查（演示） / 深度溯源 / 规则 / 知识库 */
 export const NAV_PAGES = PAGES.filter(page => page.navLabel);
 
 export const DEFAULT_ROUTE = 'overview';

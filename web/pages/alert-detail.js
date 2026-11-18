@@ -18,13 +18,21 @@
 //   8) 稿的「ID 不存在」页 → 接口没有 404：未知事件 ID 走 502；只有 400（ID/类型无效）按「没有这条告警」处理。
 //   9) 场景行（稿映射 scenario）与「类型」重复，不单列。
 //
-// 六格状态：loading / empty（未研判）/ partial（研判记录读不到）/ error（告警本体读不到）/ long-content / disabled。
+// P003-T015（D020 / A3）：本页的**首要数据源换成研判记录**（`GET /api/agent/triage/{alertId}`），
+// 牧云事件（`GET /api/alerts/{alertId}`）降为可选补充——syslog 案件对不上牧云事件号时照样打开这条研判，
+// 不跳进一个认不出 ID 的牧云详情，也不因为牧云没配就整页报错。新增两块（稿未覆盖，D020 明写要这四样）：
+//   -「命中的规则」：命中的规则名与那段 Rego 原文（`GET /api/rules/{id}`）；一条都没命中时写「没有套上」。
+//   -「用过的知识库」：分析采纳了哪一页（`verdict.wiki.adopted`），没采纳时写原因（`verdict.wiki.reason`）。
+// 短结果（`verdict.summary`，上限 500 字）与证据（`triage.evidence[]`）沿用原有两块。
+//
+// 六格状态：loading / empty（未研判）/ partial（研判记录读不到）/ error（研判记录读不到）/ long-content / disabled。
 
 import {
   AlertDetailError,
   enqueueTriage,
   getAlert,
   getInvestigation,
+  getRule,
   getTraceBoard,
   getTriageRecord,
 } from '../src/alert-detail.js';
@@ -52,6 +60,16 @@ const REQUIRED_STATUS = {
 const REVIEW_LABEL = { supported: '支持原结论', needs_revision: '要求修订', unavailable: '未完成' };
 /** 溯源白板节点的 kind → 中文；未登记的类型原样显示（trace-board.js:74-77 的 kind 是自由字符串） */
 const ENTITY_LABEL = { asset: '资产', external_ip: '外部 IP' };
+// syslog MsgId → 事件类型中文（syslog-input.js:9-15 的映射 + 稿的 TYPE_LABELS）。
+// 研判记录只带 msgid，牧云事件对不上时标题/类型就从这里来（同 pages/alerts.js 的映射，两页各留一份，
+// 因为页面之间不互相 import 私有表）。
+const MSGID_LABELS = {
+  'cloudwalker-webshell': '网站后门', 'cloudwalker-honeypot': '蜜罐',
+  'cloudwalker-suspicious-command': '可疑操作', 'cloudwalker-abnormal-login': '异常登录',
+  'cloudwalker-brute-force': '暴力破解', 'cloudwalker-revshell': '反弹 Shell',
+  'cloudwalker-malware': '恶意程序', 'cloudwalker-elevation-process': '提权进程',
+  'cloudwalker-abnormal-network': '网络审计',
+};
 
 const TEMPLATE = `
 <div class="detail-page">
@@ -124,6 +142,18 @@ const TEMPLATE = `
           <p class="summary" data-role="summary" hidden></p>
           <p class="report" data-role="report" hidden></p>
           <p class="side-note" data-role="verdict-note" hidden></p>
+        </section>
+
+        <section class="block" data-role="rule-block" aria-labelledby="ad-rule-label">
+          <h2 class="block-label" id="ad-rule-label">命中的规则<span class="meta" data-role="rule-meta"></span></h2>
+          <p class="rule-line" data-role="rule-line">—</p>
+          <pre class="rego" data-role="rule-rego" hidden></pre>
+        </section>
+
+        <section class="block" data-role="wiki-block" aria-labelledby="ad-wiki-label">
+          <h2 class="block-label" id="ad-wiki-label">用过的知识库<span class="meta" data-role="wiki-meta"></span></h2>
+          <ul class="wiki-list" data-role="wiki-list"></ul>
+          <p class="side-note" data-role="wiki-note" hidden></p>
         </section>
 
         <section class="block" data-role="claims-block" aria-labelledby="ad-claims-label" hidden>
@@ -199,10 +229,19 @@ function ensureStyles(document) {
 
 const pad2 = value => String(value).padStart(2, '0');
 
-/** ISO → `YYYY-MM-DD HH:MM:SS`（本地时区）；空值或非法时间显示「—」（照稿） */
-export function formatTime(iso) {
-  if (!iso) return '—';
-  const date = new Date(iso);
+/**
+ * 时间 → `YYYY-MM-DD HH:MM:SS`（本地时区）；空值或非法时间显示「—」（照稿）。
+ * 研判记录的事件时间是秒级 Unix 时间（triage-monitor.js:143），牧云事件是 ISO，两种都收。
+ */
+export function formatTime(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  let date;
+  if (typeof value === 'number' || /^\d{9,13}$/.test(String(value))) {
+    const num = Number(value);
+    date = new Date(num > 1e11 ? num : num * 1000);
+  } else {
+    date = new Date(value);
+  }
   if (Number.isNaN(date.getTime())) return '—';
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} `
     + `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
@@ -367,6 +406,8 @@ export function mountAlertDetailPage(params = [], options = {}) {
     triageError: null,
     investigation: null,
     investigationError: null,
+    rule: null,
+    ruleMissing: false,
     board: null,
     busy: false,
     note: '',
@@ -406,31 +447,54 @@ export function mountAlertDetailPage(params = [], options = {}) {
     $('crumb').textContent = alertId || '—';
   }
 
+  /** 本页要操作的那条案件 ID：研判记录优先（syslog 案件对不上牧云事件号），其次牧云事件、最后 URL */
+  function targetIdOf() {
+    return state.triage?.alert_id ?? state.alert?.id ?? alertId;
+  }
+
+  /** 牧云事件对不上时，标题用研判记录自己的类型 + 主机（不编一个牧云标题） */
+  function caseTitleOf(triage) {
+    const typeLabel = MSGID_LABELS[triage?.msgid] ?? null;
+    const host = typeof triage?.host_ip === 'string' && triage.host_ip ? triage.host_ip : null;
+    if (typeLabel && host) return `${typeLabel} · ${host}`;
+    return typeLabel ?? host ?? null;
+  }
+
   function paintHead() {
-    const alert = state.alert ?? {};
+    const alert = state.alert; // 牧云事件，可能没有（syslog 案件对不上 / 牧云没配）
+    const triage = state.triage;
     const level = $('level');
-    level.textContent = alert.level ?? '—';
-    level.className = `level ${LEVEL_CLASS[alert.levelKey] ?? ''}`.trim();
+    level.textContent = alert?.level ?? '—';
+    level.className = `level ${LEVEL_CLASS[alert?.levelKey] ?? ''}`.trim();
 
-    $('type').textContent = alert.scenario ?? alert.eventType ?? '—';
+    $('type').textContent = alert
+      ? (alert.scenario ?? alert.eventType ?? '—')
+      : (MSGID_LABELS[triage?.msgid] ?? triage?.msgid ?? '—');
 
-    const status = state.triage?.status;
+    const status = triage?.status;
     const stateEl = $('state');
     // 研判记录读不到时不猜状态（不是「未入队」）：照实说读不到
-    stateEl.textContent = state.triageError ? '状态读取失败' : triageLabelOf(state.triage);
+    stateEl.textContent = state.triageError ? '状态读取失败' : triageLabelOf(triage);
     stateEl.className = `state${TRIAGE_ACTIVE.has(status) ? ' is-queued' : ''}`;
 
-    $('title').textContent = alert.title ?? '（无标题）';
+    $('title').textContent = alert?.title ?? caseTitleOf(triage) ?? '（无标题）';
 
     const meta = [];
-    if (alert.asset) meta.push({ text: alert.asset });
-    if (alert.assetIp) meta.push({ text: alert.assetIp, mono: true });
-    meta.push({ text: formatTime(alert.createdAt), mono: true });
-    if (Number.isSafeInteger(alert.eventId)) meta.push({ text: `#${alert.eventId}`, mono: true });
-    if (Number.isSafeInteger(alert.hostId)) meta.push({ text: `#${alert.hostId}`, mono: true });
+    if (alert?.asset) meta.push({ text: alert.asset });
+    const address = alert?.assetIp ?? triage?.host_ip;
+    if (address) meta.push({ text: address, mono: true });
+    const source = alert?.source ?? triage?.source_ip;
+    if (source) meta.push({ text: `来源 ${source}`, mono: true });
+    meta.push({ text: formatTime(alert?.createdAt ?? triage?.event_time), mono: true });
+    if (Number.isSafeInteger(alert?.eventId)) meta.push({ text: `#${alert.eventId}`, mono: true });
+    if (Number.isSafeInteger(alert?.hostId)) meta.push({ text: `#${alert.hostId}`, mono: true });
     // Syslog 案件 ID（triage.alert_id）只在与本告警 ID 不同时才显示——相同就是牧云事件自己
-    const caseId = state.triage?.alert_id;
-    if (typeof caseId === 'string' && caseId && caseId !== alert.id) meta.push({ text: caseId, mono: true });
+    const caseId = triage?.alert_id;
+    if (typeof caseId === 'string' && caseId && caseId !== alert?.id) meta.push({ text: caseId, mono: true });
+    // 重复投递次数（D020 / T009：沿用记录上的 repeat_count，不另造计数）
+    if (Number.isSafeInteger(triage?.repeat_count) && triage.repeat_count > 1) {
+      meta.push({ text: `重复 ×${triage.repeat_count}` });
+    }
 
     const metaHost = $('meta');
     metaHost.replaceChildren(...meta.flatMap((item, index) => {
@@ -439,7 +503,7 @@ export function mountAlertDetailPage(params = [], options = {}) {
     }));
 
     // 深度溯源：真链接，参数从第二段起传（router.js:38-46；trace 页 T005 读 params[0]）
-    $('trace').href = `#/trace/${encodeURIComponent(alert.id ?? '')}`;
+    $('trace').href = `#/trace/${encodeURIComponent(targetIdOf() ?? '')}`;
 
     const button = $('queue');
     if (state.triageError) {
@@ -489,7 +553,9 @@ export function mountAlertDetailPage(params = [], options = {}) {
     verdict.textContent = label ?? '待研判';
     verdict.className = `verdict ${VERDICT_CLASS[label] ?? 'is-pending'}`;
 
-    const summary = state.investigation?.verdict?.summary;
+    // 短结果：已保存研判结果的 verdict.summary 优先（AI 写出的原文），
+    // 读不到研判结果时退回研判记录上的 summary（记录是首要数据源，任务失败时这条也还在）
+    const summary = state.investigation?.verdict?.summary ?? state.triage?.summary;
     const summaryEl = $('summary');
     summaryEl.hidden = typeof summary !== 'string' || !summary.trim();
     summaryEl.textContent = summaryEl.hidden ? '' : summary;
@@ -740,12 +806,96 @@ export function mountAlertDetailPage(params = [], options = {}) {
     $('json').textContent = Object.keys(detail).length ? JSON.stringify(detail, null, 2) : '{}';
   }
 
+  /** 命中的规则 id：研判结果里的 rego.rule_ids 优先，退回记录上的 rule_id（T009 列表口径） */
+  function ruleIdsOf() {
+    const rego = state.investigation?.verdict?.rego;
+    const fromVerdict = Array.isArray(rego?.rule_ids)
+      ? rego.rule_ids.filter(id => typeof id === 'string' && id)
+      : [];
+    if (fromVerdict.length) return fromVerdict;
+    const fromCase = state.triage?.rule_id;
+    return typeof fromCase === 'string' && fromCase ? [fromCase] : [];
+  }
+
+  /**
+   * 「命中的规则」：规则名 + 那段 Rego 原文（A3）。
+   * 三种实话：命中（给正文）/ 没命中（写「没有套上」）/ 还没研判或规则未评估（照实说，不假装没有套上）。
+   */
+  function paintRule() {
+    const line = $('rule-line');
+    const regoEl = $('rule-rego');
+    const metaEl = $('rule-meta');
+    const ids = ruleIdsOf();
+    const rego = state.investigation?.verdict?.rego;
+    regoEl.hidden = true;
+    regoEl.textContent = '';
+    metaEl.textContent = '';
+
+    if (ids.length) {
+      const name = state.rule?.name && state.rule.name !== ids[0] ? `（${state.rule.name}）` : '';
+      line.textContent = `命中 ${ids.join('、')}${name}`;
+      if (ids.length > 1) metaEl.textContent = `${ids.length} 条`;
+      else if (state.ruleMissing) metaEl.textContent = '规则库里已没有这条';
+      else if (state.rule?.file) metaEl.textContent = state.rule.file;
+      if (state.rule?.rego) {
+        regoEl.hidden = false;
+        regoEl.textContent = state.rule.rego;
+      }
+      return;
+    }
+
+    if (rego && typeof rego.status === 'string') {
+      if (rego.status === 'none') { line.textContent = '没有套上'; return; }
+      if (rego.status === 'unavailable') { line.textContent = '规则评估不可用（没套上，也没能确认）'; return; }
+      if (rego.status === 'not_applicable') { line.textContent = '这一轮不做规则评估'; return; }
+      line.textContent = `规则评估结果：${rego.status}`;
+      return;
+    }
+
+    line.textContent = state.triage?.status === 'done' ? '没有套上' : '还没有研判结论，规则未评估';
+  }
+
+  /**
+   * 「用过的知识库」：采纳了哪一页 / 为什么没采纳（A3，`verdict.wiki`，investigation-agent.js:689-694）。
+   * consulted 只给数量，不编页名。
+   */
+  function paintWiki() {
+    const list = $('wiki-list');
+    const noteEl = $('wiki-note');
+    const metaEl = $('wiki-meta');
+    const wiki = state.investigation?.verdict?.wiki;
+    metaEl.textContent = '';
+
+    if (!wiki || typeof wiki !== 'object') {
+      list.replaceChildren();
+      list.hidden = true;
+      noteEl.hidden = false;
+      noteEl.textContent = state.investigationError
+        ? `研判结果读取失败：${state.investigationError}`
+        : '研判结果里没有知识库记录（还没研判，或这一轮不适用）。';
+      return;
+    }
+
+    const adopted = Array.isArray(wiki.adopted) ? wiki.adopted.filter(id => typeof id === 'string' && id) : [];
+    const consulted = Array.isArray(wiki.consulted) ? wiki.consulted.filter(id => typeof id === 'string' && id) : [];
+    const reason = typeof wiki.reason === 'string' ? wiki.reason.trim() : '';
+    metaEl.textContent = consulted.length ? `查阅 ${consulted.length} 页` : '';
+    list.hidden = adopted.length === 0;
+    list.replaceChildren(...adopted.map(id => el(document, 'li', { class: 'wiki-item' }, [
+      el(document, 'span', { class: 'wiki-id mono', text: id, title: id }),
+    ])));
+    noteEl.hidden = adopted.length === 0 && !reason;
+    noteEl.textContent = adopted.length === 0 ? (reason || '没有采纳判据页') : reason;
+  }
+
   function paint() {
     paintShell();
     if (state.phase !== 'ready') return;
     paintHead();
     paintStats();
     paintVerdict();
+    paintRule();
+    paintWiki();
     paintClaims();
     paintGaps();
     paintSteps();
@@ -776,6 +926,12 @@ export function mountAlertDetailPage(params = [], options = {}) {
     return getInvestigation(alertId, { mode: 'deep' }, request);
   }
 
+  /**
+   * 取数顺序（P003-T015）：**研判记录是首要数据源**（D020：推送 ID 和牧云事件号对不上时照样打开这条研判）。
+   *   1. 研判记录：400 = 这条 ID 不认识（not_found）；503 = 自动研判没配（记 partial，继续看牧云事件）。
+   *   2. 牧云事件 / 研判结果 / 溯源白板：三块各自失败只影响自己那块（partial）。
+   *   3. 规则原文：知道命中了哪条才去取（`GET /api/rules/{id}`），取不到只让「命中的规则」那块说实话。
+   */
   async function load() {
     state.phase = 'loading';
     state.error = null;
@@ -783,6 +939,8 @@ export function mountAlertDetailPage(params = [], options = {}) {
     state.triageError = null;
     state.investigation = null;
     state.investigationError = null;
+    state.rule = null;
+    state.ruleMissing = false;
     state.board = null;
     paint();
 
@@ -793,39 +951,65 @@ export function mountAlertDetailPage(params = [], options = {}) {
       return;
     }
 
+    let triageFailure = null;
     try {
-      const { alert, detail } = await getAlert(alertId, request);
-      state.alert = alert;
-      state.detail = detail;
-      state.phase = 'ready';
+      state.triage = await getTriageRecord(alertId, request);
     } catch (error) {
-      state.error = error;
-      state.alert = null;
       if (error instanceof AlertDetailError && error.kind === 'invalid_id') {
         state.phase = 'not_found';
         $('not-found-detail').textContent = `链接里的告警 ID「${alertId}」不是本仓支持的事件类型或编号。`;
-      } else {
-        state.phase = 'error';
+        paint();
+        return;
       }
-      paint();
-      note(state.phase === 'error' ? `读取失败：${describeError(error).detail}` : '');
-      return;
+      // 研判记录读不到 ≠ 这条告警不存在：先记下来，牧云事件还能读就照常显示（partial）
+      triageFailure = error;
+      state.triageError = actionErrorDetail(error);
     }
 
-    // 三块次要数据各自失败只影响自己那块（partial）：研判记录 / 研判结果 / 溯源白板
-    const [triageResult, investigationResult, boardResult] = await Promise.allSettled([
-      getTriageRecord(alertId, request),
+    // 牧云事件（可选的补充）/ 研判结果 / 溯源白板，各自失败只影响自己那块
+    const [alertResult, investigationResult, boardResult] = await Promise.allSettled([
+      getAlert(alertId, request),
       loadInvestigation(),
       getTraceBoard(alertId, request),
     ]);
 
-    if (triageResult.status === 'fulfilled') state.triage = triageResult.value;
-    else state.triageError = actionErrorDetail(triageResult.reason);
+    if (alertResult.status === 'fulfilled') {
+      state.alert = alertResult.value.alert;
+      state.detail = alertResult.value.detail;
+    } else {
+      state.alert = null;
+      state.detail = {};
+      // 牧云没配 / 对不上事件号：本页照常打开研判记录，只在题干里说一句没有原始事件可看
+      note(`牧云事件没有读到（${actionErrorDetail(alertResult.reason)}），下面按研判记录显示。`);
+    }
 
     if (investigationResult.status === 'fulfilled') state.investigation = investigationResult.value;
     else state.investigationError = actionErrorDetail(investigationResult.reason);
 
     state.board = boardResult.status === 'fulfilled' ? boardResult.value : null;
+
+    // 两边都没读到时才是整页错误（研判记录读不到 + 牧云也没读到）
+    if (triageFailure && !state.alert) {
+      state.error = triageFailure;
+      state.phase = 'error';
+      paint();
+      note(`读取失败：${describeError(triageFailure).detail}`);
+      return;
+    }
+
+    state.phase = 'ready';
+
+    // 命中了哪条规则才去取原文；取不到（404 / 读失败）不挡这一页
+    const ruleId = ruleIdsOf()[0];
+    if (ruleId) {
+      try {
+        state.rule = await getRule(ruleId, request);
+        state.ruleMissing = state.rule === null;
+      } catch {
+        state.rule = null;
+        state.ruleMissing = true;
+      }
+    }
 
     paint();
   }
@@ -836,7 +1020,7 @@ export function mountAlertDetailPage(params = [], options = {}) {
   $('retry').addEventListener('click', () => { void load(); });
 
   $('copy').addEventListener('click', async () => {
-    const id = state.alert?.id ?? alertId;
+    const id = targetIdOf() ?? alertId;
     try {
       if (!globalThis.navigator?.clipboard?.writeText) throw new Error('no clipboard');
       await globalThis.navigator.clipboard.writeText(id);
@@ -847,14 +1031,15 @@ export function mountAlertDetailPage(params = [], options = {}) {
   });
 
   $('queue').addEventListener('click', async () => {
-    if (!state.alert || state.busy) return;
+    const target = targetIdOf();
+    if (!target || state.busy) return;
     if (TRIAGE_ACTIVE.has(state.triage?.status)) return;
     state.busy = true;
     paintHead();
     try {
-      const record = await enqueueTriage(state.alert.id, request);
+      const record = await enqueueTriage(target, request);
       state.triage = { ...(state.triage ?? {}), ...record };
-      note(`已提交研判：${state.alert.id}`);
+      note(`已提交研判：${target}`);
     } catch (error) {
       note(`提交失败：${actionErrorDetail(error)}`);
     } finally {

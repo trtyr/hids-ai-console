@@ -1,4 +1,7 @@
-// pages/overview.js —— 总览页：六格状态矩阵 + 队列暂停/恢复 + 刷新 + 可访问性
+// pages/overview.js —— 总览页：六格状态矩阵 + 队列暂停/恢复 + 刷新 + 统计范围 + 可访问性
+//
+// P003-T015 起数字全部来自研判聚合（A1）：结论分布（verdict_counts）、类型分布（type_counts）、
+// 最后一条推送（last_received_at）、syslog 在不在听（syslog），一条 /api/alerts 都不发。
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -6,8 +9,8 @@ import { page } from '../../pages/overview.js';
 import { clearCredentials, setCredentials } from '../../src/credentials.js';
 import { allByRole, byRole, setupDom, text } from '../dom.js';
 
-/** 稿 overview.html 里的 11 类示例数量，合计 347 */
-const FULL_TOTALS = {
+/** 稿 overview.html 里的 11 类示例数量，合计 347（P003-T015 起当 type_counts 用） */
+const TYPE_COUNTS = {
   webshell: 42,
   malware: 17,
   revshell: 9,
@@ -25,16 +28,18 @@ const TRIAGE = {
   initialized: true,
   enabled: true,
   input_mode: 'syslog',
-  last_poll_at: '2026-11-17T01:02:03.000Z',
+  last_poll_at: null,
+  last_received_at: '2026-11-17T01:02:03.000Z',
   last_error: null,
+  since: null,
   counts: { queued: 12, running: 3, done: 331, failed: 1 },
+  verdict_counts: { threat: 9, uncertain: 21, false_positive: 14, review: 303 },
+  type_counts: TYPE_COUNTS,
+  syslog: { listening: true, bind: 'udp://0.0.0.0:15514', error: null },
 };
-
-const ALERTS = { alerts: [], total: 347, totals: FULL_TOTALS, errors: {}, partial: false };
 
 function routes(overrides = {}) {
   return {
-    '/api/alerts?count=1': { body: ALERTS },
     '/api/agent/triage/status': { body: TRIAGE },
     '/api/status': { body: { configured: true, connected: true } },
     '/api/agent/status': { body: { configured: true, model: 'gpt', missing: [], prompt_version: 'p-2026.11+4f2a' } },
@@ -88,6 +93,7 @@ const typeNames = () => typeRows().map(row => text(row.querySelector('td')));
 const queueModule = () => content.querySelector('.side .module');
 const queueToggle = () => byRole(content, 'button', /暂停|恢复/);
 const refreshButton = () => byRole(content, 'button', '刷新');
+const windowSelect = () => content.querySelector('[data-role="window"]');
 const liveText = () => text(content.querySelector('[role="status"]'));
 const notice = () => content.querySelector('[data-role="notice"]');
 
@@ -97,31 +103,35 @@ beforeEach(() => {
   setCredentials({ user: 'hids', password: 'hids-2026' });
 });
 
-test('loading：首屏先画骨架——数值「—」、刷新禁用转圈、aria-busy、读屏报「正在读取数据」', async () => {
+test('loading：首屏先画骨架——数值「—」、刷新/统计范围禁用转圈、aria-busy、读屏报「正在读取数据」', async () => {
   stubFetch(routes());
   mount();
 
   assert.equal(overview().getAttribute('aria-busy'), 'true');
   assert.equal(refreshButton().disabled, true);
   assert.equal(refreshButton().classList.contains('is-loading'), true);
-  assert.equal(valueOf(content.querySelector('.summary'), '告警总数'), '—');
+  assert.equal(windowSelect().disabled, true);
+  assert.equal(valueOf(content.querySelector('.summary'), '真实威胁'), '—');
   assert.equal(liveText(), '正在读取数据');
 
   await settle();
   assert.equal(overview().getAttribute('aria-busy'), 'false');
   assert.equal(refreshButton().disabled, false);
+  assert.equal(windowSelect().disabled, false);
 });
 
-test('默认态：四个数字、类型表按数量降序、构成条与三段摘要、队列、运行状态、进度全来自接口', async () => {
+test('默认态：结论分布、类型分布、构成条、队列（最后推送 + Syslog 接收）、运行状态、进度全来自研判聚合', async () => {
   stubFetch(routes());
   mount();
   await settle();
 
-  assert.equal(valueOf(content.querySelector('.summary'), '告警总数'), '347');
-  assert.equal(valueOf(content.querySelector('.summary'), '待研判'), '12');
-  assert.equal(valueOf(content.querySelector('.summary'), '研判中'), '3');
-  assert.equal(valueOf(content.querySelector('.summary'), '失败'), '1');
+  // 摘要带 = 结论分布（D020）
+  assert.equal(valueOf(content.querySelector('.summary'), '真实威胁'), '9');
+  assert.equal(valueOf(content.querySelector('.summary'), '存疑'), '21');
+  assert.equal(valueOf(content.querySelector('.summary'), '误报'), '14');
+  assert.equal(valueOf(content.querySelector('.summary'), '待研判'), '303');
 
+  // 类型表 = type_counts，按数量降序
   assert.equal(content.querySelector('[data-role="types-meta"]').textContent, '11 类 · 合计 347');
   const rows = typeRows();
   assert.equal(rows.length, 11);
@@ -131,7 +141,6 @@ test('默认态：四个数字、类型表按数量降序、构成条与三段�
   assert.equal(text(rows[0].querySelector('.col-share')), '37%');
   assert.equal(rows[0].querySelector('.bar-fill').style.width, '100%');
   assert.equal(typeNames().at(-1), '内存安全');
-  assert.equal(text(rows.at(-1).querySelector('.col-num')), '4');
 
   assert.equal(content.querySelectorAll('.compose-seg').length, 11);
   assert.equal(content.querySelector('[data-role="compose-meta"]').textContent, '暴力破解 128 · 网络审计 63 · 网站后门 42');
@@ -139,7 +148,9 @@ test('默认态：四个数字、类型表按数量降序、构成条与三段�
   const queue = queueModule();
   assert.equal(valueOf(queue, '状态'), '运行中');
   assert.equal(valueOf(queue, '输入方式'), 'Syslog 推入');
-  assert.match(valueOf(queue, '最近轮询'), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  // syslog 模式没有轮询：这一格说「最后推送」，值取 last_received_at
+  assert.match(valueOf(queue, '最后推送'), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  assert.equal(valueOf(queue, 'Syslog 接收'), '在听 udp://0.0.0.0:15514');
   assert.equal(valueOf(queue, '待研判'), '12');
   assert.equal(valueOf(queue, '已完成'), '331');
   assert.equal(valueOf(queue, '最近错误'), '无');
@@ -158,14 +169,59 @@ test('默认态：四个数字、类型表按数量降序、构成条与三段�
   assert.equal(content.querySelectorAll('.progress-legend li').length, 4);
   assert.match(text(content.querySelector('.progress-legend')), /已完成 331 95%/);
 
+  // A1：一条牧云现查都不发
+  assert.equal(calls.some(call => call.url.includes('/api/alerts')), false);
   assert.equal(notice().hidden, true);
   assert.match(liveText(), /^已更新，时间 \d{2}:\d{2}:\d{2}$/);
 });
 
-test('空态：类型表给一行「暂无告警数据」，队列计数说明接口没回，不画假行假数字', async () => {
+test('轮询模式：这一格回到「最近轮询」，值取 last_poll_at；没有 syslog 键时 Syslog 接收显示「—」', async () => {
+  const pollMode = { ...TRIAGE };
+  delete pollMode.syslog; // 轮询模式接口不给 syslog 键（openapi.yaml 的 TriageSummary.syslog）
   stubFetch(routes({
-    '/api/alerts?count=1': { body: { alerts: [], total: 0, totals: {}, errors: {}, partial: false } },
-    '/api/agent/triage/status': { body: { ...TRIAGE, counts: { queued: 0, running: 0, done: 0, failed: 0 }, last_poll_at: null } },
+    '/api/agent/triage/status': { body: { ...pollMode, input_mode: 'poll', last_poll_at: '2026-11-17T02:03:04.000Z' } },
+  }));
+  mount();
+  await settle();
+
+  const queue = queueModule();
+  assert.equal(valueOf(queue, '输入方式'), '轮询拉取');
+  assert.match(valueOf(queue, '最近轮询'), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  assert.equal(valueOf(queue, 'Syslog 接收'), '—');
+});
+
+test('统计范围：选近 24 小时 → 聚合接口带 since，进度条说「窗口内」；全部时间不发 since', async () => {
+  stubFetch(routes());
+  mount();
+  await settle();
+  assert.equal(windowSelect().value, '');
+
+  windowSelect().value = '24h';
+  windowSelect().dispatchEvent(new window.Event('change'));
+  await settle();
+
+  const triageCall = calls.filter(call => call.url.includes('/api/agent/triage/status')).at(-1);
+  assert.match(triageCall.url, /\/api\/agent\/triage\/status\?since=\d{4}-\d{2}-\d{2}T/);
+  assert.equal(calls.some(call => call.url.includes('/api/alerts')), false);
+
+  windowSelect().value = '';
+  windowSelect().dispatchEvent(new window.Event('change'));
+  await settle();
+  const plain = calls.filter(call => call.url.includes('/api/agent/triage/status')).at(-1);
+  assert.equal(plain.url.endsWith('/api/agent/triage/status'), true);
+});
+
+test('空态：没有类型统计与计数时给一行「暂无告警数据」，不画假行假数字', async () => {
+  stubFetch(routes({
+    '/api/agent/triage/status': {
+      body: {
+        ...TRIAGE,
+        counts: { queued: 0, running: 0, done: 0, failed: 0 },
+        verdict_counts: { threat: 0, uncertain: 0, false_positive: 0, review: 0 },
+        type_counts: {},
+        last_received_at: null,
+      },
+    },
   }));
   mount();
   await settle();
@@ -174,47 +230,36 @@ test('空态：类型表给一行「暂无告警数据」，队列计数说明�
   assert.equal(content.querySelector('[data-role="types-meta"]').textContent, '0 类 · 合计 0');
   assert.equal(content.querySelector('[data-role="compose-meta"]').textContent, '接口未返回类型统计。');
   assert.equal(content.querySelector('[data-role="progress-meta"]').textContent, '接口未返回队列计数。');
-  assert.equal(valueOf(content.querySelector('.summary'), '告警总数'), '0');
-  assert.equal(valueOf(queueModule(), '最近轮询'), '—');
+  assert.equal(valueOf(content.querySelector('.summary'), '真实威胁'), '0');
+  assert.equal(valueOf(queueModule(), '最后推送'), '—');
+  assert.equal(valueOf(queueModule(), 'Syslog 接收'), '在听 udp://0.0.0.0:15514');
 });
 
-test('部分失败：稿的 partial 提示可见、点出失败类型，总数仍按接口的 total，缺的类型不造行', async () => {
+test('Syslog 绑定失败三态：未在听 + 原因原样进这一格', async () => {
   stubFetch(routes({
-    '/api/alerts?count=1': {
-      body: {
-        alerts: [],
-        total: 334,
-        totals: Object.fromEntries(Object.entries(FULL_TOTALS).filter(([type]) => type !== 'malware')),
-        errors: { malware: '请求超时' },
-        partial: true,
-      },
+    '/api/agent/triage/status': {
+      body: { ...TRIAGE, syslog: { listening: false, bind: null, error: 'bind EADDRINUSE 127.0.0.1:15514' } },
     },
   }));
   mount();
   await settle();
-
-  const partial = content.querySelector('[data-role="partial"]');
-  assert.equal(partial.hidden, false);
-  assert.match(text(partial), /部分类型查询失败/);
-  assert.match(text(partial), /恶意程序/);
-  assert.equal(typeNames().includes('恶意程序'), false);
-  assert.equal(typeRows().length, 10);
-  assert.equal(valueOf(content.querySelector('.summary'), '告警总数'), '334');
+  assert.equal(valueOf(queueModule(), 'Syslog 接收'), '未在听：bind EADDRINUSE 127.0.0.1:15514');
 });
 
-test('单源失败：整页不空，只是那几行「—」，顶部说明哪几项没读到', async () => {
-  stubFetch(routes({ '/api/agent/tools': { status: 503, body: { error: '牧云 API 未配置' } } }));
+test('研判聚合挂掉：那几块「—」，运行状态照常，顶部说明哪一项没读到（不冒充整页失败）', async () => {
+  stubFetch(routes({ '/api/agent/triage/status': { status: 503, body: { error: '自动研判尚未配置' } } }));
   mount();
   await settle();
 
   assert.equal(notice().hidden, false);
-  assert.match(text(notice()), /部分数据读取失败：取证工具/);
-  assert.equal(notice().getAttribute('role'), 'alert');
-  assert.equal(valueOf(content.querySelectorAll('.side .module')[1], '取证工具'), '—');
-  assert.equal(valueOf(content.querySelector('.summary'), '告警总数'), '347');
+  assert.match(text(notice()), /部分数据读取失败：研判聚合/);
+  assert.equal(valueOf(content.querySelector('.summary'), '真实威胁'), '—');
+  assert.deepEqual(typeNames(), ['—']);
+  assert.equal(valueOf(content.querySelectorAll('.side .module')[0], '状态'), '—');
+  assert.equal(valueOf(content.querySelectorAll('.side .module')[1], '牧云连接'), '已连接');
 });
 
-test('error：七路全挂 → 整页错误提示 + 全部「—」+ 刷新可点重试', async () => {
+test('error：六路全挂 → 整页错误提示 + 全部「—」+ 刷新可点重试', async () => {
   stubFetch(Object.fromEntries(Object.keys(routes()).map(path => [path, new TypeError('fetch failed')])));
   mount();
   await settle();
@@ -222,7 +267,7 @@ test('error：七路全挂 → 整页错误提示 + 全部「—」+ 刷新可�
   assert.equal(notice().hidden, false);
   assert.equal(text(notice()), '连不上研判服务，请检查网络后重试。');
   assert.equal(notice().dataset.tone, 'danger');
-  assert.equal(valueOf(content.querySelector('.summary'), '告警总数'), '—');
+  assert.equal(valueOf(content.querySelector('.summary'), '真实威胁'), '—');
   assert.deepEqual(typeNames(), ['—']);
   assert.equal(refreshButton().disabled, false);
   assert.match(liveText(), /数据读取失败/);
@@ -251,13 +296,13 @@ test('long-content：200 字最近错误与 16 位版本号全文在 DOM 与 tit
 });
 
 test('disabled：刷新在途禁用；暂停按钮请求在途禁用，回包后同步状态文案', async () => {
-  let releaseControl;
   stubFetch(routes({
     '/api/agent/triage/control': () => ({ body: { ...TRIAGE, enabled: false } }),
   }));
   mount();
   await settle();
 
+  let releaseControl;
   const gate = new Promise(resolve => { releaseControl = resolve; });
   const inner = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
@@ -294,64 +339,63 @@ test('暂停失败：提示失败、状态保持、按钮恢复可点（不假�
   assert.equal(queueToggle().disabled, false);
 });
 
-test('刷新：点一下重新取七路，更新时间跟着换，读屏播报', async () => {
+test('刷新：点一下重新取六路，更新时间跟着换，读屏播报', async () => {
   stubFetch(routes());
   mount();
   await settle();
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 6);
 
   refreshButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   assert.equal(refreshButton().disabled, true);
   await settle();
 
-  assert.equal(calls.length, 14);
+  assert.equal(calls.length, 12);
   assert.match(liveText(), /^已更新，时间 \d{2}:\d{2}:\d{2}$/);
-  assert.equal(valueOf(content.querySelector('.summary'), '告警总数'), '347');
+  assert.equal(valueOf(content.querySelector('.summary'), '真实威胁'), '9');
 });
 
 test('切页作废旧响应：第二次 render 的页面不会被第一次的晚到数据覆盖', async () => {
   const pending = [];
   globalThis.fetch = (url, init) => new Promise(resolve => pending.push({ url: String(url), init, resolve }));
 
-  const respond = (entry, total) => entry.resolve({
+  const respond = (entry, threat) => entry.resolve({
     status: 200,
     ok: true,
-    json: async () => (entry.url.endsWith('/api/alerts?count=1')
-      ? { alerts: [], total, totals: { honeypot: total }, errors: {}, partial: false }
-      : entry.url.endsWith('/api/agent/triage/status') ? TRIAGE
-        : entry.url.endsWith('/api/agent/status') ? { configured: true, prompt_version: 'x' }
-          : entry.url.endsWith('/api/agent/tools') ? { count: 1 }
-            : entry.url.endsWith('/api/triage/rules') ? { revision: null }
-              : entry.url.endsWith('/api/updates') ? { revision: null } : { configured: true, connected: true }),
+    json: async () => (entry.url.includes('/api/agent/triage/status')
+      ? { ...TRIAGE, verdict_counts: { ...TRIAGE.verdict_counts, threat } }
+      : entry.url.endsWith('/api/agent/status') ? { configured: true, prompt_version: 'x' }
+        : entry.url.endsWith('/api/agent/tools') ? { count: 1 }
+          : entry.url.endsWith('/api/triage/rules') ? { revision: null }
+            : entry.url.endsWith('/api/updates') ? { revision: null } : { configured: true, connected: true }),
   });
 
-  mount();            // 第一轮：7 个请求挂起
+  mount();            // 第一轮：6 个请求挂起
   await new Promise(resolve => setTimeout(resolve, 0));
-  mount();            // 第二轮（模拟切走再切回）：又 7 个
+  mount();            // 第二轮（模拟切走再切回）：又 6 个
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(pending.length, 14);
+  assert.equal(pending.length, 12);
 
-  pending.slice(7).forEach(entry => respond(entry, 222));
+  pending.slice(6).forEach(entry => respond(entry, 222));
   await settle();
-  assert.equal(valueOf(content.querySelector('.summary'), '告警总数'), '222');
+  assert.equal(valueOf(content.querySelector('.summary'), '真实威胁'), '222');
 
-  pending.slice(0, 7).forEach(entry => respond(entry, 111));
+  pending.slice(0, 6).forEach(entry => respond(entry, 111));
   await settle();
   assert.equal(content.querySelectorAll('.overview').length, 1);
-  assert.equal(valueOf(content.querySelector('.summary'), '告警总数'), '222');
+  assert.equal(valueOf(content.querySelector('.summary'), '真实威胁'), '222');
 });
 
-test('可访问性：表格有 caption 与 th scope，概况/进度是带名字的 region，status 有 aria-live', () => {
+test('可访问性：表格有 caption 与 th scope，结论分布/进度是带名字的 region，status 有 aria-live', () => {
   stubFetch(routes());
   mount();
 
   assert.equal(text(content.querySelector('table caption')), '按事件类型统计的告警数量与占比');
   assert.deepEqual([...content.querySelectorAll('thead th')].map(th => th.getAttribute('scope')), ['col', 'col', 'col', 'col']);
-  assert.equal(content.querySelector('section.summary').getAttribute('aria-label'), '告警概况');
+  assert.equal(content.querySelector('section.summary').getAttribute('aria-label'), '结论分布');
   assert.equal(content.querySelector('.progress-band').getAttribute('aria-label'), '研判进度');
   const status = content.querySelector('[role="status"]');
   assert.equal(status.getAttribute('aria-live'), 'polite');
-  // 载入中不许靠颜色传达状态：状态文字本身在 DOM 里
+  assert.equal(windowSelect().getAttribute('aria-label'), '统计时间范围');
   assert.equal(allByRole(content, 'heading', '事件类型').length, 1);
 });
 

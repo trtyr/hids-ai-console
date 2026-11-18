@@ -77,7 +77,8 @@
 .bulk-actions { display: flex; align-items: center; gap: 16px; }
 
 /* ---------- 表格（稿 .alerts） ---------- */
-.table-wrap { transition: opacity var(--dur) var(--ease-out); }
+/* 九列固定宽合计 1008：内容区装不下时只让包裹层横向滚，页面本身不横滚（README §15 的项目口径） */
+.table-wrap { transition: opacity var(--dur) var(--ease-out); overflow-x: auto; }
 .table-wrap.is-busy { opacity: .45; }
 
 .alerts { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -611,3 +612,63 @@
   .table-wrap { transition: none; }
   .page-tools .textbtn:disabled .od-icon { animation: none; }
 }
+
+/* ---------- 研判记录主列表（P003-T015）----------
+ * 稿 `alerts.html` 画的是牧云告警列表；主列表换成研判记录后多出四列（重复 / 命中规则 / 维护 / 操作），
+ * 稿未覆盖 → 列宽取同表既有列的最近邻（`÷` 短列取 .col-level 口径，文字列取 .col-type / .col-asset 口径）。
+ */
+.col-dup { width: 52px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.col-rule { width: 132px; }
+.col-maint { width: 148px; }
+.col-ops { width: 168px; text-align: right; white-space: nowrap; }
+
+.col-ops .ops-link {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  margin-left: 10px;
+  padding: 0;
+  font-size: 11.5px;
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+.col-ops .ops-link:first-child { margin-left: 0; }
+.col-ops .ops-link:hover { color: var(--accent-hover); }
+.col-ops .ops-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.col-ops .ops-link:disabled { color: var(--text-3); cursor: default; }
+.col-ops button.ops-link { border: 0; background: none; font-family: inherit; }
+
+.cell-ip { display: block; max-width: 100%; }
+.rule-id { display: block; max-width: 132px; }
+.rule-none { color: var(--text-3); }
+.maint { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.maint.is-updating { color: var(--warn); }
+.maint.is-failed { color: var(--danger); }
+
+/* 误报理由表单：行下展开（稿未覆盖；交互按 D020，样式取同页筛选条与本表行的既有口径） */
+.fp-row td { padding: 12px 0 14px; border-bottom: 1px solid var(--line); }
+.fp-form { display: flex; flex-direction: column; gap: 6px; }
+.fp-label { font-size: 11px; color: var(--text-3); }
+.fp-reason {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.fp-reason::placeholder { color: var(--text-3); }
+.fp-reason:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fp-actions { display: flex; align-items: center; gap: 12px; }
+.fp-hint { font-size: 11px; color: var(--text-3); }
+.fp-hint.is-error { color: var(--danger); }
+.fp-actions .btn-primary { margin-left: auto; }
+
+/* 演示入口的说明条（牧云现查：单独入口，标成演示） */
+.notice.demo-note { margin-bottom: 4px; }

@@ -132,6 +132,7 @@ function mount({
   investigationBody = investigation(),
   investigationStatus = 200,
   board = BOARD,
+  ruleBody = null,
   handler,
 } = {}) {
   const calls = [];
@@ -155,6 +156,7 @@ function mount({
       return body === null ? MISSING : respond(body);
     }
     if (target.startsWith('/api/trace/boards/')) return board === null ? respond({ error: 'x' }, 404) : respond(board);
+    if (target.startsWith('/api/rules/')) return ruleBody === null ? respond({ error: '规则不存在' }, 404) : respond(ruleBody);
     return respond({ error: '未预期的请求' }, 500);
   };
   const host = mountAlertDetailPage(params, { fetchImpl, now: () => NOW });
@@ -236,16 +238,34 @@ test('格 3「部分失败（partial）」：研判记录读不到时页面主�
   assert.equal(queue.disabled, true);
 });
 
-test('格 4「错误」：告警本体 502 → 整页错误块 + 重试，重试后恢复', async () => {
+test('格 3b「牧云读不到不算整页失败」：告警本体 502 → 研判记录照常显示，题干说明没有原始事件', async () => {
+  const { host, calls } = mount({
+    handler: async target => (target.startsWith('/api/alerts/') ? respond({ error: '牧云请求失败' }, 502) : undefined),
+  });
+  await flush();
+
+  assert.equal(region(host, 'main').hidden, false, '研判记录在，正文要渲染');
+  assert.match(text(region(host, 'note')), /牧云事件没有读到/);
+  const shown = visibleText(host);
+  assert.match(shown, /真实威胁/);
+  assert.match(shown, /nginx 工作进程派生了 \/bin\/sh 子进程/);
+  assert.equal(calls.some(call => call.url.startsWith('/api/agent/triage/')), true);
+});
+
+test('格 4「错误」：研判记录与牧云事件都读不到 → 整页错误块 + 重试，重试后恢复', async () => {
   let fail = true;
   const { host, calls } = mount({
-    handler: async target => (fail && target.startsWith('/api/alerts/') ? respond({ error: '牧云请求失败' }, 502) : undefined),
+    handler: async target => {
+      if (!fail) return undefined;
+      if (target.startsWith('/api/agent/triage/') && !target.includes('/false-positive')) return respond({ error: '读失败' }, 502);
+      if (target.startsWith('/api/alerts/')) return respond({ error: '牧云请求失败' }, 502);
+      return undefined;
+    },
   });
   await flush();
 
   const alertBox = byRole(host, 'alert', /服务返回异常/);
   assert.ok(alertBox, '错误块要有 role=alert');
-  assert.match(text(alertBox), /告警接口返回 502/);
   assert.equal(region(host, 'main').hidden, true);
   assert.equal(region(host, 'error').hidden, false);
 
@@ -262,7 +282,8 @@ test('格 4「错误」：告警本体 502 → 整页错误块 + 重试，重试
 test('格 4b「400」：ID 或事件类型无效 → 未找到块，正文不渲染，给返回链接', async () => {
   const { host } = mount({
     params: ['nosuch:1'],
-    handler: async target => (target.startsWith('/api/alerts/') ? respond({ error: '不支持的事件类型' }, 400) : undefined),
+    handler: async target => ((target.startsWith('/api/alerts/') || target.startsWith('/api/agent/triage/'))
+      ? respond({ error: '不支持的事件类型' }, 400) : undefined),
   });
   await flush();
 
@@ -644,6 +665,139 @@ test('page 契约：id / title / navLabel 不变，render 从 params[0] 取 ID �
   }
   assert.ok(urls.includes('/api/alerts/revshell%3A1'), `实际请求：${urls.join(', ')}`);
   assert.equal(text(content.querySelector('[data-role="title"]')), '反弹 Shell 外联');
+});
+
+// ---------- A3：短结果 / 命中的 Rego / 用过的 wiki / 证据 ----------
+
+test('A3 短结果：研判摘要与报告整段在页面上（summary 是 500 字内的结论摘要）', async () => {
+  const summary = 'nginx 工作进程派生 /bin/sh 并对外连接，文件与网络证据一致。'.repeat(3);
+  const { host } = mount({ investigationBody: investigation({ verdict: { ...investigation().verdict, summary } }) });
+  await flush();
+  const shown = visibleText(host);
+  assert.ok(shown.includes(summary.trim()), '短结果要整段出现');
+  assert.match(shown, /目标主机上的 nginx 工作进程在 09:38 拉起/);
+});
+
+test('A3 短结果：研判结果读不到时，退回研判记录上的 summary（不把结论空着）', async () => {
+  const { host } = mount({
+    investigationBody: null,
+    triageRecord: triage({ summary: '研判记录里的结论摘要，500 字以内。' }),
+  });
+  await flush();
+  assert.match(visibleText(host), /研判记录里的结论摘要/);
+});
+
+test('A3 命中的规则：规则名 + 整份 Rego 原文（GET /api/rules/{id}）', async () => {
+  const rego = 'package hids.rules.ssh_bruteforce\n\n# name: SSH 暴力破解\ndefault allow := false';
+  const { host, calls } = mount({
+    triageRecord: triage({ rule_id: 'ssh_bruteforce' }),
+    investigationBody: investigation({ verdict: { ...investigation().verdict, rego: { status: 'matched', rule_ids: ['ssh_bruteforce'] } } }),
+    ruleBody: { id: 'ssh_bruteforce', name: 'SSH 暴力破解', description: '', file: 'ssh_bruteforce.rego', rego },
+  });
+  await flush();
+
+  assert.equal(calls.some(call => call.url === '/api/rules/ssh_bruteforce'), true, '命中了才去读规则原文');
+  const line = text(region(host, 'rule-line'));
+  assert.match(line, /命中 ssh_bruteforce/);
+  assert.match(line, /SSH 暴力破解/);
+  const pre = region(host, 'rule-rego');
+  assert.equal(pre.hidden, false);
+  assert.equal(pre.textContent, rego);
+  assert.match(visibleText(host), /package hids\.rules\.ssh_bruteforce/);
+});
+
+test('A3 没有套上：规则评估结果 none → 详情写「没有套上」，不发规则请求', async () => {
+  const { host, calls } = mount({
+    investigationBody: investigation({ verdict: { ...investigation().verdict, rego: { status: 'none', rule_ids: [] } } }),
+  });
+  await flush();
+  assert.equal(text(region(host, 'rule-line')), '没有套上');
+  assert.equal(region(host, 'rule-rego').hidden, true);
+  assert.equal(calls.some(call => call.url.startsWith('/api/rules/')), false);
+});
+
+test('A3 规则原文读不到（404）：仍写命中哪条，并说明规则库里已没有这条', async () => {
+  const { host } = mount({
+    triageRecord: triage({ rule_id: 'gone_rule' }),
+    investigationBody: investigation({ verdict: { ...investigation().verdict, rego: { status: 'matched', rule_ids: ['gone_rule'] } } }),
+  });
+  await flush();
+  assert.match(text(region(host, 'rule-line')), /命中 gone_rule/);
+  assert.equal(text(region(host, 'rule-meta')), '规则库里已没有这条');
+  assert.equal(region(host, 'rule-rego').hidden, true);
+});
+
+test('A3 用过的 wiki：采纳页逐条列出，没采纳时写原因；查阅数进 meta', async () => {
+  const { host } = mount({
+    investigationBody: investigation({
+      verdict: {
+        ...investigation().verdict,
+        wiki: { consulted: ['honeypot/HP-10.md', 'common/CM-1.md'], adopted: ['honeypot/HP-10.md'], reason: '本页判据与本次蜜罐触发条件一致' },
+      },
+    }),
+  });
+  await flush();
+  assert.equal(text(region(host, 'wiki-meta')), '查阅 2 页');
+  const items = [...region(host, 'wiki-list').querySelectorAll('li')].map(item => text(item));
+  assert.deepEqual(items, ['honeypot/HP-10.md']);
+  assert.match(text(region(host, 'wiki-note')), /判据与本次蜜罐触发条件一致/);
+
+  const noAdopt = mount({
+    investigationBody: investigation({
+      verdict: { ...investigation().verdict, wiki: { consulted: [], adopted: [], reason: '牧云事件未匹配，本轮是降级结论，没有工具循环，未采纳判据页' } },
+    }),
+  });
+  await flush();
+  assert.equal(noAdopt.host.querySelectorAll('[data-role="wiki-list"] li').length, 0);
+  assert.match(text(region(noAdopt.host, 'wiki-note')), /未采纳判据页/);
+});
+
+test('A3 证据：研判记录的 evidence[] 逐条列出（tool 分组 + evidence_id）', async () => {
+  const { host } = mount({
+    triageRecord: triage({
+      evidence: [
+        { evidence_id: 'syslog:1', tool: 'syslog', fetched_at: iso(2026, 10, 13, 9, 41, 2), sha256: 'a'.repeat(64) },
+        { evidence_id: 'cw:2', tool: 'list_host_events', fetched_at: iso(2026, 10, 13, 9, 41, 7), sha256: 'b'.repeat(64) },
+      ],
+    }),
+  });
+  await flush();
+  assert.equal(text(region(host, 'evidence-meta')), '共 2 条');
+  const groups = [...region(host, 'evidence').querySelectorAll('details')].map(node => text(node.querySelector('summary')));
+  assert.deepEqual(groups, ['syslog1 条', 'list_host_events1 条']);
+  assert.match(text(region(host, 'evidence')), /syslog:1/);
+  assert.match(text(region(host, 'evidence')), /cw:2/);
+});
+
+test('A3 推送 ID 对不上牧云事件号：详情照样打开这条研判，标题用类型 + 主机，不去牧云认 ID', async () => {
+  const caseId = 'syslog%3Ahoneypot%3A0123456789abcdef%3A1732000000%3A11111111-2222-3333-4444-555555555555';
+  const { host, calls } = mount({
+    params: [caseId],
+    triageRecord: triage({
+      alert_id: 'syslog:honeypot:0123456789abcdef:1732000000:11111111-2222-3333-4444-555555555555',
+      matched_alert_id: null, msgid: 'cloudwalker-honeypot', host_ip: '10.0.0.5', source_ip: '45.9.1.2',
+      repeat_count: 3, verdict_label: '存疑', summary: '蜜罐触发，未见后续利用行为。',
+    }),
+    investigationBody: investigation({
+      verdict: { ...investigation().verdict, verdict_label: '存疑', summary: '蜜罐触发，未见后续利用行为。' },
+    }),
+    handler: async target => (target.startsWith('/api/alerts/') ? respond({ error: '牧云没有这条事件' }, 502) : undefined),
+    board: null,
+  });
+  await flush();
+
+  assert.equal(region(host, 'main').hidden, false);
+  assert.equal(text(region(host, 'title')), '蜜罐 · 10.0.0.5');
+  assert.equal(text(region(host, 'type')), '蜜罐');
+  const meta = text(region(host, 'meta'));
+  assert.match(meta, /10\.0\.0\.5/);
+  assert.match(meta, /来源 45\.9\.1\.2/);
+  assert.match(meta, /重复 ×3/);
+  assert.match(meta, /syslog:honeypot:/, '案件 ID 要在题干里，方便对上推送');
+  assert.equal(region(host, 'state').textContent, '已完成');
+  // 牧云照样问过一次，但读不到不影响正文
+  assert.equal(calls.some(call => call.url.startsWith('/api/alerts/')), true);
+  assert.match(visibleText(host), /蜜罐触发，未见后续利用行为。/);
 });
 
 // ---------- 纯函数 ----------
