@@ -118,12 +118,12 @@ probeSession(credentials, options?) → Promise<{ authenticated: true }>
 
 | hash | 侧栏文案 | 顶栏标题 | 页面模块 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| `#/overview` | 总览 | 总览 | `pages/overview.js` | 占位（T002 接） |
-| `#/alerts` | 告警 | 告警 | `pages/alerts.js` | 占位（T003 接） |
-| `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | **已接入**（P002-T004）；参数从第二段起原样传，页面自己 `decodeURIComponent` |
-| `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | 占位（T005 接） |
-| `#/rules` | 规则 | 规则 | `pages/rules.js` | 占位（T006 接） |
-| `#/knowledge` | 知识库 | 知识库 | `pages/knowledge.js` | 占位（T007 接） |
+| `#/overview` | 总览 | 总览 | `pages/overview.js` | 已接真接口（P002-T002，见第 9 节） |
+| `#/alerts` | 告警 | 告警 | `pages/alerts.js` | 已接真接口（P002-T003，见第 10 节） |
+| `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | 已接真接口（P002-T004，见第 11 节）；参数从第二段起原样传，页面自己 `decodeURIComponent` |
+| `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | 已接真接口（P002-T005，见第 12 节） |
+| `#/rules` | 规则 | 规则 | `pages/rules.js` | 已接真接口（P002-T006，见第 13 节） |
+| `#/knowledge` | 知识库 | 知识库 | `pages/knowledge.js` | 已接真接口（P002-T007，见第 14 节） |
 
 - 空 hash、`#/`、未知 id 一律回落到总览，不报错、不空白；回落时 `params` 为空数组。
 - 导航项是 `<a href="#/…">`（真链接，键盘可达），当前项带 `aria-current="page"`，样式上 `.is-active`。
