@@ -286,6 +286,7 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | `query_failed` | 查询抛错，或接口没返回可确认数量的列表 | `required-evidence.js:108-110`、`required-evidence.js:120-123` |
 
 提示词里专门交代了这三种空/错状态的区别，不许互相顶替（`investigation-agent.js:364`）。
+`status` 是**枚举**，取值只有上面五个，不存在第六种；`openapi.yaml` 的 `RequiredEvidence.status` 用同一个枚举，`id` 也同样是枚举（`required-evidence.js:33-35` 起的六个固定值）。
 查到的必查项证据会以精简视图回灌给模型（`investigation-agent.js:261-265`）。
 
 缺口汇总在 `requiredEvidenceGaps(checks)`（`required-evidence.js:131-139`）：
@@ -323,6 +324,95 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 必查项摘要是**之后**追加的（`investigation-agent.js:545-546`），`appendEvidenceReport` 的裁剪分支里有一条会给被裁剪段末尾补一个句号
 （`required-evidence.js:162-164`）。当被裁剪段末尾不是「，、；：。」或空白时，返回长度是 `maxLength + 1`，即 301。
 复跑命令见 [5.2](#52-必查项缺口与报告长度)。
+
+### 3.7 研判记录结构（六种）
+
+`run()` 与 `runUnmatchedSyslog()` 的返回体里，下面这六个结构是契约：字段名、取值、必填性按表。
+`openapi.yaml` 里对应七个 schema（`TriageStep` / `Claim` / `ClaimCitation` / `EvidenceRecord` / `Validation` / `Review` / `RequiredEvidence`），两边必须一致。
+
+**`steps[]`：研判步骤流水**（`TriageCase.steps`，只有自动研判队列的记录上有）
+
+| 字段 | 类型 | 必填 | 含义 | 证据 |
+| --- | --- | --- | --- | --- |
+| `stage` | string | 是 | 阶段名，如「关联事件」「规则评估」「AI 分析」「完成研判」 | `triage-monitor.js:368`、`triage-monitor.js:381` |
+| `detail` | string | 是 | 这一阶段的说明；规则评估阶段写命中或跳过的原因 | `triage-monitor.js:368-372`、`triage-monitor.js:381` |
+| `at` | string（date-time） | 是 | 写入时间，UTC ISO 串 | `triage-monitor.js:372`、`triage-monitor.js:381` |
+
+条数上限 80，超出时丢最早的（`triage-monitor.js:382`）。`steps` 出现在三处：单条查询 `status()`（`triage-monitor.js:108`）、告警列表与详情里内嵌的 `triage`（`server.js` 把 `status()` 全量塞进每条告警）；仅列表 `cases()` 的每项里**没有 `steps` 键**（`triage-monitor.js:110-125`）。未入队的记录没有 `steps` 键；排队中、失败的记录是空数组。
+
+**`claims[]` 与 `citations[]`：已核验事实**
+
+| 结构 | 字段 | 类型 | 必填 | 含义 | 证据 |
+| --- | --- | --- | --- | --- | --- |
+| claim | `text` | string | 是 | 事实的自然语言描述 | `investigation-agent.js:55`、`investigation-agent.js:70` |
+| claim | `citations` | 数组，至少 1 条 | 是 | 支持这条事实的引用；为空会被校验判失败 | `agent-tools.js:76-78` |
+| citation | `evidence_id` | string | 是 | 本次取证的证据编号，形如 `cw:1`；syslog 旁路固定 `syslog:1` | `agent-tools.js:80`、`investigation-agent.js:579` |
+| citation | `pointer` | string | 是 | 相对该证据原始返回的 JSON Pointer，必须以 `/` 开头 | `agent-tools.js:83` |
+| citation | `value` | 任意 JSON | 是 | 该指针处的原始值；必须与证据原文逐值相等 | `agent-tools.js:88-89` |
+
+`pointer` 里的 `~1` / `~0` 会按 RFC 6901 反转义后再取值（`agent-tools.js:84`）。校验口径见 [3.4](#34-引用校验与降级)：
+两次退回仍不通过的事实会被整体删掉，所以**出参里的 `claims` 条数可以比模型给得少**（`investigation-agent.js:520-526`）。
+
+**`evidence[]`：取证记录**
+
+| 字段 | 类型 | 必填 | 含义 | 证据 |
+| --- | --- | --- | --- | --- |
+| `evidence_id` | string | 是 | `cw:<第几次调用>`；syslog 旁路固定 `syslog:1` | `agent-tools.js:57`、`investigation-agent.js:592` |
+| `tool` | string | 是 | 取证工具名 | `agent-tools.js:58` |
+| `args` | object | 是 | 本次实际传给工具的参数（原样回写） | `agent-tools.js:58`、`investigation-agent.js:553-554` |
+| `fetched_at` | string（date-time） | 是 | 取证时间 | `agent-tools.js:58` |
+| `sha256` | string（64 位小写十六进制） | 是 | 对 `{name,args,result}` 序列化后的 SHA-256 | `agent-tools.js:56`、`agent-tools.js:59` |
+
+同一份数据在 `TriageCase.evidence[]` 里只有四个字段：`evidence_id`、`tool`、`fetched_at`、`sha256`——`args` 不外露（`triage-monitor.js:8-9`）。
+客户经验复用路径的 `claims` 里 `citations` 的 `evidence_id` 恒等于本次告警取证编号 `cw:1`（`investigation-agent.js:315`）；外部编号只出现在 `knowledge_reuse.case_id`（`investigation-agent.js:337`）。
+
+**`validation`：引用校验结果**
+
+| 字段 | 类型 | 必填 | 含义 | 证据 |
+| --- | --- | --- | --- | --- |
+| `ok` | boolean | 是 | 全部引用都通过为 true | `investigation-agent.js:504`、`investigation-agent.js:588` |
+| `errors` | string[] | 是 | 失败明细；`ok` 为 true 时是空数组 | `investigation-agent.js:525`、`investigation-agent.js:588` |
+| `removed_unverified_facts` | boolean | 否 | 只在两次退回仍失败、删掉未通过事实后出现，恒为 true | `investigation-agent.js:525` |
+
+**`review`：独立复核结果**
+
+| 字段 | 类型 | 必填 | 含义 | 证据 |
+| --- | --- | --- | --- | --- |
+| `assessment` | 枚举，见下 | 是 | 复核结论 | `investigation-agent.js:455`、`investigation-agent.js:587` |
+| `concerns` | string[] | 是 | 复核提出的质疑；可以是空数组（客户经验复用固定给空数组） | `investigation-agent.js:449`、`investigation-agent.js:342` |
+| `missing_evidence` | string[] | 是 | 复核认为还缺的证据 | `investigation-agent.js:449`、`investigation-agent.js:342` |
+
+`assessment` 四个取值（枚举）：
+
+| 取值 | 什么时候 | 证据 |
+| --- | --- | --- |
+| `supported` | 复核支持原结论 | `investigation-agent.js:468`、`investigation-agent.js:537` |
+| `needs_revision` | 复核要求按质疑重出结论（会触发一次重出） | `investigation-agent.js:457-463` |
+| `unavailable` | 复核没跑成：模型报错，或 syslog 未匹配到牧云事件 | `investigation-agent.js:455`、`investigation-agent.js:587` |
+| `knowledge_reuse` | 走了客户经验复用捷径，没有跑独立复核 | `investigation-agent.js:342` |
+
+实现只把 `supported` 当通过；其它取值（含枚举外的值）一律按未通过处理（`investigation-agent.js:468`、`investigation-agent.js:537`）。
+
+**`missing_evidence[]`：证据缺口**
+
+纯字符串数组，没有对象元素（`investigation-agent.js:69`）。来源三处：模型给的 `missing_data`（`investigation-agent.js:67`）、
+独立复核与误报门槛写入的缺口（`investigation-agent.js:471`、`investigation-agent.js:539`）、常规研判去重并入的必查项缺口（`investigation-agent.js:542`）。
+
+**`required_evidence[]`：必查项**
+
+| 字段 | 类型 | 必填 | 含义 | 证据 |
+| --- | --- | --- | --- | --- |
+| `id` | 枚举：`related_events` / `command_history` / `network_connections` / `source_history` / `authorization` / `file_invocation` | 是 | 必查项标识 | `required-evidence.js:33-35`、`required-evidence.js:47-88` |
+| `label` | string | 是 | 中文名 | `required-evidence.js:34` |
+| `tool` | string | 是 | 计划调用的工具名 | `required-evidence.js:34` |
+| `scope` | string | 是 | 这次查询的边界说明 | `required-evidence.js:35` |
+| `status` | 枚举，见 [3.5](#35-必查项清单) | 是 | 执行结果，五态互不混同 | `required-evidence.js:97-123` |
+| `reason` | string | 否 | 原因；`records_returned` 也可能带 | `required-evidence.js:98`、`required-evidence.js:116` |
+| `args` | object | 否 | 实际调用参数；`source_unavailable` 与 `missing_identifier` 没有这个键 | `required-evidence.js:103` |
+| `evidence_id` | string | 否 | 查到记录时的证据编号 | `required-evidence.js:107` |
+| `returned_count` | integer | 否 | 当前页返回条数 | `required-evidence.js:113` |
+| `total_reported` | integer 或 null | 否 | 平台自报总数 | `required-evidence.js:114` |
+| `platform_total_consistent` | boolean | 否 | 平台总数与当前返回是否自洽 | `required-evidence.js:115` |
 
 ## 4. 公开面
 

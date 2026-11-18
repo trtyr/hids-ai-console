@@ -192,6 +192,67 @@
 - 模型连的边标 `by: 'ai'`，校验见 5.3（`trace-board.js:396-416`）。
 - 提示词里写明了口径：程序画的「触达线索」只是同一条记录里的来源 IP 与目标主机，是粗筛，不算 AI 确认的关系（`prompts/trace-board.md:12`）。
 
+**元素字段（契约）**。`openapi.yaml` 的 `TraceBoardNode` / `TraceBoardEdge` / `TraceBoardActivity` 按这三张表写；字段名不一致就是破坏性变更。
+
+节点（`nodes[]`）：
+
+| 字段 | 类型 | 什么时候有 | 含义 | 证据 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 恒有 | `asset:<IP>` 或 `ip:<IP>` | `trace-board.js:68`、`trace-board.js:74`、`trace-board.js:106` |
+| `label` | string | 恒有 | 展示名；资产节点优先主机名，取不到才用 IP | `trace-board.js:68`、`trace-board.js:94` |
+| `address` | string（IPv4） | 恒有 | 节点地址 | `trace-board.js:69`、`trace-board.js:94` |
+| `kind` | enum `asset` / `external_ip` | 恒有 | 决定后续查询口径 | `trace-board.js:69`、`trace-board.js:108` |
+| `status` | enum `pending` / `done` | 恒有 | 建板时是 `pending`，调查收尾置 `done` | `trace-board.js:69`、`trace-board.js:326` |
+| `why` | string | 恒有 | AI 给的理由；建板时是预置句或空串，收尾时改写 | `trace-board.js:70`、`trace-board.js:326` |
+| `profile` | object | 恒有 | 资产档案；外部 IP 节点是 `{name: '外部 IP（未登记资产）', ip}` | `trace-board.js:70`、`trace-board.js:96`、`trace-board.js:284` |
+| `findings` | object[] | 恒有 | 每条工具结果的摘要，收尾时写入 | `trace-board.js:70`、`trace-board.js:327` |
+| `finding_count` | integer | 恒有 | 命中记录数（按工具类名加权，见下文） | `trace-board.js:70`、`trace-board.js:328-330` |
+| `discovered_from` | object[] | 恒有 | 这个节点从哪条证据的哪个字段发现；起点节点是空数组 | `trace-board.js:71`、`trace-board.js:76`、`trace-board.js:97`、`trace-board.js:109` |
+| `investigated_at` | string（date-time） | 调查收尾后 | 收尾时间 | `trace-board.js:326` |
+| `touched_hosts` | string[] | 调查收尾后 | 调查外部 IP 时命中的内网主机地址 | `trace-board.js:325` |
+
+`findings[]` 元素固定带 `evidence_id`、`tool`、`total`、`returned`、`rows`；列表结果另有 `page_returned`，单对象结果另有 `truncated`
+（`trace-board.js:112-123`）。`discovered_from[]` 元素是 `{evidence_id, pointer}`，`pointer` 取不到时为 `null`（`trace-board.js:71`、`trace-board.js:76`、`trace-board.js:298`）。
+
+边（`edges[]`）：
+
+| 字段 | 类型 | 含义 | 证据 |
+| --- | --- | --- | --- |
+| `from` / `to` | string | 两端节点 ID | `trace-board.js:307`、`trace-board.js:410` |
+| `rel` | string | 关系性质；程序边固定 `触达线索` | `trace-board.js:308`、`trace-board.js:410` |
+| `why` | string | 关系理由 | `trace-board.js:308`、`trace-board.js:410` |
+| `strength` | number（0–1） | 关系强度；程序边固定 0.3，AI 边出界时夹回 | `trace-board.js:309`、`trace-board.js:411` |
+| `by` | enum `program` / `ai` | 谁画的 | `trace-board.js:309`、`trace-board.js:411` |
+| `citations` | object[] | `{evidence_id, pointer, value}`；AI 边至少一条且引用值要覆盖两端地址 | `trace-board.js:309-310`、`trace-board.js:402-406` |
+| `at` | string（date-time） | 写入时间 | `trace-board.js:309`、`trace-board.js:411` |
+
+活动（`activity[]`）：
+
+| 字段 | 类型 | 含义 | 证据 |
+| --- | --- | --- | --- |
+| `at` | string（date-time） | 发生时间 | `trace-board.js:83`、`trace-board.js:332` |
+| `kind` | enum，见下 | 事件类型 | 各 push 点 |
+| `title` | string | 一句话标题 | 各 push 点 |
+| `detail` | string | 补充说明 | `trace-board.js:84`、`trace-board.js:243`、`trace-board.js:333` |
+| `node` | string | 关联节点 ID（`investigate`） | `trace-board.js:333` |
+| `edge` | integer | 关联边在 `edges` 里的下标（`link`） | `trace-board.js:413` |
+| `result` | string | 这一轮的结果摘要（`investigate`、`look`） | `trace-board.js:333`、`trace-board.js:387-388` |
+
+`kind` 的十个取值（枚举，十种全部在代码里有 push 点）：
+
+| `kind` | 什么时候 | 证据 |
+| --- | --- | --- |
+| `seed` | 建板 | `trace-board.js:83`、`trace-board.js:96` |
+| `tool` | 一次牧云查询 | `trace-board.js:238` |
+| `tool_error` | 查询失败，或动作未过校验 | `trace-board.js:243`、`trace-board.js:427` |
+| `investigate` | 调查一个节点收尾 | `trace-board.js:332` |
+| `look` | 模型查看白板 | `trace-board.js:389` |
+| `link` | 模型连边 | `trace-board.js:412` |
+| `conclude` | 模型收尾 | `trace-board.js:421` |
+| `thinking` | 模型选下一步 | `trace-board.js:367` |
+| `model_error` | 模型输出格式错误正在重试 | `trace-board.js:375` |
+| `error` | 调查中断，或整板失败 | `trace-board.js:178`、`trace-board.js:219` |
+
 ### 5.2 节点调查
 
 - **前置**：节点必须已在白板里；已查过的节点（`status: 'done'`）再查会抛错（`trace-board.js:226-229`）。

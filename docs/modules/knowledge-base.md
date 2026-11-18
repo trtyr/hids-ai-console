@@ -290,6 +290,34 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 | 回放报告 | 会话 JSON 内的 `proposal.replay` | 随会话 | `wiki-workbench.js:258` |
 | 客户经验记录 | 经验页正文里的 JSON 块 | 随页；过期后不再被复用 | `wiki-store.js:335-337`、`wiki-store.js:339-340` |
 
+### 7.1 页面结构（WikiPage）
+
+`GET /api/wiki/pages/{pagePath}` 返回一页；`GET /api/wiki/pages` 返回同一组元数据但没有 `content`。
+`openapi.yaml` 里分别是 `WikiPage` 与 `WikiPageSummary`，字段按这张表：
+
+| 字段 | 类型 | 必填 | 含义 | 依据 |
+| --- | --- | --- | --- | --- |
+| `path` | string | 是 | 相对判据库根目录的路径，如 `common/GEN-12.md` | `wiki-store.js:24` |
+| `id` | string | 是 | frontmatter 的 `id:`；缺省取文件名 | `wiki-store.js:24` |
+| `title` | string | 是 | frontmatter 的 `title:`（去首尾引号）；缺省取一级标题，再缺取文件名 | `wiki-store.js:23-25` |
+| `status` | 枚举，见下 | 是 | frontmatter 的 `status:`；缺这个字段时读作 `reference` | `wiki-store.js:25` |
+| `updated` | string | 是 | frontmatter 的 `updated:`（`YYYY-MM-DD`）；缺省是**空串**，不是 null | `wiki-store.js:25` |
+| `revision` | string | 是 | 正文全文的 SHA-256 前 16 位十六进制 | `wiki-store.js:18`、`wiki-store.js:26` |
+| `characters` | integer | 是 | 正文全文（含 frontmatter）的 JS 字符串 `length`：按 UTF-16 码元计，一个汉字算 1，一个基本平面外字符算 2 | `wiki-store.js:26` |
+| `content` | string | 只在 `WikiPage` | 含 frontmatter 的完整 Markdown 正文 | `wiki-store.js:82` |
+
+`status` 四个取值（枚举）：
+
+| 取值 | 含义 | 依据 |
+| --- | --- | --- |
+| `active` | 生效的判据；智能体只读这一类（`agentIndex` 只取 active） | `wiki-store.js:101`、`wiki-store.js:167` |
+| `draft` | 草案，不进智能体目录 | `wiki-store.js:167` |
+| `deprecated` | 作废；`list()` 直接过滤掉，但 `browse()` 仍列出 | `wiki-store.js:70`、`wiki-store.js:167`、`wiki-store.js:214` |
+| `reference` | 不是 frontmatter 能写的值，而是**缺 `status:` 时的读时默认值** | `wiki-store.js:25` |
+
+写入面（`PUT /api/wiki/pages/{pagePath}` 与发布流程）只接受前三个：状态不在 `active` / `draft` / `deprecated` 里就抛 400
+（`wiki-store.js:167`、`wiki-store.js:214`、`wiki-store.js:253`）。
+
 ## 8 不变量
 
 | 编号 | 陈述 | 反例 | 依据 | 违反症状 |
