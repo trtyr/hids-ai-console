@@ -345,6 +345,58 @@ paths:
               schema: { $ref: '#/components/schemas/TriageCase' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/agent/triage/{alertId}/false-positive:
+    parameters:
+      - $ref: '#/components/parameters/TriageId'
+    post:
+      tags: [自动研判]
+      summary: 登记误报（带理由），规则与 wiki 两个维护者各自去改
+      operationId: reportFalsePositive
+      description: |
+        值守分析员把一条**已完成**的研判判成误报时走这里。顺序是固定的：
+
+        1. 校验 `reason`／`who`，案件必须存在且 `status` 为 `done`（未完成回 409：重跑会把人工结论覆盖掉）。
+        2. **先把这一条写成误报**：`verdict=false_positive`、`verdict_label=误报`、`decision_source=human`，
+           写入 `feedback{reason,who,recorded_at}`，并落盘（`monitor.persist()`）。
+        3. 才回 202。两个维护者在后台跑，响应不等它们。
+
+        两个维护者都不是跑研判的那个 Agent，各自只改自己的东西：
+
+        - 规则维护者：按案件材料改一条 Rego 或在 `rules/` 新增一条，**一次只动一个文件**；写盘前用 `RuleStore`
+          解析校验（子集外语法、id 不合法、`ready:false` 都算失败），过不了原文件一字不动，不留临时文件。
+        - wiki 维护者：走知识维护会话产出方法论修订，再用 `publishBundle` 的发布前检查写进判据页；
+          只出草案、页没写上算失败。
+
+        维护失败不回滚结论：`verdict` 仍是 `false_positive`，失败只体现在 `maintenance`。
+        维护进度用 `GET /api/agent/triage/{alertId}` 读同一个 `maintenance` 字段。
+        同一轮维护还在跑时再次登记只回当前进度，不重起一轮。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 10
+                  maxLength: 4000
+                  description: 误报理由（原话），10 到 4000 字；短于 10 字回 400
+                who:
+                  type: string
+                  maxLength: 100
+                  description: 登记人，至少 2 字；省略时取业务账号名，未启用 Basic 认证时是 `operator`
+      responses:
+        '202':
+          description: 结论已落盘为误报，两个维护者已开始（或已在跑）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FalsePositiveRecord' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/BadRequest' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/agent/investigations:
     post:
       tags: [深度研判]
@@ -1454,6 +1506,17 @@ components:
         stage: { type: string }
         detail: { type: string }
         verdict_label: { type: [string, 'null'], enum: [真实威胁, 存疑, 误报, null] }
+        verdict:
+          type: [string, 'null']
+          enum: [threat, uncertain, false_positive, null]
+          description: 机器可读结论；人工登记误报后就是 `false_positive`
+        decision_source:
+          type: [string, 'null']
+          description: 结论来源；人工登记误报后是 `human`，研判产出是 `ai`／`rule`
+        feedback:
+          $ref: '#/components/schemas/FalsePositiveFeedback'
+        maintenance:
+          $ref: '#/components/schemas/CaseMaintenance'
         report: { type: [string, 'null'] }
         verified_facts: { type: integer }
         evidence_sources: { type: integer }
@@ -1471,6 +1534,63 @@ components:
             未入队的记录没有这个键；排队中、失败的记录是空数组。
           items: { $ref: '#/components/schemas/TriageStep' }
       additionalProperties: true
+    FalsePositiveFeedback:
+      type: object
+      description: 人工误报登记：值守分析员给的原话理由与登记人。
+      required: [reason, who, recorded_at]
+      properties:
+        reason: { type: string, description: 误报理由，10 到 4000 字 }
+        who: { type: string, description: 登记人，2 到 100 字 }
+        recorded_at: { type: string, format: date-time }
+      additionalProperties: false
+    MaintenanceSide:
+      type: object
+      description: |
+        单边维护状态。`updated` 的含义按边不同：规则那边表示那一份 Rego 已经写进 `rules/` 并通过解析；
+        wiki 那边表示方法论页已经写进去（响应里给 `page` 与 `revision`）。
+      required: [status]
+      properties:
+        status: { type: string, enum: [updating, updated, failed] }
+        at: { type: string, format: date-time }
+        error: { type: string, description: failed 时的原因（截 300 字） }
+        id: { type: string, description: 规则维护者改的 Rego 规则 id }
+        file: { type: string, description: 写进 rules/ 的文件名；只动这一个文件 }
+        action: { type: string, enum: [add, update], description: add=新增一条，update=改已有的那条 }
+        rationale: { type: string, description: 维护者给的修改理由（截 500 字） }
+        session_id: { type: string, description: wiki 维护会话 id }
+        page: { type: string, description: wiki 维护者写的方法论页路径 }
+        revision: { type: string, description: 写入后页面的新 revision }
+        pages: { type: array, items: { type: string }, description: 本次发布涉及的页面路径 }
+      additionalProperties: true
+    CaseMaintenance:
+      type: object
+      description: |
+        误报登记后的两个维护者进度。状态只有三种：`updating`（还在跑）、`updated`（这一边改完了）、`failed`（这一边失败）。
+        总态：还有一边在跑就是 `updating`；都收尾后任一边失败即 `failed`，否则 `updated`。
+        维护失败**不改变**案件结论——`verdict` 仍是 `false_positive`。
+      required: [status, rule, wiki]
+      properties:
+        status: { type: string, enum: [updating, updated, failed] }
+        updated_at: { type: string, format: date-time }
+        rule: { $ref: '#/components/schemas/MaintenanceSide' }
+        wiki: { $ref: '#/components/schemas/MaintenanceSide' }
+      additionalProperties: true
+    FalsePositiveRecord:
+      type: object
+      description: 误报登记的响应：结论、理由、两个维护者的进度。
+      required: [alert_id, verdict, feedback, maintenance]
+      properties:
+        alert_id: { type: string }
+        verdict:
+          type: object
+          required: [verdict, verdict_label, source]
+          properties:
+            verdict: { type: string, enum: [false_positive] }
+            verdict_label: { type: string, enum: [误报] }
+            source: { type: string, enum: [human], description: 人工登记（研判时的 AI 结论会写成 ai / rule） }
+        feedback: { $ref: '#/components/schemas/FalsePositiveFeedback' }
+        maintenance: { $ref: '#/components/schemas/CaseMaintenance' }
+      additionalProperties: false
     TriageCaseListItem:
       type: object
       description: |

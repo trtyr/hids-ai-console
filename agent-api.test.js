@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createServer, createAnalysisProvider } from './server.js';
+import { createServer, createAnalysisProvider, RegoRuleMaintainer } from './server.js';
+import { RuleStore } from './rule-store.js';
 import { TraceBoardService } from './trace-board.js';
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
@@ -466,4 +467,256 @@ test('A4 真 status() 剥掉 input 后仍能从研判记录复用原始报文', 
   assert.equal(alert.evidence_id, 'syslog:1');
   assert.equal(alert.facts.host_ip, '172.20.208.23');
   assert.equal(alert.facts.source_ip, '64.177.57.21');
+});
+
+// ── P003-T013 误报入口与两个维护者 ──────────────────────────────────────
+
+function falsePositiveMonitor(records) {
+  return {
+    records: new Map(records.map(record => [record.alert_id, record])),
+    persisted: 0,
+    status(alertId) {
+      const record = this.records.get(alertId);
+      if (!record) return null;
+      const { input, ...visible } = record;
+      return { ...visible, steps: [...(record.steps || [])], evidence: record.evidence || [] };
+    },
+    async persist() { this.persisted += 1; }
+  };
+}
+
+function falsePositiveCase(caseDir, overrides = {}) {
+  return { alert_id: SYSLOG_ALERT, status: 'done', stage: '研判完成', verdict: 'threat', verdict_label: '真实威胁',
+    decision_source: 'ai', case_dir: caseDir, steps: [], evidence: [], updated_at: '2026-11-18T03:00:00.000Z',
+    input: { raw: RAW_SYSLOG, parsed: { msgid: 'cloudwalker-honeypot', ts: '2026-11-18T03:00:00Z',
+      payload: { host_ip: '172.20.208.23', source_ip: '64.177.57.21' } } }, ...overrides };
+}
+
+function deferred() {
+  let resolve; let reject;
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+async function waitFor(check, label, timeoutMs = 2000) {
+  const start = Date.now();
+  for (;;) {
+    if (await check()) return;
+    if (Date.now() - start > timeoutMs) throw new Error(`等待超时：${label}`);
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
+const falsePositivePath = id => `/api/agent/triage/${encodeURIComponent(id)}/false-positive`;
+
+async function listen(t, server) {
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+const reportFalsePositive = (base, body = { reason: '运维的蜜罐探针，不是攻击', who: '值班分析员' }) =>
+  fetch(`${base}${falsePositivePath(SYSLOG_ALERT)}`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+test('A1 误报入口先把结论落成误报再回 202，维护者没跑完也已经是误报', async t => {
+  const caseDir = await caseDirectory(t);
+  await writeFile(path.join(caseDir, 'result.json'), JSON.stringify({ trace: [{ kind: 'wiki', id: 'HP-10' }] }));
+  const monitor = falsePositiveMonitor([falsePositiveCase(caseDir)]);
+  const ruleGate = deferred();
+  const wikiGate = deferred();
+  let ruleCalls = 0;
+  const ruleMaintainer = { maintain: async () => { ruleCalls += 1; await ruleGate.promise;
+    return { id: 'honeypot_probe', file: 'honeypot_probe.rego', name: '蜜罐诱捕', action: 'update' }; } };
+  const wikiAgent = {
+    create: async () => ({ id: '11111111-1111-4111-8111-111111111111', status: 'collecting' }),
+    reply: async () => { await wikiGate.promise;
+      return { status: 'ready_for_review', proposal: { changes: [{ path: 'honeypot/HP-10.md', content: 'x', page_revision: 'r' }],
+        evidence_preview: null } }; } };
+  const wiki = { agentIndex: async () => ({ category: 'honeypot', pages: [{ id: 'HP-10', title: '蜜罐', path: 'honeypot/HP-10.md' }] }),
+    publishBundle: async () => [{ path: 'honeypot/HP-10.md', revision: 'abc' }] };
+  const server = createServer(null, null, null, null, null, monitor, null, undefined, null, null, wiki, wikiAgent, null, null, null, ruleMaintainer);
+  const base = await listen(t, server);
+
+  const response = await reportFalsePositive(base);
+  assert.equal(response.status, 202);
+  const body = await response.json();
+  // 结论先落地：维护者两个都还卡在 gate 上，这一条已经是误报
+  assert.equal(body.verdict.verdict, 'false_positive');
+  assert.equal(body.verdict.verdict_label, '误报');
+  assert.equal(body.verdict.source, 'human');
+  assert.equal(body.feedback.reason, '运维的蜜罐探针，不是攻击');
+  assert.equal(body.feedback.who, '值班分析员');
+  assert.equal(body.maintenance.status, 'updating');
+  assert.ok(monitor.persisted >= 1, '回 202 之前必须已经落盘');
+  // GET 同一条案件读到同一个结论与进度
+  const visible = await (await fetch(`${base}/api/agent/triage/${encodeURIComponent(SYSLOG_ALERT)}`)).json();
+  assert.equal(visible.verdict, 'false_positive');
+  assert.equal(visible.verdict_label, '误报');
+  assert.equal(visible.feedback.reason, '运维的蜜罐探针，不是攻击');
+  assert.equal(visible.maintenance.status, 'updating');
+  // 维护还在跑时重复登记不重起一轮
+  assert.equal((await reportFalsePositive(base)).status, 202);
+  assert.equal(ruleCalls, 1);
+
+  ruleGate.resolve();
+  wikiGate.resolve();
+  await waitFor(async () => (await (await fetch(`${base}/api/agent/triage/${encodeURIComponent(SYSLOG_ALERT)}`)).json())
+    .maintenance?.status === 'updated', '两个维护者收尾');
+  const done = await (await fetch(`${base}/api/agent/triage/${encodeURIComponent(SYSLOG_ALERT)}`)).json();
+  assert.equal(done.verdict, 'false_positive');
+  assert.equal(done.maintenance.rule.status, 'updated');
+  assert.equal(done.maintenance.wiki.status, 'updated');
+  assert.equal(done.maintenance.wiki.page, 'honeypot/HP-10.md');
+  assert.equal(ruleCalls, 1);
+});
+
+test('A1 误报入口的入参校验：理由必填，案件要存在且已完成', async t => {
+  const caseDir = await caseDirectory(t);
+  const monitor = falsePositiveMonitor([
+    falsePositiveCase(caseDir),
+    falsePositiveCase(caseDir, { alert_id: 'honeypot:9', status: 'running', stage: '研判中' })
+  ]);
+  const server = createServer(null, null, null, null, null, monitor);
+  const base = await listen(t, server);
+  const send = async (alertId, body) => fetch(`${base}/api/agent/triage/${encodeURIComponent(alertId)}/false-positive`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  assert.equal((await send(SYSLOG_ALERT, { who: '值班分析员' })).status, 400);
+  assert.equal((await (await send(SYSLOG_ALERT, { reason: '太短了', who: '值班分析员' })).json()).error, '误报理由必须为 10 到 4000 字');
+  assert.equal((await send(SYSLOG_ALERT, { reason: '运维的蜜罐探针，不是攻击', who: 'x' })).status, 400);
+  assert.equal((await send(SYSLOG_ALERT.slice(0, -1) + '0', { reason: '运维的蜜罐探针，不是攻击', who: '值班分析员' })).status, 404);
+  assert.equal((await send('bad-id', { reason: '运维的蜜罐探针，不是攻击', who: '值班分析员' })).status, 400);
+  assert.equal((await (await send('honeypot:9', { reason: '运维的蜜罐探针，不是攻击', who: '值班分析员' })).json()).error,
+    '研判还没结束，不能登记误报');
+  assert.equal(monitor.records.get(SYSLOG_ALERT).verdict, 'threat');
+  assert.equal(monitor.records.get(SYSLOG_ALERT).feedback, undefined);
+});
+
+const plainRego = (id, name, line) => `package hids.rules.${id}\n# name: ${name}\ndefault match := false\nmatch if {\n  ${line}\n}\n`;
+const sshRego = plainRego('ssh_bruteforce', 'SSH 暴力破解', 'input.type == "brute_force"');
+const honeypotRego = plainRego('honeypot_probe', '蜜罐诱捕', 'input.type == "honeypot"');
+const tightenedRego = plainRego('honeypot_probe', '蜜罐诱捕', 'input.type == "honeypot"\n  not input.source_ip == "64.177.57.21"');
+const addedRego = plainRego('ops_probe_allow', '运维探针', 'input.type == "honeypot"\n  input.source_ip == "64.177.57.21"');
+const badRego = plainRego('honeypot_probe', '坏规则', 'input.host =~ "10\\..*"');
+
+function ruleModel(proposal) {
+  return { complete: async () => ({ content: JSON.stringify(proposal) }) };
+}
+
+test('A2 规则维护者只加一条或改一条 Rego，校验不过就不落盘', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-rego-maintain-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const rules = path.join(directory, 'rules');
+  await mkdir(rules, { recursive: true });
+  await writeFile(path.join(rules, 'ssh_bruteforce.rego'), sshRego);
+  await writeFile(path.join(rules, 'honeypot_probe.rego'), honeypotRego);
+  const store = new RuleStore(rules);
+  const prompts = { load: async () => ({ prompts: { rule: '维护 Rego 规则' } }) };
+  const material = { caseId: 'c1', eventType: 'honeypot', reason: '运维的蜜罐探针，不是攻击', who: '值班分析员',
+    alert: { msgid: 'cloudwalker-honeypot', payload: { source_ip: '64.177.57.21' } }, ruleIds: ['honeypot_probe'] };
+
+  // 改一条：只重写它自己那份，别人的一字不动
+  const update = await new RegoRuleMaintainer(ruleModel({ ready: true, id: 'honeypot_probe', name: '蜜罐诱捕',
+    reason: '把运维探针的固定来源排除', rego: tightenedRego }), store, prompts).maintain(material);
+  assert.deepEqual(update, { id: 'honeypot_probe', file: 'honeypot_probe.rego', name: '蜜罐诱捕',
+    action: 'update', rationale: '把运维探针的固定来源排除' });
+  assert.equal(await readFile(path.join(rules, 'honeypot_probe.rego'), 'utf8'), tightenedRego);
+  assert.equal(await readFile(path.join(rules, 'ssh_bruteforce.rego'), 'utf8'), sshRego);
+  assert.equal((await new RuleStore(rules).list()).count, 2);
+
+  // 新增一条：目录里只多一个文件
+  const add = await new RegoRuleMaintainer(ruleModel({ ready: true, id: 'ops_probe_allow', name: '运维探针',
+    reason: '新增一条专门盖住运维探针', rego: addedRego }), store, prompts).maintain(material);
+  assert.equal(add.action, 'add');
+  assert.equal(add.file, 'ops_probe_allow.rego');
+  assert.deepEqual((await readdir(rules)).sort(), ['honeypot_probe.rego', 'ops_probe_allow.rego', 'ssh_bruteforce.rego']);
+  assert.equal((await new RuleStore(rules).read('ops_probe_allow')).rego, addedRego);
+
+  // 子集外的语法：装载期就报错，原文件不动，也不留临时文件
+  await assert.rejects(() => new RegoRuleMaintainer(ruleModel({ ready: true, id: 'honeypot_probe', name: '蜜罐诱捕',
+    reason: '收紧', rego: badRego }), store, prompts).maintain(material), /honeypot_probe\.rego:\d+/);
+  assert.equal(await readFile(path.join(rules, 'honeypot_probe.rego'), 'utf8'), tightenedRego);
+  assert.deepEqual((await readdir(rules)).filter(name => name.startsWith('.')), []);
+  // id 不合法 / 模型说证据不够：都不落盘
+  await assert.rejects(() => new RegoRuleMaintainer(ruleModel({ ready: true, id: 'Bad-Id', name: 'x',
+    reason: 'x', rego: addedRego }), store, prompts).maintain(material), /规则 id 不合法/);
+  await assert.rejects(() => new RegoRuleMaintainer(ruleModel({ ready: false, reason: '缺授权记录，找当班主管确认' }),
+    store, prompts).maintain(material), /缺授权记录/);
+  assert.deepEqual((await readdir(rules)).sort(), ['honeypot_probe.rego', 'ops_probe_allow.rego', 'ssh_bruteforce.rego']);
+});
+
+test('A3 两个维护者都不是跑研判的那个 Agent，各自改自己的东西', async t => {
+  const caseDir = await caseDirectory(t);
+  await writeFile(path.join(caseDir, 'result.json'), JSON.stringify({ trace: [{ kind: 'wiki', id: 'HP-10' }],
+    verdict: { rego: { rule_ids: ['honeypot_probe'] } } }));
+  const monitor = falsePositiveMonitor([falsePositiveCase(caseDir)]);
+  const investigator = { model: { model: 'fake-model' }, run: async () => { throw new Error('误报维护不该重新跑研判'); } };
+  const ruleArgs = [];
+  const ruleMaintainer = { maintain: async args => { ruleArgs.push(args);
+    return { id: 'honeypot_probe', file: 'honeypot_probe.rego', name: '蜜罐诱捕', action: 'update' }; } };
+  const feedbacks = [];
+  const wikiAgent = {
+    create: async (page, feedback) => { feedbacks.push({ page, feedback }); return { id: '22222222-2222-4222-8222-222222222222' }; },
+    reply: async () => ({ status: 'ready_for_review', proposal: { changes: [{ path: 'honeypot/HP-10.md', content: 'x', page_revision: 'r' }],
+      evidence_preview: null } }) };
+  const published = [];
+  const wiki = { agentIndex: async () => ({ category: 'honeypot', pages: [{ id: 'HP-10', title: '蜜罐', path: 'honeypot/HP-10.md' }] }),
+    publishBundle: async (changes, evidence, audit) => { published.push({ changes, evidence, audit });
+      return [{ path: 'honeypot/HP-10.md', revision: 'rev-2' }]; } };
+  const server = createServer(null, null, investigator, null, null, monitor, null, undefined, null, null,
+    wiki, wikiAgent, null, null, null, ruleMaintainer);
+  const base = await listen(t, server);
+  assert.equal((await reportFalsePositive(base)).status, 202);
+  await waitFor(() => monitor.records.get(SYSLOG_ALERT).maintenance.status !== 'updating', '维护收尾');
+
+  assert.equal(ruleMaintainer === investigator, false);
+  assert.equal(wikiAgent === investigator, false);
+  // 规则维护者拿到的是案件材料与命中的 Rego id，不是分析 Agent 的输出
+  assert.equal(ruleArgs.length, 1);
+  assert.equal(ruleArgs[0].alert.msgid, 'cloudwalker-honeypot');
+  assert.deepEqual(ruleArgs[0].ruleIds, ['honeypot_probe']);
+  assert.equal(ruleArgs[0].reason, '运维的蜜罐探针，不是攻击');
+  // wiki 维护者拿的是同一条案件的真实反馈，预期结论误报，目标是分析时引用过的判据页
+  assert.equal(feedbacks.length, 1);
+  assert.equal(feedbacks[0].page, 'honeypot/HP-10.md');
+  assert.equal(feedbacks[0].feedback.case_id, SYSLOG_ALERT);
+  assert.equal(feedbacks[0].feedback.expected_verdict, 'false_positive');
+  assert.equal(feedbacks[0].feedback.reason, '运维的蜜罐探针，不是攻击');
+  // 方法论文档真的写进去了：走 publishBundle，审核人记登记人、说明记理由
+  assert.equal(published.length, 1);
+  assert.equal(published[0].audit.reviewer, '值班分析员');
+  assert.equal(published[0].audit.note, '运维的蜜罐探针，不是攻击');
+  assert.equal(monitor.records.get(SYSLOG_ALERT).maintenance.wiki.revision, 'rev-2');
+});
+
+test('A4 维护失败只改 maintenance，误报结论不变；一边成一败总态算失败', async t => {
+  const caseDir = await caseDirectory(t);
+  const monitor = falsePositiveMonitor([falsePositiveCase(caseDir)]);
+  const ruleMaintainer = { maintain: async () => { throw new Error('模型接口 HTTP 500: 上游不可用'); } };
+  const wikiAgent = {
+    create: async () => ({ id: '33333333-3333-4333-8333-333333333333' }),
+    reply: async () => ({ status: 'ready_for_review', proposal: { changes: [{ path: 'honeypot/HP-10.md', content: 'x', page_revision: 'r' }],
+      evidence_preview: null } }) };
+  const wiki = { agentIndex: async () => ({ category: 'honeypot', pages: [{ id: 'HP-10', title: '蜜罐', path: 'honeypot/HP-10.md' }] }),
+    publishBundle: async () => [{ path: 'honeypot/HP-10.md', revision: 'rev-3' }] };
+  const server = createServer(null, null, null, null, null, monitor, null, undefined, null, null,
+    wiki, wikiAgent, null, null, null, ruleMaintainer);
+  const base = await listen(t, server);
+
+  assert.equal((await reportFalsePositive(base)).status, 202);
+  await waitFor(() => monitor.records.get(SYSLOG_ALERT).maintenance.status !== 'updating', '维护收尾');
+  const record = monitor.records.get(SYSLOG_ALERT);
+  // 规则那边失败：误报结论一个字节都没动
+  assert.equal(record.verdict, 'false_positive');
+  assert.equal(record.verdict_label, '误报');
+  assert.equal(record.feedback.reason, '运维的蜜罐探针，不是攻击');
+  assert.equal(record.maintenance.status, 'failed');
+  assert.equal(record.maintenance.rule.status, 'failed');
+  assert.match(record.maintenance.rule.error, /上游不可用/);
+  assert.equal(record.maintenance.wiki.status, 'updated');
+  const visible = await (await fetch(`${base}/api/agent/triage/${encodeURIComponent(SYSLOG_ALERT)}`)).json();
+  assert.equal(visible.verdict, 'false_positive');
+  assert.equal(visible.maintenance.status, 'failed');
+  assert.equal(visible.maintenance.wiki.revision, 'rev-3');
 });

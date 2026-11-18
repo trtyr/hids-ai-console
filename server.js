@@ -1,7 +1,8 @@
 import http from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { realpathSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { RpcClient } from './rpc-client.js';
@@ -94,6 +95,166 @@ export function createAnalysisProvider({ monitor = null, history = null } = {}) 
 const traceBoard = agentToolbox && model ? new TraceBoardService({ toolbox: agentToolbox, model, promptStore,
   directory: path.join(root, 'backend', '.data', 'trace-boards'),
   analysis: createAnalysisProvider({ monitor: triageMonitor, history: investigationStore }) }) : null;
+
+// ── 误报维护（P003-T013）──────────────────────────────────────────────────
+// 值守分析员登记误报时，结论先落盘（前面那个路由里就写 record.verdict），两个维护者在后台各自跑：
+// 规则维护者改 Rego（只动一条规则），wiki 维护者改方法论页（走 publishBundle 的发布前检查）。
+// 维护失败只写进 maintenance，不碰 verdict——结论不会因为维护失败被改回去。
+// 两个维护者都不是跑研判的那个 InvestigationAgent：一个用 rule-maintenance 提示词，一个用 WikiWorkbench。
+
+// 维护状态词表：更新中 / 已更新 / 失败（总态与单边态同一套）。
+function maintenanceState(parts) {
+  if (parts.some(part => part.status === 'updating')) return 'updating';
+  return parts.some(part => part.status === 'failed') ? 'failed' : 'updated';
+}
+
+function ruleProposal(text) {
+  const raw = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  let output;
+  try { output = JSON.parse(raw); } catch { throw new Error('规则维护模型没有返回 JSON'); }
+  if (!output || typeof output !== 'object' || Array.isArray(output)) throw new Error('规则维护模型没有返回 JSON 对象');
+  return output;
+}
+
+// 校验：候选规则在临时目录里用真的 RuleStore 解析——只有规则子集内的语法能过，过不了就不落盘。
+async function validateRego(id, rego) {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-rego-'));
+  try {
+    await writeFile(path.join(directory, `${id}.rego`), rego, { encoding: 'utf8', mode: 0o600 });
+    const rule = await new RuleStore(directory).read(id);
+    if (!rule) throw new Error(`规则正文的 package 与规则 id 不一致：${id}`);
+    return rule;
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
+// 写一份规则：临时文件 + rename，写完再整库装载一次——宁可这次维护失败，也不留半截规则或重复 id。
+async function writeRuleFile(directory, file, rego) {
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const temporary = path.join(directory, `.${file}.${randomUUID()}.tmp`);
+  await writeFile(temporary, rego, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  try { await rename(temporary, path.join(directory, file)); }
+  catch (cause) { await rm(temporary, { force: true }); throw cause; }
+  await new RuleStore(directory).list();
+}
+
+/**
+ * 规则维护者：拿一条已完成的误报案件，让模型改一条 Rego 或新增一条，校验通过才写进 `rules/<id>.rego`。
+ * 返回 `{ id, file, name, action, rationale }`；任何一步不成立都抛错，调用方记 failed。
+ * 不重写整本：只写这一份文件，同目录其它 `.rego` 一个字节都不动。
+ */
+export class RegoRuleMaintainer {
+  constructor(model, ruleStore, prompts) { this.model = model; this.ruleStore = ruleStore; this.prompts = prompts; }
+
+  async maintain({ caseId, eventType, reason, who, alert, ruleIds = [] }) {
+    const inventory = await this.ruleStore.list();
+    const matched = [];
+    for (const id of ruleIds) {
+      const rule = await this.ruleStore.read(id);
+      if (rule) matched.push({ id: rule.id, name: rule.name, rego: rule.rego });
+    }
+    const prompt = (await this.prompts.load())?.prompts?.rule;
+    if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('规则维护提示词未配置');
+    const message = await this.model.complete([
+      { role: 'system', content: prompt },
+      { role: 'user', content: JSON.stringify({ case_id: caseId, event_type: eventType, false_positive_reason: reason,
+        reported_by: who, alert, matched_rules: matched, existing_rules: inventory.rules }) }
+    ], [], 'none');
+    const output = ruleProposal(message.content);
+    if (output.ready === false)
+      throw new Error(`规则维护者没有给出可落盘的修订：${String(output.reason || '').slice(0, 200) || '未说明原因'}`);
+    const id = String(output.id || '').trim();
+    if (!isRuleId(id)) throw new Error(`规则 id 不合法：${id || '(空)'}`);
+    const rego = String(output.rego || '');
+    if (!rego.trim()) throw new Error('规则正文为空');
+    const read = await validateRego(id, rego);
+    const existing = await this.ruleStore.read(id);
+    // 已有规则的 id 可能住在别的文件名里：改它就要写回它自己那份，不能另起一个同 id 的文件。
+    const file = existing?.file || `${id}.rego`;
+    await writeRuleFile(this.ruleStore.directory, file, rego);
+    return { id, file, name: read.name, action: existing ? 'update' : 'add',
+      rationale: String(output.reason || '').slice(0, 500) };
+  }
+}
+
+const regoMaintainer = model ? new RegoRuleMaintainer(model, regoRuleStore, promptStore) : null;
+
+// 案件里命中的 Rego 规则 id：结果落盘的 result.json 里就有，没有就当没命中（旧案件可能没有这条轨迹）。
+async function caseRegoRuleIds(record) {
+  if (!record?.case_dir) return [];
+  try {
+    const saved = JSON.parse(await readFile(path.join(record.case_dir, 'result.json'), 'utf8'));
+    const ids = saved?.verdict?.rego?.rule_ids;
+    return Array.isArray(ids) ? ids.filter(id => isRuleId(id)) : [];
+  } catch { return []; }
+}
+
+// 误报案件的 wiki 维护目标：优先分析时引用过的判据页，其次本场景第一页。
+// POST /api/wiki/sessions 与误报入口共用这一处口径，两条入口选出来的页一致。
+async function wikiFeedbackTarget(wiki, record, page = null) {
+  const eventType = eventTypeFor(record.input.parsed.msgid);
+  const index = await wiki.agentIndex(eventType);
+  const eligible = index.pages.filter(item => item.path.startsWith(`${index.category}/`));
+  let cited = [];
+  try {
+    const saved = JSON.parse(await readFile(path.join(record.case_dir, 'result.json'), 'utf8'));
+    cited = (saved.trace || []).filter(item => item.kind === 'wiki' && item.id).map(item => item.id);
+  } catch { /* 旧案件可能没有完整的引用轨迹 */ }
+  const target = page ? eligible.find(item => item.path === page)
+    : eligible.find(item => cited.includes(item.id)) || eligible[0];
+  return target ? { page: target, eventType } : null;
+}
+
+// 两个维护者并行跑，各自收尾就把自己的状态写进 maintenance；总态等两边都有结果才定。
+// 单边失败只改它自己那一格：verdict 与 feedback 一律不动（A4）。
+async function maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMaintainer }) {
+  const state = record.maintenance;
+  const settle = async (key, job) => {
+    try { state[key] = { status: 'updated', at: new Date().toISOString(), ...await job() }; }
+    catch (cause) {
+      state[key] = { status: 'failed', at: new Date().toISOString(), error: String(cause?.message || cause).slice(0, 300) };
+    }
+    state.status = maintenanceState([state.rule, state.wiki]);
+    state.updated_at = new Date().toISOString();
+    await monitor.persist?.();
+  };
+  const ruleJob = async () => {
+    if (!ruleMaintainer) throw new Error('规则维护者未配置');
+    const parsed = record.input?.parsed;
+    return ruleMaintainer.maintain({ caseId: record.alert_id, eventType: eventTypeFor(parsed?.msgid),
+      reason: record.feedback.reason, who: record.feedback.who,
+      alert: parsed ? { msgid: parsed.msgid, payload: parsed.payload } : null,
+      ruleIds: await caseRegoRuleIds(record) });
+  };
+  const wikiJob = async () => {
+    if (!wiki || !wikiAgent) throw new Error('知识维护端未配置');
+    const target = await wikiFeedbackTarget(wiki, record);
+    if (!target) throw new Error('当前场景缺少可维护的判据页');
+    const session = await wikiAgent.create(target.page.path, { case_id: record.alert_id, case_dir: record.case_dir,
+      event_type: target.eventType, reason: record.feedback.reason, expected_verdict: 'false_positive',
+      who: record.feedback.who });
+    const advanced = await wikiAgent.reply(session.id,
+      `人工登记误报：${record.feedback.reason}。请按 _schema.md 核对判据是否需要修订，需要就给出完整修订草案。`);
+    const proposal = advanced?.proposal;
+    if (!proposal) throw new Error(`维护者没有产出方法论修订（会话 ${session.id} 状态 ${advanced?.status || '未知'}）`);
+    const changes = Array.isArray(proposal.changes) && proposal.changes.length ? proposal.changes
+      : [{ path: target.page.path, content: proposal.content, page_revision: proposal.page_revision }];
+    if (!changes.some(change => change.path === target.page.path)) throw new Error('方法论修订草案没有覆盖当前判据页');
+    // 发布前的结构、断链、证据引用检查在 publishBundle 里；reviewer 记登记人，note 记他给的理由。
+    const pages = await wiki.publishBundle(changes, proposal.evidence_preview || null,
+      { reviewer: record.feedback.who, note: record.feedback.reason.slice(0, 500), case_id: record.alert_id });
+    const written = pages.find(item => item.path === target.page.path) || pages[0];
+    return { session_id: session.id, page: written.path, revision: written.revision,
+      pages: pages.map(item => item.path) };
+  };
+  await Promise.all([settle('rule', ruleJob), settle('wiki', wikiJob)]);
+}
+
+// 误报入口的响应：结论 + 理由 + 两个维护者的进度（GET 同一条案件也能读到同样的三个字段）。
+function falsePositiveView(record) {
+  return { alert_id: record.alert_id,
+    verdict: { verdict: record.verdict, verdict_label: record.verdict_label, source: record.decision_source },
+    feedback: record.feedback, maintenance: record.maintenance };
+}
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -274,7 +435,8 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   access = { user: process.env.HIDS_BASIC_AUTH_USER, password: process.env.HIDS_BASIC_AUTH_PASSWORD }, boardService = service === gateway ? traceBoard : null,
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
   maintenanceEntry = process.env.HIDS_MAINTENANCE_ENTRY_URL,
-  ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore) {
+  ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore,
+  ruleMaintainer = regoMaintainer) {
   // 注入的 TraceBoardService 没有取数器时，用本次的 monitor / history 现接一条：
   // 测试与部署走同一套接线，不再靠测试里手塞假 analysis。
   if (boardService instanceof TraceBoardService && !boardService.analysis)
@@ -429,6 +591,40 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         try { return json(res, 200, await monitor.setEnabled(body.enabled)); }
         catch (cause) { return error(res, cause.status || 502, cause.message); }
       }
+      const falsePositive = url.pathname.match(/^\/api\/agent\/triage\/(.+)\/false-positive$/);
+      if (falsePositive && req.method === 'POST') {
+        if (!monitor) return error(res, 503, '自动研判尚未配置');
+        let alertId;
+        try { alertId = decodeURIComponent(falsePositive[1]); }
+        catch { return error(res, 400, '告警 ID 编码无效'); }
+        if (!validTriageId(alertId)) return error(res, 400, '告警 ID 无效');
+        const body = await readJSON(req, 12000);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return error(res, 400, '请求正文无效');
+        const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+        if (reason.length < 10 || reason.length > 4000) return error(res, 400, '误报理由必须为 10 到 4000 字');
+        const who = String(body.who ?? access?.user ?? 'operator').trim().replace(/\s+/g, ' ').slice(0, 100);
+        if (who.length < 2) return error(res, 400, '误报登记人至少 2 个字');
+        const record = monitor.records.get(alertId);
+        if (!record) return error(res, 404, '找不到这条研判案件');
+        if (record.status !== 'done') return error(res, 409, '研判还没结束，不能登记误报');
+        // 同一轮维护还在跑：不再起第二轮，直接把当前进度回给调用方（重复点击不该让维护者跑两遍）。
+        if (record.maintenance?.status === 'updating') return json(res, 202, falsePositiveView(record));
+        // A1：先把结论与理由写死并落盘，再回 202——两个维护者还在排队时，这一条已经是误报。
+        const at = new Date().toISOString();
+        record.verdict = 'false_positive'; record.verdict_label = '误报'; record.decision_source = 'human';
+        record.feedback = { reason, who, recorded_at: at };
+        record.detail = `人工登记误报（${who}）：${reason}`.slice(0, 250);
+        record.maintenance = { status: 'updating', updated_at: at,
+          rule: { status: 'updating', at }, wiki: { status: 'updating', at } };
+        record.updated_at = at;
+        await monitor.persist?.();
+        // 后台跑两个维护者：失败只写 maintenance，不回滚 verdict；响应不等它们。
+        void maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMaintainer }).catch(cause => {
+          record.maintenance.status = 'failed';
+          record.maintenance.error = String(cause?.message || cause).slice(0, 300);
+        });
+        return json(res, 202, falsePositiveView(record));
+      }
       if (url.pathname.startsWith('/api/agent/triage/')) {
         if (!monitor) return error(res, 503, '自动研判尚未配置');
         let alertId;
@@ -486,19 +682,10 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
               const record = monitor?.records.get(body.case_id);
               if (!record?.input || record.status !== 'done' || !record.case_dir)
                 return error(res, 404, '找不到已完成的 Syslog 案件');
-              const eventType = eventTypeFor(record.input.parsed.msgid);
-              const index = await wiki.agentIndex(eventType);
-              const eligible = index.pages.filter(page => page.path.startsWith(`${index.category}/`));
-              let cited = [];
-              try {
-                const saved = JSON.parse(await readFile(path.join(record.case_dir, 'result.json'), 'utf8'));
-                cited = (saved.trace || []).filter(item => item.kind === 'wiki' && item.id).map(item => item.id);
-              } catch { /* 旧案件可能没有完整的引用轨迹 */ }
-              const current = body.page ? eligible.find(page => page.path === body.page) :
-                eligible.find(page => cited.includes(page.id)) || eligible[0];
-              if (!current) return error(res, 409, '当前场景缺少可维护的判据页');
-              return json(res, 201, await wikiAgent.create(current.path, {
-                case_id: body.case_id, case_dir: record.case_dir, event_type: eventType,
+              const target = await wikiFeedbackTarget(wiki, record, body.page || null);
+              if (!target) return error(res, 409, '当前场景缺少可维护的判据页');
+              return json(res, 201, await wikiAgent.create(target.page.path, {
+                case_id: body.case_id, case_dir: record.case_dir, event_type: target.eventType,
                 reason: body.reason, expected_verdict: body.expected_verdict, who: body.who }));
             }
             return json(res, 201, await wikiAgent.create(body.page));
