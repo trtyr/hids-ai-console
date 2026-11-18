@@ -104,6 +104,13 @@ function validAlertId(value) {
 function validTriageId(value) {
   return validAlertId(value) || /^syslog:[a-z_]+:[a-f0-9]{16}:(?:[0-9]+|unknown):[a-f0-9-]{36}$/.test(String(value));
 }
+// /api/wiki/pages/{pagePath} 的路径解析：不是页面路径返回 null，编码无效返回 { invalidEncoding: true }。
+function wikiPagePath(pathname) {
+  const prefix = '/api/wiki/pages/';
+  if (!pathname.startsWith(prefix)) return null;
+  try { return { filename: decodeURIComponent(pathname.slice(prefix.length)) }; }
+  catch { return { invalidEncoding: true }; }
+}
 function validTraceTarget(value) {
   if (validAlertId(value)) return true;
   const address = String(value || '').replace(/^ip:/, '');
@@ -303,12 +310,23 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           return json(res, 200, { pages: query ? pages.filter(page =>
             `${page.id} ${page.title} ${page.path}`.toLowerCase().includes(String(query).toLowerCase())).slice(0, 50) : pages });
         }
-        if (url.pathname.startsWith('/api/wiki/pages/') && req.method === 'GET') {
-          let filename;
-          try { filename = decodeURIComponent(url.pathname.slice('/api/wiki/pages/'.length)); }
-          catch { return error(res, 400, '知识库页面路径编码无效'); }
-          try { return json(res, 200, await wiki.get(filename)); }
+        // 页面读写走控制台 Basic 账号（D003），因此排在下面的管理员令牌闸之前。
+        const pagePath = wikiPagePath(url.pathname);
+        if (pagePath?.invalidEncoding) return error(res, 400, '知识库页面路径编码无效');
+        if (pagePath && url.pathname === '/api/wiki/pages/' && req.method === 'PUT')
+          return error(res, 400, '请在路径里写明要修改的页面');
+        if (pagePath && req.method === 'GET') {
+          try { return json(res, 200, await wiki.get(pagePath.filename)); }
           catch (cause) { return error(res, cause.code === 'ENOENT' ? 404 : cause.status || 400, cause.message); }
+        }
+        if (pagePath && req.method === 'PUT') {
+          const body = await readJSON(req, 120000);
+          if (!body || !Object.hasOwn(body, 'expected_revision') || !/^[0-9a-f]{16}$/.test(String(body.expected_revision)))
+            return error(res, 400, '缺少有效的页面版本，请刷新后重试');
+          try {
+            return json(res, 200, await wiki.update(pagePath.filename, body.content, body.expected_revision,
+              `通过控制台直接编辑（操作人 ${access?.user || 'admin'}）`));
+          } catch (cause) { return error(res, cause.code === 'ENOENT' ? 404 : cause.status || 400, cause.message); }
         }
         if (!promptAdminToken) return error(res, 503, '尚未配置知识库管理员凭据');
         if (!hasPromptAdminAccess(req, promptAdminToken)) return error(res, 403, '知识库管理员凭据无效');
