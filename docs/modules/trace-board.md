@@ -133,13 +133,13 @@
 | `status` | `running` → `done`／`failed`／`interrupted` | `trace-board.js:79-85`、`trace-board.js:225-231`、`trace-board.js:181-191` |
 | `window` | 时间窗：`since`／`until`／`hours` | `trace-board.js:79-85`、`trace-board.js:88-100` |
 | `alert` | 绑定的告警：`id`／`type`／`title`／`host`／`occurred_at`；手填 IP 起的板 `type`／`occurred_at` 为 `null` | `trace-board.js:158-202` |
-| `hops` | 往回的链上的一跳：`id`／`kind`／`label`／`host`／`occurred_at`／`evidence_id`／`discovered`；告警那一跳 `kind=alert`（P003-T014） | `trace-board.js:87-119` |
-| `links` | 线：`from`／`to`／`rel`／`evidence_id`；**`from` 是更晚的一端、`to` 是更早的原因**（P003-T014） | `trace-board.js:120-137` |
-| `gaps` | 断点 `{hop_id, reason}`：断在哪一跳的左边、为什么断；旧白板的字符串缺口读取时归一成 `hop_id:null`（P003-T014） | `trace-board.js:138-145` |
-| `discovery` | 发现顺序 `{step, kind, id}`（`kind` 为 `hop`／`link`），实时追加；旧板按 hops、links 顺序补齐 | `trace-board.js:119-124` |
-| `chain_length`／`has_gaps` | 链长（hops 个数，含告警那一跳）／有没有断点（P003-T014） | `trace-board.js:143-145` |
+| `hops` | 往回的链上的一跳：`id`／`kind`／`label`／`host`／`occurred_at`／`evidence_id`／`discovered`；告警那一跳 `kind=alert`（P003-T014） | `trace-board.js:90-94` |
+| `links` | 线：`from`／`to`／`rel`／`evidence_id`；**`from` 是更晚的一端、`to` 是更早的原因**（P003-T014） | `trace-board.js:106-118` |
+| `gaps` | 断点 `{hop_id, reason}`：断在哪一跳的左边、为什么断；旧白板的字符串缺口读取时归一成 `hop_id:null`（P003-T014） | `trace-board.js:119-120` |
+| `discovery` | 发现顺序 `{step, kind, id}`（`kind` 为 `hop`／`link`），实时追加；旧板按 hops、links 顺序补齐 | `trace-board.js:121-123` |
+| `chain_length`／`has_gaps` | 链长（hops 个数，含告警那一跳）／有没有断点（P003-T014） | `trace-board.js:124` |
 | `nodes`／`edges`／`activity` | **旧字段**：节点、边、活动流水；`activity` 不再是主数据，`nodes`／`edges` 与 `hops`／`links` 一一对应（P003-T014 起保留兼容） | `trace-board.js:79-85` |
-| `summary` | 结论摘要（AI `conclude` 写） | `trace-board.js:503-590` |
+| `summary` | 结论摘要（AI `conclude` 写） | `trace-board.js:568-575` |
 | `investigations` | 已调查的节点数 | `trace-board.js:339-342` |
 | `model`／`focus` | 本次用的模型名与操作员给的焦点 | `trace-board.js:222-224` |
 | `origin_evidence` | 起点那条原始事件的摘要 | `trace-board.js:79-85`、`trace-board.js:112-125` |
@@ -189,7 +189,7 @@
   这里不读它的 `input`，只在研判记录还没落盘时用 `status()` 公开的 `case_dir` 定位案卷。匹配到牧云事件的 syslog 告警，
   研判记录挂在 `result_alert_id` 上，按它二次查找。取到后 `origin_evidence.evidence_id` 用分析那份（`syslog:1`）、
   `origin_evidence.reused = true`，起板不再调 `get_<类型>_event`；没有案卷时 syslog 告警回 422（不猜）。
-- **详情形状**：`hops`／`links`／`gaps`／`discovery` 由 `presentBoard`（`trace-board.js:87-145`）从落盘的 `nodes`／`edges`／`gaps`／`discovery` 派生；
+- **详情形状**：`hops`／`links`／`gaps`／`discovery` 由 `presentBoard`（`trace-board.js:87-126`）从落盘的 `nodes`／`edges`／`gaps`／`discovery` 派生；
   `links` 的方向先按 `occurred_at` 比，时间相同或未知时按离告警的深度定：`from` 永远靠告警一侧（更晚）。
 - **列表**：`summaries` 每条给 `type`／`host`／`occurred_at`／`status`／`chain_length`／`has_gaps`／`updated_at`（`trace-board.js:75-85`），
   `page` 先按 `statuses`／`type`／`host`／`from`／`to` 筛再切页（`trace-board.js:282-296`）。
