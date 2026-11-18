@@ -352,3 +352,20 @@ test('syslog 模式的 summary 给出最后一条到达时刻，重启后不丢�
   assert.equal('last_received_at' in polling.summary(), false);
   assert.equal('interval_ms' in polling.summary(), true);
 });
+
+test('type_counts 不因 MsgId 撞上对象原型键名而冒出垃圾键', t => {
+  const monitor = new TriageMonitor({ file: '/tmp/hids-summary-proto.json', service: {}, investigator: {}, history: {} });
+  // eventTypeFor 用普通对象查表：这三个 MsgId 会取到原型上的函数 / 对象，真值但不能当类型用。
+  const msgids = ['toString', 'constructor', '__proto__', 'hasOwnProperty', 'cloudwalker-honeypot'];
+  for (const msgid of msgids) {
+    const alertId = `syslog:x:${String(msgid).padStart(16, '0')}:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e46`;
+    monitor.records.set(alertId, { alert_id: alertId, status: 'done', verdict: 'threat',
+      created_at: '2026-11-03T08:00:00.000Z', updated_at: '2026-11-03T08:00:00.000Z',
+      input: { raw: '', parsed: { msgid, ts: '2026-11-03T08:00:00Z', payload: {} } } });
+  }
+  // 只有映射表里的类型出键；原型键名的记录全落 unknown，计数不丢
+  assert.deepEqual(monitor.summary().type_counts, { honeypot: 1, unknown: 4 });
+  assert.equal(monitor.summary().verdict_counts.threat, 5);
+  // 键名只能是映射表里的类型或 unknown：没有 function/object 字样漏进键里
+  for (const key of Object.keys(monitor.summary().type_counts)) assert.match(key, /^[a-z_]+$/);
+});

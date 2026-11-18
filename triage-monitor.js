@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from './syslog-input.js';
+import { eventTypes } from './cloudwalker.js';
 import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './syslog-case.js';
 
 // 结论排序的档位：threat 在前，其余同档保持时间倒序；没有结论的记录排最后。
@@ -171,8 +172,11 @@ export class TriageMonitor {
       if (sinceMs != null && !(Date.parse(record.created_at) >= sinceMs)) continue;
       counts[record.status] = (counts[record.status] || 0) + 1;
       verdict_counts[Object.hasOwn(verdict_counts, record.verdict) ? record.verdict : 'review'] += 1;
-      const type = eventTypeFor(record.input?.parsed?.msgid) || 'unknown';
-      type_counts[type] = (type_counts[type] || 0) + 1;
+      // eventTypeFor 用普通对象查表：MsgId 是 toString / constructor / __proto__ 时会取到原型上的函数或对象。
+      // 只认 eventTypes 里真有的类型名，别的一律算 unknown——否则 type_counts 的键会变成函数源码。
+      const type = eventTypeFor(record.input?.parsed?.msgid);
+      const typeKey = typeof type === 'string' && Object.hasOwn(eventTypes, type) ? type : 'unknown';
+      type_counts[typeKey] = (type_counts[typeKey] || 0) + 1;
     }
     return { initialized: this.initialized, enabled: this.enabled, input_mode: this.inputMode,
       since: sinceMs == null ? null : new Date(sinceMs).toISOString(),
