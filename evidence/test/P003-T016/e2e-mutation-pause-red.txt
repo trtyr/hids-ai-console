@@ -1,0 +1,175 @@
+== 起桩后端与前端 ==
+前端已起 http://127.0.0.1:13016
+桩后端已起 http://127.0.0.1:18106
+PASS  S0 登录（凭据进内存）
+PASS  S0 视口 1440×900
+
+== A1 列表页：七列 / 无画布 / 行链接 / 键盘回车 ==
+PASS  A1 标题「深度溯源」
+PASS  A1 七列表头
+PASS  A1 列表页没有画布（.canvas）
+PASS  A1 行数 = 桩的 8 条
+PASS  A1 第一行是「溯源」对白板的真链接
+PASS  A1 链接里告警 ID 已编码（冒号 %3A）
+PASS  A1 四值状态都在列表里（进行中/已完成/失败/中断）
+PASS  A1 已完成
+PASS  A1 失败
+PASS  A1 中断
+PASS  A1 键盘 Tab→Enter 能在行链接上进白板
+PASS  A1 白板页仍叫「深度溯源」（壳标题）
+
+== A2 入口：告警列表「溯源」/ 告警详情「深度溯源」/ 404 后自动创建 ==
+PASS  A2 告警列表每一行都有「溯源」链接
+PASS  A2 每行都有（4 行 4 个）
+PASS  A2 点「溯源」带着这条的 ID 进白板（hash 已解码对得上）
+PASS  A2 打开已有白板（GET 一次就画）
+PASS  A2 GET 一次（不是先 POST）
+PASS  A2 不该有 POST
+PASS  A2 告警详情「深度溯源」链到白板
+PASS  A2 没有白板：404 后自动 POST 创建并画（空链进行中）
+PASS  A2 POST 一次
+PASS  A2 POST 正文只有 target
+PASS  A2 422：白板错误态带服务端原话（不假装有白板）
+
+== A3 白板：告警在右 / 原因往左 / 可拖 / 位置记住 / 不能加点加线 ==
+      位置：-4.5,-194.5,-384.5,-574.5,4
+PASS  A3 四个点都画出来（=hops 数）
+PASS  A3 告警点钉在最右（x=0，点半径 4.5 的偏移）
+PASS  A3 第 2 跳往左 190px
+PASS  A3 第 3 跳再往左 190px
+PASS  A3 第 4 跳再往左 190px
+PASS  A3 拖点后写进 localStorage（相对告警点）
+PASS  A3 拖点：点真的动了（-194.5 → -132.052）
+PASS  A3 告警点拖不动（钉死）
+PASS  A3 刷新后拖过的位置不弹回（存 -132.052，读到 -132.5）
+PASS  A3 白板没有输入入口（input/textarea/select 0）
+PASS  A3 没有「新建/添加/连一条」的按钮
+PASS  A3 双击画布不凭空加点
+PASS  A3 线数 = links 数（3），没有多出来的线
+
+== A4 进行中往左长 / 重放·暂停·继续 / 断点常显 ==
+PASS  A4 进行中先画已有的 2 跳
+PASS  A4 进行中：重放/暂停/跳到最新三键 hidden（D016）
+PASS  A4 进行中：跟随仍可用
+PASS  A4 进行中：5s 轮询后新的一跳自己长出来（2→3）
+PASS  A4 进行中：线也跟着长（1→2）
+      暂停后：{"prog":"第 4 / 7 步","t":"继续","d":true,"latest":false}
+PASS  A4 暂停后按钮文本变「继续」
+FAIL  A4 暂停中「继续」可点（disabled=false，第一轮的死按钮）
+        期望: 包含「"d":false」
+        实测: {"prog":"第 4 / 7 步","t":"继续","d":true,"latest":false}
+PASS  A4 暂停中进度真的停住（2s 不动）
+      继续后：{"prog":"第 4 / 7 步","t":"继续","d":true,"latest":false}
+FAIL  A4 继续接着播
+        期望: 进度变化
+        实测: {"prog":"第 4 / 7 步","t":"继续","d":true,"latest":false}
+TIMEOUT document.querySelector('.playback')?.textContent ~ 第 7 / 7 步 → 
+        2 / 4 跳 · 1 / 3 条线 · 第 4 / 7 步
+        重放
+        继续
+        跳到最新
+        跟随
+      
+      播完：{"prog":"第 4 / 7 步","t":"继续","d":true,"latest":false}
+PASS  A4 播完（count>=steps.length）「继续」才禁用
+FAIL  A4 播完「跳到最新」一起禁用
+        期望: 包含「"latest":true」
+        实测: {"prog":"第 4 / 7 步","t":"继续","d":true,"latest":false}
+FAIL  A4 播完 4 跳 3 线
+        期望: 4
+        实测: 2
+      重放后：{"prog":"第 0 / 7 步","t":"暂停","d":false,"latest":false}
+PASS  A4 再点「重放」又从头播（按钮回「暂停」且可点）
+PASS  A4 断点写在图上（不点开也看得见）
+PASS  A4 断点原因全文在 title
+PASS  A4 断点不可点（pointer-events:none，不挡拖拽）
+PASS  A4 断点 1 处写在状态栏
+PASS  A4 失败：顶栏写失败与原因
+PASS  A4 失败：画出来的链不清掉（4 跳）
+PASS  A4 中断：顶栏写中断与原因
+
+== A5 没有对话输入框 ==
+PASS  A5 白板页 input/textarea 计数 0
+PASS  A5 白板页 contenteditable 计数 0
+PASS  A5 白板页没有「发送/提问」按钮
+
+== 六格 · 列表页 ==
+PASS  列表 loading：table-wrap aria-busy=true
+PASS  列表 loading：骨架文案「正在读取溯源…」
+PASS  列表 loading：刷新 + 四个筛选全禁用
+PASS  列表 empty：无筛选空态文案
+PASS  列表 empty：分页两键都禁用
+PASS  列表 empty（有筛选）：改为「没有匹配」
+PASS  列表 empty（有筛选）：给「清除筛选」
+PASS  列表 清除筛选后回到全部 8 条
+PASS  列表 error：整块错误 + 服务端原话
+PASS  列表 error：role=alert
+PASS  列表 error：点「重试」再发一轮并渲染
+PASS  列表 partial：.notice role=alert 可见
+PASS  列表 partial：写明是刷新失败下表示上一次结果
+PASS  列表 partial：行数保持 8 条
+      长内容行：{"host":"10.0.0.5.node-with-a-very-long-hostname.intranet.example.corp.internal","hostTitle":"10.0.0.5.node-with-a-very-long-hostname.intranet.example.corp.internal","id":"long:1","idTitle":"long:1"}
+PASS  列表 long-content：长主机全文进 textContent
+PASS  列表 long-content：长主机 title 也是全文
+      长 ID 行：{"shown":"syslog:revsh…600:aaa1","title":"syslog:revshell:a1b2c3d4e5f60718:1763373600:aaa1","href":"#/trace-board/syslog%3Arevshell%3Aa1b2c3d4e5f60718%3A1763373600%3Aaaa1"}
+PASS  列表 long-content：长 ID 屏幕上缩成首尾
+PASS  列表 long-content：长 ID title 是全 ID
+PASS  列表 long-content：href 也是全 ID（编码后）
+PASS  列表 disabled：单页时「上一页」「下一页」都禁用
+PASS  列表 筛选下推 status=failed（offset 回 0）
+PASS  列表 筛选后 1 行（失败那条）
+PASS  列表 筛选下推带 offset=0
+
+== 六格 · 白板页 ==
+PASS  白板 loading：.canvas aria-busy=true
+PASS  白板 loading：「正在读取白板…」
+PASS  白板 loading：刷新禁用
+PASS  白板 empty（已完成）：「这条链没有跳」
+PASS  白板 empty：重放/跳到最新禁用（不启动）
+PASS  白板 empty（进行中）：「还没有跳 / 任务在跑…」
+PASS  白板 partial：.notice role=alert（刷新失败）
+PASS  白板 partial：链保持原样（节点数不变）
+PASS  白板 error：画布「白板读取失败」+ 服务端原话
+PASS  白板 error：服务端原话带出来
+PASS  白板 error：给「重试」按钮
+PASS  白板 error：点重试恢复画板
+PASS  白板 error：没带目标写「没有指定这一条」
+PASS  白板 error：没带目标不发请求
+PASS  白板 long-content：超长标签全文进 .gnode-label（4 跳全中）
+PASS  白板 long-content：断点原因全文在 title
+PASS  白板 long-content：断点原因全文在图上文本
+PASS  白板 long-content：页面不横向溢出
+
+== 控制台 ==
+PASS  浏览器控制台无 page error
+
+== 视觉作证：1440×900 与 390×844 ==
+PASS  截图 1440-trace-list.png
+PASS  截图 1440-trace-board-paused.png
+TIMEOUT document.querySelector('.playback')?.textContent ~ 第 7 / 7 步 → 
+        2 / 4 跳 · 1 / 3 条线 · 第 4 / 7 步
+        重放
+        继续
+        跳到最新
+        跟随
+      
+PASS  截图 1440-trace-board-done.png
+PASS  截图 1440-trace-board-running.png
+PASS  截图 1440-trace-board-error.png
+PASS  截图 1440-trace-board-long.png
+PASS  视口切到 390×844
+PASS  390 列表：页面无整页横向溢出
+PASS  390 列表：表格在包裹层里横滚（overflow-x auto）
+PASS  390 列表：包裹层可滚（scrollWidth > clientWidth）
+PASS  截图 390-trace-list.png
+PASS  390 白板：页面无整页横向溢出
+PASS  390 白板：四个点都在（没被挤没）
+PASS  截图 390-trace-board.png
+
+== 汇总 ==
+PASS=113 FAIL=4
+失败项：
+ - A4 暂停中「继续」可点（disabled=false，第一轮的死按钮）
+ - A4 继续接着播
+ - A4 播完「跳到最新」一起禁用
+ - A4 播完 4 跳 3 线
