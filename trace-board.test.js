@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { TraceBoardService } from './trace-board.js';
@@ -172,4 +172,179 @@ test('asset investigation gives newly discovered external IPs the same ids as ev
   assert.ok(board.nodes.some(node => node.id === 'ip:64.177.57.21'));
   assert.ok(board.edges.some(edge => edge.by === 'program' && edge.from === 'ip:64.177.57.21' &&
     edge.to === 'asset:172.20.208.23'));
+});
+
+const SYSLOG_ALERT = 'syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43';
+
+test('A1 已有溯源直接返回那条，不再查一遍告警详情', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-resume-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(path.join(directory, 'honeypot:7.json'), JSON.stringify({ id: 'honeypot:7',
+    alert_id: 'honeypot:7', title: '上次那板', status: 'done', nodes: [], edges: [], gaps: [],
+    alert: { id: 'honeypot:7', type: 'honeypot', title: '蜜罐', host: '172.20.208.23',
+      occurred_at: '2026-11-18T03:00:00.000Z' },
+    created_at: '2026-11-18T03:00:00.000Z', updated_at: '2026-11-18T04:00:00.000Z' }));
+  const service = new TraceBoardService({ directory, toolbox: { investigation: () => { throw new Error('不该查牧云'); } },
+    model: { model: 'fake' } });
+  const resumed = await service.startOrResume('honeypot:7');
+  assert.equal(resumed.created, false);
+  assert.equal(resumed.board.title, '上次那板');
+  assert.equal((await service.start('honeypot:7')).id, 'honeypot:7');
+});
+
+test('A1 没有溯源时从告警新建，created 为真并标出告警起点', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-create-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const toolbox = { listTools: async () => [], investigation: () => ({ started: 0, maxCalls: 10,
+    records: new Map(), async callTool(name) {
+      return { evidenceId: 'cw:1', tool: name, result: { event: { id: 7, event_name: '蜜罐攻击',
+        source_ip: '64.177.57.21', host_view: { host_ip: '172.20.208.23', host_name: 'demo' } } },
+      view: { facts: { host_ip: { value: '172.20.208.23', pointer: '/event/host_view/host_ip' } } } };
+    }, verifyClaims: () => ({ ok: true }) }) };
+  const actions = [{ action: 'look' },
+    { action: 'investigate', node: 'asset:172.20.208.23', why: '先核查告警资产' },
+    { action: 'conclude', summary: '只标了起点', gaps: [] }];
+  const service = new TraceBoardService({ directory, toolbox,
+    model: { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) },
+    promptStore: { load: async () => ({ prompts: { trace: '追查' } }) } });
+  const started = await service.startOrResume('honeypot:7');
+  assert.equal(started.created, true);
+  assert.equal(started.board.alert.type, 'honeypot');
+  assert.equal(started.board.alert.host, '172.20.208.23');
+  await service.running.get('honeypot:7');
+  const board = await service.get('honeypot:7');
+  assert.equal(board.status, 'done');
+  assert.equal(board.hops[0].kind, 'alert');
+});
+
+test('A2 列表给出类型/主机/告警时间/状态/链长/断点/更新时间，能筛能分页', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-list-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const rows = [
+    ['webshell:1', 'done', 'webshell', '10.0.0.1', '2026-11-18T01:00:00.000Z', 2, [], '2026-11-18T04:00:00.000Z'],
+    ['honeypot:2', 'running', 'honeypot', '10.0.0.2', '2026-11-18T02:00:00.000Z', 3,
+      [{ hop_id: null, reason: '还没追完' }], '2026-11-18T05:00:00.000Z'],
+    ['webshell:3', 'failed', 'webshell', '10.0.0.3', '2026-11-18T03:00:00.000Z', 1, [], '2026-11-18T06:00:00.000Z']
+  ];
+  for (const [id, status, type, host, occurredAt, hops, gaps, updated] of rows)
+    await writeFile(path.join(directory, `${id}.json`), JSON.stringify({ id, alert_id: id, title: id, status,
+      nodes: Array.from({ length: hops }, (_item, index) => ({ id: `hop:${index}` })), edges: [], gaps,
+      alert: { id, type, title: id, host, occurred_at: occurredAt },
+      created_at: occurredAt, updated_at: updated }));
+  const service = new TraceBoardService({ directory });
+
+  const all = await service.page();
+  assert.equal(all.total, 3);
+  assert.deepEqual(all.boards.map(board => board.id), ['webshell:3', 'honeypot:2', 'webshell:1']);
+  assert.deepEqual(all.boards[0], { id: 'webshell:3', alert_id: 'webshell:3', title: 'webshell:3',
+    type: 'webshell', host: '10.0.0.3', occurred_at: '2026-11-18T03:00:00.000Z', status: 'failed',
+    chain_length: 1, has_gaps: false, created_at: '2026-11-18T03:00:00.000Z',
+    updated_at: '2026-11-18T06:00:00.000Z' });
+
+  const running = await service.page({ statuses: ['running'] });
+  assert.deepEqual(running.boards.map(board => board.id), ['honeypot:2']);
+  assert.equal(running.boards[0].chain_length, 3);
+  assert.equal(running.boards[0].has_gaps, true);
+  assert.deepEqual((await service.page({ type: 'webshell' })).boards.map(board => board.id), ['webshell:3', 'webshell:1']);
+  assert.deepEqual((await service.page({ host: '10.0.0.2' })).boards.map(board => board.id), ['honeypot:2']);
+  assert.deepEqual((await service.page({ from: Date.parse('2026-11-18T02:30:00Z') })).boards.map(board => board.id), ['webshell:3']);
+  assert.deepEqual((await service.page({ from: Date.parse('2026-11-18T01:00:00Z'),
+    to: Date.parse('2026-11-18T02:00:00Z') })).boards.map(board => board.id), ['honeypot:2', 'webshell:1']);
+  assert.deepEqual(await service.page({ statuses: ['done'], from: Date.parse('2026-11-19T00:00:00Z') }),
+    { boards: [], total: 0 });
+  const second = await service.page({ count: 1, offset: 1 });
+  assert.equal(second.total, 3);
+  assert.deepEqual(second.boards.map(board => board.id), ['honeypot:2']);
+});
+
+test('A3 详情是 hops/links/gaps/discovery，线从更晚指向更早', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-detail-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(path.join(directory, 'honeypot:7.json'), JSON.stringify({ id: 'honeypot:7',
+    alert_id: 'honeypot:7', seed: 'asset:172.20.208.23', status: 'done', title: '蜜罐诱捕',
+    alert: { id: 'honeypot:7', type: 'honeypot', title: '蜜罐诱捕', host: '172.20.208.23',
+      occurred_at: '2026-11-18T03:00:00.000Z' },
+    nodes: [
+      { id: 'asset:172.20.208.23', label: 'demo', address: '172.20.208.23', kind: 'asset',
+        occurred_at: '2026-11-18T03:00:00.000Z',
+        discovered_from: [{ evidence_id: 'cw:1', pointer: '/event/host_view/host_ip' }] },
+      { id: 'ip:64.177.57.21', label: '64.177.57.21', address: '64.177.57.21', kind: 'external_ip',
+        occurred_at: '2026-11-18T02:00:00.000Z',
+        discovered_from: [{ evidence_id: 'cw:2', pointer: '/events/0/source_ip' }] }
+    ],
+    edges: [{ from: 'ip:64.177.57.21', to: 'asset:172.20.208.23', rel: '触达线索', by: 'program',
+      citations: [{ evidence_id: 'cw:2', pointer: '/events/0/source_ip', value: '64.177.57.21' }] }],
+    gaps: [{ hop_id: 'ip:64.177.57.21', reason: 'HIDS 上没有更早的记录' }],
+    activity: [], created_at: '2026-11-18T03:00:00.000Z', updated_at: '2026-11-18T04:00:00.000Z' }));
+  const detail = await new TraceBoardService({ directory }).get('honeypot:7');
+
+  assert.equal(detail.chain_length, 2);
+  assert.equal(detail.has_gaps, true);
+  assert.equal(detail.hops.length, 2);
+  assert.deepEqual(detail.hops[0], { id: 'asset:172.20.208.23', kind: 'alert', label: 'demo',
+    host: '172.20.208.23', occurred_at: '2026-11-18T03:00:00.000Z', evidence_id: 'cw:1', discovered: 1 });
+  assert.equal(detail.hops[1].kind, 'host');
+  assert.equal(detail.hops[1].evidence_id, 'cw:2');
+  // 告警那边更晚（03:00），线从它指向更早的来源（02:00）。
+  assert.deepEqual(detail.links, [{ id: 'link:0', from: 'asset:172.20.208.23', to: 'ip:64.177.57.21',
+    rel: '触达线索', evidence_id: 'cw:2' }]);
+  assert.deepEqual(detail.gaps, [{ hop_id: 'ip:64.177.57.21', reason: 'HIDS 上没有更早的记录' }]);
+  assert.deepEqual(detail.discovery.map(item => item.kind), ['hop', 'hop', 'link']);
+  assert.equal(detail.alert.host, '172.20.208.23');
+});
+
+test('A3 两端时间相同时按离告警的远近定方向：从告警一侧指向原因一侧', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-tie-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(path.join(directory, 'honeypot:8.json'), JSON.stringify({ id: 'honeypot:8',
+    alert_id: 'honeypot:8', seed: 'asset:172.20.208.23', status: 'done',
+    nodes: [
+      { id: 'asset:172.20.208.23', address: '172.20.208.23', kind: 'asset', occurred_at: '2026-11-18T03:00:00.000Z' },
+      { id: 'ip:64.177.57.21', address: '64.177.57.21', kind: 'external_ip', occurred_at: '2026-11-18T03:00:00.000Z' }
+    ],
+    edges: [{ from: 'ip:64.177.57.21', to: 'asset:172.20.208.23', rel: '触达' }],
+    gaps: [], activity: [], created_at: '2026-11-18T03:00:00.000Z', updated_at: '2026-11-18T04:00:00.000Z' }));
+  const detail = await new TraceBoardService({ directory }).get('honeypot:8');
+  assert.equal(detail.links[0].from, 'asset:172.20.208.23');
+  assert.equal(detail.links[0].to, 'ip:64.177.57.21');
+});
+
+test('A4 告警分析已取到的证据直接引用，不为同一份再查一遍', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-reuse-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const calls = [];
+  const toolbox = { listTools: async () => [], investigation: () => ({ started: 0, maxCalls: 10,
+    records: new Map(), async callTool(name) { calls.push(name); throw new Error('不该重查'); },
+    verifyClaims: () => ({ ok: true }) }) };
+  const actions = [{ action: 'look' },
+    { action: 'investigate', node: 'asset:172.20.208.23', why: '沿触发链往回' },
+    { action: 'conclude', summary: '断在来源一侧',
+      gaps: [{ hop_id: 'ip:64.177.57.21', reason: 'HIDS 上没有更早的记录' }] }];
+  const service = new TraceBoardService({ directory, toolbox,
+    model: { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) },
+    promptStore: { load: async () => ({ prompts: { trace: '追查' } }) },
+    analysis: async alertId => alertId === SYSLOG_ALERT ? { evidence_id: 'syslog:1', tool: 'received_syslog',
+      type: 'honeypot', facts: { host_ip: '172.20.208.23', host_name: 'demo', source_ip: '64.177.57.21',
+        occurred_at: '2026-11-18T03:00:00.000Z', title: '蜜罐诱捕' } } : null });
+  const started = await service.startOrResume(SYSLOG_ALERT);
+  assert.equal(started.created, true);
+  assert.deepEqual(calls, []);
+  await service.running.get(SYSLOG_ALERT);
+  const board = await service.get(SYSLOG_ALERT);
+  assert.equal(board.status, 'done');
+  assert.equal(board.origin_evidence.evidence_id, 'syslog:1');
+  assert.equal(board.origin_evidence.reused, true);
+  assert.equal(board.alert.type, 'honeypot');
+  assert.equal(board.alert.host, '172.20.208.23');
+  assert.equal(board.hops[0].evidence_id, 'syslog:1');
+  assert.deepEqual(board.gaps, [{ hop_id: 'ip:64.177.57.21', reason: 'HIDS 上没有更早的记录' }]);
+});
+
+test('A4 syslog 告警没有分析证据时明确拒绝，不猜', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-noreuse-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const service = new TraceBoardService({ directory, model: { model: 'fake' },
+    toolbox: { investigation: () => ({ started: 0, maxCalls: 10, records: new Map() }) } });
+  await assert.rejects(service.start(SYSLOG_ALERT),
+    error => error.status === 422 && /分析记录/.test(error.message));
 });

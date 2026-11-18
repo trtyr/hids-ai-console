@@ -13,7 +13,7 @@ import { InvestigationAgent } from './investigation-agent.js';
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
 import { TriageMonitor } from './triage-monitor.js';
-import { SyslogReceiver } from './syslog-input.js';
+import { SyslogReceiver, parseSyslog } from './syslog-input.js';
 import { eventTypeFor } from './syslog-input.js';
 import { WikiStore } from './wiki-store.js';
 import { WikiWorkbench } from './wiki-workbench.js';
@@ -51,8 +51,49 @@ const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, i
   baselineFile: path.join(root, 'backend', '.data', 'baseline.json'),
   intelFile: path.join(root, 'backend', '.data', 'intel.json') }) : null;
 const wikiWorkbench = new WikiWorkbench(wikiStore, model, promptStore, path.join(root, 'backend', '.data', 'wiki-sessions'));
+
+// A4：告警分析已经取到的原始报文写在案卷（cases/<...>/01-原始告警.txt）里，研判记录（InvestigationStore）带 case_dir。
+// TriageMonitor.status() 对外是瘦身记录（triage-monitor.js 剥掉 input），这里不读它的 input，只按研判记录顺案卷取原始报文。
+async function caseParsed(caseInfo) {
+  if (!caseInfo?.case_dir) return null;
+  try { return parseSyslog(await readFile(path.join(caseInfo.case_dir, '01-原始告警.txt'), 'utf8')); }
+  catch { return null; }
+}
+
+// 溯源复用告警分析证据的取数器。monitor / history 都从 createServer 的注入点传进来，测试能用真接线。
+export function createAnalysisProvider({ monitor = null, history = null } = {}) {
+  const latest = async alertId => {
+    if (!alertId) return null;
+    for (const mode of ['triage', 'deep']) {
+      try { const saved = await history?.latest(alertId, mode); if (saved) return saved; }
+      catch { /* 读不到就当没有，下面回退到案卷 */ }
+    }
+    return null;
+  };
+  return async alertId => {
+    const visible = monitor?.status(alertId);
+    // syslog 匹配到牧云事件时，研判记录挂在事件 ID（result_alert_id）上；先按告警 ID 找，再按它找。
+    const saved = await latest(alertId) || await latest(visible?.result_alert_id);
+    // 案卷优先从研判记录取；分析还在跑（尚未落研判记录）时，用 status() 里公开的 case_dir 定位，同样不碰 input。
+    const parsed = await caseParsed(saved) || await caseParsed(visible);
+    const type = parsed ? eventTypeFor(parsed.msgid) : null;
+    if (!type) return null;
+    const payload = parsed.payload || {};
+    const hostIp = String(payload.host_ip || '').replace(/\/32$/, '');
+    if (!hostIp) return null;
+    const evidenceId = (saved?.evidence || []).find(item => item.tool === 'received_syslog')?.evidence_id || 'syslog:1';
+    return { evidence_id: evidenceId, tool: 'received_syslog', type, facts: {
+      host_ip: hostIp, host_name: payload.host_name || null,
+      source_ip: payload.source_ip || payload.login_ip || null,
+      destination_ip: payload.target_ip || payload.destination_ip || null,
+      occurred_at: parseInstant(payload.event_create_time ?? parsed.ts),
+      title: payload.event_name || eventTypes[type], event_id: payload.event_id ?? null } };
+  };
+}
+
 const traceBoard = agentToolbox && model ? new TraceBoardService({ toolbox: agentToolbox, model, promptStore,
-  directory: path.join(root, 'backend', '.data', 'trace-boards') }) : null;
+  directory: path.join(root, 'backend', '.data', 'trace-boards'),
+  analysis: createAnalysisProvider({ monitor: triageMonitor, history: investigationStore }) }) : null;
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -118,7 +159,7 @@ function wikiPagePath(pathname) {
   catch { return { invalidEncoding: true }; }
 }
 function validTraceTarget(value) {
-  if (validAlertId(value)) return true;
+  if (validTriageId(value)) return true;
   const address = String(value || '').replace(/^ip:/, '');
   return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(address) && address.split('.').every(part => Number(part) <= 255);
 }
@@ -179,6 +220,26 @@ function caseQuery(params) {
     to: toTime ? Math.floor(Date.parse(toTime) / 1000) : null, sort } };
 }
 
+// 解析 /api/trace/boards 的查询参数：分页由路由先校验；这里只做筛选词表与时间校验。
+const traceStatuses = new Set(['running', 'done', 'failed', 'interrupted']);
+function traceQuery(params) {
+  const statuses = paramList(params, 'status');
+  for (const value of statuses) if (!traceStatuses.has(value)) return { error: `筛选状态无效：${value}` };
+  const type = params.get('type')?.trim() || null;
+  if (type && !Object.hasOwn(eventTypes, type)) return { error: `筛选事件类型无效：${type}` };
+  const from = params.get('from')?.trim();
+  const to = params.get('to')?.trim();
+  const fromTime = from ? parseInstant(from) : null;
+  const toTime = to ? parseInstant(to) : null;
+  if (from && !fromTime) return { error: `筛选起始时间无效：${from}` };
+  if (to && !toTime) return { error: `筛选结束时间无效：${to}` };
+  if (fromTime && toTime && fromTime > toTime) return { error: '筛选起始时间晚于结束时间' };
+  const host = params.get('host')?.trim() || null;
+  return { filters: { ...(statuses.length ? { statuses } : {}), ...(type ? { type } : {}),
+    ...(host ? { host } : {}), ...(fromTime ? { from: Date.parse(fromTime) } : {}),
+    ...(toTime ? { to: Date.parse(toTime) } : {}) } };
+}
+
 // 研判侧筛选：逐页拉取、挂 triage 后过滤，翻到流末或扫描上限后再切页。
 // 没有研判记录的告警按 not_queued / review 参与筛选（与 TriageCase.status 口径一致）。
 async function triageFilteredAlerts(service, monitor, query, { statuses, verdicts, count, offset }) {
@@ -214,6 +275,10 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
   maintenanceEntry = process.env.HIDS_MAINTENANCE_ENTRY_URL,
   ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore) {
+  // 注入的 TraceBoardService 没有取数器时，用本次的 monitor / history 现接一条：
+  // 测试与部署走同一套接线，不再靠测试里手塞假 analysis。
+  if (boardService instanceof TraceBoardService && !boardService.analysis)
+    boardService.analysis = createAnalysisProvider({ monitor, history });
   const investigate = async (executor, alertId, mode, onProgress = null) => {
     if (mode === 'triage' && monitor?.ruleEngine) {
       let decision;
@@ -266,15 +331,21 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const offset = Number(url.searchParams.get('offset') || 0);
         if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
           return error(res, 400, '分页参数无效');
-        return json(res, 200, await boardService.page({ count, offset }));
+        const parsed = traceQuery(url.searchParams);
+        if (parsed.error) return error(res, 400, parsed.error);
+        return json(res, 200, await boardService.page({ count, offset, ...parsed.filters }));
       }
       if (url.pathname === '/api/trace/boards' && req.method === 'POST') {
         if (!boardService) return error(res, 503, '深度溯源模型或牧云 MCP 尚未配置');
         const body = await readJSON(req);
         const target = body?.target || body?.alert_id || body?.ip;
         if (!validTraceTarget(target)) return error(res, 400, '请输入有效告警 ID 或 IPv4 地址');
-        try { return json(res, 202, await boardService.start(target, body.focus)); }
-        catch (cause) { return error(res, cause.status || 502, cause.message); }
+        try {
+          // 已有白板回 200（直接打开那条），新建才回 202（任务已启动）。
+          const started = boardService.startOrResume ? await boardService.startOrResume(target, body.focus)
+            : { created: true, board: await boardService.start(target, body.focus) };
+          return json(res, started.created ? 202 : 200, started.board);
+        } catch (cause) { return error(res, cause.status || 502, cause.message); }
       }
       if (url.pathname.startsWith('/api/trace/boards/') && req.method === 'GET') {
         if (!boardService) return error(res, 503, '深度溯源模型或牧云 MCP 尚未配置');

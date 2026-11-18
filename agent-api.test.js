@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createServer } from './server.js';
+import { createServer, createAnalysisProvider } from './server.js';
+import { TraceBoardService } from './trace-board.js';
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
 import { TriageMonitor } from './triage-monitor.js';
@@ -303,4 +304,166 @@ test('总览接口在 syslog 模式透出最后一条到达时刻，poll 模式�
   const pollBody = await (await fetch(`${pollBase}/api/agent/triage/status`)).json();
   assert.equal('last_received_at' in pollBody, false);
   assert.equal('interval_ms' in pollBody, true);
+});
+
+// ---------- P003-T014：溯源列表筛选与 200/202 语义 ----------
+
+test('白板列表把状态/类型/主机/时间筛选交给服务层，非法值回 400 且不调服务层', async t => {
+  const seen = [];
+  const boardService = { page: async options => { seen.push(options); return { boards: [], total: 0 }; } };
+  const server = createServer(null, null, null, null, null, null, null, {}, boardService);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  const response = await fetch(`${base}/api/trace/boards?count=5&offset=2&status=done&type=honeypot` +
+    '&host=10.0.0.1&from=2026-11-18T00:00:00Z&to=1795046400');
+  assert.equal(response.status, 200);
+  assert.deepEqual(seen[0], { count: 5, offset: 2, statuses: ['done'], type: 'honeypot', host: '10.0.0.1',
+    from: Date.parse('2026-11-18T00:00:00Z'), to: 1795046400000 });
+
+  const before = seen.length;
+  for (const [query, message] of [['status=bogus', /筛选状态无效/], ['type=bogus', /筛选事件类型无效/],
+    ['from=not-a-time', /筛选起始时间无效/], ['to=bad', /筛选结束时间无效/],
+    ['from=2026-11-19T00:00:00Z&to=2026-11-18T00:00:00Z', /晚于结束时间/]]) {
+    const failed = await fetch(`${base}/api/trace/boards?${query}`);
+    assert.equal(failed.status, 400, `${query} 应回 400`);
+    assert.match((await failed.json()).error, message);
+  }
+  assert.equal(seen.length, before);
+  await fetch(`${base}/api/trace/boards`);
+  assert.deepEqual(seen.at(-1), { count: 20, offset: 0 });
+});
+
+test('POST 白板：已有返回 200，新建返回 202，syslog 形态告警 ID 也收', async t => {
+  const calls = [];
+  const boardService = { get: async () => null,
+    startOrResume: async (id, focus) => { calls.push({ id, focus });
+      return { created: id !== 'honeypot:7', board: { alert_id: id, status: 'running' } }; } };
+  const server = createServer(null, null, null, null, null, null, null, {}, boardService);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const syslog = 'syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43';
+  const post = async target => {
+    const response = await fetch(`${base}/api/trace/boards`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target, focus: '看链' }) });
+    return { status: response.status, body: await response.json() };
+  };
+  assert.deepEqual(await post('honeypot:7'), { status: 200, body: { alert_id: 'honeypot:7', status: 'running' } });
+  assert.deepEqual(await post(syslog), { status: 202, body: { alert_id: syslog, status: 'running' } });
+  assert.deepEqual(calls, [{ id: 'honeypot:7', focus: '看链' }, { id: syslog, focus: '看链' }]);
+});
+
+// ---------- P003-T014 复审：分析证据从研判记录的案卷取，不读 status().input ----------
+
+const SYSLOG_ALERT = 'syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43';
+const RAW_SYSLOG = '<134>1 2026-11-18T03:00:00Z host app 1 cloudwalker-honeypot [meta ' +
+  'host_ip="172.20.208.23" source_ip="64.177.57.21" event_create_time="2026-11-18 11:00:00" ' +
+  'event_name="蜜罐诱捕"]';
+
+async function caseDirectory(t, raw = RAW_SYSLOG) {
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-analysis-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const caseDir = path.join(directory, 'case');
+  await mkdir(caseDir, { recursive: true });
+  await writeFile(path.join(caseDir, '01-原始告警.txt'), raw);
+  return caseDir;
+}
+
+test('A4 分析证据从研判记录的案卷读原始报文，status() 的 input 一律不碰', async t => {
+  const caseDir = await caseDirectory(t);
+  const record = { alert_id: 'honeypot:7', mode: 'triage', case_dir: caseDir,
+    evidence: [{ evidence_id: 'cw:1', tool: 'get_honeypot_event' },
+      { evidence_id: 'syslog:1', tool: 'received_syslog' }] };
+  const history = { latest: async (id, mode) => id === 'honeypot:7' && mode === 'triage' ? record : null };
+  // 瘦身记录里没有 input（triage-monitor.js 的 status() 行为）；读了就抛。
+  const monitor = { status: id => id === 'honeypot:7' ? { alert_id: id, result_alert_id: 'honeypot:7',
+    get input() { throw new Error('不许读 status().input'); } } : null };
+  const alert = await createAnalysisProvider({ monitor, history })('honeypot:7');
+  assert.equal(alert.evidence_id, 'syslog:1');
+  assert.equal(alert.type, 'honeypot');
+  assert.equal(alert.facts.host_ip, '172.20.208.23');
+  assert.equal(alert.facts.source_ip, '64.177.57.21');
+  assert.equal(alert.facts.title, '蜜罐诱捕');
+  assert.equal(alert.facts.occurred_at, '2026-11-18T03:00:00.000Z');
+});
+
+test('A4 研判记录还没落盘时用 status() 公开的 case_dir 定位案卷；都没有就回 null', async t => {
+  const caseDir = await caseDirectory(t);
+  const monitor = { status: id => id === 'honeypot:7' ? { alert_id: id, case_dir: caseDir,
+    get input() { throw new Error('不许读 status().input'); } } : null };
+  const alert = await createAnalysisProvider({ monitor, history: null })('honeypot:7');
+  assert.equal(alert.facts.host_ip, '172.20.208.23');
+  assert.equal(await createAnalysisProvider({ monitor, history: null })('webshell:1'), null);
+
+  const noCase = { status: () => ({ alert_id: 'honeypot:9' }) };
+  assert.equal(await createAnalysisProvider({ monitor: noCase, history: null })('honeypot:9'), null);
+});
+
+test('A4 真接线：POST syslog 告警起板走注入的 monitor/history，不查牧云事件详情', async t => {
+  const caseDir = await caseDirectory(t);
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-wired-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const record = { alert_id: 'honeypot:7', mode: 'triage', case_dir: caseDir,
+    evidence: [{ evidence_id: 'syslog:1', tool: 'received_syslog' }] };
+  const history = { latest: async (id, mode) => id === 'honeypot:7' && mode === 'triage' ? record : null };
+  // 真 status(syslogId) 用 records.get(syslogId) 找回记录，记录上的 result_alert_id 指向研判记录。
+  const monitor = { status: id => id === SYSLOG_ALERT ? { alert_id: id, result_alert_id: 'honeypot:7' } : null };
+  const calls = [];
+  const toolbox = { listTools: async () => [], investigation: () => ({ started: 0, maxCalls: 10,
+    records: new Map(), async callTool(name) { calls.push(name); throw new Error('不该查'); },
+    verifyClaims: () => ({ ok: true }) }) };
+  const actions = [{ action: 'look' },
+    { action: 'investigate', node: 'asset:172.20.208.23', why: '沿触发链往回' },
+    { action: 'conclude', summary: '断在来源', gaps: [] }];
+  const boardService = new TraceBoardService({ toolbox, directory,
+    model: { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) },
+    promptStore: { load: async () => ({ prompts: { trace: '追查' } }) } });
+  const server = createServer(null, null, null, history, null, monitor, null, {}, boardService);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const response = await fetch(`${base}/api/trace/boards`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: SYSLOG_ALERT }) });
+  assert.equal(response.status, 202);
+  const started = await response.json();
+  assert.equal(started.alert.host, '172.20.208.23');
+  assert.equal(started.origin_evidence.evidence_id, 'syslog:1');
+  assert.equal(started.origin_evidence.reused, true);
+  await boardService.running.get(SYSLOG_ALERT);
+  const board = await boardService.get(SYSLOG_ALERT);
+  assert.equal(board.status, 'done');
+  assert.deepEqual(calls, []);
+});
+
+test('POST 白板：服务层未分类异常回 502', async t => {
+  const boardService = { startOrResume: async () => { throw new Error('牧云 MCP 调用失败'); } };
+  const server = createServer(null, null, null, null, null, null, null, {}, boardService);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const response = await fetch(`${base}/api/trace/boards`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: 'honeypot:7' }) });
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { error: '牧云 MCP 调用失败' });
+});
+
+test('A4 真 status() 剥掉 input 后仍能从研判记录复用原始报文', async t => {
+  const caseDir = await caseDirectory(t);
+  const directory = await mkdtemp(path.join(tmpdir(), 'trace-real-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const history = new InvestigationStore(directory);
+  await history.save({ alert_id: 'honeypot:7', mode: 'triage', case_dir: caseDir,
+    evidence: [{ evidence_id: 'syslog:1', tool: 'received_syslog' }] });
+  const monitor = new TriageMonitor({ file: path.join(directory, 'queue.json'), service: {}, investigator: {}, history: {} });
+  monitor.records.set(SYSLOG_ALERT, { alert_id: SYSLOG_ALERT, status: 'done', result_alert_id: 'honeypot:7',
+    input: { raw: RAW_SYSLOG, parsed: { msgid: 'cloudwalker-honeypot', ts: '2026-11-18T03:00:00Z',
+      payload: { host_ip: '172.20.208.23', source_ip: '64.177.57.21' } } } });
+  // 先钉死复现条件：真 status() 回的是瘦身记录，没有 input。
+  assert.equal('input' in monitor.status(SYSLOG_ALERT), false);
+  const alert = await createAnalysisProvider({ monitor, history })(SYSLOG_ALERT);
+  assert.equal(alert.evidence_id, 'syslog:1');
+  assert.equal(alert.facts.host_ip, '172.20.208.23');
+  assert.equal(alert.facts.source_ip, '64.177.57.21');
 });

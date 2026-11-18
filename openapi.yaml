@@ -403,10 +403,35 @@ paths:
       summary: 列出已保存的溯源白板
       operationId: listTraceBoards
       description: |
-        按更新时间倒序分页。先判白板服务有没有配（没配回 503），再判分页参数（不合法回 400「分页参数无效」）。
+        按更新时间倒序分页。先判白板服务有没有配（没配回 503），再判分页参数（不合法回 400「分页参数无效」），
+        最后判筛选词表（不合法回 400）。筛选在服务层先做，再切页；`total` 是筛选后、切页前的白板总数。
       parameters:
         - $ref: '#/components/parameters/Count'
         - $ref: '#/components/parameters/Offset'
+        - name: status
+          in: query
+          description: 按状态筛，可逗号分隔多选
+          schema:
+            type: array
+            items: { type: string, enum: [running, done, failed, interrupted] }
+          style: form
+          explode: true
+        - name: type
+          in: query
+          description: 按告警事件类型名筛（如 honeypot、webshell）；手填 IP 起的白板没有类型，不会被选中
+          schema: { type: string }
+        - name: host
+          in: query
+          description: 按告警主机地址精确筛
+          schema: { type: string }
+        - name: from
+          in: query
+          description: 告警时间起点（含端点）。RFC3339 或 Unix 秒/毫秒时间戳；没有告警时间的白板会被排除
+          schema: { type: string }
+        - name: to
+          in: query
+          description: 告警时间终点（含端点），口径同 from；起点晚于终点回 400
+          schema: { type: string }
       responses:
         '200':
           description: 白板摘要列表
@@ -416,14 +441,19 @@ paths:
                 type: object
                 required: [boards, total]
                 properties:
-                  boards: { type: array, items: { $ref: '#/components/schemas/TraceBoard' } }
-                  total: { type: integer, description: 切页前的白板总数 }
+                  boards: { type: array, items: { $ref: '#/components/schemas/TraceBoardSummary' } }
+                  total: { type: integer, description: 筛选后、切页前的白板总数 }
         '400': { $ref: '#/components/responses/BadRequest' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [深度研判]
-      summary: 从告警 ID 或 IPv4 地址启动深度溯源
+      summary: 从一条告警或 IPv4 地址启动深度溯源
       operationId: startTraceBoard
+      description: |
+        已有白板直接返回那条（200），不重查事件、不覆盖；没有才创建并开始往回走（202）。
+        syslog 形态的告警 ID 直接引用告警分析已经落盘的原始报文（研判记录 `case_dir` 下的 `01-原始告警.txt`，
+        `origin_evidence.evidence_id` 取分析记录里的 `syslog:1`，`origin_evidence.reused = true`），不为同一份证据再查牧云；
+        没有分析记录或案卷回 422。
       requestBody:
         required: true
         content:
@@ -432,17 +462,28 @@ paths:
               type: object
               description: target 优先；兼容 alert_id 和 ip 字段
               properties:
-                target: { type: string, description: "例如 revshell:1、172.16.221.41 或 ip:172.16.221.41" }
-                alert_id: { $ref: '#/components/schemas/TypedAlertId' }
-                ip: { type: string, format: ipv4 }
+                target: { type: string, description: "例如 revshell:1、syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43、172.16.221.41 或 ip:172.16.221.41" }
+                alert_id: { type: string, description: "告警 ID；与 target 同一套校验，也收 syslog 形态" }
+                ip: { type: string, format: ipv4, description: "IPv4 地址；也接受 ip: 前缀写法（与 target 同一套校验）" }
                 focus: { type: string }
       responses:
+        '200':
+          description: 该告警已有溯源白板，原样返回
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TraceBoard' }
         '202':
-          description: 白板任务已启动
+          description: 白板任务已启动（新建）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TraceBoard' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '422':
+          description: 告警没有可用于起板的资产/主机，或 syslog 告警还没有分析记录
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/BackendError' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/trace/boards/{target}:
     get:
@@ -453,11 +494,11 @@ paths:
         - name: target
           in: path
           required: true
-          description: 告警 ID 或 IPv4 地址；冒号需 URL 编码
+          description: 告警 ID（含 syslog 形态）或 IPv4 地址；冒号需 URL 编码
           schema: { type: string }
       responses:
         '200':
-          description: 白板及其节点、关系、活动记录
+          description: 白板详情。主数据是 hops / links / gaps / discovery；nodes / edges / activity 作为旧字段保留
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TraceBoard' }
@@ -1527,6 +1568,74 @@ components:
           description: 常规研判的必查项；深度研判与客户经验复用捷径为空数组。
           items: { $ref: '#/components/schemas/RequiredEvidence' }
       additionalProperties: true
+    TraceBoardAlert:
+      type: object
+      description: 白板绑定的那条告警；手填 IP 起的白板 type / occurred_at 为 null。
+      properties:
+        id: { type: string }
+        type: { type: [string, 'null'], description: 事件类型名，如 honeypot }
+        title: { type: string }
+        host: { type: [string, 'null'], description: 告警主机地址 }
+        occurred_at: { type: [string, 'null'], format: date-time, description: 告警发生时间 }
+      additionalProperties: true
+    TraceBoardSummary:
+      type: object
+      description: 溯源列表的一行。不含链本身，也不放结论（威胁 / 误报是告警分析的事）。
+      required: [id, status, chain_length, has_gaps]
+      properties:
+        id: { type: string }
+        alert_id: { type: [string, 'null'] }
+        title: { type: string }
+        type: { type: [string, 'null'], description: 告警事件类型名 }
+        host: { type: [string, 'null'], description: 告警主机地址 }
+        occurred_at: { type: [string, 'null'], format: date-time, description: 告警时间，筛选 from/to 就按它比 }
+        status: { type: string, enum: [running, done, failed, interrupted] }
+        chain_length: { type: integer, description: 链长＝hops 个数（含告警那一跳） }
+        has_gaps: { type: boolean, description: 有没有断点（gaps 非空） }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+      additionalProperties: true
+    TraceBoardHop:
+      type: object
+      description: 触发链上的一跳。告警那一跳用 kind=alert；其余按当前取证能力是主机（kind=host）。
+      required: [id, kind, label, host, occurred_at, evidence_id, discovered]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [alert, host, process, file, account, request] }
+        label: { type: string }
+        host: { type: [string, 'null'], description: 这一跳在哪台机器上 }
+        occurred_at: { type: [string, 'null'], format: date-time, description: 这一跳发生时间；未知为 null }
+        evidence_id: { type: [string, 'null'], description: 撑着这一跳的原始证据 ID }
+        discovered: { type: integer, description: 第几个被发现（1 起） }
+      additionalProperties: true
+    TraceBoardLink:
+      type: object
+      description: 触发链上的一条线。方向固定：from 是更晚的一端（靠告警），to 是更早的原因。
+      required: [id, from, to, rel, evidence_id]
+      properties:
+        id: { type: string }
+        from: { type: string, description: 更晚的一跳的 hop id }
+        to: { type: string, description: 更早的原因的 hop id }
+        rel: { type: string, description: 关系标签 }
+        evidence_id: { type: [string, 'null'], description: 撑着这条线的原始证据 ID }
+      additionalProperties: true
+    TraceBoardGap:
+      type: object
+      description: 一个断点：断在哪一跳的左边，为什么断。hop_id 为 null 表示整条链层面的缺口。
+      required: [hop_id, reason]
+      properties:
+        hop_id: { type: [string, 'null'], description: 往回的链在这一跳的左侧断了 }
+        reason: { type: string, description: 为什么断（如 HIDS 上没有更早的记录） }
+      additionalProperties: false
+    TraceBoardDiscovery:
+      type: object
+      description: 发现顺序的一项，重放只播这个数组。
+      required: [step, kind, id]
+      properties:
+        step: { type: integer, description: 第几步（1 起） }
+        kind: { type: string, enum: [hop, link] }
+        id: { type: string, description: hop id 或 link id }
+      additionalProperties: false
     TraceBoard:
       type: object
       properties:
@@ -1541,11 +1650,29 @@ components:
           type: string
           enum: [running, done, failed, interrupted]
           description: 进程重启后读到 running 而未在跑的任务会被改写成 interrupted
-        nodes: { type: array, items: { $ref: '#/components/schemas/TraceBoardNode' } }
-        edges: { type: array, items: { $ref: '#/components/schemas/TraceBoardEdge' } }
-        activity: { type: array, items: { $ref: '#/components/schemas/TraceBoardActivity' } }
+        alert: { $ref: '#/components/schemas/TraceBoardAlert' }
+        hops:
+          type: array
+          description: 往回的链上的一跳一跳；告警那一跳在最前（discovered=1，kind=alert）
+          items: { $ref: '#/components/schemas/TraceBoardHop' }
+        links:
+          type: array
+          description: 线由更晚指向更早（from 更晚、to 更早）
+          items: { $ref: '#/components/schemas/TraceBoardLink' }
+        discovery:
+          type: array
+          description: 发现顺序；实时运行时往数组后面追加
+          items: { $ref: '#/components/schemas/TraceBoardDiscovery' }
+        chain_length: { type: integer, description: 链长＝hops 个数（含告警那一跳） }
+        has_gaps: { type: boolean, description: 有没有断点（gaps 非空） }
+        nodes: { type: array, items: { $ref: '#/components/schemas/TraceBoardNode' }, description: 旧字段：节点；与 hops 一一对应，保留兼容 }
+        edges: { type: array, items: { $ref: '#/components/schemas/TraceBoardEdge' }, description: 旧字段：关系；links 由它定向得出 }
+        activity: { type: array, items: { $ref: '#/components/schemas/TraceBoardActivity' }, description: 旧字段：调查过程；不再是主数据 }
         summary: { type: string }
-        gaps: { type: array, items: { type: string } }
+        gaps:
+          type: array
+          description: '断点；旧白板里的字符串缺口读取时归一成 {hop_id: null, reason}'
+          items: { $ref: '#/components/schemas/TraceBoardGap' }
         investigations: { type: integer, description: 已调查的节点数 }
         window:
           type: object
