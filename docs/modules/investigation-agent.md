@@ -338,8 +338,7 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | `detail` | string | 是 | 这一阶段的说明；规则评估阶段写命中或跳过的原因 | `triage-monitor.js:368-372`、`triage-monitor.js:381` |
 | `at` | string（date-time） | 是 | 写入时间，UTC ISO 串 | `triage-monitor.js:372`、`triage-monitor.js:381` |
 
-条数上限 80，超出时丢最早的（`triage-monitor.js:382`）。只有单条查询 `status()` 会给 `steps`：未入队、排队中、失败的记录都是空数组，不缺键（`triage-monitor.js:108`）；
-列表 `cases()` 的每项里**没有 `steps` 键**（`triage-monitor.js:110-125`），不要按「恒有」写断言。
+条数上限 80，超出时丢最早的（`triage-monitor.js:382`）。`steps` 出现在三处：单条查询 `status()`（`triage-monitor.js:108`）、告警列表与详情里内嵌的 `triage`（`server.js` 把 `status()` 全量塞进每条告警）；仅列表 `cases()` 的每项里**没有 `steps` 键**（`triage-monitor.js:110-125`）。未入队、排队中、失败的记录是空数组，不缺键。
 
 **`claims[]` 与 `citations[]`：已核验事实**
 
@@ -365,7 +364,7 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | `sha256` | string（64 位小写十六进制） | 是 | 对 `{name,args,result}` 序列化后的 SHA-256 | `agent-tools.js:56`、`agent-tools.js:59` |
 
 同一份数据在 `TriageCase.evidence[]` 里只有四个字段：`evidence_id`、`tool`、`fetched_at`、`sha256`——`args` 不外露（`triage-monitor.js:8-9`）。
-客户经验复用路径的 `evidence_id` 用外部编号（如经验案例 ID），不保证形如 `cw:<n>`（`investigation-agent.js:336-340`）。
+客户经验复用路径的 `claims` 里 `citations` 的 `evidence_id` 恒等于本次告警取证编号 `cw:1`（`investigation-agent.js:315`）；外部编号只出现在 `knowledge_reuse.case_id`（`investigation-agent.js:337`）。
 
 **`validation`：引用校验结果**
 

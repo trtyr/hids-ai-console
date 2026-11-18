@@ -1105,7 +1105,7 @@ components:
           description: cidr 只允许 source_ip（IPv4 /24 至 /32）；lte 只允许 failure_count（1 至 200）
         value:
           oneOf: [{ type: string, maxLength: 512 }, { type: integer, minimum: 0 }]
-          description: equals 的 IP 类字段要求合法 IP 且不是 0.0.0.0 或 ::；sha256 要求 64 位十六进制
+          description: equals 的 IP 类字段要求合法 IP 且不是 0.0.0.0 或 ::；sha256 要求 64 位十六进制；abnormal_type 只收 1、2、3
       additionalProperties: false
     RuleSetRule:
       type: object
@@ -1247,7 +1247,7 @@ components:
           type: array
           description: |
             研判步骤流水，按发生顺序；只保留最近 80 条。
-            只出现在单条查询 GET /api/agent/triage/{alertId} 的响应里；列表 GET /api/agent/triage/cases 的每一项没有这个键。
+            出现在三处：单条研判查询 GET /api/agent/triage/{alertId}；告警列表与详情里内嵌的 triage（server.js 把 status() 全量塞进每条告警）；仅 GET /api/agent/triage/cases 的列表项没有这个键。
             未入队、排队中、失败的记录是空数组。
           items: { $ref: '#/components/schemas/TriageStep' }
       additionalProperties: true
@@ -1293,6 +1293,9 @@ components:
         alert_id: { type: [string, 'null'] }
         title: { type: string }
         seed: { type: string, description: 起点节点 ID }
+        run_id: { type: string, format: uuid, description: 本次运行 ID }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
         status:
           type: string
           enum: [running, done, failed, interrupted]

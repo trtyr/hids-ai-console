@@ -313,7 +313,7 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 
 > 本小节的行号对**当前 HEAD**。本页前文行号还停在 `35530d8`（`cloudwalker.js` 已被 P003-T001 改过），旧行号复位不在本卡范围。
 
-列表与详情接口里 `alert.detail` 是**字符串**（一句固定文案，`cloudwalker.js:54`、`cloudwalker.js:213`）；
+列表与详情接口里 `alert.detail` 是**字符串**（一句固定文案，`cloudwalker.js:62`、`cloudwalker.js:213`）；
 而 `GET /api/alerts/{alertId}` 返回的顶层 `detail` 是**牧云原始事件对象**（`raw.event || raw`，`cloudwalker.js:203`、`cloudwalker.js:215`）。
 后者**没有固定结构**：本仓不裁字段、不归一化，字段名与含义随事件类型变。
 
