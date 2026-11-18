@@ -149,7 +149,7 @@ export class WikiStore {
     return { checked_at: new Date().toISOString(), active_pages: active.length, issues };
   }
 
-  update(filename, content, expectedRevision) {
+  update(filename, content, expectedRevision, note = '通过知识库工作台更新') {
     const job = this.pending.then(async () => {
       if (!pagePattern.test(filename)) throw Object.assign(new Error('只允许修订判据页和客户经验页'), { status: 400 });
       const previous = await this.get(filename);
@@ -171,7 +171,7 @@ export class WikiStore {
       await writeFile(temporary, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
       await rename(temporary, filenameOnDisk);
       await appendFile(path.join(this.directory, 'log.md'),
-        `\n## [${new Date().toISOString()}] update | ${previous.id}\n影响判据：${previous.id}\n要点：通过知识库工作台更新；上版 ${previous.revision}，新版 ${next.revision}。\n`, 'utf8');
+        `\n## [${new Date().toISOString()}] update | ${previous.id}\n影响判据：${previous.id}\n要点：${String(note).replace(/\s+/g, ' ')}；上版 ${previous.revision}，新版 ${next.revision}。\n`, 'utf8');
       return this.get(filename);
     });
     this.pending = job.catch(() => {});
