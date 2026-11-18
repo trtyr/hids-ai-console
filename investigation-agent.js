@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { eventTypes } from './cloudwalker.js';
+import { RuleStore } from './rule-store.js';
+import { eventTypeFor } from './syslog-input.js';
 import { PromptStore } from './prompt-store.js';
 import { boundEvidenceView } from './evidence-view.js';
 import { readCaseFile } from './syslog-case.js';
@@ -12,6 +16,9 @@ const verdictMap = { '真实威胁': 'threat', '存疑': 'uncertain', '误报': 
   confirmed_threat: 'threat', suspected_threat: 'uncertain', unsuccessful_attack: 'uncertain',
   undetermined: 'uncertain', needs_review: 'uncertain', needs_data: 'uncertain', suggested_benign: 'false_positive' };
 const verdictLabels = { threat: '真实威胁', uncertain: '存疑', false_positive: '误报' };
+// 结论正文（summary）上限；客户报告 report 另有更严的 300 字口径（triage-output.js:36）。
+const conclusionBodyLimit = 500;
+const defaultRulesDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rules');
 const highRisk = new Set(['memory_webshell', 'revshell', 'elevation_process', 'webshell', 'honeypot']);
 
 function parseJSON(text) {
@@ -77,6 +84,53 @@ function verifyOutputFacts(session, verdict) {
   return session.verifyClaims([...verdict.claims, ...facts]);
 }
 
+// A1：把 syslog 告警载荷映射成 Rego 规则库的告警事实。字段口径由任务卡给定；空字段不出现在事实里，
+// 规则写到该字段时按 Rego 的 undefined 语义套不上（rule-store.js:28-31）。
+function regoFact(type, parsed) {
+  const payload = parsed?.payload || {};
+  const pick = (...names) => {
+    for (const name of names) {
+      const value = payload[name];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+    }
+    return null;
+  };
+  const fact = { type: eventTypeFor(parsed?.msgid) || type || null, host: pick('host_ip'),
+    source_ip: pick('source_ip', 'login_ip'), command: pick('process_command_line'),
+    path: pick('file_path'), peer: pick('target_ip'), user: pick('user_name', 'login_username') };
+  return Object.fromEntries(Object.entries(fact).filter(([, value]) => value !== null));
+}
+
+function regoPromptSection(rego) {
+  if (rego.status === 'matched') {
+    return ['# 套上的 Rego 规则',
+      '规则库对本次告警事实求值命中下列规则，整段 Rego 正文一并给出。规则只说明字段命中，不是本次结论；必须用当前告警详情逐条核对并给出引用。',
+      ...rego.rules.map(rule => `## ${rule.id}（${rule.name}）\n\`\`\`rego\n${rule.rego}\n\`\`\``)].join('\n\n');
+  }
+  const reason = rego.status === 'none' ? '规则库对本次告警事实求值无命中'
+    : rego.status === 'unavailable' ? `规则库求值失败：${rego.reason}`
+      : '没有可求值的 syslog 告警事实';
+  return `# 套上的 Rego 规则\n本次没有套上的 Rego 规则（${reason}）。`;
+}
+
+const bodyChars = value => [...String(value || '')].length;
+
+function conclusionProblem(args, { wikiRequired, wikiConsulted }) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return '结论必须是 JSON 对象';
+  if (!verdictMap[args.verdict]) return 'verdict 必须是真实威胁、存疑、误报三者之一';
+  const chars = bodyChars(args.summary);
+  if (!chars) return 'summary 结论正文不能为空';
+  if (chars > conclusionBodyLimit) return `summary 结论正文 ${chars} 字，超过 ${conclusionBodyLimit} 字上限；请压缩后重新提交`;
+  if (wikiRequired && !wikiConsulted.size) return '本次分析还没有调用知识库工具：先用 wiki_page 或 wiki_search 核对判据，再提交结论';
+  const adopted = wikiRequired && Array.isArray(args.wiki_adopted) ? args.wiki_adopted.map(String) : [];
+  const unknown = adopted.filter(id => !wikiConsulted.has(id));
+  if (unknown.length) return `wiki_adopted 里的 ${unknown.join('、')} 没有在本次分析中通过 wiki_page/wiki_search 读过`;
+  if (wikiRequired && !adopted.length && !String(args.wiki_reason || '').trim())
+    return '必须写明采纳了哪一页（wiki_adopted），或为什么没采纳（wiki_reason）';
+  return null;
+}
+
 function modelTools(catalog) {
   return catalog.map(tool => ({ type: 'function', function: {
     name: tool.name, description: tool.name === 'get_process_asset'
@@ -91,6 +145,28 @@ function modelTools(catalog) {
     parameters: tool.inputSchema || { type: 'object', properties: {} }
   } }));
 }
+
+// A3：结论只经这个工具写出，正文上限在工具入口处判（超限退回重写，不落库）。
+const conclusionToolSpec = { type: 'function', function: {
+  name: 'submit_conclusion',
+  description: '提交最终研判结论。结论必须经本工具写出：summary 是结论正文，按字符计不超过 500 字；' +
+    '有知识库时必须先用 wiki_page/wiki_search 核对判据，并写明采纳了哪一页（wiki_adopted）或为什么没采纳（wiki_reason）。',
+  parameters: { type: 'object', additionalProperties: true, required: ['verdict', 'summary'], properties: {
+    verdict: { type: 'string', enum: ['真实威胁', '存疑', '误报'], description: '三态结论' },
+    verdict_label: { type: 'string', description: '可省略，系统按三态重写' },
+    confidence: { type: 'string' },
+    summary: { type: 'string', description: '结论正文，不超过 500 字' },
+    analysis: { type: 'string' },
+    report: { type: 'string', description: '给客户看的一段话；常规研判不超过 300 字' },
+    claims: { type: 'array', items: { type: 'object' } },
+    evidence_facts: { type: 'array', items: { type: 'object' } },
+    missing_evidence: { type: 'array', items: { type: 'string' } },
+    missing_data: { type: 'array', items: { type: 'string' } },
+    next_actions: { type: 'array', items: { type: 'string' } },
+    recommended_actions: { type: 'array', items: { type: 'string' } },
+    wiki_adopted: { type: 'array', items: { type: 'string' }, description: '常规研判用：采纳的判据页编号；没有采纳就留空并写 wiki_reason。deep 模式忽略' },
+    wiki_reason: { type: 'string', description: '常规研判用：没有采纳判据页的原因；deep 模式忽略' }
+  } } } };
 
 const wikiToolSpecs = [
   { type: 'function', function: { name: 'wiki_page', description: '按编号读取当前告警类型或通用判据的完整 Wiki 页面。Wiki 是判断依据，不能当作当前告警证据。',
@@ -204,12 +280,24 @@ export function boundedToolArgs(name, rawArgs, catalog) {
 }
 
 export class InvestigationAgent {
-  constructor(toolbox, model, promptStore = new PromptStore(), knowledgeStore = null) {
+  constructor(toolbox, model, promptStore = new PromptStore(), knowledgeStore = null, ruleStore = null) {
     this.toolbox = toolbox; this.model = model; this.promptStore = promptStore; this.knowledgeStore = knowledgeStore;
+    this.ruleStore = ruleStore || new RuleStore(defaultRulesDirectory);
   }
 
   async prompts() { return this.promptStore.load(); }
   async updatePrompt(section, content, revision) { return this.promptStore.update(section, content, revision); }
+
+  // A1：分析开始时对本次告警事实求值。规则库读不了/解析失败不抛，降级成「没有套上」并写明原因。
+  async regoRules(type, parsed) {
+    const fact = regoFact(type, parsed);
+    try {
+      const evaluation = await this.ruleStore.evaluate(fact);
+      return { status: evaluation.matched.length ? 'matched' : 'none', fact, rules: evaluation.matched };
+    } catch (error) {
+      return { status: 'unavailable', fact, rules: [], reason: String(error.message || error).slice(0, 200) };
+    }
+  }
 
   async run(alertId, { mode = 'deep', onProgress = () => {}, streamContext = null, ruleEvaluation = null } = {}) {
     const match = String(alertId || '').match(/^([a-z_]+):([1-9][0-9]*)$/);
@@ -242,8 +330,20 @@ export class InvestigationAgent {
         result, view: { msgid: result.msgid, payload: result.payload } });
       trace.push({ kind: 'tool', name: 'received_syslog', evidence_id: 'syslog:1', note: '原始 syslog 推送字段' });
     }
+    const rego = mode === 'triage' && streamContext?.parsed
+      ? await this.regoRules(match[1], streamContext.parsed)
+      : { status: 'not_applicable', fact: null, rules: [] };
+    if (mode === 'triage' && streamContext?.parsed) {
+      onProgress('注入规则', rego.status === 'matched'
+        ? `已套上 Rego 规则 ${rego.rules.map(rule => rule.id).join('、')}`
+        : '本次没有套上的 Rego 规则');
+      trace.push({ kind: 'rego', status: rego.status, rule_ids: rego.rules.map(rule => rule.id) });
+    }
     let wikiIndex = null;
     const wikiPages = new Map();
+    const wikiConsulted = new Set();
+    let wikiChoice = null;
+    let wikiNudged = false;
     if (mode === 'triage' && this.knowledgeStore?.agentIndex) {
       wikiIndex = await this.knowledgeStore.agentIndex(match[1]);
       trace.push({ kind: 'wiki', action: 'index', category: wikiIndex.category,
@@ -332,6 +432,9 @@ export class InvestigationAgent {
               claims, missing_evidence: requiredEvidenceGaps(requiredChecks),
               next_actions: ['抽查本次告警与原始处置记录；若出现经验的失效条件，撤回经验并重新研判'] });
             verdict.report = appendEvidenceReport(verdict.report, requiredChecks);
+            // 捷径不走调查循环，但仍属「常规研判且知识库在位」：结果字段与主路径同口径（文档 §4）。
+            verdict.rego = { status: rego.status, rule_ids: rego.rules.map(rule => rule.id) };
+            verdict.wiki = { consulted: [], adopted: [], reason: '命中已审核经验捷径，未调用知识库工具' };
             return { alert_id: alertId, mode, model: this.model.model,
               prompt_version: `${prompts.version}+${prompts.revision}+${systemDigest}`,
               scenario_ids: [match[1]], knowledge_reuse: { case_id: record.id, title: record.title,
@@ -355,6 +458,7 @@ export class InvestigationAgent {
       prompts.prompts.cross, mode === 'triage' ? prompts.sop?.common : '',
       ...cards.map(card => `# 当前场景：${card.name}\n${card.prompt}\n\n${mode === 'triage' ? prompts.sop?.[card.id] || '' : ''}`), outputContract,
       mode === 'triage' ? triageReportContract : '',
+      regoPromptSection(rego),
       ruleContext ? '# 已确认误报规则的复核\n规则只表明当前告警的若干字段与一条历史误报条件相同，不是本次结论。核对来源身份、目标资产、命令语义、会话前后行为、授权及新增反证；规则字段的引用须以当前牧云事件详情为准。无法核实的条件写入证据缺口，不能因为规则命中直接输出误报。' : '',
       mode === 'triage' && streamContext ? '# syslog 输入\n本条告警由牧云 syslog 推送触发。先用 read_case_file 读取 00-这是什么.md、03-研判事实.md，必要时读取 01、02、04 和判据索引。syslog 和 API 字段分别可引用 syslog:1 与 cw:1 的原始 JSON Pointer；文件内容只是阅读视图。有 event_id 时按事件 ID 回查并核对主机身份；缺少 ID 时才按主机与时间关联，检查匹配差值和内容。' : '',
       match[1] === 'honeypot' ? honeypotBoundary : '', match[1] === 'elevation_process' ? elevationBoundary : '']
@@ -364,7 +468,7 @@ export class InvestigationAgent {
       { role: 'user', content: `调查牧云告警 ${alertId}。先根据告警详情和已经收集的 API 证据提出假设，再自主选择必要的查询工具；除核对变化外，无需重复读取已给的详情。最多 8 次工具调用，无法覆盖的必查项写入 missing_data。工具结果是精简视图，预聚合计数只覆盖当前返回页。必查项查询状态：${JSON.stringify(requiredChecks)}。已取到的必查证据视图：${JSON.stringify(requiredViews)}。empty_page 仅表示指定范围的当前页未返回记录；source_unavailable 表示缺少可用数据源；query_failed 表示接口查询失败，不得相互混同。${streamContext ? `本次 syslog 来源、事件匹配和材料目录：${JSON.stringify({ parsed: streamContext.parsed, context: streamContext.context, match: streamContext.match, files: streamContext.caseInfo.files })}。` : ''}${ruleContext ? `已确认误报的规则候选：${JSON.stringify(ruleContext)}。` : ''}${wikiIndex ? `可用 Wiki 目录：${JSON.stringify(wikiIndex)}。已加载的通则及场景判据：${JSON.stringify([...wikiPages.values()].slice(0, 4))}。其他判据按需使用 wiki_page 或 wiki_search 读取。Wiki 是判据，不能代替本次取证。` : ''}最终按三种中文 verdict 输出，claims.citations 使用 evidence_id、pointer、value。告警详情证据：${toolMessage(original)}` }
     ];
     const tools = [...modelTools(relevantTools(catalog, match[1])), ...(wikiIndex ? wikiToolSpecs : []),
-      ...(mode === 'triage' && streamContext ? [caseToolSpec] : [])];
+      conclusionToolSpec, ...(mode === 'triage' && streamContext ? [caseToolSpec] : [])];
     const finalMessages = (focused = false) => [{ role: 'system', content: system }, { role: 'user', content:
       `请根据以下已查询证据直接输出完整 JSON 结论。不得再请求工具；没有足够证据时 verdict 必须为“存疑”。` +
       (focused ? '本轮仅提供关键证据；省略的工具结果不能引用，未覆盖的事实写入 missing_data。' : '') +
@@ -393,6 +497,29 @@ export class InvestigationAgent {
         for (const call of reply.tool_calls) {
           const name = call.function?.name;
           let content;
+          if (name === 'submit_conclusion') {
+            try {
+              const submitted = parseJSON(call.function?.arguments || '{}');
+              const problem = conclusionProblem(submitted, { wikiRequired: Boolean(mode === 'triage' && wikiIndex), wikiConsulted });
+              if (problem) {
+                content = JSON.stringify({ error: problem });
+                trace.push({ kind: 'conclusion_rejected', error: problem });
+              } else {
+                draft = normalizeVerdict(submitted);
+                wikiChoice = { adopted: Array.isArray(submitted.wiki_adopted) ? submitted.wiki_adopted.map(String) : [],
+                  reason: String(submitted.wiki_reason || '').trim() };
+                trace.push({ kind: 'conclusion', tool: 'submit_conclusion', summary_chars: bodyChars(draft.summary),
+                  adopted: wikiChoice.adopted });
+                messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ accepted: true }) });
+                break;
+              }
+            } catch (error) {
+              content = JSON.stringify({ error: String(error.message).slice(0, 250) });
+              trace.push({ kind: 'tool_error', name, requested_args: call.function?.arguments || '{}', error: String(error.message).slice(0, 250) });
+            }
+            messages.push({ role: 'tool', tool_call_id: call.id, content });
+            continue;
+          }
           if (++calls > 8) content = JSON.stringify({ error: '工具调用已达到 8 次上限，请基于已有证据给出待复核结论' });
           else {
             try {
@@ -404,10 +531,12 @@ export class InvestigationAgent {
               } else if (wikiIndex && name === 'wiki_page') {
                 const page = await this.knowledgeStore.agentPage(match[1], rawArgs.id);
                 wikiPages.set(page.id, page);
+                wikiConsulted.add(page.id);
                 content = JSON.stringify(page);
                 trace.push({ kind: 'wiki', action: 'page', id: page.id, title: page.title });
               } else if (wikiIndex && name === 'wiki_search') {
                 const matches = await this.knowledgeStore.agentSearch(match[1], rawArgs.keyword);
+                for (const page of matches) wikiConsulted.add(page.id);
                 content = JSON.stringify({ matches });
                 trace.push({ kind: 'wiki', action: 'search', keyword: rawArgs.keyword, matches: matches.length });
               } else {
@@ -434,12 +563,22 @@ export class InvestigationAgent {
           }
           messages.push({ role: 'tool', tool_call_id: call.id, content });
         }
+        if (draft) break;
         continue;
       }
       try { draft = normalizeVerdict(parseJSON(reply.content)); }
       catch (error) {
         messages.push({ role: 'assistant', content: reply.content || '' });
         messages.push({ role: 'user', content: `输出解析失败：${String(error.message).slice(0, 120)}。请严格输出一个 JSON 对象，包含三种中文 verdict 之一、summary、confidence、claims、missing_data。` });
+        continue;
+      }
+      // A2：有知识库时分析必须调用过知识库工具；模型直接吐结论就先催一轮。
+      if (mode === 'triage' && wikiIndex && !wikiConsulted.size && !wikiNudged && turn < 5) {
+        wikiNudged = true;
+        draft = null;
+        messages.push({ role: 'assistant', content: reply.content || '' });
+        messages.push({ role: 'user', content: '本次分析还没有调用知识库工具。先调用 wiki_page 或 wiki_search 核对判据；判据不适用时在结论里写明原因。' });
+        trace.push({ kind: 'wiki', action: 'required' });
         continue;
       }
       break;
@@ -545,6 +684,14 @@ export class InvestigationAgent {
       finalizeTriageOutput(verdict);
       verdict.report = appendEvidenceReport(verdict.report, requiredChecks);
     }
+    if (mode === 'triage' && wikiIndex) {
+      const consulted = [...wikiConsulted];
+      verdict.wiki = wikiChoice ? { consulted, adopted: wikiChoice.adopted, reason: wikiChoice.reason }
+        : { consulted, adopted: [], reason: consulted.length
+          ? '结论没有经 submit_conclusion 工具说明采纳页' : '分析过程未调用知识库工具（已要求一次仍未调用）' };
+      if (!consulted.length) verdict.missing_evidence = [...new Set([...verdict.missing_evidence, '分析过程未调用知识库工具'])];
+    }
+    verdict.rego = { status: rego.status, rule_ids: rego.rules.map(rule => rule.id) };
     onProgress('完成研判', '正在保存研判记录');
     const systemDigest = createHash('sha256').update(system).digest('hex').slice(0, 12);
     return { alert_id: alertId, mode, model: this.model.model,
@@ -562,8 +709,13 @@ export class InvestigationAgent {
     const wikiPages = this.knowledgeStore.agentContextPages ?
       await this.knowledgeStore.agentContextPages(type) : [];
     const material = await readCaseFile(caseInfo, '03-研判事实.md');
+    const rego = await this.regoRules(type, input.parsed);
+    onProgress('注入规则', rego.status === 'matched'
+      ? `已套上 Rego 规则 ${rego.rules.map(rule => rule.id).join('、')}`
+      : '本次没有套上的 Rego 规则');
     onProgress('AI 分析', '牧云 API 未匹配到对应事件，依据 syslog 和当前上下文说明缺口');
     const system = [prompts.prompts.triage, prompts.sop?.common, prompts.sop?.[type],
+      regoPromptSection(rego),
       `# 当前证据边界\n这是 syslog 推送触发的告警。牧云 API 没有匹配到对应事件，不能使用别的事件详情，不能断言缺失字段为零。最终结论必须是“存疑”；只根据 syslog 字段与上下文解释已知事实、缺少什么和下一步要核对什么。Wiki 判据是方法，不是本次事实。只输出 JSON：{"summary":"","analysis":"","missing_data":[""],"recommended_actions":[""]}。`]
       .filter(Boolean).join('\n\n');
     let narrative = {};
@@ -577,16 +729,21 @@ export class InvestigationAgent {
     const facts = Object.entries(input.parsed.payload).filter(([, value]) => value !== null && value !== '' && value !== undefined)
       .slice(0, 5).map(([key, value]) => ({ text: `syslog ${key}=${String(value).slice(0, 100)}`,
         citations: [{ evidence_id: 'syslog:1', pointer: `/payload/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`, value }] }));
+    const verdict = finalizeTriageOutput({ verdict: 'uncertain', verdict_label: '存疑', confidence: '低',
+      risk_level: '待核查', summary: String(narrative.summary || '已收到 syslog 告警，牧云 API 未匹配到对应事件').slice(0, 500),
+      analysis: String(narrative.analysis || matchResult.reason).slice(0, 3000), claims: facts,
+      missing_evidence: [...new Set([matchResult.reason, ...(Array.isArray(narrative.missing_data) ? narrative.missing_data : [])])],
+      next_actions: Array.isArray(narrative.recommended_actions) ? narrative.recommended_actions.slice(0, 5) : ['核对牧云事件详情与告警时间'] });
+    verdict.rego = { status: rego.status, rule_ids: rego.rules.map(rule => rule.id) };
+    // 降级路径没有工具循环：知识库工具与结论工具都不适用，结果里写明未采纳原因。
+    verdict.wiki = { consulted: [], adopted: [], reason: '牧云事件未匹配，本轮是降级结论，没有工具循环，未采纳判据页' };
     return { alert_id: `syslog:${type}:${createHash('sha256').update(input.raw).digest('hex').slice(0, 16)}`,
       mode: 'triage', model: this.model.model, prompt_version: `${prompts.version}+${prompts.revision}`,
-      scenario_ids: [type], verdict: finalizeTriageOutput({ verdict: 'uncertain', verdict_label: '存疑', confidence: '低',
-        risk_level: '待核查', summary: String(narrative.summary || '已收到 syslog 告警，牧云 API 未匹配到对应事件').slice(0, 500),
-        analysis: String(narrative.analysis || matchResult.reason).slice(0, 3000), claims: facts,
-        missing_evidence: [...new Set([matchResult.reason, ...(Array.isArray(narrative.missing_data) ? narrative.missing_data : [])])],
-        next_actions: Array.isArray(narrative.recommended_actions) ? narrative.recommended_actions.slice(0, 5) : ['核对牧云事件详情与告警时间'] }),
+      scenario_ids: [type], verdict,
       review: { assessment: 'unavailable', concerns: ['对应牧云事件未匹配，无法独立复核完整事件详情'], missing_evidence: [matchResult.reason] },
       validation: { ok: facts.length > 0, errors: facts.length ? [] : ['syslog 缺少可引用字段'] },
-      trace: [{ kind: 'wiki', action: 'index', category: wikiIndex.category },
+      trace: [{ kind: 'rego', status: rego.status, rule_ids: rego.rules.map(rule => rule.id) },
+        { kind: 'wiki', action: 'index', category: wikiIndex.category },
         ...wikiPages.map(page => ({ kind: 'wiki', action: 'context', id: page.id, title: page.title })),
         { kind: 'tool_error', name: `list_${type}_events`, error: matchResult.reason }],
       evidence: [{ evidence_id: 'syslog:1', tool: 'received_syslog', args: {}, fetched_at: new Date().toISOString(),

@@ -12,6 +12,7 @@
 | `triage-output.js` | 客户报告与建议动作的整形 |
 
 关键结论都标了 `文件:行号`，行号对应三份实现文件在提交 `35530d8` 时的内容；本卡只新增这份文档，没动这三份实现文件。
+例外：§3.8 与 §4 里 `InvestigationAgent` 构造签名那两处是 P003-T012 补的，行号对 P003-T012 提交；其余旧行号未重排。
 全文只描述现状，不评价该改成什么。
 
 **术语**（第一次出现先给一句话解释，后面直接用）：
@@ -86,6 +87,7 @@
 | --- | --- | --- |
 | 读原始事件 | `session.callTool('get_<类型>_event', { id })` 取告警详情 | `investigation-agent.js:236` |
 | 收 syslog 字段 | 常规研判且带 `streamContext` 时，把 syslog 报文登记为 `syslog:1` | `investigation-agent.js:238-244` |
+| 注入规则 | 用规则库对 syslog 告警事实求值，命中把整段 Rego 写进系统提示，见 [3.8](#38-规则注入知识库必查与结论工具p003-t012) | `investigation-agent.js:333-341` |
 | 载判据目录 | 常规研判且知识库在位时，取本类与通用判据目录及上下文页 | `investigation-agent.js:247-257` |
 | 跑必查项 | 常规研判按告警类型生成清单并逐项查询 | `investigation-agent.js:258-260` |
 | 复用客户经验 | 常规研判且知识库在位时，尝试命中已审核经验 | `investigation-agent.js:266-351` |
@@ -414,13 +416,71 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | `total_reported` | integer 或 null | 否 | 平台自报总数 | `required-evidence.js:114` |
 | `platform_total_consistent` | boolean | 否 | 平台总数与当前返回是否自洽 | `required-evidence.js:115` |
 
+### 3.8 规则注入、知识库必查与结论工具（P003-T012）
+
+本节三块都是 P003-T012 加的，行号对当前提交。
+
+#### A. Rego 规则注入（`investigation-agent.js:333-341`、`investigation-agent.js:89-115`、`investigation-agent.js:292-301`）
+
+分析开始时（读完原始事件、进入调查循环之前），常规研判且带 `streamContext` 时，用 P003-T011 的规则库对本条 syslog 告警的事实求值。事实字段与取值（`investigation-agent.js:89-104`）：
+
+| 事实字段 | 取值 |
+| --- | --- |
+| `type` | `eventTypeFor(parsed.msgid)`（`syslog-input.js:59`）；对不上事件类型表就不放这个键 |
+| `host` | `payload.host_ip` |
+| `source_ip` | `payload.source_ip`，没有就 `payload.login_ip` |
+| `command` | `payload.process_command_line` |
+| `path` | `payload.file_path` |
+| `peer` | `payload.target_ip` |
+| `user` | `payload.user_name`，没有就 `payload.login_username` |
+
+- 空字符串或缺失的字段不进事实对象：规则写到该字段时按 Rego 的 undefined 语义套不上（`rule-store.js:28-31`）；规则没写该字段就仍然不限制。
+- 规则库默认是仓内 `rules/`（`investigation-agent.js:21`、`investigation-agent.js:285`）；构造第 5 个参数可以注入别的 `RuleStore`（测试用临时目录）。
+- 求值结果写进 `verdict.rego`：`{status, rule_ids}`，`status` 四态 `matched` / `none` / `unavailable` / `not_applicable`（`investigation-agent.js:694`）。`unavailable` 表示规则库读取或解析失败，研判不中断，原因写进系统提示。
+- 系统提示里恒有一段 `# 套上的 Rego 规则`（`investigation-agent.js:105-115`、`investigation-agent.js:461`），四种口径：
+  - 命中：逐条列 `id`、`name` 与整段 Rego 正文（`rego` 围栏），并声明「规则只说明字段命中，不是本次结论」；
+  - 没命中：`本次没有套上的 Rego 规则（规则库对本次告警事实求值无命中）。`
+  - 没有可求值事实（deep 模式或没有 syslog 上下文）：`……（没有可求值的 syslog 告警事实）。`
+  - 求值失败：`……（规则库求值失败：<原因>）。`
+- 旁路 `runUnmatchedSyslog` 同样注入这一段（`investigation-agent.js:712-720`），`verdict.rego` 同口径（`investigation-agent.js:737`）。
+
+可复跑断言：`node --test investigation-agent.test.js` 的「A1 套上的 Rego 连整段正文进分析上下文……」用例断言系统提示含规则名、`package hids.rules.test_probe`、`input.command == "id"`；未命中时含「本次没有套上的 Rego 规则」。
+
+#### B. 知识库必查与采纳记录（`investigation-agent.js:534-539`、`investigation-agent.js:575-583`、`investigation-agent.js:687-693`）
+
+- 只在 `mode === 'triage'` 且知识库在位（`agentIndex` 可用）时要求。
+- 分析过程至少调用一次知识库工具：`wiki_page` 返回的页编号、`wiki_search` 返回的每个匹配编号都记进 `wikiConsulted`（`investigation-agent.js:534`、`investigation-agent.js:539`）。
+- 模型直接吐 JSON 结论时先催一轮（trace `{kind:'wiki', action:'required'}`，`investigation-agent.js:575-583`）；催过仍未调用就照收结论，但在 `verdict.wiki` 与 `missing_evidence` 里写明（`investigation-agent.js:687-693`）。
+- 结论工具（见 C）的校验：没查过知识库就提交 → 退回「本次分析还没有调用知识库工具……」；`wiki_adopted` 里有没在本次查过的页 → 退回；既没采纳页又没写 `wiki_reason` → 退回「必须写明采纳了哪一页……」（`investigation-agent.js:119-132`）。
+- 结果字段 `verdict.wiki`（`investigation-agent.js:687-693`）：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `consulted` | string[] | 本次通过 `wiki_page` / `wiki_search` 读过的页编号 |
+| `adopted` | string[] | 结论工具声明的采纳页；未声明时为空数组 |
+| `reason` | string | 没采纳的原因；采纳了就是空串 |
+
+- 降级路径 `runUnmatchedSyslog` 不走工具循环：`verdict.wiki = {consulted: [], adopted: [], reason: '牧云事件未匹配，本轮是降级结论，没有工具循环，未采纳判据页'}`（`investigation-agent.js:739`）。
+- 知识经验复用捷径（[2.3](#23-客户经验复用一条会提前返回的捷径)）同样不走工具循环，但两个字段照写：`verdict.rego` 与主路径同口径，`verdict.wiki = {consulted: [], adopted: [], reason: '命中已审核经验捷径，未调用知识库工具'}`（`investigation-agent.js:436-437`）。
+
+#### C. 结论工具 `submit_conclusion`（`investigation-agent.js:150-169`、`investigation-agent.js:500-522`）
+
+- 调查循环的工具列表里恒有 `submit_conclusion`（`investigation-agent.js:471`）；模型调用它并通过校验即结束调查轮次，被退回时不结束。
+- 校验（`conclusionProblem`，`investigation-agent.js:119-132`）按顺序：
+  1. `verdict` 必须是三态（真实威胁 / 存疑 / 误报）；
+  2. 正文取 `summary`，按字符计（`[...text].length`，`investigation-agent.js:117`）不超过 500 字；空正文或超限都退回，不落库；
+  3. 有知识库时按 B 校验必查与采纳；deep 模式忽略 `wiki_adopted` / `wiki_reason`，不因「未查知识库」被拒。
+- 收下的结论进既有流水线（独立复核、引用校验、降级、客户报告整形）；trace 记一条 `{kind:'conclusion', tool:'submit_conclusion', summary_chars, adopted}`（`investigation-agent.js:511-512`）。
+- 500 字是结论工具入口的上限；常规研判的 `summary` 随后被 `finalizeTriageOutput` 收窄到 300 字、客户报告 `report` 也按 300 字口径整形（`triage-output.js:36`），deep 模式不做这步收窄。
+- 兼容路径：模型仍可直接吐 JSON 结论。有知识库时先催一轮知识库；收下时 `verdict.wiki.reason` 记「结论没有经 submit_conclusion 工具说明采纳页」（`investigation-agent.js:689-690`）。
+
 ## 4. 公开面
 
 | 导出 | 签名 / 形态 | 作用 | 证据 |
 | --- | --- | --- | --- |
-| `InvestigationAgent` | `new InvestigationAgent(toolbox, model, promptStore?, knowledgeStore?)` | 研判智能体。四个构造参数依次是取证工具箱、模型客户端、提示词存储、知识库 | `investigation-agent.js:206-209` |
+| `InvestigationAgent` | `new InvestigationAgent(toolbox, model, promptStore?, knowledgeStore?, ruleStore?)` | 研判智能体。五个构造参数依次是取证工具箱、模型客户端、提示词存储、知识库、Rego 规则库（缺省读仓内 `rules/`） | `investigation-agent.js:283-286` |
 | `.run(alertId, options)` | `Promise<研判记录>` | 主路径，见 [2.2](#22-主路径的阶段) | `investigation-agent.js:214` |
-| `.runUnmatchedSyslog(input, matchResult, caseInfo, onProgress?)` | `Promise<研判记录>` | 未匹配 syslog 的旁路，见 [2.4](#24-未匹配-syslog-的旁路) | `investigation-agent.js:558` |
+| `.runUnmatchedSyslog(input, matchResult, caseInfo, onProgress?)` | `Promise<研判记录>` | 未匹配 syslog 的旁路，见 [2.4](#24-未匹配-syslog-的旁路) | `investigation-agent.js:705` |
 | `.prompts()` / `.updatePrompt(section, content, revision)` | `Promise<…>` | 读 / 改提示词，转调提示词存储 | `investigation-agent.js:211-212` |
 | `boundedToolArgs(name, rawArgs, catalog)` | `(name, args, catalog) => args` | 工具参数收窄，见 [3.2](#32-工具轮次与调用上限) | `investigation-agent.js:177` |
 | `agentConfigured(env?)` | `(env?) => boolean` | 五个环境变量齐了才算配好：牧云地址、牧云 Token、模型地址、模型密钥、模型名 | `investigation-agent.js:597-599` |
@@ -435,6 +495,7 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 `validation`、`trace`、`required_evidence`、`evidence`、`auto_action`（`investigation-agent.js:550-555`）。
 客户经验复用那条捷径返回同一个结构，只是 `review.assessment` 记作 `knowledge_reuse`、`validation.ok` 写死 true（`investigation-agent.js:342-343`），
 另外多一个 `knowledge_reuse` 字段记命中的经验（`investigation-agent.js:337-340`）。
+P003-T012 起 `verdict` 里固定多两个只读字段：`rego`（`{status, rule_ids}`）与 `wiki`（仅常规研判且知识库在位时出现，`{consulted, adopted, reason}`），见 [3.8](#38-规则注入知识库必查与结论工具p003-t012)。
 
 ## 5. 怎么验证
 
@@ -510,6 +571,38 @@ console.log(boundedToolArgs('list_process_assets', { count: 500 }, catalog).coun
 ```
 
 预期输出：`50`——`list_process_assets` 的 `count` 上限是 50，其余 `list_` 工具是 5（`investigation-agent.js:180-182`）。
+
+### 5.5 规则注入与结论工具（可照着写测试）
+
+只跑 P003-T012 新增的用例：
+
+```bash
+node --test investigation-agent.test.js 2>&1 | grep -E "A1 |A2 |A3 "
+```
+
+预期 4 行 `✔`：A1（命中与未命中）、A2（必调与采纳）、A2（未采纳原因）、A3（501 字退回 / 500 字收下）。
+
+用真规则库跑一遍注入骨架（照抄可改断言）：
+
+```bash
+node --input-type=module -e "
+import { InvestigationAgent } from './investigation-agent.js';
+import { AgentToolbox } from './agent-tools.js';
+import { RuleStore } from './rule-store.js';
+const toolbox = new AgentToolbox({ listTools: async () => [{ name: 'get_honeypot_event', inputSchema: { type: 'object', properties: { id: {} }, required: ['id'] } }], callTool: async () => ({ id: 7, source_ip: '192.0.2.2' }) });
+let system = '';
+const model = { model: 'fake', complete: async (messages, tools) => {
+  if (!tools.length) return { content: JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
+  system = messages[0].content;
+  return { content: JSON.stringify({ verdict: '存疑', summary: '需核查来源', claims: [], missing_data: [] }) };
+} };
+const streamContext = { parsed: { msgid: 'cloudwalker-honeypot', payload: { host_ip: '10.0.0.5', source_ip: '192.0.2.2', target_ip: '10.0.0.5', user_name: 'root' } }, context: {}, match: { matched: false }, caseInfo: { files: [] } };
+const result = await new InvestigationAgent(toolbox, model, undefined, null, new RuleStore('rules')).run('honeypot:7', { mode: 'triage', streamContext });
+console.log(system.includes('package hids.rules.honeypot_probe'), JSON.stringify(result.verdict.rego));
+"
+```
+
+预期输出：`true {"status":"matched","rule_ids":["honeypot_probe"]}`——仓内 `rules/honeypot_probe.rego` 的 `type`/`peer`/`user` 三个条件都被这次 syslog 事实满足。
 
 ## 6. 已知边界与未决
 
