@@ -20,8 +20,10 @@ import { WikiWorkbench } from './wiki-workbench.js';
 import { TraceBoardService } from './trace-board.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
+import { RuleStore, isRuleId } from './rule-store.js';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(moduleDirectory, '..');
 const host = process.env.HIDS_HOST || '127.0.0.1';
 const port = Number(process.env.HIDS_PORT || 8080);
 const baseUrl = process.env.CLOUDWALKER_URL;
@@ -37,6 +39,8 @@ const agent = triageToolbox && model ? new InvestigationAgent(triageToolbox, mod
 const deepInvestigator = agentToolbox && model ? new InvestigationAgent(agentToolbox, model, promptStore, wikiStore) : null;
 const investigationStore = new InvestigationStore(path.join(root, 'backend', '.data', 'investigations'));
 const triageRuleEngine = new TriageRuleEngine(path.join(root, 'backend', '.data', 'triage-rules.json'));
+// Rego 规则库跟着代码走（不是 .data/ 运行态）：默认读仓根的 rules/ 目录。
+const regoRuleStore = new RuleStore(path.join(moduleDirectory, 'rules'));
 const triageInputMode = process.env.HIDS_TRIAGE_INPUT_MODE || 'syslog';
 const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, investigator: agent,
   history: investigationStore, file: path.join(root, 'backend', '.data', 'triage-monitor.json'),
@@ -209,7 +213,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   access = { user: process.env.HIDS_BASIC_AUTH_USER, password: process.env.HIDS_BASIC_AUTH_PASSWORD }, boardService = service === gateway ? traceBoard : null,
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
   maintenanceEntry = process.env.HIDS_MAINTENANCE_ENTRY_URL,
-  ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN) {
+  ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore) {
   const investigate = async (executor, alertId, mode, onProgress = null) => {
     if (mode === 'triage' && monitor?.ruleEngine) {
       let decision;
@@ -315,6 +319,27 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           return json(res, 200, await (monitor?.ruleEngine || triageRuleEngine)
             .saveConfig(body.config, body.expected_revision));
         } catch (cause) { return error(res, cause.status || 400, cause.message); }
+      }
+      if (url.pathname === '/api/rules' && req.method === 'GET') {
+        try { return json(res, 200, await ruleStore.list()); }
+        catch (cause) { return error(res, 502, `规则库读取失败：${cause.message}`); }
+      }
+      if (url.pathname === '/api/rules/evaluate' && req.method === 'POST') {
+        let fact;
+        try { fact = await readJSON(req); } catch (cause) { return error(res, 400, cause.message); }
+        if (fact === null || typeof fact !== 'object' || Array.isArray(fact)) return error(res, 400, '告警事实必须是 JSON 对象');
+        try { return json(res, 200, await ruleStore.evaluate(fact)); }
+        catch (cause) { return error(res, 502, `规则求值失败：${cause.message}`); }
+      }
+      if (url.pathname.startsWith('/api/rules/') && req.method === 'GET') {
+        let id;
+        try { id = decodeURIComponent(url.pathname.slice('/api/rules/'.length)); }
+        catch { return error(res, 400, '规则 id 编码无效'); }
+        if (!isRuleId(id)) return error(res, 400, '规则 id 无效');
+        try {
+          const rule = await ruleStore.read(id);
+          return rule ? json(res, 200, rule) : error(res, 404, '规则不存在');
+        } catch (cause) { return error(res, 502, `规则库读取失败：${cause.message}`); }
       }
       if (url.pathname === '/api/agent/triage/cases' && req.method === 'GET') {
         if (!monitor) return error(res, 503, '自动研判尚未配置');

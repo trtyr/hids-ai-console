@@ -20,6 +20,7 @@ tags:
   - name: 自动研判
   - name: 深度研判
   - name: 规则
+  - name: Rego 规则
   - name: 知识库
   - name: 维护服务
 paths:
@@ -522,6 +523,68 @@ paths:
                   valid: { type: boolean, const: true }
                   count: { type: integer }
         '400': { $ref: '#/components/responses/BadRequest' }
+  /api/rules:
+    get:
+      tags: [Rego 规则]
+      summary: 列出 Rego 规则库
+      operationId: listRegoRules
+      description: |
+        一条规则一个 `.rego` 文件：规则 id 取 `package hids.rules.<id>` 的最后一段，显示名取 `# name:` 注释。
+        列表只给元数据，原文用 `GET /api/rules/{id}` 取。空规则库回 `{count: 0, rules: []}`，不是 404。
+        规则文件不合法（缺 `# name:`、用了子集外语法、id 重复）时整次读取失败：回 502，正文带 `rules/<文件>:<行>` 定位。
+        支持的 Rego 子集见 `rule-store.js` 文件头。
+      responses:
+        '200':
+          description: 规则元数据列表，按 id 排序
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoRuleList' }
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/rules/evaluate:
+    post:
+      tags: [Rego 规则]
+      summary: 用一条告警事实求值
+      operationId: evaluateRegoRules
+      description: |
+        事实是 JSON 对象，约定字段：`host`（主机）、`peer`（对端）、`command`（命令）、`user`（用户）、
+        `path`（路径）、`type`（类型）、`source_ip`（来源 IP）。规则只读它写到的字段，**没写的字段就是不限制**。
+        比较是严格相等（`"1"` 不等于 `1`）；`contains` / `startswith` / `endswith` 只对字符串成立。
+        事实缺字段时，引用该字段的条件不成立（`!=` 也一样，与 Rego 的 undefined 语义一致）；要「缺字段也算通过」写 `not input.<字段> == <值>`。
+        没有规则命中时明确回空：`matched` 为空数组、`count` 为 0。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlertFact' }
+      responses:
+        '200':
+          description: 命中结果；没命中时 matched 为空数组
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoEvaluation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/rules/{id}:
+    get:
+      tags: [Rego 规则]
+      summary: 按 id 读规则的 Rego 原文
+      operationId: getRegoRule
+      description: 返回规则元数据与整份 .rego 文件原文（逐字返回，含注释与空行）。id 不存在回 404，id 不合格式回 400。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 规则 id，即 `package hids.rules.<id>` 的最后一段；小写字母开头的标识符，不合格式回 400
+          schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+      responses:
+        '200':
+          description: 规则元数据与整份 .rego 原文（逐字返回）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoRule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
   /api/wiki/pages:
     get:
       tags: [知识库]
@@ -1501,6 +1564,69 @@ components:
         revision: { type: [string, 'null'] }
         writable: { type: boolean }
       additionalProperties: true
+    RegoRuleSummary:
+      type: object
+      description: 规则库列表里的一条规则元数据，不含 Rego 原文。
+      required: [id, name, description, file]
+      properties:
+        id: { type: string, pattern: '^[a-z][a-z0-9_]*$', description: 取 `package hids.rules.<id>` 的最后一段；也是读取原文时的路径参数 }
+        name: { type: string, description: '`# name:` 注释里的显示名，必填' }
+        description: { type: [string, 'null'], description: '`# description:` 注释；没写是 null' }
+        file: { type: string, description: 规则文件名（相对 rules/ 目录），只用于定位，不参与寻址 }
+      additionalProperties: false
+    RegoRule:
+      type: object
+      description: 单条规则：元数据加 Rego 原文。
+      required: [id, name, description, file, rego]
+      properties:
+        id: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        file: { type: string }
+        rego: { type: string, description: 整份 .rego 文件原文，逐字返回 }
+      additionalProperties: false
+    RegoRuleList:
+      type: object
+      required: [count, rules]
+      properties:
+        count: { type: integer, minimum: 0 }
+        rules:
+          type: array
+          items: { $ref: '#/components/schemas/RegoRuleSummary' }
+      additionalProperties: false
+    RegoRuleMatch:
+      type: object
+      description: 求值命中项：规则名字加 Rego 原文。
+      required: [id, name, rego]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        rego: { type: string }
+      additionalProperties: false
+    RegoEvaluation:
+      type: object
+      description: 求值结果。没有规则命中时 `matched` 是空数组、`count` 是 0，不是 null。
+      required: [count, matched]
+      properties:
+        count: { type: integer, minimum: 0 }
+        matched:
+          type: array
+          items: { $ref: '#/components/schemas/RegoRuleMatch' }
+      additionalProperties: false
+    AlertFact:
+      type: object
+      description: |
+        一条告警事实。七个约定字段都可省略：规则只读自己写到的字段，没写的字段就是不限制；多余的键被忽略。
+        字段与规则条件里的名字一一对应（`input.host`、`input.source_ip` …）。
+      properties:
+        host: { type: string, description: 主机 }
+        peer: { type: string, description: 对端 }
+        command: { type: string, description: 命令 }
+        user: { type: string, description: 用户 }
+        path: { type: string, description: 路径 }
+        type: { type: string, description: 类型 }
+        source_ip: { type: string, description: 来源 IP }
+      additionalProperties: true
     WikiPageSummary:
       type: object
       description: 知识库页面元数据（不含正文）。浏览接口一次返回目录下全部页，含 deprecated 页。
@@ -1590,6 +1716,11 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     BackendError:
       description: 上游查询或研判失败
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RuleLibraryError:
+      description: 规则文件读取或解析失败；正文 error 里带 `rules/<文件>:<行>` 定位
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
