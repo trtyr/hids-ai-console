@@ -118,7 +118,7 @@ probeSession(credentials, options?) → Promise<{ authenticated: true }>
 
 | hash | 侧栏文案 | 顶栏标题 | 页面模块 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| `#/overview` | 总览 | 总览 | `pages/overview.js` | 占位（T002 接） |
+| `#/overview` | 总览 | 总览 | `pages/overview.js` | 已接真接口（P002-T002，见第 9 节） |
 | `#/alerts` | 告警 | 告警 | `pages/alerts.js` | 占位（T003 接） |
 | `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | 占位（T004 接），参数从第二段起原样传 |
 | `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | 占位（T005 接） |
@@ -209,3 +209,82 @@ web/
 - 维护端：设计稿写明是独立入口，本目录不管。
 - 凭据不持久化 → 刷新即重新登录（见第 2 节）。
 - `web/_handoff/`（开工交接件：`handoff.md` + 设计稿副本）只是参考材料：不参与构建，`serve.js` 对 `/_handoff/*` 一律回 404，不会被当成产品资源发出去。
+
+## 9. 总览页（`pages/overview.js` + `src/status.js`，P002-T002）
+
+布局、文案、断点照设计稿 `overview.html` + `overview-notes.md`；字段一个不编，全部来自本仓接口。
+
+### 数据 adapter（`src/status.js`，本页唯一发 HTTP 的地方）
+
+```js
+loadOverview(options?) → Promise<{
+  alerts: { ok:true, total, totals, errors, partial } | { ok:false, error },
+  triage: { ok:true, enabled, inputMode, lastPollAt, lastError, counts:{queued,running,done,failed} } | { ok:false, error },
+  system: { cloud, agent, tools, rules, updates },   // 同上，各自 ok / error
+  failed: string[],                                  // 失败的源名（顺序见 SOURCE_KEYS）
+  fetchedAt: Date                                     // 本机时刻，见「与稿的差异 2」
+}>
+setTriageEnabled(enabled, options?) → Promise<TriageSummary 的归一形态>   // enabled 必须是布尔值
+formatClock(date) → 'HH:MM:SS'          // 拿不到时间给 '—'
+formatDateTime(iso|null) → 'YYYY-MM-DD HH:mm:ss'  // 空给 '—'，解析不了原样返回
+// options: { fetchImpl?, baseUrl?, now? }   // 单测注入用；页面调用时不传，走 globalThis.fetch
+// 失败一律抛 OverviewError：kind ∈ 'unauthorized' | 'http' | 'network' | 'invalid'，附 status
+```
+
+七个只读源与「失败了会怎样」：
+
+| 源 | operation | 用到的字段 | 失败时页面表现 |
+| --- | --- | --- | --- |
+| `alerts` | `GET /api/alerts?count=1` | `total` / `totals` / `errors` / `partial` | 摘要带数字与类型表 →「—」，顶部报出这一项 |
+| `triage` | `GET /api/agent/triage/status` | `enabled` / `input_mode` / `last_poll_at` / `last_error` / `counts` | 三个数字 + 队列模块 + 进度条 →「—」，暂停按钮禁用 |
+| `cloud` | `GET /api/status` | `configured` / `connected` / `reason` | 牧云连接 →「—」。**502 算成功源**（正文仍是这三个字段，`connected:false` + `reason` 进 `title`） |
+| `agent` | `GET /api/agent/status` | `configured` / `prompt_version` | 研判模型、提示词版本 →「—」 |
+| `tools` | `GET /api/agent/tools` | `count` | 取证工具 →「—」（未配置时接口回 503） |
+| `rules` | `GET /api/triage/rules` | `revision` | 规则版本 →「—」（配置取自示例文件时 `revision` 本来就是 `null`） |
+| `updates` | `GET /api/updates` | `revision` | 运行状态标题右侧的版本 →「—」 |
+| 写 | `PUT /api/agent/triage/control` | 正文 `{ enabled }`，回 `TriageSummary` | 顶部提示「自动研判操作失败：…」，状态保持、按钮恢复可点 |
+
+取数口径（写死在这三条上）：
+
+1. 七路并行、互不拖累：单源失败只让**它对应的那几行**变成「—」，整页不空。
+2. **任一路 401** → 整体 `unauthorized`：凭据失效说「登录已失效，请退出后重新登录。」，不冒充网络问题。
+3. 七路全失败 → 整页错误态（顶部一行 + 数值全「—」+ 刷新可点重试）。
+
+### 状态矩阵
+
+| 格 | 触发 | 界面 | 断言要点（可写成测试） |
+| --- | --- | --- | --- |
+| 默认 | 打开页面 / 刷新完成 | 四个数字、11 类类型表（按数量降序）、构成条 + 前三类、队列模块、运行状态、进度条 | 表格行数 = `totals` 的 key 数；首行是数量最多的类型；`[role=status]` 播报「已更新，时间 HH:MM:SS」 |
+| loading（稿未画，缺项取值） | `render()` 后请求未回 | 数值全「—」、刷新按钮禁用并转圈、根节点 `aria-busy="true"` | 立即断言：`aria-busy === 'true'`、刷新 `disabled === true`、`[role=status]` 文本「正在读取数据」 |
+| empty | `totals` 为空 / 类型全 0 / `counts` 全 0 | 类型表一行「暂无告警数据」；构成说明「接口未返回类型统计。」；进度说明「接口未返回队列计数。」 | 不造行、不编百分比；「告警总数」显示接口给的 `0` |
+| partial | `partial === true`（部分类型查询失败） | 稿的警示行可见，点名失败类型（中文名） | 失败类型**不出现在**类型表里；总数仍用接口的 `total`（不自己求和） |
+| error | 七路全挂 / 单源挂 | 全挂：顶部 danger 行 + 数值全「—」；单源挂：顶部 warn 行「部分数据读取失败：<源名>」 | 两种都是 `role="alert"`；错误行文案不许把「网络不通」「登录失效」「5xx」混成一句 |
+| long-content | `last_error` 很长、`prompt_version` / 版本号很长 | 视觉截断（`od-truncate`），`title` 与 DOM 文本留全文 | `dd.textContent` 与 `title` 都等于原值——截断只发生在视觉层 |
+| disabled | 刷新在途 / 队列开关请求在途 | 对应按钮 `disabled`，刷新带 `is-loading` 转圈 | 请求在途时再点不会再发一次（`fetch` 调用数不变） |
+
+本页没有「部分失败之外的分页/筛选状态」；「不适用」的格子不必为它编状态。
+
+### 交互与事件
+
+| 动作 | 后果 |
+| --- | --- |
+| 「刷新」 | 重新读七路（7 个 GET），回落 loading，完成后换更新时间并播报「已更新，时间 …」 |
+| 「暂停」/「恢复」 | `PUT /api/agent/triage/control`，正文 `{enabled:!当前}`；成功后状态文字、按钮文案、进度与四个计数一起换，播报「自动研判已暂停 / 已恢复」；失败只报错、状态不动 |
+| 切页 | 每次 `render` 递增内部序号，晚到的旧响应直接丢弃（不会把上一页的数据写进新页面） |
+| 行、格子、数字 | **不可点**：本页没有行级操作，明细与入队都在「告警」页（`overview-notes.md` §5） |
+
+### 可访问性
+
+- 表格有 `caption`（视觉隐藏）与 `th scope="col"`；四个数字是 `dl / dt / dd`。
+- 摘要带 `section aria-label="告警概况"`，进度是 `section aria-label="研判进度"`。
+- 顶部通知行 `role="alert"`；播报用独立的 `role="status" aria-live="polite"` 节点（视觉隐藏）。
+- 长内容只做视觉截断，`title` 带全文；状态不靠颜色单独表达（「运行中 / 已暂停」有文字）。
+- 页面只放两个动作：刷新、暂停/恢复；按钮的可访问名就是按钮文字。
+
+### 与稿的差异（三处，都是「稿 / 壳 / 接口」的约束，不是随手改）
+
+1. **「更新时间 + 刷新」的位置**：稿在顶栏 `.bar-right`；壳 `views/shell.js` 不在 T002 的 scope（禁改），所以落在内容区顶部靠右一行，沿用同一套 `.stamp` / `.textbtn` 样式。
+2. **「更新时间」是本机时刻**：接口没有 `overview.checkedAt` 这类字段；稿自己的脚本就是本机 `new Date()` 打的时间戳，所以按稿办——它是「这一屏数据什么时候读的」，不是服务端数据时间。
+3. **类型中文名**来自稿的 `TYPE_LABELS`（接口只回类型 id）。与后端 `cloudwalker.js` 的 `eventTypes` 相比只有一条不同：`webshell` 稿里叫「网站后门」，后端叫 `WebShell`。界面照稿。
+
+稿上有、接口没有、于是**藏掉**的区块：**没有**（`backend-findings.md` 的 P002-T002 一节记了同一句）。
