@@ -4,13 +4,13 @@ import assert from 'node:assert/strict';
 
 import { DEFAULT_ROUTE, NAV_PAGES, PAGES, hashFor, routeFromHash } from '../src/router.js';
 
-test('侧栏五个入口，顺序与文案照设计稿（总览/告警/深度溯源/规则/知识库）', () => {
-  assert.deepEqual(NAV_PAGES.map(page => page.navLabel), ['总览', '告警', '深度溯源', '规则', '知识库']);
-  assert.deepEqual(NAV_PAGES.map(page => page.id), ['overview', 'alerts', 'trace', 'rules', 'knowledge']);
+test('侧栏六个入口，顺序与文案照设计稿 + P003-T015 的演示入口（牧云现查标成演示）', () => {
+  assert.deepEqual(NAV_PAGES.map(page => page.navLabel), ['总览', '告警', '牧云现查（演示）', '深度溯源', '规则', '知识库']);
+  assert.deepEqual(NAV_PAGES.map(page => page.id), ['overview', 'alerts', 'alerts-demo', 'trace', 'rules', 'knowledge']);
 });
 
-test('六张页面各有一个模块文件，告警详情不在侧栏但可路由', () => {
-  assert.deepEqual(PAGES.map(page => page.id), ['overview', 'alerts', 'alert-detail', 'trace', 'rules', 'knowledge']);
+test('七张页面各有一个模块文件，告警详情不在侧栏但可路由', () => {
+  assert.deepEqual(PAGES.map(page => page.id), ['overview', 'alerts', 'alerts-demo', 'alert-detail', 'trace', 'rules', 'knowledge']);
   const detail = PAGES.find(page => page.id === 'alert-detail');
   assert.equal(detail.navLabel, null);
   assert.equal(NAV_PAGES.includes(detail), false);

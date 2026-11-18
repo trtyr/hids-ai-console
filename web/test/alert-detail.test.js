@@ -7,6 +7,7 @@ import {
   enqueueTriage,
   getAlert,
   getInvestigation,
+  getRule,
   getTraceBoard,
   getTriageRecord,
 } from '../src/alert-detail.js';
@@ -164,6 +165,17 @@ test('getInvestigation：回包 mode 或 verdict 缺失 → invalid；502 仍然
     assert.equal(error.status, 502);
     return true;
   });
+});
+
+test('getRule：GET /api/rules/{id}，回 id/name/file/rego；404 → null（规则可能已被维护者删掉）', async () => {
+  const rego = 'package hids.rules.ssh_bruteforce\n\ndefault allow := false';
+  const fetchImpl = fakeFetch(respond({ id: 'ssh_bruteforce', name: 'SSH 暴力破解', description: 'd', file: 'ssh_bruteforce.rego', rego }));
+  const rule = await getRule('ssh_bruteforce', { fetchImpl });
+  assert.equal(fetchImpl.calls[0].url, '/api/rules/ssh_bruteforce');
+  assert.deepEqual(rule, { id: 'ssh_bruteforce', name: 'SSH 暴力破解', description: 'd', file: 'ssh_bruteforce.rego', rego });
+
+  assert.equal(await getRule('gone', { fetchImpl: fakeFetch(respond({ error: '规则不存在' }, 404)) }), null);
+  await assert.rejects(() => getRule('x', { fetchImpl: fakeFetch(respond({ id: 'x' })) }), error => error.kind === 'invalid');
 });
 
 test('getTraceBoard：GET /api/trace/boards/{ID}，404 → null，nodes 不是数组 → invalid', async () => {

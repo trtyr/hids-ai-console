@@ -22,7 +22,31 @@
   padding: 10px 0 0;
 }
 
-/* ---------- 通知（部分失败 / 读取失败） ---------- */
+/* ---------- 统计范围（稿未覆盖：D020「一段时间里来了多少」靠聚合接口的 since） ----------
+   控件样式取同页 .textbtn 与告警页筛选条 select 的最近邻（高 32、方角 2、边框 --line-2）。 */
+.ov-window {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.ov-window select {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.ov-window select:hover { border-color: var(--line-hover); }
+.ov-window select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ov-window select:disabled { opacity: .55; cursor: default; }
+
+/* ---------- 通知（读取失败） ---------- */
 .notice {
   display: flex;
   align-items: flex-start;

@@ -1,67 +1,83 @@
-// 页面：告警列表（P002-T003 / P003-T007 回填筛选与排序）
+// 页面：告警主列表 —— 推送进来的研判记录（P003-T015 起；D020）
 //
-// 视觉与结构照设计稿 `design/alerts.html`（左侧导航 + 顶栏由壳提供，本文件只写内容区），
-// 字段与操作全部来自本仓接口（adapter 在 `web/src/alerts.js`，页面里没有 fetch）。
+// 主列表**不是牧云现查**：一行就是一条研判记录（`GET /api/agent/triage/cases`），
+// 同一主机同窗口的重复投递合成一行、计数沿用记录上的 `repeat_count`（D008/D012）。
+// 牧云现查仍在，但在单独入口 `#/alerts-demo`（`pages/alerts-demo.js`），标成演示——
+// 主列表这条路不碰 `/api/alerts`，所以牧云没配时主列表照常工作（A4）。
 //
-// P003-T007 回填（后端 T001 已支持）：筛选条（搜索 / 类型 / 等级 / 结论 / 研判状态 / 时间范围）
-// 与「等级 / 时间」排序全部换成真参数下推，不再前端自筛；`truncated` 扫描窗口提示照实显示。
-// 稿没有的三处按缺项处理并记账（报告「稿→码对照表」与 web/README.md）：
-//   1) 时间范围：稿 `alerts.html:990-1038` 没有这个控件（`alerts-notes.md:125` 列为待补）——
-//      群主拍板（P003-T007）加一个与旁边四个下拉同款的 select：全部时间 / 近 24 小时 / 近 7 天 / 近 30 天，
-//      选中只算 `from = now - N`，`to` 不传（接口闭区间，不传＝到现在）。
-//   2) 等级筛选稿三档（高/中/低），接口四档 → 补「严重」（同页等级列本来就会显示「严重」）。
-//   3) 研判状态稿四档，接口另有 not_queued → 补「未研判」（同页状态列本来就会显示「未研判」）。
-//   4) `truncated: true` 的扫描窗口提示复用同页部分失败提示条的样式（`.notice`）。
+// 视觉沿用设计稿 `design/alerts.html` 的表格语言（表头吸顶、单行单元格、固定列宽、分页）。
+// 稿画的是牧云告警列表（等级/告警 ID/资产/IP/研判状态/结论），D020 把主列表换成了研判记录，
+// 新列（主机/重复/命中规则/维护）稿未覆盖 → 按同页最近邻取值（同一套 `.cell-*` / `.verdict` /
+// `.triage` 样式与列宽口径），逐条记在 `coding-reports/P003-T015.md` 的稿→码对照表与「未决」。
 //
-// 接口没有方向参数：`sort` 只有 `time` / `level`，两者都是固定降序。稿的「同列再点切换升降序」只做降序，
-// `aria-sort` 只报 `descending`，不伪造升序结果。
+// 稿上有、这一版没做的（同一原因：稿未覆盖研判记录列表，且 D020 没要求）：
+//   1) 抽屉：摘要/步骤/证据已在详情页（`#/alert-detail/<id>`），行内直接跳过去，不复刻一份。
+//   2) 批量「重新研判所选」：单条重新入队保留在状态/操作列之外由详情页发起；主列表不做多选。
+//   3) 搜索框：`GET /api/agent/triage/cases` 没有关键词参数（server.js:364-382），不前端自筛。
+//   4) 等级列：研判记录上没有等级字段（TriageCaseListItem 只有 msgid/主机/事件时间/命令）。
 //
-// 稿上有、接口仍没有 → 藏掉（A2）：
-//   1) 队列条「查看 N 条失败」——按研判状态筛可以手动选「失败」，不做一键跳转。
-//   2) 抽屉「场景」行 —— 接口只有 scenario（= 事件类型中文名），与「事件类型」重复，不单列。
-//   3) 抽屉「证据来源」按分类拆条 —— 抽屉只有两个数量；条目级证据在详情页（T007 已接）。
-//
-// 「缺失证据」不在上面：TriageCase schema 没列这个键（additionalProperties: true），
-// 但实现返回体里有（triage-monitor.js:108），稿也画了（alerts.html:1139）——按实现渲染。
-//
-// 「共 N 条 · 更新时间 · 刷新」在稿里位于顶栏，但顶栏属壳（web/src/views/shell.js），
-// 所以落在内容区首行——只挪位置，不动壳。
+// 误报（A2 / D020「点误报，这一行马上变成误报，理由留着。规则改没改成，旁边另标」）：
+// 点「标为误报」在行下展开理由表单（稿未覆盖，取值取同页既有表单/文本按钮样式），
+// 提交走后端 `POST /api/agent/triage/{id}/false-positive`，202 回来就把这一行改成误报并显示维护状态；
+// 两个维护者的进度另标在「维护」列（updating / updated / failed），不影响结论。
 
-import { AlertsError, enqueueTriage, fetchTriageSummary, listAlerts, setTriageEnabled } from '../src/alerts.js';
+import {
+  CasesError, fetchQueueStatus, listCases, reportFalsePositive, setQueueEnabled,
+} from '../src/cases.js';
 
 const STYLE_HREF = 'assets/pages/alerts.css';
-const COLUMN_COUNT = 10;
+const COLUMN_COUNT = 9;
 const PAGE_SIZES = [20, 50];
+
+// syslog MsgId → 事件类型（syslog-input.js:9-15 的映射表；接口只回 msgid，类型名要自己映射才筛得了）
+const MSGID_TYPE = {
+  'cloudwalker-webshell': 'webshell',
+  'cloudwalker-honeypot': 'honeypot',
+  'cloudwalker-suspicious-command': 'suspicious_operation',
+  'cloudwalker-abnormal-login': 'abnormal_login',
+  'cloudwalker-brute-force': 'brute_force',
+  'cloudwalker-revshell': 'revshell',
+  'cloudwalker-malware': 'malware',
+  'cloudwalker-elevation-process': 'elevation_process',
+  'cloudwalker-abnormal-network': 'network_audit',
+};
+
+// 类型中文名（稿的 TYPE_LABELS，与后端 eventTypes 一一对应）
+const TYPE_LABELS = {
+  webshell: '网站后门', malware: '恶意程序', revshell: '反弹 Shell', memory_webshell: '内存马',
+  brute_force: '暴力破解', abnormal_login: '异常登录', elevation_process: '提权进程',
+  network_audit: '网络审计', suspicious_operation: '可疑操作', honeypot: '蜜罐', memory_security: '内存安全',
+};
+
+// 类型筛选项：只列 syslog 真能映射出来的 9 类。`memory_webshell` / `memory_security` 在接口枚举里
+// （openapi.yaml:1076-1077）但没有对应 MsgId（syslog-input.js:9-15），选了永远是空表，不摆出来。
+const TYPE_OPTIONS = Object.entries(MSGID_TYPE)
+  .map(([, type]) => type)
+  .map(type => [type, TYPE_LABELS[type] ?? type]);
 
 const TRIAGE_LABEL = { not_queued: '未研判', queued: '排队中', running: '研判中', done: '完成', failed: '失败' };
 const TRIAGE_CLASS = { queued: 'is-queued', running: 'is-running', done: 'is-done', failed: 'is-failed' };
 const VERDICT_CLASS = { 真实威胁: 'verdict-threat', 存疑: 'verdict-uncertain', 误报: 'verdict-false' };
-// 接口的 levelKey 有四档（low/medium/high/critical，cloudwalker.js:39），稿只有三档色点：
-// critical 与 high 同用危险色（稿没有更重的色）。
-const LEVEL_DOT = { low: 'sq-low', medium: 'sq-mid', high: 'sq-high', critical: 'sq-high' };
-const INPUT_MODE_LABEL = { syslog: 'Syslog 推入', poll: '轮询拉取' };
-
-// 筛选条取值（稿 `alerts.html:999-1035`；接口枚举见 server.js:121-124）。
-// 稿的等级三档、研判状态四档之外补的两项在文件头第 2、3 条记账。
-const TYPE_OPTIONS = [
-  ['brute_force', '暴力破解'], ['network_audit', '网络审计'], ['webshell', '网站后门'],
-  ['suspicious_operation', '可疑操作'], ['abnormal_login', '异常登录'], ['malware', '恶意程序'],
-  ['honeypot', '蜜罐'], ['elevation_process', '提权进程'], ['revshell', '反弹 Shell'],
-  ['memory_webshell', '内存马'], ['memory_security', '内存安全'],
-];
-const LEVEL_OPTIONS = [['critical', '严重'], ['high', '高'], ['medium', '中'], ['low', '低']];
 const VERDICT_OPTIONS = [['threat', '真实威胁'], ['uncertain', '存疑'], ['false_positive', '误报'], ['review', '待研判']];
-const TRIAGE_OPTIONS = [['not_queued', '未研判'], ['queued', '排队中'], ['running', '研判中'], ['done', '完成'], ['failed', '失败']];
-// 时间范围（稿缺项，群主拍板加：只算 from，to 不传）：值 → 回看的毫秒数
+const MAINT_LABEL = { updating: '更新中', updated: '已更新', failed: '失败' };
+const INPUT_MODE_LABEL = { syslog: 'Syslog 推入', poll: '轮询拉取' };
+// 时间范围（同 demo 页的取值口径：只算 from，to 不传＝到现在）
 const TIME_OPTIONS = [['24h', '近 24 小时', 24 * 60 * 60 * 1000], ['7d', '近 7 天', 7 * 24 * 60 * 60 * 1000],
   ['30d', '近 30 天', 30 * 24 * 60 * 60 * 1000]];
-// 扫描窗口上限（cloudwalker.js:184 的 MAX_SCAN）——truncated 时总数只含窗口内匹配
-const SCAN_LIMIT = 500;
-// 没有结论时按研判状态说实话（不把失败写成「研判中」）
-const NO_VERDICT_COPY = {
-  not_queued: '未研判', queued: '排队中，暂无结论', running: '研判中，暂无结论',
-  failed: '研判失败，暂无结论', done: '未产生结论',
-};
+// 误报理由长度是服务端口径（server.js:607）；页面先自己拦一遍，别把 400 当网络错误显示
+const REASON_MIN = 10;
+const REASON_MAX = 4000;
+
+const ICON_REFRESH = `
+  <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+    <path d="M13.4 2.6v2.9h-2.9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+  </svg>`;
+const ICON_SEARCH = `
+  <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4" />
+    <path d="M10.2 10.2 13.4 13.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+  </svg>`;
 
 const TEMPLATE = `
 <div class="alerts-page">
@@ -69,31 +85,9 @@ const TEMPLATE = `
     <span class="page-total">共 <b data-role="total">—</b> 条</span>
     <span class="page-stamp"><b data-role="stamp" class="mono">—</b> 更新</span>
     <button type="button" class="textbtn" data-role="refresh">
-      <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-        <path d="M13.4 2.6v2.9h-2.9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      ${ICON_REFRESH}
       刷新
     </button>
-  </div>
-
-  <div class="notice" data-role="partial" hidden>
-    <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 2.4 14.4 13.6H1.6z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
-      <path d="M8 6.4v3.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-      <circle cx="8" cy="11.6" r=".7" fill="currentColor" />
-    </svg>
-    <span><strong>部分类型查询失败</strong>，总数只合计成功的类型；<span data-role="partial-reason">—</span></span>
-  </div>
-
-  <div class="notice" data-role="truncated" hidden>
-    <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 2.4 14.4 13.6H1.6z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
-      <path d="M8 6.4v3.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-      <circle cx="8" cy="11.6" r=".7" fill="currentColor" />
-    </svg>
-    <span><strong>筛选结果只统计了扫描窗口</strong>：单次最多扫 <span class="mono" data-role="scan-limit">500</span> 条原始事件，
-      总数只含窗口内的匹配；请缩小时间范围或加类型条件。</span>
   </div>
 
   <div class="queuestrip" data-role="queue" role="group" aria-label="自动研判队列">
@@ -111,11 +105,8 @@ const TEMPLATE = `
 
   <div class="filters" role="group" aria-label="筛选与排序">
     <div class="search">
-      <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4" />
-        <path d="M10.2 10.2 13.4 13.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-      </svg>
-      <input type="search" data-role="filter-q" placeholder="搜索标题、ID 或资产" aria-label="搜索告警" />
+      ${ICON_SEARCH}
+      <input type="search" data-role="filter-host" placeholder="主机 IP（精确匹配）" aria-label="按主机 IP 筛选" />
     </div>
 
     <select data-role="filter-type" aria-label="按事件类型筛选">
@@ -123,19 +114,9 @@ const TEMPLATE = `
       ${TYPE_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
     </select>
 
-    <select data-role="filter-level" aria-label="按等级筛选">
-      <option value="">全部等级</option>
-      ${LEVEL_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
-    </select>
-
     <select data-role="filter-verdict" aria-label="按研判结论筛选">
       <option value="">全部结论</option>
       ${VERDICT_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
-    </select>
-
-    <select data-role="filter-triage" aria-label="按研判状态筛选">
-      <option value="">全部研判</option>
-      ${TRIAGE_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
     </select>
 
     <select data-role="filter-time" aria-label="按时间范围筛选">
@@ -147,33 +128,24 @@ const TEMPLATE = `
     <span class="filter-count" data-role="filter-count"></span>
   </div>
 
-  <div class="bulkbar" data-role="bulkbar" hidden>
-    <span class="bulk-count">已选 <b data-role="bulk-count">0</b> 条</span>
-    <div class="bulk-actions">
-      <button type="button" class="btn-primary" data-role="bulk-queue">重新研判所选</button>
-      <button type="button" class="textbtn" data-role="bulk-clear">清除选择</button>
-    </div>
-  </div>
-
   <div class="table-wrap" data-role="table-wrap">
     <table class="alerts">
-      <caption class="sr-only">告警列表，时间倒序；点标题或告警 ID 查看摘要，可勾选后批量重新研判</caption>
+      <caption class="sr-only">研判记录列表，最新在前；点「详情」看这条研判，点「溯源」进深度溯源。</caption>
       <thead>
         <tr>
-          <th scope="col" class="col-check"><input type="checkbox" data-role="select-all" aria-label="全选当前页" /></th>
-          <th scope="col" class="col-level" data-role="th-level" aria-sort="none">
-            <button type="button" class="th-sort" data-role="sort-level" data-sort="level">等级<span class="arrow" data-role="arrow-level"></span></button>
+          <th scope="col" class="col-verdict" data-role="th-verdict" aria-sort="none">
+            <button type="button" class="th-sort" data-role="sort-verdict" data-sort="verdict">结论<span class="arrow" data-role="arrow-verdict"></span></button>
           </th>
-          <th scope="col" class="col-id">告警 ID</th>
-          <th scope="col" class="col-title">告警</th>
           <th scope="col" class="col-type">类型</th>
-          <th scope="col" class="col-asset">资产</th>
-          <th scope="col" class="col-ip">IP</th>
-          <th scope="col" class="col-state">研判状态</th>
-          <th scope="col" class="col-verdict">结论</th>
+          <th scope="col" class="col-ip">主机</th>
           <th scope="col" class="col-time" data-role="th-time" aria-sort="descending">
             <button type="button" class="th-sort" data-role="sort-time" data-sort="time">时间<span class="arrow is-active" data-role="arrow-time">↓</span></button>
           </th>
+          <th scope="col" class="col-dup">重复</th>
+          <th scope="col" class="col-rule">命中规则</th>
+          <th scope="col" class="col-maint">维护</th>
+          <th scope="col" class="col-state">状态</th>
+          <th scope="col" class="col-ops">操作</th>
         </tr>
       </thead>
       <tbody data-role="rows"></tbody>
@@ -195,85 +167,7 @@ const TEMPLATE = `
   </div>
 
   <p class="sr-only" data-role="sr-status" role="status" aria-live="polite"></p>
-</div>
-
-<div class="scrim" data-role="scrim" hidden></div>
-<aside class="drawer" data-role="drawer" aria-labelledby="drawer-title" hidden>
-  <div class="drawer-head">
-    <div class="drawer-head-main">
-      <div class="drawer-tags">
-        <span class="drawer-id mono" data-role="drawer-id">—</span>
-        <button type="button" class="copy-btn" data-role="copy-id" aria-label="复制告警 ID">
-          <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
-            <rect x="5.6" y="5.6" width="7" height="7" rx="1.1" fill="none" stroke="currentColor" stroke-width="1.2" />
-            <path d="M10.4 5.6V4.2A1.2 1.2 0 0 0 9.2 3H4.2A1.2 1.2 0 0 0 3 4.2v5a1.2 1.2 0 0 0 1.2 1.2h1.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-          </svg>
-        </button>
-        <span class="drawer-level" data-role="drawer-level">—</span>
-      </div>
-      <h2 id="drawer-title" data-role="drawer-title">告警摘要</h2>
-      <p class="drawer-meta" data-role="drawer-meta">—</p>
-    </div>
-    <div class="drawer-actions">
-      <a class="detail-link" data-role="drawer-detail" href="#/alerts">查看完整详情 ›</a>
-      <button type="button" class="drawer-close" data-role="drawer-close" aria-label="关闭摘要">
-        <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-        </svg>
-      </button>
-    </div>
-  </div>
-
-  <div class="drawer-body">
-    <section class="drawer-block is-verdict" data-role="verdict-block" data-tone="muted">
-      <span class="block-label">研判结论</span>
-      <p class="verdict-big" data-role="drawer-verdict">—</p>
-      <p class="report" data-role="drawer-report">—</p>
-      <p class="missing" data-role="drawer-missing" hidden></p>
-    </section>
-
-    <section class="drawer-block">
-      <span class="block-label">关键信息</span>
-      <dl class="field-grid">
-        <div><dt>资产</dt><dd data-role="drawer-asset">—</dd></div>
-        <div><dt>IP</dt><dd class="mono" data-role="drawer-ip">—</dd></div>
-        <div><dt>事件类型</dt><dd data-role="drawer-type">—</dd></div>
-        <div><dt>事件 ID</dt><dd class="mono" data-role="drawer-event">—</dd></div>
-        <div><dt>主机 ID</dt><dd class="mono" data-role="drawer-host">—</dd></div>
-        <div><dt>发生时间</dt><dd class="mono" data-role="drawer-time">—</dd></div>
-        <div><dt>研判状态</dt><dd data-role="drawer-state">—</dd></div>
-      </dl>
-    </section>
-
-    <section class="drawer-block" data-role="drawer-steps-block" hidden>
-      <span class="block-label">研判步骤</span>
-      <ol class="steps" data-role="drawer-steps"></ol>
-    </section>
-
-    <section class="drawer-block">
-      <span class="block-label">证据来源<span class="label-meta mono" data-role="drawer-evidence-total"></span></span>
-      <ul class="evidence" data-role="drawer-evidence"></ul>
-    </section>
-
-    <details class="raw">
-      <summary>原始字段</summary>
-      <dl class="field-grid">
-        <div><dt>eventType</dt><dd class="mono" data-role="raw-type">—</dd></div>
-        <div><dt>eventId</dt><dd class="mono" data-role="raw-event">—</dd></div>
-        <div><dt>hostId</dt><dd class="mono" data-role="raw-host">—</dd></div>
-        <div><dt>levelKey</dt><dd class="mono" data-role="raw-level">—</dd></div>
-        <div><dt>matched_alert_id</dt><dd class="mono" data-role="raw-matched">—</dd></div>
-      </dl>
-    </details>
-
-    <p class="drawer-note">完整证据链、研判步骤与原始事件可在详情页查看。</p>
-  </div>
-
-  <div class="drawer-foot">
-    <button type="button" class="btn-primary" data-role="drawer-queue">加入研判队列</button>
-    <button type="button" class="textbtn" data-role="drawer-close-2">关闭</button>
-  </div>
-</aside>`;
+</div>`;
 
 /** 本页样式只在第一次 render 时注入一次（web/index.html 与 app.css 不归本卡，见文件头）。 */
 function ensureStyles(document) {
@@ -287,10 +181,21 @@ function ensureStyles(document) {
 
 const pad2 = value => String(value).padStart(2, '0');
 
-/** ISO → `YYYY-MM-DD HH:MM:SS`（本地时区）；空值或非法时间显示「—」（照稿） */
-export function formatTime(iso) {
-  if (!iso) return '—';
-  const date = new Date(iso);
+/**
+ * 事件时间 → `YYYY-MM-DD HH:MM:SS`（本地时区）。
+ * 接口给的是 syslog 事件时间：秒级 Unix 时间（数字或数字串），或者已经是 ISO 串（triage-monitor.js:143）。
+ * 解析不出来显示「—」（照稿：空值不编时间）。
+ */
+export function formatEventTime(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  let date;
+  if (typeof value === 'number' || /^\d{9,13}$/.test(String(value))) {
+    const num = Number(value);
+    // 13 位是毫秒（牧云个别事件给毫秒），10 位是秒
+    date = new Date(num > 1e11 ? num : num * 1000);
+  } else {
+    date = new Date(String(value));
+  }
   if (Number.isNaN(date.getTime())) return '—';
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} `
     + `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
@@ -300,16 +205,46 @@ function stampOf(date) {
   return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
 }
 
-/** 研判状态（没有 triage 时后端给 null → 未研判） */
-export function triageStatusOf(alert) {
-  const status = alert?.triage?.status;
-  return typeof status === 'string' && Object.hasOwn(TRIAGE_LABEL, status) ? status : 'not_queued';
+/** msgid → 事件类型键（映射表外原样给 null，不猜） */
+export function typeOf(record) {
+  return MSGID_TYPE[record?.msgid] ?? null;
 }
 
-/** 结论只读 triage.verdict_label；未产生结论时 null（不拿 alert.verdict 顶上，那是占位值） */
-export function verdictOf(alert) {
-  const label = alert?.triage?.verdict_label;
+/** msgid → 中文类型名；映射表外的 msgid 原样显示（不吞数据） */
+export function typeLabelOf(record) {
+  const type = typeOf(record);
+  if (type) return TYPE_LABELS[type] ?? type;
+  return typeof record?.msgid === 'string' && record.msgid ? record.msgid : '—';
+}
+
+/** 结论只读 verdict_label；未产生结论时 null（不拿 msgid / detail 顶上） */
+export function verdictOf(record) {
+  const label = record?.verdict_label;
   return label === '真实威胁' || label === '存疑' || label === '误报' ? label : null;
+}
+
+/** 重复次数：沿用记录上的 repeat_count（1 表示只投递过一次），别的字段不当第二口径 */
+export function repeatOf(record) {
+  const count = record?.repeat_count;
+  return Number.isSafeInteger(count) && count >= 1 ? count : 1;
+}
+
+/** 命中规则：命中的规则 id；研判完成但没命中 → 「没有套上」；还没结论 → null */
+export function ruleOf(record) {
+  if (typeof record?.rule_id === 'string' && record.rule_id) return record.rule_id;
+  if (record?.status === 'done') return null;
+  return undefined;
+}
+
+/** 维护状态一句话（规则 / 知识库两条边各自的状态，另标在「维护」列） */
+export function maintenanceText(record) {
+  const maintenance = record?.maintenance;
+  if (!maintenance || typeof maintenance !== 'object') return '—';
+  const side = key => {
+    const status = maintenance[key]?.status;
+    return MAINT_LABEL[status] ?? '—';
+  };
+  return `规则 ${side('rule')} · 知识库 ${side('wiki')}`;
 }
 
 function el(document, tag, props = {}, children = []) {
@@ -325,7 +260,7 @@ function el(document, tag, props = {}, children = []) {
 }
 
 /**
- * 挂载告警页。
+ * 挂载告警主列表页。
  * @param {{ fetchImpl?: typeof fetch, baseUrl?: string, now?: () => Date }} [options] 单测注入用
  * @returns {HTMLElement} 交给壳放进内容槽
  */
@@ -342,30 +277,24 @@ export function mountAlertsPage(options = {}) {
   const state = {
     count: PAGE_SIZES[0],
     offset: 0,
-    alerts: [],
+    cases: [],
     total: 0,
-    partial: false,
-    partialErrors: {},
-    truncated: false,
-    // 筛选与排序：全部下推给接口（server.js:129-152），前端不再自筛
-    filters: { q: '', type: '', level: '', verdict: '', triage: '', time: '' },
+    // 筛选与排序全部下推给接口（server.js:364-382），前端不自筛
+    filters: { host: '', type: '', verdict: '', time: '' },
     sort: 'time',
     phase: 'loading', // loading | ready | error
     error: null,
     summary: null,
     summaryError: null,
-    selected: new Set(),
-    openIndex: -1,
-    lastTrigger: null,
     updatedAt: null,
+    fpIndex: -1, // 正在填误报理由的行；-1 = 没有
   };
 
   const request = { fetchImpl: options.fetchImpl, baseUrl: options.baseUrl };
 
-  // ---------- 渲染 ----------
-
   function announce(message) {
-    $('sr-status').textContent = message;
+    const node = $('sr-status');
+    if (node) node.textContent = message;
   }
 
   function pageCount() {
@@ -378,41 +307,25 @@ export function mountAlertsPage(options = {}) {
     $('refresh').disabled = state.phase === 'loading';
   }
 
-  function paintNotice() {
-    const notice = $('partial');
-    notice.hidden = !state.partial;
-    if (!state.partial) return;
-    const reasons = Object.entries(state.partialErrors).map(([type, reason]) => `${type}：${reason}`);
-    $('partial-reason').textContent = reasons.length ? reasons.join('；') : '未返回失败原因';
-  }
-
-  /** 扫描窗口被截断：总数只含窗口内匹配（cloudwalker.js:182-188）——不把「只扫了 500 条」画成「一共就这些」 */
-  function paintTruncated() {
-    $('truncated').hidden = !state.truncated;
-  }
-
-  /** 有筛选或非默认排序时才算「筛选态」：清除按钮、结果计数、空态文案都看它 */
   function filtersActive() {
-    const { q, type, level, verdict, triage, time } = state.filters;
-    return Boolean(q || type || level || verdict || triage || time) || state.sort !== 'time';
+    const { host, type, verdict, time } = state.filters;
+    return Boolean(host || type || verdict || time) || state.sort !== 'time';
   }
 
   function paintFilters() {
     $('clear-filters').hidden = !filtersActive();
-    // 稿的结果计数是「N / 全部条数」，但接口不回未筛选总量——只说筛选后有几条
+    // 接口不回「未筛选总量」时的对比数——只说筛选后有几条
     $('filter-count').textContent = filtersActive() && state.phase === 'ready' ? `筛选后 ${state.total} 条` : '';
     const disabled = state.phase === 'loading';
-    for (const role of ['filter-q', 'filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']) {
-      $(role).disabled = disabled;
-    }
+    for (const role of ['filter-host', 'filter-type', 'filter-verdict', 'filter-time']) $(role).disabled = disabled;
   }
 
-  /** 表头排序：接口只有 sort=time|level（都是降序），aria-sort 只报 descending，不伪造升序 */
+  /** 表头排序：接口只有 sort=time|verdict（都是固定顺序），aria-sort 只报真实方向 */
   function paintSort() {
-    $('th-level').setAttribute('aria-sort', state.sort === 'level' ? 'descending' : 'none');
+    $('th-verdict').setAttribute('aria-sort', state.sort === 'verdict' ? 'descending' : 'none');
     $('th-time').setAttribute('aria-sort', state.sort === 'time' ? 'descending' : 'none');
-    $('arrow-level').textContent = state.sort === 'level' ? '↓' : '';
-    $('arrow-level').classList.toggle('is-active', state.sort === 'level');
+    $('arrow-verdict').textContent = state.sort === 'verdict' ? '↓' : '';
+    $('arrow-verdict').classList.toggle('is-active', state.sort === 'verdict');
     $('arrow-time').textContent = state.sort === 'time' ? '↓' : '';
     $('arrow-time').classList.toggle('is-active', state.sort === 'time');
   }
@@ -424,7 +337,7 @@ export function mountAlertsPage(options = {}) {
     const qerror = $('qerror');
 
     if (!summary) {
-      // 队列状态读不到时：不假装队列在跑，也不拿 0 充数（稿没有这一格，按登录页「无法连接」最近邻处理）
+      // 队列状态读不到时：不假装队列在跑，也不拿 0 充数。列表本身照常（partial）
       qstate.classList.remove('is-paused');
       $('qstate-text').textContent = '状态不可用';
       $('qmode').textContent = '—';
@@ -440,7 +353,7 @@ export function mountAlertsPage(options = {}) {
     const paused = summary.enabled === false;
     qstate.classList.toggle('is-paused', paused);
     $('qstate-text').textContent = paused ? '已暂停' : '运行中';
-    $('qmode').textContent = INPUT_MODE_LABEL[summary.input_mode] ?? summary.input_mode ?? '—';
+    $('qmode').textContent = INPUT_MODE_LABEL[summary.inputMode] ?? summary.inputMode ?? '—';
     toggle.textContent = paused ? '恢复' : '暂停';
     const counts = summary.counts ?? {};
     for (const key of ['queued', 'running', 'done', 'failed']) {
@@ -448,62 +361,167 @@ export function mountAlertsPage(options = {}) {
     }
   }
 
-  function levelCell(alert) {
-    const dot = el(document, 'i', { class: `sq ${LEVEL_DOT[alert.levelKey] ?? 'sq-low'}`, 'aria-hidden': 'true' });
-    return el(document, 'span', { class: 'lvl' }, [dot, document.createTextNode(alert.level ?? '—')]);
-  }
-
-  function triageCell(alert) {
-    const status = triageStatusOf(alert);
-    return el(document, 'span', { class: `triage ${TRIAGE_CLASS[status] ?? ''}`.trim(), text: TRIAGE_LABEL[status] });
-  }
-
-  function verdictCell(alert) {
-    const verdict = verdictOf(alert);
-    if (!verdict) return el(document, 'span', { class: 'verdict-pending', text: '—' });
+  function verdictCell(record) {
+    const verdict = verdictOf(record);
+    if (!verdict) return el(document, 'span', { class: 'verdict-pending', text: '待研判' });
     return el(document, 'span', { class: `verdict ${VERDICT_CLASS[verdict]}`, text: verdict });
   }
 
-  function rowElement(alert, index) {
-    const open = () => openDrawer(index);
-    const idButton = el(document, 'button', { type: 'button', class: 'cell-id', text: alert.id ?? '—', title: alert.id ?? '' });
-    idButton.addEventListener('click', open);
-    const titleButton = el(document, 'button', {
-      type: 'button', class: 'cell-title', text: alert.title ?? '—', title: alert.title ?? '',
-    });
-    titleButton.addEventListener('click', open);
+  function statusCell(record) {
+    const status = Object.hasOwn(TRIAGE_LABEL, record?.status) ? record.status : 'not_queued';
+    return el(document, 'span', { class: `triage ${TRIAGE_CLASS[status] ?? ''}`.trim(), text: TRIAGE_LABEL[status] });
+  }
 
-    const checkbox = el(document, 'input', { type: 'checkbox', 'aria-label': `选择告警 ${alert.id ?? ''}` });
-    checkbox.checked = state.selected.has(alert.id);
-    checkbox.addEventListener('change', () => {
-      if (checkbox.checked) state.selected.add(alert.id);
-      else state.selected.delete(alert.id);
-      paintBulk();
-      announce(`已选 ${state.selected.size} 条`);
-    });
+  /** 命中规则列：命中给 id；完成但没命中写「没有套上」（D020）；还没结论给「—」 */
+  function ruleCell(record) {
+    const rule = ruleOf(record);
+    if (rule === undefined) return el(document, 'span', { class: 'verdict-pending', text: '—' });
+    if (rule === null) return el(document, 'span', { class: 'rule-none', text: '没有套上' });
+    return el(document, 'span', { class: 'rule-id mono od-truncate', text: rule, title: rule });
+  }
 
-    const time = formatTime(alert.createdAt);
+  function maintCell(record) {
+    const maintenance = record?.maintenance;
+    const text = maintenanceText(record);
+    const tone = maintenance?.status === 'failed' ? 'is-failed' : maintenance?.status === 'updating' ? 'is-updating' : '';
+    return el(document, 'span', { class: `maint ${tone}`.trim(), text, title: text });
+  }
+
+  function opsCell(record, index) {
+    const id = String(record?.alert_id ?? '');
+    const detail = el(document, 'a', { class: 'textbtn ops-link', href: `#/alert-detail/${encodeURIComponent(id)}`, text: '详情' });
+    const trace = el(document, 'a', { class: 'textbtn ops-link', href: `#/trace/${encodeURIComponent(id)}`, text: '溯源' });
+    const canFalsePositive = record?.status === 'done' && verdictOf(record) !== '误报';
+    const fp = el(document, 'button', {
+      type: 'button',
+      class: 'textbtn ops-link',
+      text: record?.status === 'done' && verdictOf(record) === '误报' ? '已误报' : '标为误报',
+      'aria-label': `把 ${id} 标为误报`,
+    });
+    fp.disabled = !canFalsePositive;
+    if (record?.status !== 'done') fp.title = '研判还没结束，不能登记误报';
+    fp.addEventListener('click', () => openFalsePositiveForm(index));
+    return el(document, 'td', { class: 'col-ops' }, [detail, trace, fp]);
+  }
+
+  function rowElement(record, index) {
+    const id = String(record?.alert_id ?? '');
+    const hostIp = record?.host_ip || '—';
+    const source = record?.source_ip || null;
+    const command = record?.command || null;
+    const hostTitle = [hostIp, source ? `来源 ${source}` : null, command ? `命令 ${command}` : null]
+      .filter(Boolean).join(' · ');
+    const time = formatEventTime(record?.event_time);
+
     const cells = [
-      el(document, 'td', { class: 'col-check' }, [checkbox]),
-      el(document, 'td', { class: 'col-level' }, [levelCell(alert)]),
-      el(document, 'td', { class: 'col-id' }, [idButton]),
-      el(document, 'td', {}, [titleButton]),
-      el(document, 'td', { class: 'col-type', text: alert.scenario ?? alert.eventType ?? '—' }),
-      el(document, 'td', { class: 'col-asset' }, [el(document, 'span', {
-        class: 'cell-asset', text: alert.asset ?? '—', title: alert.asset ?? '',
+      el(document, 'td', { class: 'col-verdict' }, [verdictCell(record)]),
+      el(document, 'td', { class: 'col-type', text: typeLabelOf(record) }),
+      el(document, 'td', { class: 'col-ip' }, [el(document, 'span', {
+        class: 'cell-ip mono od-truncate', text: hostIp, title: hostTitle,
       })]),
-      el(document, 'td', { class: 'col-ip' }, [el(document, 'span', { class: 'cell-ip', text: alert.assetIp || '—' })]),
-      el(document, 'td', { class: 'col-state' }, [triageCell(alert)]),
-      el(document, 'td', { class: 'col-verdict' }, [verdictCell(alert)]),
       el(document, 'td', { class: 'col-time' }, [el(document, 'span', { class: 'cell-time', text: time, title: time })]),
+      el(document, 'td', { class: 'col-dup mono', text: `×${repeatOf(record)}`, title: `重复投递 ${repeatOf(record)} 次` }),
+      el(document, 'td', { class: 'col-rule' }, [ruleCell(record)]),
+      el(document, 'td', { class: 'col-maint' }, [maintCell(record)]),
+      el(document, 'td', { class: 'col-state' }, [statusCell(record)]),
+      opsCell(record, index),
     ];
-    const row = el(document, 'tr', { dataset: { index: String(index) } }, cells);
-    if (state.openIndex === index) row.classList.add('is-open');
+    const row = el(document, 'tr', { dataset: { index: String(index), caseId: id } }, cells);
+    if (state.fpIndex === index) row.classList.add('is-open');
     return row;
   }
 
-  function messageRow(text, action) {
-    const cell = el(document, 'td', { colspan: String(COLUMN_COUNT) }, [document.createTextNode(text)]);
+  /** 误报理由表单（行下展开）。稿未覆盖：取值取同页既有表单样式，交互按 D020。 */
+  function falsePositiveRow(index) {
+    const record = state.cases[index];
+    const textarea = el(document, 'textarea', {
+      class: 'fp-reason', rows: '3', maxlength: String(REASON_MAX),
+      placeholder: '误报理由（10 到 4000 字）：哪里不对、依据是什么',
+      'aria-label': `给 ${record?.alert_id ?? ''} 填误报理由`,
+    });
+    const hint = el(document, 'span', { class: 'fp-hint', text: `至少 ${REASON_MIN} 字` });
+    const submit = el(document, 'button', { type: 'button', class: 'btn-primary', text: '提交误报' });
+    const cancel = el(document, 'button', { type: 'button', class: 'textbtn', text: '取消' });
+
+    const form = el(document, 'form', { class: 'fp-form', 'aria-label': '登记误报' }, [
+      el(document, 'label', { class: 'fp-label', for: 'fp-reason-input' }, [document.createTextNode('误报理由')]),
+      textarea, el(document, 'div', { class: 'fp-actions' }, [hint, cancel, submit]),
+    ]);
+    textarea.id = 'fp-reason-input';
+
+    cancel.addEventListener('click', () => closeFalsePositiveForm());
+    form.addEventListener('submit', event => { event.preventDefault(); void submitFalsePositive(index, textarea, hint, submit); });
+    submit.addEventListener('click', event => {
+      event.preventDefault();
+      void submitFalsePositive(index, textarea, hint, submit);
+    });
+    form.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        closeFalsePositiveForm();
+      }
+    });
+
+    const cell = el(document, 'td', { colspan: String(COLUMN_COUNT) }, [form]);
+    return { row: el(document, 'tr', { class: 'fp-row', dataset: { fpIndex: String(index) } }, [cell]), textarea };
+  }
+
+  async function submitFalsePositive(index, textarea, hint, submit) {
+    const record = state.cases[index];
+    if (!record) return;
+    const reason = textarea.value.trim();
+    if (reason.length < REASON_MIN || reason.length > REASON_MAX) {
+      hint.textContent = `理由要 ${REASON_MIN} 到 ${REASON_MAX} 字`;
+      hint.classList.add('is-error');
+      textarea.setAttribute('aria-invalid', 'true');
+      textarea.focus();
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = '提交中…';
+    try {
+      const result = await reportFalsePositive(record.alert_id, { reason }, request);
+      // 后端先写结论再回 202：这一行马上变误报，理由留在记录上（D020）
+      state.cases[index] = {
+        ...record,
+        verdict: 'false_positive',
+        verdict_label: '误报',
+        feedback: result.feedback ?? { reason },
+        maintenance: result.maintenance ?? record.maintenance,
+        decision_source: 'human',
+      };
+      state.fpIndex = -1;
+      paintTable();
+      paintPager();
+      announce(`已把 ${record.alert_id} 标成误报，理由已记录`);
+    } catch (error) {
+      submit.disabled = false;
+      submit.textContent = '提交误报';
+      hint.textContent = describeFalsePositiveError(error);
+      hint.classList.add('is-error');
+    }
+  }
+
+  function openFalsePositiveForm(index) {
+    if (state.fpIndex === index) return;
+    state.fpIndex = index;
+    paintTable();
+    const textarea = host.querySelector(`.fp-row[data-fp-index="${index}"] textarea`);
+    if (textarea) textarea.focus();
+    announce(`正在给 ${state.cases[index]?.alert_id ?? ''} 填误报理由`);
+  }
+
+  function closeFalsePositiveForm() {
+    const index = state.fpIndex;
+    if (index < 0) return;
+    state.fpIndex = -1;
+    paintTable();
+    const trigger = host.querySelector(`tr[data-index="${index}"] button[aria-label*="误报"]`);
+    if (trigger && typeof trigger.focus === 'function') trigger.focus();
+  }
+
+  function messageRow(textValue, action) {
+    const cell = el(document, 'td', { colspan: String(COLUMN_COUNT) }, [document.createTextNode(textValue)]);
     if (action) {
       const button = el(document, 'button', { type: 'button', class: 'textbtn', text: action.label });
       button.addEventListener('click', action.onClick);
@@ -520,7 +538,7 @@ export function mountAlertsPage(options = {}) {
     else wrap.removeAttribute('aria-busy');
 
     if (state.phase === 'loading') {
-      body.replaceChildren(messageRow('正在读取告警…'));
+      body.replaceChildren(messageRow('正在读取研判记录…'));
       return;
     }
     if (state.phase === 'error') {
@@ -534,19 +552,27 @@ export function mountAlertsPage(options = {}) {
       body.replaceChildren(el(document, 'tr', { class: 'empty-row' }, [cell]));
       return;
     }
-    if (!state.alerts.length) {
+    if (!state.cases.length) {
       body.replaceChildren(filtersActive()
-        ? messageRow('没有匹配的告警。', { label: '清除筛选', onClick: () => { clearFilters(); } })
-        : messageRow(state.total === 0 ? '暂无告警。' : '本页没有告警，请回到上一页。'));
+        ? messageRow('没有匹配的研判记录。', { label: '清除筛选', onClick: () => { clearFilters(); } })
+        : messageRow(state.total === 0 ? '暂无研判记录。' : '本页没有记录，请回到上一页。'));
       return;
     }
-    body.replaceChildren(...state.alerts.map((alert, index) => rowElement(alert, index)));
+
+    const nodes = [];
+    state.cases.forEach((record, index) => {
+      nodes.push(rowElement(record, index));
+      if (state.fpIndex === index) {
+        nodes.push(falsePositiveRow(index).row);
+      }
+    });
+    body.replaceChildren(...nodes);
   }
 
   function paintPager() {
     const totalPages = pageCount();
-    const start = state.alerts.length ? state.offset + 1 : 0;
-    const end = state.offset + state.alerts.length;
+    const start = state.cases.length ? state.offset + 1 : 0;
+    const end = state.offset + state.cases.length;
     $('pager-info').textContent = `${start}–${end} / ${state.total} 条 · 共 ${totalPages} 页`;
     $('prev-page').disabled = state.offset === 0;
     $('next-page').disabled = state.offset + state.count >= state.total;
@@ -568,208 +594,77 @@ export function mountAlertsPage(options = {}) {
     }
     $('page-numbers').replaceChildren(...nodes);
 
-    for (const size of PAGE_SIZES) {
-      $(`size-${size}`).setAttribute('aria-pressed', String(size === state.count));
-    }
-  }
-
-  function paintBulk() {
-    const bar = $('bulkbar');
-    bar.hidden = state.selected.size === 0;
-    $('bulk-count').textContent = String(state.selected.size);
-
-    const selectAll = $('select-all');
-    const onPage = state.alerts.filter(alert => state.selected.has(alert.id)).length;
-    selectAll.checked = state.alerts.length > 0 && onPage === state.alerts.length;
-    selectAll.indeterminate = onPage > 0 && onPage < state.alerts.length;
-    selectAll.disabled = state.alerts.length === 0;
+    for (const size of PAGE_SIZES) $(`size-${size}`).setAttribute('aria-pressed', String(size === state.count));
   }
 
   function paint() {
     paintToolbar();
-    paintNotice();
-    paintTruncated();
     paintFilters();
     paintSort();
     paintQueue();
     paintTable();
     paintPager();
-    paintBulk();
   }
-
-  // ---------- 抽屉 ----------
-
-  function paintDrawer(alert) {
-    const status = triageStatusOf(alert);
-    const verdict = verdictOf(alert);
-    const levelClass = { low: 'is-low', medium: 'is-mid', high: 'is-high', critical: 'is-high' }[alert.levelKey] ?? '';
-    const verdictClass = verdict ? {
-      真实威胁: 'is-threat', 存疑: 'is-uncertain', 误报: 'is-false',
-    }[verdict] : 'is-pending';
-
-    $('drawer-id').textContent = alert.id ?? '—';
-    $('drawer-level').className = `drawer-level ${levelClass}`.trim();
-    $('drawer-level').textContent = alert.level ?? '—';
-    $('drawer-title').textContent = alert.title ?? '告警摘要';
-    $('drawer-meta').textContent = [alert.asset ?? '—', alert.assetIp || '—', formatTime(alert.createdAt)].join(' · ');
-    $('drawer-detail').href = `#/alert-detail/${encodeURIComponent(alert.id ?? '')}`;
-
-    const verdictEl = $('drawer-verdict');
-    verdictEl.textContent = verdict ?? NO_VERDICT_COPY[status];
-    verdictEl.className = `verdict-big ${verdictClass}`;
-    $('verdict-block').dataset.tone = verdict === '真实威胁' ? 'danger' : verdict === '存疑' ? 'warn' : 'muted';
-    $('drawer-report').textContent = alert.triage?.report
-      || (verdict ? '' : '该告警尚未产生研判结论。');
-
-    // 缺失证据：TriageCase schema 没列该键（openapi.yaml:803-816，additionalProperties: true），
-    // 实现里 status() 返回体带它（triage-monitor.js:108），done 态由 verdict 填值（:385）。
-    // 稿只在 DOM 里放了空 <p>、没写文案（alerts.html:1139），文案按最近邻取「缺失证据：A、B」。
-    const missing = Array.isArray(alert.triage?.missing_evidence)
-      ? alert.triage.missing_evidence.filter(item => typeof item === 'string' && item.trim())
-      : [];
-    const missingEl = $('drawer-missing');
-    missingEl.hidden = missing.length === 0;
-    missingEl.replaceChildren(...(missing.length === 0 ? [] : [
-      el(document, 'b', { text: '缺失证据' }),
-      el(document, 'span', { text: `：${missing.join('、')}` }),
-    ]));
-
-    $('drawer-asset').textContent = alert.asset ?? '—';
-    $('drawer-ip').textContent = alert.assetIp || '—';
-    $('drawer-type').textContent = alert.scenario ?? alert.eventType ?? '—';
-    $('drawer-event').textContent = alert.eventId === undefined || alert.eventId === null ? '—' : `#${alert.eventId}`;
-    $('drawer-host').textContent = alert.hostId === null || alert.hostId === undefined ? '—' : `#${alert.hostId}`;
-    $('drawer-time').textContent = formatTime(alert.createdAt);
-    $('drawer-state').textContent = TRIAGE_LABEL[status];
-
-    // 步骤：接口给 {stage, detail, at}（triage-monitor.js:343,356）；有数据才出区块，前端不生成时间线
-    const steps = Array.isArray(alert.triage?.steps) ? alert.triage.steps : [];
-    $('drawer-steps-block').hidden = steps.length === 0;
-    $('drawer-steps').replaceChildren(...steps.map((step, index) => {
-      // 稿只画了「已完成（实心）/ 处理中（空心）」两种节点，没有失败节点：
-      // 失败任务的最后一步按已完成样子画（最近邻取值），不假装还在跑
-      const done = index < steps.length - 1 || status === 'done' || status === 'failed';
-      const item = el(document, 'li', { class: `step${done ? ' is-done' : ' is-active'}` }, [
-        el(document, 'span', { class: 'step-dot', 'aria-hidden': 'true' }),
-        el(document, 'span', { class: 'step-main' }, [
-          el(document, 'span', { class: 'step-title', text: step.stage ?? '—' }),
-          step.detail ? el(document, 'span', { class: 'step-detail', text: String(step.detail) }) : null,
-        ]),
-        el(document, 'span', { class: 'step-time', text: step.at ? formatTime(step.at) : '' }),
-      ]);
-      return item;
-    }));
-
-    // 证据：接口只有两个数量（backend-contract-gaps.md §3），不编条目与分类
-    const facts = Number.isSafeInteger(alert.triage?.verified_facts) ? alert.triage.verified_facts : 0;
-    const sources = Number.isSafeInteger(alert.triage?.evidence_sources) ? alert.triage.evidence_sources : 0;
-    $('drawer-evidence-total').textContent = sources ? `共 ${sources} 个来源` : '';
-    $('drawer-evidence').replaceChildren(
-      el(document, 'li', {}, [el(document, 'span', { text: '已验证事实' }), el(document, 'span', { class: 'mono', text: `${facts} 条` })]),
-      el(document, 'li', {}, [el(document, 'span', { text: '证据来源' }), el(document, 'span', { class: 'mono', text: `${sources} 个` })]),
-    );
-
-    $('raw-type').textContent = alert.eventType ?? '—';
-    $('raw-event').textContent = alert.eventId === undefined || alert.eventId === null ? '—' : String(alert.eventId);
-    $('raw-host').textContent = alert.hostId === null || alert.hostId === undefined ? '—' : String(alert.hostId);
-    $('raw-level').textContent = alert.levelKey ?? '—';
-    $('raw-matched').textContent = alert.triage?.matched_alert_id || '—';
-
-    paintDrawerAction(alert, status);
-  }
-
-  /** 底部按钮：失败→重试、完成→重新研判、排队中/研判中→禁用并显示当前状态、未研判→加入队列 */
-  function paintDrawerAction(alert, status) {
-    const button = $('drawer-queue');
-    button.disabled = status === 'queued' || status === 'running';
-    button.textContent = {
-      queued: '排队中', running: '研判中', failed: '重试', done: '重新研判', not_queued: '加入研判队列',
-    }[status];
-    button.dataset.alertId = alert.id ?? '';
-  }
-
-  function openDrawer(index) {
-    const alert = state.alerts[index];
-    if (!alert) return;
-    state.lastTrigger = document.activeElement;
-    state.openIndex = index;
-    paintDrawer(alert);
-    $('drawer').hidden = false;
-    // 稿：≤760px 抽屉占满宽度，此时才上遮罩（桌面端抽屉与列表可同时操作）
-    const narrow = globalThis.matchMedia?.('(max-width: 760px)')?.matches === true;
-    $('scrim').hidden = !narrow;
-    for (const row of $('rows').querySelectorAll('tr[data-index]')) {
-      row.classList.toggle('is-open', Number(row.dataset.index) === index);
-    }
-    $('drawer-close').focus();
-  }
-
-  function closeDrawer() {
-    const drawer = $('drawer');
-    if (drawer.hidden) return;
-    drawer.hidden = true;
-    $('scrim').hidden = true;
-    const index = state.openIndex;
-    state.openIndex = -1;
-    for (const row of $('rows').querySelectorAll('tr[data-index]')) row.classList.remove('is-open');
-    const row = $('rows').querySelector(`tr[data-index="${index}"]`);
-    const target = row?.querySelector('.cell-title') ?? state.lastTrigger;
-    if (target && typeof target.focus === 'function') target.focus();
-  }
-
-  // ---------- 取数 ----------
 
   function describeError(error) {
-    if (error instanceof AlertsError) {
+    if (error instanceof CasesError) {
       if (error.kind === 'unauthorized') return { title: '登录已失效', detail: '账号或密码不再有效，请重新登录后再打开告警。' };
-      if (error.kind === 'unavailable') return { title: '告警接口不可用', detail: '服务端尚未配置牧云接口，取不到告警。' };
+      if (error.kind === 'unavailable') return { title: '自动研判未配置', detail: '服务端没有启用自动研判，读不到研判记录。' };
+      if (error.kind === 'invalid_id') return { title: '筛选条件无效', detail: error.message };
       if (error.kind === 'network') return { title: '无法连接', detail: '连不上研判服务，请检查网络或稍后重试。' };
-      if (error.kind === 'http') return { title: '服务返回异常', detail: `告警接口返回 ${error.status ?? '未知状态码'}，请稍后重试。` };
-      return { title: '返回格式异常', detail: '告警接口返回的内容不是约定结构，请联系维护人员。' };
+      if (error.kind === 'http') return { title: '服务返回异常', detail: `研判记录接口返回 ${error.status ?? '未知状态码'}，请稍后重试。` };
+      return { title: '返回格式异常', detail: '研判记录接口返回的内容不是约定结构，请联系维护人员。' };
     }
     return { title: '加载失败', detail: error?.message ?? '未知错误' };
   }
 
-  /**
-   * 取一页列表 + 队列汇总。
-   * 两次请求之间后端数据可能变少：此时游标被拉回最后一页，必须跟着重拉一次，
-   * 否则页脚按新 `total` 画、行区还是超界请求的空数组（「281–300 / 300 条」+「本页没有告警」）。
-   * @param {boolean} [refetchOnClamp] 仅在游标真被拉回时重拉；重拉最多一次，防止数据连续缩水时空转
-   */
+  function describeFalsePositiveError(error) {
+    if (error instanceof CasesError) {
+      if (error.kind === 'conflict') return '研判还没结束，不能登记误报';
+      if (error.kind === 'not_found') return '找不到这条研判案件';
+      if (error.kind === 'unauthorized') return '登录已失效，请重新登录';
+      if (error.kind === 'unavailable') return '自动研判未配置，登记不了误报';
+      if (error.kind === 'network') return '连接不上研判服务';
+      return error.message;
+    }
+    return error?.message ?? '登记失败';
+  }
+
   /** 时间范围 → `from`（只算 from；`to` 不传＝到现在）。每次取数时按当前时刻重算 */
   function fromOf() {
     const option = TIME_OPTIONS.find(([value]) => value === state.filters.time);
     return option ? new Date(now().getTime() - option[2]).toISOString() : undefined;
   }
 
+  /**
+   * 取一页研判记录 + 队列状态。
+   * 两次请求之间记录可能变少：游标被拉回最后一页时必须跟着重拉一次，
+   * 否则页脚按新 total 画、行区还是超界请求的空数组。
+   * @param {boolean} [refetchOnClamp] 仅在游标真被拉回时重拉；最多一次
+   */
   async function load(refetchOnClamp = true) {
     state.phase = 'loading';
+    state.fpIndex = -1;
     paint();
-    const [alertsResult, summaryResult] = await Promise.allSettled([
-      listAlerts({
+    const [casesResult, queueResult] = await Promise.allSettled([
+      listCases({
         count: state.count,
         offset: state.offset,
-        q: state.filters.q,
+        host: state.filters.host,
         type: state.filters.type,
-        level: state.filters.level,
         verdict: state.filters.verdict,
-        triageStatus: state.filters.triage,
         from: fromOf(),
         sort: state.sort,
       }, request),
-      fetchTriageSummary(request),
+      fetchQueueStatus(request),
     ]);
 
-    if (alertsResult.status === 'fulfilled') {
-      state.alerts = alertsResult.value.alerts;
-      state.total = alertsResult.value.total;
-      state.partial = alertsResult.value.partial;
-      state.partialErrors = alertsResult.value.errors;
-      state.truncated = alertsResult.value.truncated;
+    if (casesResult.status === 'fulfilled') {
+      state.cases = casesResult.value.cases;
+      state.total = casesResult.value.total;
       state.phase = 'ready';
       state.error = null;
       state.updatedAt = now();
-      // 总页数缩水时把游标拉回最后一页（接口数据在两次请求之间会变）
       const maxOffset = Math.max(0, (pageCount() - 1) * state.count);
       if (state.offset > maxOffset) {
         state.offset = maxOffset;
@@ -777,24 +672,24 @@ export function mountAlertsPage(options = {}) {
       }
     } else {
       state.phase = 'error';
-      state.error = alertsResult.reason;
-      state.alerts = [];
+      state.error = casesResult.reason;
+      state.cases = [];
       state.total = 0;
-      state.partial = false;
-      state.partialErrors = {};
-      state.truncated = false;
     }
 
-    if (summaryResult.status === 'fulfilled') {
-      state.summary = summaryResult.value;
+    // 队列读不到只让队列条显示「状态不可用」，列表照常（partial）
+    if (queueResult.status === 'fulfilled') {
+      state.summary = queueResult.value;
       state.summaryError = null;
     } else {
       state.summary = null;
-      state.summaryError = summaryResult.reason?.message ?? '未知错误';
+      state.summaryError = queueResult.reason?.message ?? '未知错误';
     }
 
     paint();
-    if (state.phase === 'ready') announce(state.total ? `已载入 ${state.alerts.length} 条，共 ${state.total} 条告警` : '暂无告警');
+    if (state.phase === 'ready') {
+      announce(state.total ? `已载入 ${state.cases.length} 条，共 ${state.total} 条研判记录` : '暂无研判记录');
+    }
   }
 
   function goToPage(page) {
@@ -802,42 +697,33 @@ export function mountAlertsPage(options = {}) {
     const target = Math.min(Math.max(1, page), maxPage);
     if (target === Math.floor(state.offset / state.count) + 1) return;
     state.offset = (target - 1) * state.count;
-    closeDrawer();
     void load();
   }
 
   /* ---------- 筛选 / 排序 ---------- */
 
-  /** DOM 控件 → state（只读一次，避免每个分支各拼一套） */
   function readFilters() {
     state.filters = {
-      q: $('filter-q').value.trim(),
+      host: $('filter-host').value.trim(),
       type: $('filter-type').value,
-      level: $('filter-level').value,
       verdict: $('filter-verdict').value,
-      triage: $('filter-triage').value,
       time: $('filter-time').value,
     };
   }
 
-  /** 筛选条件一变就回第一页重取（设计稿 §4：筛选重置页码，不清空已选告警） */
   function onFilterChange(message) {
     readFilters();
     state.offset = 0;
-    closeDrawer();
     announce(message);
     void load();
   }
 
   function clearFilters() {
-    for (const role of ['filter-q', 'filter-type', 'filter-level', 'filter-verdict', 'filter-triage', 'filter-time']) {
-      $(role).value = '';
-    }
-    state.filters = { q: '', type: '', level: '', verdict: '', triage: '', time: '' };
+    for (const role of ['filter-host', 'filter-type', 'filter-verdict', 'filter-time']) $(role).value = '';
+    state.filters = { host: '', type: '', verdict: '', time: '' };
     state.sort = 'time';
     state.offset = 0;
-    closeDrawer();
-    $('filter-q').focus();
+    $('filter-host').focus();
     announce('已清除筛选');
     void load();
   }
@@ -846,28 +732,25 @@ export function mountAlertsPage(options = {}) {
 
   $('refresh').addEventListener('click', () => { void load(); });
 
-  // 搜索框：回车 / 失焦（change）与搜索框自带清除（search）都触发一次服务端查询
-  $('filter-q').addEventListener('change', () => onFilterChange('已按关键词筛选'));
-  $('filter-q').addEventListener('search', () => onFilterChange('已按关键词筛选'));
+  // 主机 IP：回车 / 失焦 / 搜索框自带清除都触发一次服务端查询
+  $('filter-host').addEventListener('change', () => onFilterChange('已按主机筛选'));
+  $('filter-host').addEventListener('search', () => onFilterChange('已按主机筛选'));
   for (const [role, message] of [
     ['filter-type', '已按事件类型筛选'],
-    ['filter-level', '已按等级筛选'],
     ['filter-verdict', '已按研判结论筛选'],
-    ['filter-triage', '已按研判状态筛选'],
     ['filter-time', '已按时间范围筛选'],
   ]) {
     $(role).addEventListener('change', () => onFilterChange(message));
   }
   $('clear-filters').addEventListener('click', clearFilters);
 
-  // 表头排序：接口只有 sort=time|level，同一列再点不会变成升序（没有参数可发）
-  for (const name of ['level', 'time']) {
+  // 表头排序：接口只有 sort=time|verdict（方向固定），同一列再点不会再变一个顺序
+  for (const name of ['verdict', 'time']) {
     $(`sort-${name}`).addEventListener('click', () => {
       if (state.sort === name) return;
       state.sort = name;
       state.offset = 0;
-      closeDrawer();
-      announce(name === 'level' ? '已按等级降序排序' : '已按时间降序排序');
+      announce(name === 'verdict' ? '已按结论排序，真实威胁在前' : '已按时间倒序排序');
       void load();
     });
   }
@@ -880,56 +763,9 @@ export function mountAlertsPage(options = {}) {
       if (size === state.count) return;
       state.count = size;
       state.offset = 0;
-      closeDrawer();
       announce(`每页 ${size} 条`);
       void load();
     });
-  }
-
-  $('select-all').addEventListener('change', () => {
-    const selectAll = $('select-all');
-    for (const alert of state.alerts) {
-      if (selectAll.checked) state.selected.add(alert.id);
-      else state.selected.delete(alert.id);
-    }
-    paintTable();
-    paintBulk();
-    announce(`已选 ${state.selected.size} 条`);
-  });
-
-  $('bulk-clear').addEventListener('click', () => {
-    state.selected.clear();
-    paint();
-    announce('已清除选择');
-  });
-
-  $('bulk-queue').addEventListener('click', () => { void enqueueSelected(); });
-
-  async function enqueueSelected() {
-    const ids = [...state.selected].filter(id => {
-      const onPage = state.alerts.find(alert => alert.id === id);
-      const status = onPage ? triageStatusOf(onPage) : null;
-      return status !== 'queued' && status !== 'running';
-    });
-    if (!ids.length) {
-      announce('所选告警都已在队列中');
-      return;
-    }
-    const button = $('bulk-queue');
-    button.disabled = true;
-    let moved = 0;
-    for (const id of ids) {
-      try {
-        await enqueueTriage(id, request);
-        moved += 1;
-      } catch (error) {
-        announce(`入队失败：${describeError(error).detail}`);
-      }
-    }
-    button.disabled = false;
-    state.selected.clear();
-    announce(moved ? `已重新入队 ${moved} 条` : '入队失败，未提交任何告警');
-    await load();
   }
 
   $('queue-toggle').addEventListener('click', async () => {
@@ -937,7 +773,7 @@ export function mountAlertsPage(options = {}) {
     const button = $('queue-toggle');
     button.disabled = true;
     try {
-      const next = await setTriageEnabled(state.summary.enabled === false, request);
+      const next = await setQueueEnabled(state.summary.enabled === false, request);
       state.summary = next;
       state.summaryError = null;
       paintQueue();
@@ -949,44 +785,10 @@ export function mountAlertsPage(options = {}) {
     }
   });
 
-  $('drawer-queue').addEventListener('click', async () => {
-    const alert = state.alerts[state.openIndex];
-    if (!alert) return;
-    const status = triageStatusOf(alert);
-    if (status === 'queued' || status === 'running') return;
-    const button = $('drawer-queue');
-    button.disabled = true;
-    try {
-      const record = await enqueueTriage(alert.id, request);
-      alert.triage = { ...(alert.triage ?? {}), ...record };
-      paintDrawer(alert);
-      paintTable();
-      announce(`${alert.id} 已加入研判队列`);
-    } catch (error) {
-      button.disabled = false;
-      announce(`入队失败：${describeError(error).detail}`);
-    }
-  });
-
-  $('drawer-close').addEventListener('click', closeDrawer);
-  $('drawer-close-2').addEventListener('click', closeDrawer);
-  $('scrim').addEventListener('click', closeDrawer);
-
   host.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !$('drawer').hidden) {
+    if (event.key === 'Escape' && state.fpIndex >= 0) {
       event.stopPropagation();
-      closeDrawer();
-    }
-  });
-
-  $('copy-id').addEventListener('click', async () => {
-    const id = $('drawer-id').textContent;
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('no clipboard');
-      await navigator.clipboard.writeText(id);
-      announce(`已复制告警 ID ${id}`);
-    } catch {
-      announce(`复制失败，请手动选择 ${id}`);
+      closeFalsePositiveForm();
     }
   });
 

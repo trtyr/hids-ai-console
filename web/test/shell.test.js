@@ -20,7 +20,7 @@ const navLinks = () => allByRole(document, 'link');
 
 beforeEach(() => setupDom());
 
-test('侧栏五个入口：可访问名与 href 一一对应（总览/告警/深度溯源/规则/知识库）', () => {
+test('侧栏六个入口：可访问名与 href 一一对应（总览/告警/牧云现查（演示）/深度溯源/规则/知识库）', () => {
   mount();
   const links = navLinks().filter(link => link.getAttribute('href')?.startsWith('#/'));
   assert.deepEqual(links.map(link => text(link)), NAV_PAGES.map(page => page.navLabel));

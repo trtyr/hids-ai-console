@@ -1,10 +1,19 @@
-// 页面：总览（设计稿 overview.html）
+// 页面：总览（设计稿 overview.html；P003-T015 起数字改走研判聚合）
 //
-// 只看「现在什么情况」：告警总量与类型构成、自动研判队列与进度、依赖状态。
+// 只看「现在什么情况」：结论分布、事件类型构成、自动研判队列与进度、依赖状态。
 // 明细与行级操作一概不在本页（overview-notes.md §1 / §3）——本页唯一的写操作是队列暂停/恢复。
 //
-// 数据：`web/src/status.js`（本页唯一发 HTTP 的地方）。字段全部来自本仓接口，
-// 稿上有、接口没有的区块照 A2 藏掉并记 backend-findings.md；本页没有要藏的。
+// 数据：`web/src/status.js`（本页唯一发 HTTP 的地方），**全部来自 `GET /api/agent/triage/status`**。
+// D020：数字来自研判记录，不来自牧云现查——本页不再请求 `/api/alerts`，也没有「为了有数去拉牧云」的退路（A1）。
+//
+// 稿未覆盖、按 D020 要求补的三处（逐条记在 coding-reports/P003-T015.md 的稿→码对照表）：
+//   1. 摘要带四个数换成**结论分布**（真实威胁 / 存疑 / 误报 / 待研判，`verdict_counts`）：
+//      队列的四项计数仍在「自动研判」模块与底部研判进度条里，不重复占摘要带。
+//   2. 「最近轮询」在 syslog 模式改成「最后推送」显示 `last_received_at`（T010：syslog 模式没有轮询，
+//      `last_poll_at` 恒为 null），轮询模式仍显示 `last_poll_at`；另加一行「Syslog 接收」
+//      显示在不在听（三态：在听 / 未绑定 / 绑定失败）。
+//   3. 顶栏一行加「统计范围」下拉（全部时间 / 近 24 小时 / 近 7 天 / 近 30 天），值为聚合接口的 `since`——
+//      D020「一段时间里来了多少」就靠它，控件样式取同页 `.textbtn` 与告警页时间筛选的最近邻。
 //
 // 两处与稿的位置差异（壳禁改，见报告）：
 //   1. 稿的「更新时间 + 刷新」在顶栏 `.bar-right`，壳 `web/src/views/shell.js` 不在本卡 scope
@@ -13,7 +22,7 @@
 
 import { formatClock, formatDateTime, loadOverview, setTriageEnabled } from '../src/status.js';
 
-/** 事件类型中文名：接口只回类型 id（`totals` 的 key），中文名取自稿的 TYPE_LABELS（id 与后端 eventTypes 一一对应） */
+/** 事件类型中文名：接口只回类型 id（`type_counts` 的 key），中文名取自稿的 TYPE_LABELS（id 与后端 eventTypes 一一对应） */
 const TYPE_LABELS = {
   webshell: '网站后门',
   malware: '恶意程序',
@@ -30,8 +39,7 @@ const TYPE_LABELS = {
 
 /** 报错文案里的数据源名（顺序同 status.js 的 SOURCE_KEYS） */
 const SOURCE_LABELS = {
-  alerts: '告警统计',
-  triage: '自动研判',
+  triage: '研判聚合',
   cloud: '牧云连接',
   agent: '研判模型',
   tools: '取证工具',
@@ -47,30 +55,33 @@ const ICON_REFRESH = `
     <path d="M13.4 2.6v2.9h-2.9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
   </svg>`;
 
-const ICON_WARN = `
-  <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-    <path d="M8 2.4 14.4 13.6H1.6z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
-    <path d="M8 6.4v3.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-    <circle cx="8" cy="11.6" r=".7" fill="currentColor" />
-  </svg>`;
+// 统计范围：值 → 回看的毫秒数（null = 全部时间，不传 since）。与告警页时间筛选同一套口径。
+const WINDOW_OPTIONS = [['', '全部时间', null], ['24h', '近 24 小时', 24 * 60 * 60 * 1000],
+  ['7d', '近 7 天', 7 * 24 * 60 * 60 * 1000], ['30d', '近 30 天', 30 * 24 * 60 * 60 * 1000]];
 
 const TEMPLATE = `
 <div class="ov-bar">
   <p class="stamp"><b class="mono" data-role="stamp">—</b> 更新</p>
+  <span class="sep-v" aria-hidden="true"></span>
+  <label class="ov-window">
+    <span class="ov-window-label">统计范围</span>
+    <select data-role="window" aria-label="统计时间范围">
+      ${WINDOW_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
+    </select>
+  </label>
   <span class="sep-v" aria-hidden="true"></span>
   <button type="button" class="textbtn" data-role="refresh">${ICON_REFRESH}刷新</button>
 </div>
 
 <p class="notice" data-role="notice" role="alert" hidden></p>
 
-<div class="notice ov-partial" data-role="partial" hidden>${ICON_WARN}<span><strong>部分类型查询失败</strong>，总数只合计成功的类型；<span data-role="partial-reason">—</span></span></div>
 
-<section class="summary" aria-label="告警概况">
+<section class="summary" aria-label="结论分布">
   <div class="nums">
-    <dl class="num"><dt>告警总数</dt><dd data-role="stat-total">—</dd></dl>
-    <dl class="num is-warn"><dt>待研判</dt><dd data-role="stat-queued">—</dd></dl>
-    <dl class="num"><dt>研判中</dt><dd data-role="stat-running">—</dd></dl>
-    <dl class="num is-danger"><dt>失败</dt><dd data-role="stat-failed">—</dd></dl>
+    <dl class="num is-danger"><dt>真实威胁</dt><dd data-role="stat-threat">—</dd></dl>
+    <dl class="num is-warn"><dt>存疑</dt><dd data-role="stat-uncertain">—</dd></dl>
+    <dl class="num"><dt>误报</dt><dd data-role="stat-false">—</dd></dl>
+    <dl class="num"><dt>待研判</dt><dd data-role="stat-review">—</dd></dl>
   </div>
   <div class="compose">
     <span class="compose-label">类型构成</span>
@@ -108,7 +119,8 @@ const TEMPLATE = `
       <dl class="kv">
         <div class="kv-row"><dt>状态</dt><dd><span class="state" data-role="queue-state">—</span></dd></div>
         <div class="kv-row"><dt>输入方式</dt><dd data-role="queue-mode">—</dd></div>
-        <div class="kv-row"><dt>最近轮询</dt><dd class="mono od-truncate" data-role="queue-poll">—</dd></div>
+        <div class="kv-row"><dt data-role="queue-last-label">最近轮询</dt><dd class="mono od-truncate" data-role="queue-poll">—</dd></div>
+        <div class="kv-row"><dt>Syslog 接收</dt><dd data-role="queue-syslog">—</dd></div>
         <div class="kv-row is-strong"><dt>待研判</dt><dd data-role="queue-queued">—</dd></div>
         <div class="kv-row"><dt>研判中</dt><dd data-role="queue-running">—</dd></div>
         <div class="kv-row"><dt>已完成</dt><dd data-role="queue-done">—</dd></div>
@@ -174,13 +186,12 @@ function mountTemplate(content) {
     host,
     stamp: $('stamp'),
     refresh: $('refresh'),
+    window: $('window'),
     notice: $('notice'),
-    partial: $('partial'),
-    partialReason: $('partial-reason'),
-    statTotal: $('stat-total'),
-    statQueued: $('stat-queued'),
-    statRunning: $('stat-running'),
-    statFailed: $('stat-failed'),
+    statThreat: $('stat-threat'),
+    statUncertain: $('stat-uncertain'),
+    statFalse: $('stat-false'),
+    statReview: $('stat-review'),
     compose: $('compose'),
     composeMeta: $('compose-meta'),
     typesMeta: $('types-meta'),
@@ -189,6 +200,8 @@ function mountTemplate(content) {
     queueState: $('queue-state'),
     queueMode: $('queue-mode'),
     queuePoll: $('queue-poll'),
+    queueLastLabel: $('queue-last-label'),
+    queueSyslog: $('queue-syslog'),
     queueQueued: $('queue-queued'),
     queueRunning: $('queue-running'),
     queueDone: $('queue-done'),
@@ -245,20 +258,31 @@ function describeError(error) {
   return KIND_TEXT[error?.kind] ?? `数据读取失败：${error?.message || '未知原因'}`;
 }
 
-/** totals → 按数量降序的类型行（接口没返回的类型不造行；失败类型由 partial 提示说明） */
-function typeEntries(alerts) {
-  if (!alerts?.ok) return [];
-  return Object.entries(alerts.totals)
+/**
+ * type_counts → 按数量降序的类型行（接口没返回的类型不造行：空队列就是空表）。
+ * @param {object} model loadOverview 的返回
+ */
+function typeEntries(model) {
+  const triage = model?.triage;
+  if (!triage?.ok) return [];
+  return Object.entries(triage.typeCounts ?? {})
     .map(([key, count]) => ({ key, label: TYPE_LABELS[key] ?? key, count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'zh-CN'));
 }
 
+/** 窗口内进入队列的记录数＝四个结论档之和（聚合口径与 /api/agent/triage/cases 的 total 一致） */
+function windowTotal(triage) {
+  const counts = triage?.verdictCounts;
+  if (!counts) return null;
+  return counts.threat + counts.uncertain + counts.false_positive + counts.review;
+}
+
 function renderTypes(ui, model) {
-  const entries = typeEntries(model.alerts);
-  const total = model.alerts.ok ? model.alerts.total : null;
+  const entries = typeEntries(model);
+  const total = model.triage.ok ? windowTotal(model.triage) : null;
   ui.typesMeta.textContent = total === null ? '—' : `${entries.length} 类 · 合计 ${total}`;
 
-  if (!model.alerts.ok) {
+  if (!model.triage.ok) {
     ui.types.replaceChildren(emptyRow('—'));
     return;
   }
@@ -311,7 +335,7 @@ function emptyRow(label) {
 }
 
 function renderCompose(ui, model) {
-  const entries = typeEntries(model.alerts);
+  const entries = typeEntries(model);
   ui.compose.replaceChildren(...entries.map(item => {
     const max = entries[0].count || 1;
     const segment = document.createElement('span');
@@ -321,26 +345,27 @@ function renderCompose(ui, model) {
     segment.title = `${item.label} ${item.count}`;
     return segment;
   }));
-  if (!model.alerts.ok) ui.composeMeta.textContent = '—';
+  if (!model.triage.ok) ui.composeMeta.textContent = '—';
   else if (!entries.length) ui.composeMeta.textContent = '接口未返回类型统计。';
   else ui.composeMeta.textContent = entries.slice(0, 3).map(item => `${item.label} ${item.count}`).join(' · ');
 }
 
 function renderSummary(ui, model) {
-  const counts = model.triage.ok ? model.triage.counts : null;
-  setText(ui.statTotal, model.alerts.ok ? model.alerts.total : null);
-  setText(ui.statQueued, counts ? counts.queued : null);
-  setText(ui.statRunning, counts ? counts.running : null);
-  setText(ui.statFailed, counts ? counts.failed : null);
+  const verdicts = model.triage.ok ? model.triage.verdictCounts : null;
+  setText(ui.statThreat, verdicts ? verdicts.threat : null);
+  setText(ui.statUncertain, verdicts ? verdicts.uncertain : null);
+  setText(ui.statFalse, verdicts ? verdicts.false_positive : null);
+  setText(ui.statReview, verdicts ? verdicts.review : null);
+}
 
-  const failedTypes = model.alerts.ok ? Object.keys(model.alerts.errors) : [];
-  const showPartial = model.alerts.ok && model.alerts.partial;
-  ui.partial.hidden = !showPartial;
-  if (showPartial) {
-    ui.partialReason.textContent = failedTypes.length
-      ? failedTypes.map(type => TYPE_LABELS[type] ?? type).join('、')
-      : '接口未返回具体原因';
-  }
+/** Syslog 接收三态（openapi.yaml 的 TriageSummary.syslog）：在听 / 未绑定 / 绑定失败 */
+function syslogStateText(triage) {
+  if (triage.inputMode !== 'syslog') return null;
+  const syslog = triage.syslog;
+  if (!syslog) return '—';
+  if (syslog.listening) return syslog.bind ? `在听 ${syslog.bind}` : '在听';
+  if (syslog.error) return `未在听：${syslog.error}`;
+  return '未绑定';
 }
 
 function renderQueue(ui, model) {
@@ -349,7 +374,9 @@ function renderQueue(ui, model) {
     setText(ui.queueState, null);
     ui.queueState.classList.remove('is-paused');
     setText(ui.queueMode, null);
+    ui.queueLastLabel.textContent = '最近轮询';
     setText(ui.queuePoll, null);
+    setText(ui.queueSyslog, null);
     setText(ui.queueQueued, null);
     setText(ui.queueRunning, null);
     setText(ui.queueDone, null);
@@ -365,7 +392,11 @@ function renderQueue(ui, model) {
   ui.queueToggle.textContent = paused ? '恢复' : '暂停';
   ui.queueToggle.disabled = false;
   setText(ui.queueMode, triage.inputMode === 'poll' ? '轮询拉取' : triage.inputMode === 'syslog' ? 'Syslog 推入' : null);
-  setLongText(ui.queuePoll, formatDateTime(triage.lastPollAt));
+  // syslog 模式没有轮询（T010）：这一格改说「最后推送」，值用 last_received_at
+  const syslogMode = triage.inputMode === 'syslog';
+  ui.queueLastLabel.textContent = syslogMode ? '最后推送' : '最近轮询';
+  setLongText(ui.queuePoll, formatDateTime(syslogMode ? triage.lastReceivedAt : triage.lastPollAt));
+  setText(ui.queueSyslog, syslogStateText(triage));
   setText(ui.queueQueued, triage.counts.queued);
   setText(ui.queueRunning, triage.counts.running);
   setText(ui.queueDone, triage.counts.done);
@@ -398,8 +429,9 @@ function renderProgress(ui, model) {
 
   const { counts } = triage;
   const total = counts.done + counts.queued + counts.running + counts.failed;
+  const scopeText = triage.since ? '窗口内共' : '共';
   ui.progressMeta.textContent = total
-    ? `共 ${total} 个任务 · 完成率 ${Math.round((counts.done / total) * 100)}%`
+    ? `${scopeText} ${total} 个任务 · 完成率 ${Math.round((counts.done / total) * 100)}%`
     : '接口未返回队列计数。';
 
   ui.progressBar.replaceChildren(...PROGRESS_SEGMENTS.filter(item => counts[item.key] > 0).map(item => {
@@ -440,16 +472,16 @@ function renderAll(ui, model) {
 
 /** loading / 全失败共用：数值回到「—」，别把上一轮的数字留在屏幕上当现状 */
 function renderBlank(ui) {
-  for (const node of [ui.statTotal, ui.statQueued, ui.statRunning, ui.statFailed, ui.queueState, ui.queueMode,
-    ui.queuePoll, ui.queueQueued, ui.queueRunning, ui.queueDone, ui.queueFailed, ui.queueError,
+  for (const node of [ui.statThreat, ui.statUncertain, ui.statFalse, ui.statReview, ui.queueState, ui.queueMode,
+    ui.queuePoll, ui.queueSyslog, ui.queueQueued, ui.queueRunning, ui.queueDone, ui.queueFailed, ui.queueError,
     ui.version, ui.sysCloud, ui.sysAgent, ui.sysRules, ui.sysTools, ui.sysPrompt, ui.typesMeta,
     ui.composeMeta, ui.progressMeta]) {
     setText(node, null);
   }
+  ui.queueLastLabel.textContent = '最近轮询';
   ui.queueState.classList.remove('is-paused');
   ui.queueToggle.textContent = '暂停';
   ui.queueToggle.disabled = true;
-  ui.partial.hidden = true;
   ui.compose.replaceChildren();
   ui.progressBar.replaceChildren();
   ui.progressLegend.replaceChildren();
@@ -461,6 +493,7 @@ function setBusy(ui, busy) {
   ui.host.classList.toggle('is-busy', busy);
   ui.refresh.disabled = busy;
   ui.refresh.classList.toggle('is-loading', busy);
+  ui.window.disabled = busy;
 }
 
 // 「这次 render 是否已被下一次取代」的序号。不缓存 DOM（页面模块契约：render 每次整块重画），
@@ -493,7 +526,7 @@ export const page = {
       ui.refresh.disabled = true;
       announce('正在读取数据');
       try {
-        const next = await loadOverview();
+        const next = await loadOverview({ since: sinceOf() });
         if (!isCurrent()) return;
         model = next;
         renderAll(ui, next);
@@ -509,8 +542,19 @@ export const page = {
       }
     };
 
+    // 统计范围 → 聚合起点（每次取数按当前时刻重算；空值＝全部时间，不传 since）
+    const sinceOf = () => {
+      const option = WINDOW_OPTIONS.find(([value]) => value === ui.window.value);
+      return option?.[2] ? new Date(Date.now() - option[2]).toISOString() : null;
+    };
+
     ui.refresh.addEventListener('click', () => {
       if (ui.refresh.disabled) return;
+      load();
+    });
+
+    ui.window.addEventListener('change', () => {
+      announce(ui.window.value ? `统计范围：${ui.window.selectedOptions?.[0]?.textContent ?? ui.window.value}` : '统计范围：全部时间');
       load();
     });
 

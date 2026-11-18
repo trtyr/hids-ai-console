@@ -1,4 +1,6 @@
 // src/status.js —— 总览的数据 adapter：请求形状、失败归一、字段照文档、时间格式化
+//
+// P003-T015 起总览只读研判聚合（A1）：这里也要盯住「一条 /api/alerts 请求都不发」。
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -12,27 +14,23 @@ import {
   setTriageEnabled,
 } from '../src/status.js';
 
-const ALERTS = {
-  alerts: [],
-  total: 347,
-  totals: { webshell: 42, brute_force: 128, brute_force_extra: 3, honeypot: 12 },
-  errors: {},
-  partial: false,
-};
-
 const TRIAGE = {
   initialized: true,
   enabled: true,
   input_mode: 'syslog',
   last_poll_at: null,
+  last_received_at: '2026-11-17T01:02:03.000Z',
   last_error: null,
+  since: null,
   counts: { queued: 12, running: 3, done: 331, failed: 1 },
+  verdict_counts: { threat: 9, uncertain: 21, false_positive: 14, review: 302 },
+  type_counts: { brute_force: 128, webshell: 42, honeypot: 12, unknown: 3 },
+  syslog: { listening: true, bind: 'udp://0.0.0.0:15514', error: null },
 };
 
 /** 一份「后端一切正常」的回包表：路径 → { status, body } */
 function healthyRoutes() {
   return {
-    '/api/alerts?count=1': { body: ALERTS },
     '/api/agent/triage/status': { body: TRIAGE },
     '/api/status': { body: { configured: true, connected: true } },
     '/api/agent/status': { body: { configured: true, model: 'gpt', missing: [], prompt_version: 'p-2026.11+4f2a' } },
@@ -72,62 +70,82 @@ beforeEach(() => {
   setCredentials({ user: 'hids', password: 'hids-2026' });
 });
 
-test('七个只读源：路径与 Authorization 头逐个对上，不额外发请求', async () => {
+test('六个只读源：路径与 Authorization 头逐个对上，一条牧云现查都不发（A1）', async () => {
   const fetchImpl = fakeFetch(healthyRoutes());
   await loadOverview({ fetchImpl, baseUrl: 'http://console.test', now: () => new Date(2026, 10, 17, 9, 8, 7) });
 
   assert.deepEqual(
     fetchImpl.calls.map(call => call.url.replace('http://console.test', '')),
-    ['/api/alerts?count=1', '/api/agent/triage/status', '/api/status', '/api/agent/status',
-      '/api/agent/tools', '/api/triage/rules', '/api/updates'],
+    ['/api/agent/triage/status', '/api/status', '/api/agent/status', '/api/agent/tools', '/api/triage/rules', '/api/updates'],
   );
   for (const call of fetchImpl.calls) {
     assert.equal(call.init.method, 'GET');
     assert.equal(call.init.headers.Authorization, 'Basic aGlkczpoaWRzLTIwMjY=');
     assert.equal(call.init.credentials, 'omit');
   }
-  assert.equal(fetchImpl.calls.length, 7);
+  assert.equal(fetchImpl.calls.some(call => call.url.includes('/api/alerts')), false);
+  assert.equal(fetchImpl.calls.length, 6);
+  assert.equal(SOURCE_KEYS.includes('alerts'), false);
 });
 
-test('成功：七源归一成 ok:true，fetchedAt 用注入的时钟，failed 为空', async () => {
+test('成功：六源归一成 ok:true，结论分布 / 类型分布 / 最后推送 / syslog 三态都带出来', async () => {
   const model = await loadOverview(options(healthyRoutes(), { now: () => new Date(2026, 10, 17, 9, 8, 7) }));
 
   assert.deepEqual(model.failed, []);
-  assert.equal(model.alerts.total, 347);
-  assert.deepEqual(model.alerts.totals, { webshell: 42, brute_force: 128, brute_force_extra: 3, honeypot: 12 });
-  assert.equal(model.alerts.partial, false);
-  assert.equal(model.triage.enabled, true);
+  assert.equal(model.triage.ok, true);
+  assert.deepEqual(model.triage.verdictCounts, { threat: 9, uncertain: 21, false_positive: 14, review: 302 });
+  assert.deepEqual(model.triage.typeCounts, { brute_force: 128, webshell: 42, honeypot: 12, unknown: 3 });
+  assert.equal(model.triage.lastReceivedAt, '2026-11-17T01:02:03.000Z');
+  assert.deepEqual(model.triage.syslog, { listening: true, bind: 'udp://0.0.0.0:15514', error: null });
   assert.deepEqual(model.triage.counts, { queued: 12, running: 3, done: 331, failed: 1 });
-  assert.equal(model.triage.lastPollAt, null);
   assert.equal(model.system.cloud.connected, true);
-  assert.equal(model.system.agent.promptVersion, 'p-2026.11+4f2a');
   assert.equal(model.system.tools.count, 28);
-  assert.equal(model.system.rules.revision, '4f2a9c1d0b7e3311');
-  assert.equal(model.system.updates.revision, '9b1d4f2a7c3e5566');
   assert.equal(formatClock(model.fetchedAt), '09:08:07');
+  assert.equal(model.since, null);
 });
 
-test('字段照文档：totals 里的非整数丢掉、errors 只留字符串、null 字段归 null', async () => {
+test('since：带上统计范围时只给聚合接口加 ?since=（编码后），其它源不变', async () => {
+  const fetchImpl = fakeFetch(healthyRoutes());
+  const model = await loadOverview({
+    fetchImpl, baseUrl: 'http://console.test', since: '2026-11-17T00:00:00.000Z',
+  });
+  const urls = fetchImpl.calls.map(call => call.url.replace('http://console.test', ''));
+  assert.equal(urls[0], '/api/agent/triage/status?since=2026-11-17T00%3A00%3A00.000Z');
+  assert.equal(urls.length, 6);
+  assert.equal(fetchImpl.calls.some(call => call.url.includes('/api/alerts')), false);
+  assert.equal(model.since, '2026-11-17T00:00:00.000Z');
+
+  // 空串 / 空白不当 since 发出去
+  const again = fakeFetch(healthyRoutes());
+  await loadOverview({ fetchImpl: again, baseUrl: 'http://console.test', since: '   ' });
+  assert.equal(again.calls[0].url, 'http://console.test/api/agent/triage/status');
+});
+
+test('字段照文档：type_counts 里的非整数丢掉、结论四键缺了就 invalid、null 字段归 null', async () => {
   const routes = healthyRoutes();
-  routes['/api/alerts?count=1'] = {
+  routes['/api/agent/triage/status'] = {
     body: {
-      alerts: [],
-      total: 3,
-      totals: { honeypot: 3, webshell: null, malware: '很多' },
-      errors: { webshell: '请求超时', malware: 42 },
-      partial: true,
+      ...TRIAGE,
+      last_poll_at: '2026-11-17T01:02:03.000Z',
+      last_error: '牧云 401',
+      type_counts: { honeypot: 3, webshell: null, malware: '很多' },
+      syslog: { listening: false, bind: null, error: 'bind EADDRINUSE 127.0.0.1:15514' },
     },
   };
-  routes['/api/agent/triage/status'] = { body: { ...TRIAGE, last_poll_at: '2026-11-17T01:02:03.000Z', last_error: '牧云 401' } };
   routes['/api/triage/rules'] = { body: { config: {}, origin: 'example', revision: null } };
 
   const model = await loadOverview(options(routes));
-  assert.deepEqual(model.alerts.totals, { honeypot: 3 });
-  assert.deepEqual(model.alerts.errors, { webshell: '请求超时' });
-  assert.equal(model.alerts.partial, true);
+  assert.deepEqual(model.triage.typeCounts, { honeypot: 3 });
   assert.equal(model.triage.lastPollAt, '2026-11-17T01:02:03.000Z');
   assert.equal(model.triage.lastError, '牧云 401');
+  assert.deepEqual(model.triage.syslog, { listening: false, bind: null, error: 'bind EADDRINUSE 127.0.0.1:15514' });
   assert.equal(model.system.rules.revision, null);
+
+  // 结论四键是接口的 required：缺一个就整源 invalid，不拿 0 假装
+  routes['/api/agent/triage/status'] = { body: { ...TRIAGE, verdict_counts: { threat: 1, uncertain: 2, false_positive: 3 } } };
+  const broken = await loadOverview(options(routes));
+  assert.equal(broken.triage.ok, false);
+  assert.equal(broken.triage.error.kind, 'invalid');
 });
 
 test('/api/status 的 502 是「配置在、连不上」：照样当成功源读，reason 留着', async () => {
@@ -150,8 +168,16 @@ test('单源失败不拖累别源：该源 ok:false，其余照常，failed 列�
   assert.equal(model.system.tools.ok, false);
   assert.equal(model.system.tools.error.kind, 'http');
   assert.equal(model.system.tools.error.status, 503);
-  assert.equal(model.alerts.ok, true);
   assert.equal(model.triage.ok, true);
+});
+
+test('研判聚合挂掉不影响运行状态那几行（反之亦然）', async () => {
+  const routes = healthyRoutes();
+  routes['/api/agent/triage/status'] = { status: 503, body: { error: '自动研判尚未配置' } };
+  const model = await loadOverview(options(routes));
+  assert.equal(model.triage.ok, false);
+  assert.deepEqual(model.failed, ['triage']);
+  assert.equal(model.system.cloud.ok, true);
 });
 
 test('任一路 401 → 整体 unauthorized（凭据失效不是「部分数据缺失」）', async () => {
@@ -166,15 +192,13 @@ test('任一路 401 → 整体 unauthorized（凭据失效不是「部分数据�
   });
 });
 
-test('七路全挂 → 抛第一个错误（页面据此走整页错误态）', async () => {
-  const routes = Object.fromEntries(SOURCE_KEYS.map(() => ['/x', {}]));
+test('六路全挂 → 抛第一个错误（页面据此走整页错误态）', async () => {
   const dead = () => { throw new TypeError('fetch failed'); };
 
   await assert.rejects(loadOverview({ fetchImpl: dead, baseUrl: 'http://console.test' }), error => {
     assert.equal(error.kind, 'network');
     return true;
   });
-  assert.equal(Object.keys(routes).length, 1);
 });
 
 test('没有凭据就不发请求：直接 unauthorized', async () => {
@@ -186,15 +210,14 @@ test('没有凭据就不发请求：直接 unauthorized', async () => {
 
 test('单源回包缺必填字段 → 该源 ok:false / invalid，不把 undefined 画到屏幕上', async () => {
   const routes = healthyRoutes();
-  routes['/api/alerts?count=1'] = { body: { alerts: [], total: '347' } };
+  routes['/api/agent/triage/status'] = { body: { enabled: true } };
   routes['/api/agent/status'] = { body: { prompt_version: 'x' } };
 
   const model = await loadOverview(options(routes));
-  assert.equal(model.alerts.ok, false);
-  assert.equal(model.alerts.error.kind, 'invalid');
+  assert.equal(model.triage.ok, false);
+  assert.equal(model.triage.error.kind, 'invalid');
   assert.equal(model.system.agent.ok, false);
   assert.equal(model.system.agent.error.kind, 'invalid');
-  assert.equal(model.triage.ok, true);
 });
 
 test('回包不是 JSON → invalid（不冒 SyntaxError 到页面）', async () => {
