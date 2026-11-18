@@ -7,6 +7,8 @@
 - 在架构里的位置：编排层，见 [architecture.md 第 4 节](../architecture.md#4-模块分层与依赖)
 - 证据约定：本页每一处 `文件:行号` 引用都能在 [evidence/recon/P001-T011.md](../../evidence/recon/P001-T011.md) 的清单表里查到；
   清单里没有的引用不出现在本页。行号对应提交 `63f1379`；P003-T006 新增的分页入口（`page`／`summaries`）见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)。
+- P003-T014 之后：列表筛选、`POST` 200/202、`hops`／`links`／`gaps`／`discovery`、以及分析证据复用（`startOrResume`／`createAnalysisProvider`）
+  见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)；这几处行号按 P003-T014 复审提交，其余仍按 `63f1379`。
 
 ## 1 职责
 
@@ -56,9 +58,9 @@
 
 | 请求 | 行为 | 证据 |
 | --- | --- | --- |
-| `POST /api/trace/boards` | 请求体取 `target`／`alert_id`／`ip` 与 `focus`，目标不合法返回 400，成功返回 202 与白板快照 | `server.js:245-251` |
-| `GET /api/trace/boards` | 分页列白板：接 `count`／`offset`，回 `{ boards, total }`（`total` 是切页前总数）；分页参数不合法返回 400 | `server.js:237-242` |
-| `GET /api/trace/boards/{id}` | 返回单张白板；没有这张白板返回 404 | `server.js:253-262` |
+| `POST /api/trace/boards` | 请求体取 `target`／`alert_id`／`ip` 与 `focus`；目标不合法 400，已有白板 200（原样返回那条，不重查不覆盖），新建 202 与白板快照；告警起不了板回 422，建板过程出错回 502 | `server.js:338-352` |
+| `GET /api/trace/boards` | 分页列白板：接 `count`／`offset` 与 `status`／`type`／`host`／`from`／`to` 筛选，回 `{ boards, total }`（`total` 是筛选后、切页前总数）；分页或筛选参数不合法返回 400 | `server.js:328-336` |
+| `GET /api/trace/boards/{id}` | 返回单张白板（`hops`／`links`／`gaps`／`discovery` 为详情主数据）；没有这张白板返回 404 | `server.js:353-361` |
 | `GET /api/trace/tools` | 返回牧云 MCP 的工具目录（`provider` 为 `cloudwalker-mcp`，`readOnly` 为 `true`） | `server.js:226-229` |
 
 `/api/trace/tools` 依赖牧云 MCP 工具箱（`server.js:226-229`）；另外三条依赖 `boardService`，它默认为 `traceBoard` 实例，而 `traceBoard` 只在牧云 MCP 工具箱与模型都在时才创建
@@ -130,8 +132,14 @@
 | `seed` | 起点节点 ID | `trace-board.js:64-71` |
 | `status` | `running` → `done`／`failed`／`interrupted` | `trace-board.js:79-85`、`trace-board.js:225-231`、`trace-board.js:181-191` |
 | `window` | 时间窗：`since`／`until`／`hours` | `trace-board.js:79-85`、`trace-board.js:88-100` |
-| `nodes`／`edges`／`activity` | 节点、边、活动流水 | `trace-board.js:79-85` |
-| `summary`／`gaps` | 结论摘要与缺口清单 | `trace-board.js:425-431` |
+| `alert` | 绑定的告警：`id`／`type`／`title`／`host`／`occurred_at`；手填 IP 起的板 `type`／`occurred_at` 为 `null` | `trace-board.js:158-202` |
+| `hops` | 往回的链上的一跳：`id`／`kind`／`label`／`host`／`occurred_at`／`evidence_id`／`discovered`；告警那一跳 `kind=alert`（P003-T014） | `trace-board.js:87-119` |
+| `links` | 线：`from`／`to`／`rel`／`evidence_id`；**`from` 是更晚的一端、`to` 是更早的原因**（P003-T014） | `trace-board.js:120-137` |
+| `gaps` | 断点 `{hop_id, reason}`：断在哪一跳的左边、为什么断；旧白板的字符串缺口读取时归一成 `hop_id:null`（P003-T014） | `trace-board.js:138-145` |
+| `discovery` | 发现顺序 `{step, kind, id}`（`kind` 为 `hop`／`link`），实时追加；旧板按 hops、links 顺序补齐 | `trace-board.js:119-124` |
+| `chain_length`／`has_gaps` | 链长（hops 个数，含告警那一跳）／有没有断点（P003-T014） | `trace-board.js:143-145` |
+| `nodes`／`edges`／`activity` | **旧字段**：节点、边、活动流水；`activity` 不再是主数据，`nodes`／`edges` 与 `hops`／`links` 一一对应（P003-T014 起保留兼容） | `trace-board.js:79-85` |
+| `summary` | 结论摘要（AI `conclude` 写） | `trace-board.js:503-590` |
 | `investigations` | 已调查的节点数 | `trace-board.js:339-342` |
 | `model`／`focus` | 本次用的模型名与操作员给的焦点 | `trace-board.js:222-224` |
 | `origin_evidence` | 起点那条原始事件的摘要 | `trace-board.js:79-85`、`trace-board.js:112-125` |
@@ -140,13 +148,14 @@
 
 ### 4.1 一次溯源从头到尾
 
-1. **操作员发起**：`POST /api/trace/boards`，请求体给 `target`（告警 ID 或 IP）与可选的 `focus`（`server.js:245-251`）。
+1. **操作员发起**：`POST /api/trace/boards`，请求体给 `target`（告警 ID / syslog 告警 ID / IP）与可选的 `focus`（`server.js:338-352`）。已有白板在 `startOrResume` 里直接返回（200），不重查、不覆盖；没有才往下走（202）——细节见 [4.3](#43-p003-t014已有即返回与证据复用)。
 2. **路由层校验目标格式**，不合法的直接 400（`server.js:116-120`）。
 3. **服务层再校验一次**：目标要么匹配 `<类型>:<数字>`（类型要在事件类型表里），要么是 IPv4，否则抛 400「请输入有效告警 ID 或 IPv4 地址」
    （`trace-board.js:206-210`）。
 4. **开一个取证会话**，上限 2000 次工具调用（`trace-board.js:211-213`）。
-5. **造初始白板**：告警起点先调 `get_<类型>_event` 取原始事件、再归一化成告警（`trace-board.js:215-221`）；这个告警既没有可用资产也没有来源 IP 时抛 422
-   （`trace-board.js:215-221`）。IP 起点直接造白板（`trace-board.js:215-221`）。
+5. **造初始白板**：告警起点先调 `get_<类型>_event` 取原始事件、再归一化成告警；告警分析已经落盘过原始报文时（syslog 形态）
+   直接引用那份证据，不再查同一份（`trace-board.js:324-367`、`server.js:57-96`）。这个告警既没有可用资产也没有来源 IP 时抛 422
+   （`trace-board.js:324-367`）。IP 起点直接造白板（`trace-board.js:188-202`）。
 6. **记下模型名与操作员焦点**，首次落盘（`trace-board.js:222-224`）。
 7. **后台开跑**：`start()` 把追查循环挂在后台并立即返回初始快照（`trace-board.js:225-231`）。
 8. **模型每轮给一个动作**：循环开始时载入溯源提示词与 MCP 工具目录，首轮用户消息带上告警 ID、起点、时间窗、操作员焦点与 12 次调查上限
@@ -169,6 +178,21 @@
 
 节点类型决定查询范围：资产节点按 `host_ip` 过滤（`trace-board.js:256`），外部 IP 节点按 `source_ip` 过滤，并额外查防火墙连接记录
 （`trace-board.js:256`、`trace-board.js:286-287`）。
+
+### 4.3 P003-T014：已有即返回与证据复用
+
+- **入口**：`TraceBoardService.startOrResume`（`trace-board.js:324-367`）。目标先解析成三种之一——牧云告警 `<类型>:<id>`、syslog 告警 ID、
+  IPv4；正在跑或已有落盘白板时 `get` 之后返回 `{created:false}`，不重新取事件；只有都没有才建板并进追查循环。
+  `start` 保留旧签名，返回白板本身。HTTP 层按 `created` 回 200 / 202（`server.js:338-352`）。
+- **证据复用（A4）**：`createAnalysisProvider`（`server.js:57-96`）顺着研判记录（`InvestigationStore`，记录上有 `case_dir`）
+  读案卷 `01-原始告警.txt`，用 `parseSyslog` 还原原始报文；`TriageMonitor.status()` 对外是瘦身记录（`triage-monitor.js` 剥掉 `input`），
+  这里不读它的 `input`，只在研判记录还没落盘时用 `status()` 公开的 `case_dir` 定位案卷。匹配到牧云事件的 syslog 告警，
+  研判记录挂在 `result_alert_id` 上，按它二次查找。取到后 `origin_evidence.evidence_id` 用分析那份（`syslog:1`）、
+  `origin_evidence.reused = true`，起板不再调 `get_<类型>_event`；没有案卷时 syslog 告警回 422（不猜）。
+- **详情形状**：`hops`／`links`／`gaps`／`discovery` 由 `presentBoard`（`trace-board.js:87-145`）从落盘的 `nodes`／`edges`／`gaps`／`discovery` 派生；
+  `links` 的方向先按 `occurred_at` 比，时间相同或未知时按离告警的深度定：`from` 永远靠告警一侧（更晚）。
+- **列表**：`summaries` 每条给 `type`／`host`／`occurred_at`／`status`／`chain_length`／`has_gaps`／`updated_at`（`trace-board.js:75-85`），
+  `page` 先按 `statuses`／`type`／`host`／`from`／`to` 筛再切页（`trace-board.js:282-296`）。
 
 ## 5 覆盖构件
 

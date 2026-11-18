@@ -13,7 +13,7 @@ import { InvestigationAgent } from './investigation-agent.js';
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
 import { TriageMonitor } from './triage-monitor.js';
-import { SyslogReceiver } from './syslog-input.js';
+import { SyslogReceiver, parseSyslog } from './syslog-input.js';
 import { eventTypeFor } from './syslog-input.js';
 import { WikiStore } from './wiki-store.js';
 import { WikiWorkbench } from './wiki-workbench.js';
@@ -51,24 +51,49 @@ const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, i
   baselineFile: path.join(root, 'backend', '.data', 'baseline.json'),
   intelFile: path.join(root, 'backend', '.data', 'intel.json') }) : null;
 const wikiWorkbench = new WikiWorkbench(wikiStore, model, promptStore, path.join(root, 'backend', '.data', 'wiki-sessions'));
-// A4：告警分析已经取到的证据（syslog 形态的分析记录留着原始报文）直接引用，溯源不再查同一份。
-async function analyzedAlert(alertId) {
-  const record = triageMonitor?.status(alertId);
-  const parsed = record?.input?.parsed;
-  const type = parsed ? eventTypeFor(parsed.msgid) : null;
-  if (!type) return null;
-  const payload = parsed.payload || {};
-  const hostIp = String(payload.host_ip || '').replace(/\/32$/, '');
-  if (!hostIp) return null;
-  return { evidence_id: 'syslog:1', tool: 'received_syslog', type, facts: {
-    host_ip: hostIp, host_name: payload.host_name || null,
-    source_ip: payload.source_ip || payload.login_ip || null,
-    destination_ip: payload.target_ip || payload.destination_ip || null,
-    occurred_at: parseInstant(payload.event_create_time ?? parsed.ts),
-    title: payload.event_name || eventTypes[type], event_id: payload.event_id ?? null } };
+
+// A4：告警分析已经取到的原始报文写在案卷（cases/<...>/01-原始告警.txt）里，研判记录（InvestigationStore）带 case_dir。
+// TriageMonitor.status() 对外是瘦身记录（triage-monitor.js 剥掉 input），这里不读它的 input，只按研判记录顺案卷取原始报文。
+async function caseParsed(caseInfo) {
+  if (!caseInfo?.case_dir) return null;
+  try { return parseSyslog(await readFile(path.join(caseInfo.case_dir, '01-原始告警.txt'), 'utf8')); }
+  catch { return null; }
 }
+
+// 溯源复用告警分析证据的取数器。monitor / history 都从 createServer 的注入点传进来，测试能用真接线。
+export function createAnalysisProvider({ monitor = null, history = null } = {}) {
+  const latest = async alertId => {
+    if (!alertId) return null;
+    for (const mode of ['triage', 'deep']) {
+      try { const saved = await history?.latest(alertId, mode); if (saved) return saved; }
+      catch { /* 读不到就当没有，下面回退到案卷 */ }
+    }
+    return null;
+  };
+  return async alertId => {
+    const visible = monitor?.status(alertId);
+    // syslog 匹配到牧云事件时，研判记录挂在事件 ID（result_alert_id）上；先按告警 ID 找，再按它找。
+    const saved = await latest(alertId) || await latest(visible?.result_alert_id);
+    // 案卷优先从研判记录取；分析还在跑（尚未落研判记录）时，用 status() 里公开的 case_dir 定位，同样不碰 input。
+    const parsed = await caseParsed(saved) || await caseParsed(visible);
+    const type = parsed ? eventTypeFor(parsed.msgid) : null;
+    if (!type) return null;
+    const payload = parsed.payload || {};
+    const hostIp = String(payload.host_ip || '').replace(/\/32$/, '');
+    if (!hostIp) return null;
+    const evidenceId = (saved?.evidence || []).find(item => item.tool === 'received_syslog')?.evidence_id || 'syslog:1';
+    return { evidence_id: evidenceId, tool: 'received_syslog', type, facts: {
+      host_ip: hostIp, host_name: payload.host_name || null,
+      source_ip: payload.source_ip || payload.login_ip || null,
+      destination_ip: payload.target_ip || payload.destination_ip || null,
+      occurred_at: parseInstant(payload.event_create_time ?? parsed.ts),
+      title: payload.event_name || eventTypes[type], event_id: payload.event_id ?? null } };
+  };
+}
+
 const traceBoard = agentToolbox && model ? new TraceBoardService({ toolbox: agentToolbox, model, promptStore,
-  directory: path.join(root, 'backend', '.data', 'trace-boards'), analysis: analyzedAlert }) : null;
+  directory: path.join(root, 'backend', '.data', 'trace-boards'),
+  analysis: createAnalysisProvider({ monitor: triageMonitor, history: investigationStore }) }) : null;
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -250,6 +275,10 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
   maintenanceEntry = process.env.HIDS_MAINTENANCE_ENTRY_URL,
   ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore) {
+  // 注入的 TraceBoardService 没有取数器时，用本次的 monitor / history 现接一条：
+  // 测试与部署走同一套接线，不再靠测试里手塞假 analysis。
+  if (boardService instanceof TraceBoardService && !boardService.analysis)
+    boardService.analysis = createAnalysisProvider({ monitor, history });
   const investigate = async (executor, alertId, mode, onProgress = null) => {
     if (mode === 'triage' && monitor?.ruleEngine) {
       let decision;

@@ -5,7 +5,7 @@
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
 - 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。
-- 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)
+- 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
 ## 1. 模块职责与边界
 
@@ -75,9 +75,9 @@
 | GET | `/api/agent/tools` | 200 工具清单 | 无 API 工具箱回 503 | `server.js:221-225` |
 | GET | `/api/trace/tools` | 200 工具清单 | 无 MCP 工具箱回 503 | `server.js:226-230` |
 | GET | `/api/agent/status` | 200 | — | `server.js:231-236` |
-| GET | `/api/trace/boards` | 200 白板列表（`{boards, total}`，接 `count`／`offset`） | 无白板服务回 503；分页参数不合法回 400 | `server.js:237-244` |
-| POST | `/api/trace/boards` | 202 | 无白板服务回 503 | `server.js:245-252` |
-| GET | `/api/trace/boards/{target}` | 200 / 404 | 无白板服务回 503 | `server.js:253-261` |
+| GET | `/api/trace/boards` | 200 白板列表（`{boards, total}`，接 `count`／`offset` 与 `status`／`type`／`host`／`from`／`to`；`total` 是筛选后、切页前总数） | 无白板服务回 503；分页或筛选参数不合法回 400 | `server.js:328-336` |
+| POST | `/api/trace/boards` | 200（已有白板，原样返回）/ 202（新建） | 无白板服务回 503；目标不合法回 400；告警起不了板回 422；建板过程出错回 502 | `server.js:338-352` |
+| GET | `/api/trace/boards/{target}` | 200（`hops`／`links`／`gaps`／`discovery` 为详情主数据）/ 404 | 无白板服务回 503；目标格式不合法回 400 | `server.js:353-361` |
 | GET | `/api/agent/triage/status` | 200 | 无研判队列回 503 | `server.js:262-264` |
 | GET | `/api/triage/rules` | 200 | 读取失败回 502 | `server.js:265-269` |
 | POST | `/api/triage/rules/validate` | 200 `{valid:true,count}` | 正文不是对象 / 缺 `config` 键回 400「请求正文缺少 config」；`config` 不是合法规则集回 400「规则集格式无效」 | `server.js:270-279` |

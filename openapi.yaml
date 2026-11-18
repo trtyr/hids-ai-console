@@ -451,8 +451,9 @@ paths:
       operationId: startTraceBoard
       description: |
         已有白板直接返回那条（200），不重查事件、不覆盖；没有才创建并开始往回走（202）。
-        syslog 形态的告警 ID 直接引用告警分析已经落盘的原始报文（`origin_evidence.evidence_id = syslog:1`，
-        `origin_evidence.reused = true`），不为同一份证据再查牧云；没有分析记录回 422。
+        syslog 形态的告警 ID 直接引用告警分析已经落盘的原始报文（研判记录 `case_dir` 下的 `01-原始告警.txt`，
+        `origin_evidence.evidence_id` 取分析记录里的 `syslog:1`，`origin_evidence.reused = true`），不为同一份证据再查牧云；
+        没有分析记录或案卷回 422。
       requestBody:
         required: true
         content:
@@ -479,6 +480,11 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '422':
           description: 告警没有可用于起板的资产/主机，或 syslog 告警还没有分析记录
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: 建板过程出错（取告警详情或启动调查失败），正文 `{error}`
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
