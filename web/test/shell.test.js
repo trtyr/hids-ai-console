@@ -58,10 +58,10 @@ test('退出登录：点一下回调一次', () => {
   assert.equal(signOuts, 1);
 });
 
-test('六页都能 render：各留一个根节点、不抛错（T002 起总览接真数据，T003 告警、T005 溯源已接，其余仍是占位）', () => {
+test('每页渲染：六个页面都能渲染出一个根节点，不抛错', () => {
   mount();
   for (const page of PAGES) {
-    assert.doesNotThrow(() => page.render(shell.content, { params: [] }), `${page.id} render 不该抛`);
+    assert.doesNotThrow(() => page.render(shell.content, { params: [] }), `${page.id} 渲染抛错了`);
     assert.equal(shell.content.children.length, 1, `${page.id} 渲染后内容区应只有一个根节点`);
   }
 });
