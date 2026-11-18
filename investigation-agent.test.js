@@ -84,6 +84,10 @@ test('published customer experience avoids a full repeat investigation when curr
   assert.equal(result.validation.ok, true);
   assert.equal(result.required_evidence.find(item => item.id === 'authorization').status, 'source_unavailable');
   assert.match(result.verdict.report, /操作授权与测试工单没有可用数据源/);
+  // 捷径也属「常规研判且知识库在位」：rego / wiki 与主路径同口径（P003-T012 复审打回 major）。
+  assert.deepEqual(result.verdict.rego, { status: 'not_applicable', rule_ids: [] });
+  assert.deepEqual(result.verdict.wiki,
+    { consulted: [], adopted: [], reason: '命中已审核经验捷径，未调用知识库工具' });
 });
 
 test('knowledge claims without a current behavior citation continue to full investigation', async t => {
@@ -561,4 +565,15 @@ test('A3 结论经 submit_conclusion 写出：501 字被退，500 字原样收�
   const conclusion = result.trace.find(item => item.kind === 'conclusion');
   assert.deepEqual({ tool: conclusion.tool, summary_chars: conclusion.summary_chars },
     { tool: 'submit_conclusion', summary_chars: 500 });
+});
+
+test('deep 模式下结论工具忽略 wiki 字段，不因未查知识库被拒', async () => {
+  const model = scriptedModel([
+    { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '正文', wiki_adopted: ['GEN-12'],
+      claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }] }) }
+  ]);
+  const result = await new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7');
+  assert.equal(result.validation.ok, true);
+  assert.equal(result.verdict.verdict, 'uncertain');
+  assert.equal(result.verdict.wiki, undefined);
 });

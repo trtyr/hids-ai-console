@@ -123,7 +123,7 @@ function conclusionProblem(args, { wikiRequired, wikiConsulted }) {
   if (!chars) return 'summary 结论正文不能为空';
   if (chars > conclusionBodyLimit) return `summary 结论正文 ${chars} 字，超过 ${conclusionBodyLimit} 字上限；请压缩后重新提交`;
   if (wikiRequired && !wikiConsulted.size) return '本次分析还没有调用知识库工具：先用 wiki_page 或 wiki_search 核对判据，再提交结论';
-  const adopted = Array.isArray(args.wiki_adopted) ? args.wiki_adopted.map(String) : [];
+  const adopted = wikiRequired && Array.isArray(args.wiki_adopted) ? args.wiki_adopted.map(String) : [];
   const unknown = adopted.filter(id => !wikiConsulted.has(id));
   if (unknown.length) return `wiki_adopted 里的 ${unknown.join('、')} 没有在本次分析中通过 wiki_page/wiki_search 读过`;
   if (wikiRequired && !adopted.length && !String(args.wiki_reason || '').trim())
@@ -164,8 +164,8 @@ const conclusionToolSpec = { type: 'function', function: {
     missing_data: { type: 'array', items: { type: 'string' } },
     next_actions: { type: 'array', items: { type: 'string' } },
     recommended_actions: { type: 'array', items: { type: 'string' } },
-    wiki_adopted: { type: 'array', items: { type: 'string' }, description: '采纳的判据页编号；没有采纳就留空并写 wiki_reason' },
-    wiki_reason: { type: 'string', description: '没有采纳判据页的原因' }
+    wiki_adopted: { type: 'array', items: { type: 'string' }, description: '常规研判用：采纳的判据页编号；没有采纳就留空并写 wiki_reason。deep 模式忽略' },
+    wiki_reason: { type: 'string', description: '常规研判用：没有采纳判据页的原因；deep 模式忽略' }
   } } } };
 
 const wikiToolSpecs = [
@@ -432,6 +432,9 @@ export class InvestigationAgent {
               claims, missing_evidence: requiredEvidenceGaps(requiredChecks),
               next_actions: ['抽查本次告警与原始处置记录；若出现经验的失效条件，撤回经验并重新研判'] });
             verdict.report = appendEvidenceReport(verdict.report, requiredChecks);
+            // 捷径不走调查循环，但仍属「常规研判且知识库在位」：结果字段与主路径同口径（文档 §4）。
+            verdict.rego = { status: rego.status, rule_ids: rego.rules.map(rule => rule.id) };
+            verdict.wiki = { consulted: [], adopted: [], reason: '命中已审核经验捷径，未调用知识库工具' };
             return { alert_id: alertId, mode, model: this.model.model,
               prompt_version: `${prompts.version}+${prompts.revision}+${systemDigest}`,
               scenario_ids: [match[1]], knowledge_reuse: { case_id: record.id, title: record.title,
@@ -533,7 +536,7 @@ export class InvestigationAgent {
                 trace.push({ kind: 'wiki', action: 'page', id: page.id, title: page.title });
               } else if (wikiIndex && name === 'wiki_search') {
                 const matches = await this.knowledgeStore.agentSearch(match[1], rawArgs.keyword);
-                for (const match of matches) wikiConsulted.add(match.id);
+                for (const page of matches) wikiConsulted.add(page.id);
                 content = JSON.stringify({ matches });
                 trace.push({ kind: 'wiki', action: 'search', keyword: rawArgs.keyword, matches: matches.length });
               } else {

@@ -436,23 +436,23 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 
 - 空字符串或缺失的字段不进事实对象：规则写到该字段时按 Rego 的 undefined 语义套不上（`rule-store.js:28-31`）；规则没写该字段就仍然不限制。
 - 规则库默认是仓内 `rules/`（`investigation-agent.js:21`、`investigation-agent.js:285`）；构造第 5 个参数可以注入别的 `RuleStore`（测试用临时目录）。
-- 求值结果写进 `verdict.rego`：`{status, rule_ids}`，`status` 四态 `matched` / `none` / `unavailable` / `not_applicable`（`investigation-agent.js:691`）。`unavailable` 表示规则库读取或解析失败，研判不中断，原因写进系统提示。
-- 系统提示里恒有一段 `# 套上的 Rego 规则`（`investigation-agent.js:105-115`、`investigation-agent.js:458`），四种口径：
+- 求值结果写进 `verdict.rego`：`{status, rule_ids}`，`status` 四态 `matched` / `none` / `unavailable` / `not_applicable`（`investigation-agent.js:694`）。`unavailable` 表示规则库读取或解析失败，研判不中断，原因写进系统提示。
+- 系统提示里恒有一段 `# 套上的 Rego 规则`（`investigation-agent.js:105-115`、`investigation-agent.js:461`），四种口径：
   - 命中：逐条列 `id`、`name` 与整段 Rego 正文（`rego` 围栏），并声明「规则只说明字段命中，不是本次结论」；
   - 没命中：`本次没有套上的 Rego 规则（规则库对本次告警事实求值无命中）。`
   - 没有可求值事实（deep 模式或没有 syslog 上下文）：`……（没有可求值的 syslog 告警事实）。`
   - 求值失败：`……（规则库求值失败：<原因>）。`
-- 旁路 `runUnmatchedSyslog` 同样注入这一段（`investigation-agent.js:709-717`），`verdict.rego` 同口径（`investigation-agent.js:734`）。
+- 旁路 `runUnmatchedSyslog` 同样注入这一段（`investigation-agent.js:712-720`），`verdict.rego` 同口径（`investigation-agent.js:737`）。
 
 可复跑断言：`node --test investigation-agent.test.js` 的「A1 套上的 Rego 连整段正文进分析上下文……」用例断言系统提示含规则名、`package hids.rules.test_probe`、`input.command == "id"`；未命中时含「本次没有套上的 Rego 规则」。
 
-#### B. 知识库必查与采纳记录（`investigation-agent.js:531-536`、`investigation-agent.js:572-580`、`investigation-agent.js:684-690`）
+#### B. 知识库必查与采纳记录（`investigation-agent.js:534-539`、`investigation-agent.js:575-583`、`investigation-agent.js:687-693`）
 
 - 只在 `mode === 'triage'` 且知识库在位（`agentIndex` 可用）时要求。
-- 分析过程至少调用一次知识库工具：`wiki_page` 返回的页编号、`wiki_search` 返回的每个匹配编号都记进 `wikiConsulted`（`investigation-agent.js:531`、`investigation-agent.js:536`）。
-- 模型直接吐 JSON 结论时先催一轮（trace `{kind:'wiki', action:'required'}`，`investigation-agent.js:572-580`）；催过仍未调用就照收结论，但在 `verdict.wiki` 与 `missing_evidence` 里写明（`investigation-agent.js:684-690`）。
+- 分析过程至少调用一次知识库工具：`wiki_page` 返回的页编号、`wiki_search` 返回的每个匹配编号都记进 `wikiConsulted`（`investigation-agent.js:534`、`investigation-agent.js:539`）。
+- 模型直接吐 JSON 结论时先催一轮（trace `{kind:'wiki', action:'required'}`，`investigation-agent.js:575-583`）；催过仍未调用就照收结论，但在 `verdict.wiki` 与 `missing_evidence` 里写明（`investigation-agent.js:687-693`）。
 - 结论工具（见 C）的校验：没查过知识库就提交 → 退回「本次分析还没有调用知识库工具……」；`wiki_adopted` 里有没在本次查过的页 → 退回；既没采纳页又没写 `wiki_reason` → 退回「必须写明采纳了哪一页……」（`investigation-agent.js:119-132`）。
-- 结果字段 `verdict.wiki`（`investigation-agent.js:684-690`）：
+- 结果字段 `verdict.wiki`（`investigation-agent.js:687-693`）：
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
@@ -460,18 +460,19 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | `adopted` | string[] | 结论工具声明的采纳页；未声明时为空数组 |
 | `reason` | string | 没采纳的原因；采纳了就是空串 |
 
-- 降级路径 `runUnmatchedSyslog` 不走工具循环：`verdict.wiki = {consulted: [], adopted: [], reason: '牧云事件未匹配，本轮是降级结论，没有工具循环，未采纳判据页'}`（`investigation-agent.js:736`）。
+- 降级路径 `runUnmatchedSyslog` 不走工具循环：`verdict.wiki = {consulted: [], adopted: [], reason: '牧云事件未匹配，本轮是降级结论，没有工具循环，未采纳判据页'}`（`investigation-agent.js:739`）。
+- 知识经验复用捷径（[2.3](#23-客户经验复用一条会提前返回的捷径)）同样不走工具循环，但两个字段照写：`verdict.rego` 与主路径同口径，`verdict.wiki = {consulted: [], adopted: [], reason: '命中已审核经验捷径，未调用知识库工具'}`（`investigation-agent.js:436-437`）。
 
-#### C. 结论工具 `submit_conclusion`（`investigation-agent.js:150-169`、`investigation-agent.js:497-519`）
+#### C. 结论工具 `submit_conclusion`（`investigation-agent.js:150-169`、`investigation-agent.js:500-522`）
 
-- 调查循环的工具列表里恒有 `submit_conclusion`（`investigation-agent.js:468`）；模型调用它并通过校验即结束调查轮次，被退回时不结束。
+- 调查循环的工具列表里恒有 `submit_conclusion`（`investigation-agent.js:471`）；模型调用它并通过校验即结束调查轮次，被退回时不结束。
 - 校验（`conclusionProblem`，`investigation-agent.js:119-132`）按顺序：
-  1. 正文取 `summary`，按字符计（`[...text].length`，`investigation-agent.js:117`）不超过 500 字；空正文或超限都退回，不落库；
-  2. `verdict` 必须是三态（真实威胁 / 存疑 / 误报）；
-  3. 有知识库时按 B 校验必查与采纳。
-- 收下的结论进既有流水线（独立复核、引用校验、降级、客户报告整形）；trace 记一条 `{kind:'conclusion', tool:'submit_conclusion', summary_chars, adopted}`（`investigation-agent.js:508-509`）。
+  1. `verdict` 必须是三态（真实威胁 / 存疑 / 误报）；
+  2. 正文取 `summary`，按字符计（`[...text].length`，`investigation-agent.js:117`）不超过 500 字；空正文或超限都退回，不落库；
+  3. 有知识库时按 B 校验必查与采纳；deep 模式忽略 `wiki_adopted` / `wiki_reason`，不因「未查知识库」被拒。
+- 收下的结论进既有流水线（独立复核、引用校验、降级、客户报告整形）；trace 记一条 `{kind:'conclusion', tool:'submit_conclusion', summary_chars, adopted}`（`investigation-agent.js:511-512`）。
 - 500 字是结论工具入口的上限；常规研判的 `summary` 随后被 `finalizeTriageOutput` 收窄到 300 字、客户报告 `report` 也按 300 字口径整形（`triage-output.js:36`），deep 模式不做这步收窄。
-- 兼容路径：模型仍可直接吐 JSON 结论。有知识库时先催一轮知识库；收下时 `verdict.wiki.reason` 记「结论没有经 submit_conclusion 工具说明采纳页」（`investigation-agent.js:686-687`）。
+- 兼容路径：模型仍可直接吐 JSON 结论。有知识库时先催一轮知识库；收下时 `verdict.wiki.reason` 记「结论没有经 submit_conclusion 工具说明采纳页」（`investigation-agent.js:689-690`）。
 
 ## 4. 公开面
 
@@ -479,7 +480,7 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | --- | --- | --- | --- |
 | `InvestigationAgent` | `new InvestigationAgent(toolbox, model, promptStore?, knowledgeStore?, ruleStore?)` | 研判智能体。五个构造参数依次是取证工具箱、模型客户端、提示词存储、知识库、Rego 规则库（缺省读仓内 `rules/`） | `investigation-agent.js:283-286` |
 | `.run(alertId, options)` | `Promise<研判记录>` | 主路径，见 [2.2](#22-主路径的阶段) | `investigation-agent.js:214` |
-| `.runUnmatchedSyslog(input, matchResult, caseInfo, onProgress?)` | `Promise<研判记录>` | 未匹配 syslog 的旁路，见 [2.4](#24-未匹配-syslog-的旁路) | `investigation-agent.js:702` |
+| `.runUnmatchedSyslog(input, matchResult, caseInfo, onProgress?)` | `Promise<研判记录>` | 未匹配 syslog 的旁路，见 [2.4](#24-未匹配-syslog-的旁路) | `investigation-agent.js:705` |
 | `.prompts()` / `.updatePrompt(section, content, revision)` | `Promise<…>` | 读 / 改提示词，转调提示词存储 | `investigation-agent.js:211-212` |
 | `boundedToolArgs(name, rawArgs, catalog)` | `(name, args, catalog) => args` | 工具参数收窄，见 [3.2](#32-工具轮次与调用上限) | `investigation-agent.js:177` |
 | `agentConfigured(env?)` | `(env?) => boolean` | 五个环境变量齐了才算配好：牧云地址、牧云 Token、模型地址、模型密钥、模型名 | `investigation-agent.js:597-599` |
