@@ -707,7 +707,8 @@ export function mountTraceBoardPage(options = {}) {
     $('progress').hidden = false;
     $('replay').disabled = !can || !steps.length;
     $('latest').disabled = !can || state.reveal.count >= steps.length;
-    $('pause').disabled = !can || !state.reveal.playing;
+    // 播完才禁（稿 trace.html:1200 的条件）：暂停中按钮文本是「继续」，必须还能点，否则「停」成了单程门
+    $('pause').disabled = !can || !steps.length || (!state.reveal.playing && state.reveal.count >= steps.length);
     $('pause').textContent = state.reveal.playing ? '暂停' : '继续';
     $('follow').setAttribute('aria-pressed', String(state.follow));
     $('zoom-level').textContent = `${Math.round(state.view.k * 100)}%`;

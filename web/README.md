@@ -456,7 +456,7 @@ D020 的落法：**牧云现查仍在，但是单独入口并标成演示**；`/
 | 2 | `GET /api/alerts/{alertId}`（`getAlert`） | `openapi.yaml:158-176`；`server.js:347-355` | 牧云事件标题/等级/资产 + 原始事件 `detail`（**可选**） | 失败不清空页面：题干说明「牧云事件没有读到（原因），下面按研判记录显示。」 |
 | 3 | `GET /api/agent/investigations/{alertId}?mode=triage|deep` | `openapi.yaml:295-312`；`server.js:326-333` | 短结果的 `summary`、`report`、claims、`required_evidence`、核验/复核、**`verdict.rego`**、**`verdict.wiki`** | partial：那一块写「读取失败：<原因>」 |
 | 4 | `GET /api/rules/{id}`（`getRule`） | `openapi.yaml:660-680`；`server.js:570-578` → `rule-store.js` | 命中规则的**名字与整份 Rego 原文** | 404 → 页面写「规则库里已没有这条」，不挡页面 |
-| 5 | `GET /api/trace/boards/{target}` | `openapi.yaml:353-371`；`server.js:169-176` | 关联实体（`nodes[]`） | 404 → `null`，区块隐藏 |
+| 5 | `GET /api/trace/boards/{target}` | `openapi.yaml:544-560`；`server.js:515-524` | 关联实体（`nodes[]`） | 404 → `null`，区块隐藏 |
 | 6 | `POST /api/agent/triage/{alertId}`（`retryTriage`） | `server.js:646`（202） | 「加入研判队列 / 重新研判」 | 播报「提交失败：<原因>」，按钮恢复 |
 
 **读不到 ≠ 整页失败**：只有「研判记录与牧云事件两边都读不到」才整页错误；其余情况是哪块读不到就哪块说读不到。

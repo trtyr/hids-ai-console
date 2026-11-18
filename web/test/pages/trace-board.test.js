@@ -122,6 +122,14 @@ async function settle(rounds = 8) {
 
 const $ = (host, role) => host.querySelector(`[data-role="${role}"]`);
 const click = element => element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+/**
+ * 真用户点击：禁用的控件点不动（`HTMLElement.click()` 在 disabled 时不派发事件）。
+ * 涉及「按钮该不该可点」的用例一律用它——`dispatchEvent` 会绕过 disabled，能把死按钮伪装成能点。
+ */
+function press(element) {
+  assert.equal(element.disabled, false, `「${text(element)}」是禁用状态，真用户点不动`);
+  element.click();
+}
 const nodes = host => [...host.querySelectorAll('.gnode')];
 const nodeOf = (host, hopId) => host.querySelector(`.gnode[data-hop="${CSS_ESCAPE(hopId)}"]`);
 // jsdom 的 CSS.escape 可能没有：hop id 里有冒号，用属性选择器转义
@@ -347,19 +355,29 @@ test('A4 完成后自动按 discovery 重放：一步一跳，线晚于两端；
   assert.equal(edgeHits(host).length, 2);
 });
 
-test('A4 暂停 / 继续：暂停后不再往前走，继续接着说', async () => {
+test('A4 暂停 / 继续：暂停后「继续」还能按（不是死按钮），按了接着往前走，播完才禁', async () => {
   const { host, timers } = mount(route());
   await settle();
   timers.tick();
   timers.tick();
   assert.equal(nodes(host).length, 2);
-  click($(host, 'pause'));
+
+  press($(host, 'pause'));                        // 暂停
   assert.equal(text($(host, 'pause')), '继续');
   assert.equal(timers.running, 0);
-  click($(host, 'pause'));
+  assert.equal($(host, 'pause').disabled, false, '暂停中「继续」被禁 = 用户只能点「重放」从头来（审查 major 回归点）');
+  timers.tick();                                  // 停住之后不该再有一点动静
+  assert.equal(nodes(host).length, 2);
+
+  press($(host, 'pause'));                        // 继续（press 先断言没被禁）
+  assert.equal(text($(host, 'pause')), '暂停');
   assert.equal(timers.running, 1);
   timers.tick();
-  assert.equal(edgeHits(host).length, 1);
+  assert.equal(edgeHits(host).length, 1, '继续之后要接着往前走');
+
+  for (let guard = 0; timers.running && guard < 20; guard += 1) timers.tick();
+  assert.equal(timers.running, 0, '播完自己停');
+  assert.equal($(host, 'pause').disabled, true, '播到最新才禁「继续」');
 });
 
 test('A4 断点不点开也看得见：断点写在图上的那一跳旁边，不用点检查器', async () => {
