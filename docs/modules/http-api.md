@@ -4,14 +4,14 @@
 
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
-- 行号基准：本页的 `文件:行号` 指向 `server.js` 第 373 行版本（commit `35530d8`）。改了代码要重新核。
-- 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)
+- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。
+- 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)
 
 ## 1. 模块职责与边界
 
 **职责**：`server.js` 只做 HTTP 层的四件事——分发路由、判身份、校验入参、把结果封装成响应。业务逻辑不在这个文件里：研判在 `investigation-agent.js`，规则在 `triage-rules.js`，研判队列在 `triage-monitor.js`，判据库在 `wiki-store.js`。本页只讲 HTTP 这一层。
 
-**关键路径**：`server.js:204` 是全部 HTTP 逻辑的入口——一个 `http.createServer` 回调；认证闸门在 `server.js:205`，未捕获异常的出口在 `server.js:461-463`。
+**关键路径**：`server.js:204` 是全部 HTTP 逻辑的入口——一个 `http.createServer` 回调；认证闸门在 `server.js:205`，未捕获异常的出口在 `server.js:478-480`。
 
 **覆盖构件**（拆卡清单里的 `components` 字段，本页逐块对应）：
 
@@ -33,7 +33,7 @@
 
 ## 2. 启动与依赖装配
 
-**关键路径**：`server.js:24` 到 `server.js:50` 是模块级装配，`server.js:186-190` 是 `createServer` 的签名，`server.js:467-474` 是进程入口。
+**关键路径**：`server.js:24` 到 `server.js:50` 是模块级装配，`server.js:186-190` 是 `createServer` 的签名，`server.js:484-491` 是进程入口。
 
 模块被加载时就建好的东西：
 
@@ -51,13 +51,13 @@
 
 **规则预筛挂在 `investigate()` 闭包上**（`server.js:191-202`）：`mode === 'triage'` 且 `monitor.ruleEngine` 存在时，先跑一次规则评估，把结果作为 `rule_evaluation` 挂到结论上；评估抛错就记成 `{ status: 'error' }` 继续往下走，不中断研判。
 
-**进程入口**（`server.js:467-474`）：`process.argv[1]` 的真实路径等于本文件路径时才启动监听，并打印 `HIDS API: http://<host>:<port>`；随后若输入模式是 `syslog`，再起一个 UDP 接收器。
+**进程入口**（`server.js:484-491`）：`process.argv[1]` 的真实路径等于本文件路径时才启动监听，并打印 `HIDS API: http://<host>:<port>`；随后若输入模式是 `syslog`，再起一个 UDP 接收器。
 
 ## 3. 路由分发
 
-**关键路径**：`server.js:204`（处理函数）、`server.js:206`（路径解析）、`server.js:208` 到 `server.js:458`（依次排列的分支）、`server.js:459-460`（404 兜底）。
+**关键路径**：`server.js:204`（处理函数）、`server.js:206`（路径解析）、`server.js:208` 到 `server.js:475`（依次排列的分支）、`server.js:476-477`（404 兜底）。
 
-**分发机制**：没有路由表，是一条 `if` 链。每一支的形状都是「路径条件 + 方法条件」，命中即 `return`，后面的分支不再看。因此**分支顺序决定谁先赢**：`GET /api/agent/triage/status`（`server.js:252-253`）排在 `GET /api/agent/triage/{alertId}`（`server.js:297-304`）前面，所以 `status` 这个词不会被当成告警 ID。
+**分发机制**：没有路由表，是一条 `if` 链。每一支的形状都是「路径条件 + 方法条件」，命中即 `return`，后面的分支不再看。因此**分支顺序决定谁先赢**：`GET /api/agent/triage/status`（`server.js:262-263`）排在 `GET /api/agent/triage/{alertId}`（`server.js:307-314`）前面，所以 `status` 这个词不会被当成告警 ID。
 
 路径与查询串由 `new URL(req.url, 'http://' + (req.headers.host || 'localhost'))` 解析（`server.js:206`），后面的判断都用 `url.pathname` 与 `url.searchParams`。
 
@@ -65,41 +65,41 @@
 
 31 条「路径 + 方法」组合。「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
 
-> 源码里与路径有关的分支条件也是 31 行（`grep -c "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` → `31`），但两者不是同一个单位：`/api/agent/triage/{alertId}` 一行分支给出 GET 与 POST 两条组合（`server.js:297-304`），`server.js:311` 那行只是 `/api/wiki/` 的分组入口，不算一条组合。
+> 源码里与路径有关的分支条件也是 31 行（`grep -c "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` → `31`），但两者不是同一个单位：`/api/agent/triage/{alertId}` 一行分支给出 GET 与 POST 两条组合（`server.js:307-314`），`server.js:321` 那行只是 `/api/wiki/` 的分组入口，不算一条组合。
 
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
-| GET | `/api/session` | 200 `{authenticated:true}` | — | `server.js:208-209` |
-| GET | `/api/updates` | 200 升级包概览 | — | `server.js:208-209` |
-| GET | `/api/status` | 200 / 502 | 未配牧云回 200（`configured:false`）；配了但连不上回 502，正文仍是 `{configured, connected:false, reason}` | `server.js:210-215` |
-| GET | `/api/agent/tools` | 200 工具清单 | 无 API 工具箱回 503 | `server.js:215-223` |
-| GET | `/api/trace/tools` | 200 工具清单 | 无 MCP 工具箱回 503 | `server.js:215-223` |
-| GET | `/api/agent/status` | 200 | — | `server.js:225-229` |
-| GET | `/api/trace/boards` | 200 白板列表 | 无白板服务回 503 | `server.js:231-251` |
-| POST | `/api/trace/boards` | 202 | 无白板服务回 503 | `server.js:231-251` |
-| GET | `/api/trace/boards/{target}` | 200 / 404 | 无白板服务回 503 | `server.js:231-251` |
-| GET | `/api/agent/triage/status` | 200 | 无研判队列回 503 | `server.js:252-253` |
-| GET | `/api/triage/rules` | 200 | 读取失败回 502 | `server.js:255-258` |
-| POST | `/api/triage/rules/validate` | 200 `{valid:true,count}` | 正文不是对象 / 缺 `config` 键回 400「请求正文缺少 config」；`config` 不是合法规则集回 400「规则集格式无效」 | `server.js:260-269` |
-| PUT | `/api/triage/rules` | 200 | 需规则管理员令牌 | `server.js:270-280` |
-| GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:282-288` |
-| PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503 | `server.js:290-295` |
-| GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:297-304` |
-| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503 | `server.js:297-304` |
-| GET | `/api/agent/prompts` | 200 | — | `server.js:306-310` |
-| GET | `/api/wiki/pages` | 200 | — | `server.js:311-337` |
-| GET | `/api/wiki/pages/{path}` | 200 / 404 | — | `server.js:311-337` |
-| GET | `/api/wiki/health` | 200 | 需知识库管理员令牌 | `server.js:338-365` |
-| GET | `/api/wiki/sessions` | 200 | 需知识库管理员令牌 | `server.js:338-365` |
-| POST | `/api/wiki/sessions` | 201 | 需知识库管理员令牌 | `server.js:338-365` |
-| GET | `/api/wiki/sessions/{id}` | 200 / 404 | 需知识库管理员令牌 | `server.js:366-387` |
-| POST | `/api/wiki/sessions/{id}/messages` | 200 | 需知识库管理员令牌 | `server.js:366-387` |
-| POST | `/api/wiki/sessions/{id}/replay` | 200 | 需知识库管理员令牌 | `server.js:366-387` |
-| POST | `/api/wiki/sessions/{id}/publish` | 200 | 需知识库管理员令牌 | `server.js:366-387` |
-| POST | `/api/agent/investigations` | 200 | 无研判器回 503 | `server.js:389-393` |
-| GET | `/api/agent/investigations/{alertId}` | 200 / 404 | — | `server.js:414-421` |
-| GET | `/api/alerts` | 200 | 无牧云服务回 503 | `server.js:423-437` |
-| GET | `/api/alerts/{type}:{id}` | 200 | 无牧云服务回 503 | `server.js:439-458` |
+| GET | `/api/session` | 200 `{authenticated:true, user, role}` | — | `server.js:208-214` |
+| GET | `/api/updates` | 200 升级包概览 | — | `server.js:215` |
+| GET | `/api/status` | 200 / 502 | 未配牧云回 200（`configured:false`）；配了但连不上回 502，正文仍是 `{configured, connected:false, reason}` | `server.js:216-220` |
+| GET | `/api/agent/tools` | 200 工具清单 | 无 API 工具箱回 503 | `server.js:221-225` |
+| GET | `/api/trace/tools` | 200 工具清单 | 无 MCP 工具箱回 503 | `server.js:226-230` |
+| GET | `/api/agent/status` | 200 | — | `server.js:231-236` |
+| GET | `/api/trace/boards` | 200 白板列表（`{boards, total}`，接 `count`／`offset`） | 无白板服务回 503；分页参数不合法回 400 | `server.js:237-244` |
+| POST | `/api/trace/boards` | 202 | 无白板服务回 503 | `server.js:245-252` |
+| GET | `/api/trace/boards/{target}` | 200 / 404 | 无白板服务回 503 | `server.js:253-261` |
+| GET | `/api/agent/triage/status` | 200 | 无研判队列回 503 | `server.js:262-264` |
+| GET | `/api/triage/rules` | 200 | 读取失败回 502 | `server.js:265-269` |
+| POST | `/api/triage/rules/validate` | 200 `{valid:true,count}` | 正文不是对象 / 缺 `config` 键回 400「请求正文缺少 config」；`config` 不是合法规则集回 400「规则集格式无效」 | `server.js:270-279` |
+| PUT | `/api/triage/rules` | 200 | 需规则管理员令牌 | `server.js:280-291` |
+| GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:292-299` |
+| PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503 | `server.js:300-306` |
+| GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:307-315` |
+| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503 | `server.js:307-315` |
+| GET | `/api/agent/prompts` | 200 | — | `server.js:316-318` |
+| GET | `/api/wiki/pages` | 200 `{pages, total}`，接 `count`／`offset` | 分页参数不合法回 400 | `server.js:322-334` |
+| GET | `/api/wiki/pages/{path}` | 200 / 404 | — | `server.js:340-343` |
+| GET | `/api/wiki/health` | 200 | 需知识库管理员令牌 | `server.js:355` |
+| GET | `/api/wiki/sessions` | 200 | 需知识库管理员令牌 | `server.js:356` |
+| POST | `/api/wiki/sessions` | 201 | 需知识库管理员令牌 | `server.js:357-405` |
+| GET | `/api/wiki/sessions/{id}` | 200 / 404 | 需知识库管理员令牌 | `server.js:383-404` |
+| POST | `/api/wiki/sessions/{id}/messages` | 200 | 需知识库管理员令牌 | `server.js:383-404` |
+| POST | `/api/wiki/sessions/{id}/replay` | 200 | 需知识库管理员令牌 | `server.js:383-404` |
+| POST | `/api/wiki/sessions/{id}/publish` | 200 | 需知识库管理员令牌 | `server.js:383-404` |
+| POST | `/api/agent/investigations` | 200 | 无研判器回 503 | `server.js:406-430` |
+| GET | `/api/agent/investigations/{alertId}` | 200 / 404 | — | `server.js:431-439` |
+| GET | `/api/alerts` | 200 | 无牧云服务回 503 | `server.js:440-454` |
+| GET | `/api/alerts/{type}:{id}` | 200 | 无牧云服务回 503 | `server.js:456-475` |
 
 ### 3.2 不是路由的固定响应
 
@@ -107,11 +107,11 @@
 
 | 条件 | 状态 | 正文 | 出处 |
 | --- | --- | --- | --- |
-| `/api/agent/prompts` 用了非 GET 方法 | 405 | 请使用提示词文件上传入口 | `server.js:309` |
-| `/api/agent/prompts/upload` | 410 | 提示词更新已迁移到独立维护端，业务端不允许上传 | `server.js:306-310` |
-| `/api/` 开头的未知路径 | 404 | 接口不存在 | `server.js:459-460` |
+| `/api/agent/prompts` 用了非 GET 方法 | 405 | 请使用提示词文件上传入口 | `server.js:319` |
+| `/api/agent/prompts/upload` | 410 | 提示词更新已迁移到独立维护端，业务端不允许上传 | `server.js:316-320` |
+| `/api/` 开头的未知路径 | 404 | 接口不存在 | `server.js:476-477` |
 
-405 在整个文件里只有这一处（`grep -n "405" server.js` 只命中 `server.js:309`）。**方法对不上的路径，除这一处外都落到 404**：`POST /api/session` 与 `POST /api/triage/rules` 都回 404「接口不存在」。非 API 路径（如 `/`）也回同一句 404（`server.js:459-460`）。但 404 有两种文案——`/api/` 下的未知路径回「接口不存在」（`server.js:459-460`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:366-387`）。
+405 在整个文件里只有这一处（`grep -n "405" server.js` 只命中 `server.js:319`）。**方法对不上的路径，除这一处外都落到 404**：`POST /api/session` 与 `POST /api/triage/rules` 都回 404「接口不存在」。非 API 路径（如 `/`）也回同一句 404（`server.js:476-477`）。但 404 有两种文案——`/api/` 下的未知路径回「接口不存在」（`server.js:476-477`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:383-404`）。
 
 ### 3.3 路径里的 ID
 
@@ -120,7 +120,7 @@
 | 校验函数 | 接受什么 | 用在哪 | 出处 |
 | --- | --- | --- | --- |
 | `validAlertId` | `<小写类型>:<正整数>`，类型须在事件类型表里，序号须是安全整数 | `GET /api/agent/investigations/{alertId}`（`mode=deep` 时）、单条告警路由的类型段 | `server.js:102-105` |
-| `validTriageId` | `validAlertId`，或 syslog 形态 `syslog:<类型>:<16 位十六进制>:<数字或 unknown>:<36 位 UUID>` | `GET/POST /api/agent/triage/{alertId}`、`GET /api/agent/investigations/{alertId}`（`mode=triage` 时） | `server.js:106-115` |
+| `validTriageId` | `validAlertId`，或 syslog 形态 `syslog:<类型>:<16 位十六进制>:<数字或 unknown>:<36 位 UUID>` | `GET/POST /api/agent/triage/{alertId}`、`GET /api/agent/investigations/{alertId}`（`mode=triage` 时） | `server.js:106-108` |
 | `validTraceTarget` | 告警 ID，或去掉 `ip:` 前缀后的 IPv4（每段 ≤ 255） | 溯源白板三条路由 | `server.js:116-185` |
 
 解码失败与校验失败给的是不同的文案：解码失败回「告警 ID 编码无效」，校验失败回「告警 ID 无效」或「告警 ID 或研判模式无效」。
@@ -135,15 +135,17 @@
 
 **比较方式**：请求头必须以 `Basic ` 开头，取后面的 Base64 解码成字节，与 `user:password` 的字节做 `timingSafeEqual`。字节长度不等时先判否，不进 `timingSafeEqual`（`server.js:58-65`）。
 
-**401 的形状与其它错误不同**（`server.js:66-72`）：状态码 401，响应头固定四条——`WWW-Authenticate: Basic realm="HIDS AI Console", charset="UTF-8"`、`Content-Type: text/plain; charset=utf-8`、`Cache-Control: no-store`、`X-Content-Type-Options: nosniff`；正文是纯文本「需要登录后访问」——不是 `{error:...}`，也不是 JSON。探针实测（P003-T005 在当前提交复跑，含新增的 `Content-Type`）：
+**会话自报的身份**（`server.js:208-214`）：`GET /api/session` 在 `authenticated` 之外回 `user` 与 `role`。业务侧只有一套 Basic 账号，`role` 固定 `operator`（值守操作员）；管理员权限走维护端令牌那条线，不在这套身份里。配了密码没配用户名时 `user` 落回 `admin`（与 `hasAccess` 的比对口径一致）；没配密码时没有账号可报，`user` 与 `role` 都是 `null`。
+
+**401 的形状与其它错误不同**（`server.js:66-72`）：状态码 401，响应头固定四条——`WWW-Authenticate: Basic realm="HIDS AI Console", charset="UTF-8"`、`Content-Type: text/plain; charset=utf-8`、`Cache-Control: no-store`、`X-Content-Type-Options: nosniff`；正文是纯文本「需要登录后访问」——不是 `{error:...}`，也不是 JSON。探针实测（P003-T006 在当前提交复跑，含 `user` / `role` 与 `Content-Type`）：
 
 ```
 A1 无凭据 | 401 | www-authenticate="Basic realm=\"HIDS AI Console\", charset=\"UTF-8\"" | content-type=text/plain; charset=utf-8 | body="需要登录后访问"
 A2 错密码 | 401 | 需要登录后访问
-A3 正确凭据 | 200 | {"authenticated":true}
+A3 正确凭据 | 200 | {"authenticated":true,"user":"ops","role":"operator"}
 A4 非 Basic 前缀 | 401 | 需要登录后访问
 A5 根路径 / | 401 | 需要登录后访问
-A6 空密码放行 | 200 | {"authenticated":true}
+A6 空密码放行 | 200 | {"authenticated":true,"user":null,"role":null}
 ```
 
 （完整命令见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md) 第三节的探针脚本。）
@@ -152,7 +154,7 @@ A6 空密码放行 | 200 | {"authenticated":true}
 
 ## 5. 管理员令牌校验
 
-**关键路径**：`server.js:73-80`（知识库令牌）、`server.js:81-88`（规则令牌）、`server.js:271-272`（规则侧判定顺序）、`server.js:336-337`（知识库侧判定顺序）。
+**关键路径**：`server.js:73-80`（知识库令牌）、`server.js:81-88`（规则令牌）、`server.js:281-282`（规则侧判定顺序）、`server.js:353-354`（知识库侧判定顺序）。
 
 **两套令牌各管一片**，请求头不同：
 
@@ -163,7 +165,7 @@ A6 空密码放行 | 200 | {"authenticated":true}
 
 两个比较函数的形状一样：令牌没配就返回 `false`；请求头必须是字符串；字节长度相等才走 `timingSafeEqual`。
 
-**判定顺序是三档**，以规则写接口为例（`server.js:271-272`）：
+**判定顺序是三档**，以规则写接口为例（`server.js:281-282`）：
 
 | 情况 | 状态 | 正文 |
 | --- | --- | --- |
@@ -171,21 +173,21 @@ A6 空密码放行 | 200 | {"authenticated":true}
 | 令牌不匹配 | 403 | 规则管理员令牌无效 |
 | 令牌匹配 | 进业务分支 | — |
 
-知识库侧同构，只是文案换成「尚未配置知识库管理员凭据」与「知识库管理员凭据无效」（`server.js:336-337`）。
+知识库侧同构，只是文案换成「尚未配置知识库管理员凭据」与「知识库管理员凭据无效」（`server.js:353-354`）。
 
-**一个容易看错的后果**：知识库分支里，两个读接口排在令牌判定之前（`server.js:311-337`），所以 `GET /api/wiki/pages` 与 `GET /api/wiki/pages/{path}` 只要过了 Basic 认证就能读，不需要管理员令牌。但也因此，`/api/wiki/` 底下**别的**路径——包括不存在的路径——会先撞上令牌判定：探针里不带令牌请求 `/api/wiki/unknown-path` 得到的是 403「知识库管理员凭据无效」，不是 404。
+**一个容易看错的后果**：知识库分支里，两个读接口排在令牌判定之前（`server.js:321-354`），所以 `GET /api/wiki/pages` 与 `GET /api/wiki/pages/{path}` 只要过了 Basic 认证就能读，不需要管理员令牌。但也因此，`/api/wiki/` 底下**别的**路径——包括不存在的路径——会先撞上令牌判定：探针里不带令牌请求 `/api/wiki/unknown-path` 得到的是 403「知识库管理员凭据无效」，不是 404。
 
-规则侧的读接口 `GET /api/triage/rules` 不需要令牌，但响应里带一个 `writable` 字段，表示当前能不能写（`server.js:255-258`）。
+规则侧的读接口 `GET /api/triage/rules` 不需要令牌，但响应里带一个 `writable` 字段，表示当前能不能写（`server.js:265-268`）。
 
 ## 6. SSE 流式响应
 
-**关键路径**：`server.js:389-393`（进入判定）、`server.js:394-407`（流式分支）、`server.js:408-412`（非流式分支）。
+**关键路径**：`server.js:406-430`（进入判定）、`server.js:411-424`（流式分支）、`server.js:425-429`（非流式分支）。
 
-**触发条件**：`url.searchParams.get('stream') === '1'`（`server.js:394-407`）——**精确等于字符串 `1`**。`stream=0`、`stream=true` 都拿不到流式响应，会走普通 JSON 分支（探针 D3 实测两个值都回 `application/json`）。
+**触发条件**：`url.searchParams.get('stream') === '1'`（`server.js:411-424`）——**精确等于字符串 `1`**。`stream=0`、`stream=true` 都拿不到流式响应，会走普通 JSON 分支（探针 D3 实测两个值都回 `application/json`）。
 
-**前置判定排在流式分支之前**（`server.js:389-393`）：请求正文先读出来，正文不是对象回 400「请求正文无效」；没有研判器回 503「该研判模式的模型或牧云取证接口尚未配置」。也就是说 `stream=1` 并不绕过配置检查——没配模型时它回的是 503，不是 SSE（探针 D4）。
+**前置判定排在流式分支之前**（`server.js:406-430`）：请求正文先读出来，正文不是对象回 400「请求正文无效」；没有研判器回 503「该研判模式的模型或牧云取证接口尚未配置」。也就是说 `stream=1` 并不绕过配置检查——没配模型时它回的是 503，不是 SSE（探针 D4）。
 
-**响应头**（`server.js:395-396`）：
+**响应头**（`server.js:412-413`）：
 
 | 头 | 值 |
 | --- | --- |
@@ -194,17 +196,17 @@ A6 空密码放行 | 200 | {"authenticated":true}
 | `Connection` | `keep-alive` |
 | `X-Content-Type-Options` | `nosniff` |
 
-**帧格式**：`data: <JSON>\n\n`（`server.js:397`）。响应已销毁或已结束时不写。帧里的 `type` 有三种：
+**帧格式**：`data: <JSON>\n\n`（`server.js:414`）。响应已销毁或已结束时不写。帧里的 `type` 有三种：
 
 | type | 内容 | 出处 |
 | --- | --- | --- |
-| `progress` | `{stage, detail}`，由研判过程的 `onProgress` 回调发出 | `server.js:401-402` |
-| `result` | `{result: <history.save() 的返回值>}`——发出去的是落盘之后的对象 | `server.js:403` |
-| `error` | `{error: <异常消息>}` | `server.js:404` |
+| `progress` | `{stage, detail}`，由研判过程的 `onProgress` 回调发出 | `server.js:418-419` |
+| `result` | `{result: <history.save() 的返回值>}`——发出去的是落盘之后的对象 | `server.js:420` |
+| `error` | `{error: <异常消息>}` | `server.js:421` |
 
-**心跳**：每 15000 毫秒写一行 `: heartbeat\n\n`（`server.js:398`），这是 SSE 的注释行，客户端按协议忽略它。连接关闭时清掉定时器（`server.js:399`），`finally` 里再清一次并结束响应（`server.js:405`）。
+**心跳**：每 15000 毫秒写一行 `: heartbeat\n\n`（`server.js:415`），这是 SSE 的注释行，客户端按协议忽略它。连接关闭时清掉定时器（`server.js:416`），`finally` 里再清一次并结束响应（`server.js:422`）。
 
-**异常也回 200**：研判过程抛错时，状态码仍是 200，错误以 `error` 帧的形式发给客户端（`server.js:404`）。探针 D2 实测：
+**异常也回 200**：研判过程抛错时，状态码仍是 200，错误以 `error` 帧的形式发给客户端（`server.js:421`）。探针 D2 实测：
 
 ```
 D2 异常 status=200 body="data: {\"type\":\"error\",\"error\":\"模型服务不可用\"}\n\n"
@@ -217,18 +219,20 @@ D1 status=200 content-type="text/event-stream; charset=utf-8" cache-control="no-
 D1 原始报文="data: {\"type\":\"progress\",\"stage\":\"查询证据\",\"detail\":\"正在查询 list_host_events\"}\n\ndata: {\"type\":\"progress\",\"stage\":\"独立复核\",\"detail\":\"正在核对结论\"}\n\ndata: {\"type\":\"result\",\"result\":{\"alert_id\":\"revshell:7\",\"mode\":\"deep\",\"verdict\":{\"verdict\":\"undetermined\"},\"saved_at\":\"2026-11-17T00:00:00.000Z\"}}\n\n"
 ```
 
-**与非流式分支的差别**（`server.js:408-412`）：走的是同一次 `investigate()`，结果用 `json()` 包装。差别在错误处理——非流式分支把消息命中「告警 ID 无效|研判模式无效」的错误映射成 400，其余映射成 502；流式分支没有这层映射，异常一律变成 `error` 帧（状态码仍是 200）。判断「这次研判成功没有」要看帧里的 `type`，不能只看状态码。
+**与非流式分支的差别**（`server.js:425-429`）：走的是同一次 `investigate()`，结果用 `json()` 包装。差别在错误处理——非流式分支把消息命中「告警 ID 无效|研判模式无效」的错误映射成 400，其余映射成 502；流式分支没有这层映射，异常一律变成 `error` 帧（状态码仍是 200）。判断「这次研判成功没有」要看帧里的 `type`，不能只看状态码。
 
 ## 7. 分页参数校验
 
-**关键路径**：`server.js:284-287`（案件目录）、`server.js:425-427`（告警列表）。
+**关键路径**：`server.js:294-297`（案件目录）、`server.js:442-444`（告警列表）、`server.js:239-242`（白板列表）、`server.js:324-328`（知识库列表）。
 
-分页参数出现在两条路由上，规则一样：
+分页参数出现在四条路由上，缺省与边界基本一样，只有知识库列表的 `count` 例外：
 
-| 路由 | 出处 |
-| --- | --- |
-| `GET /api/agent/triage/cases` | `server.js:284-287` |
-| `GET /api/alerts` | `server.js:425-427` |
+| 路由 | 出处 | `count` 缺省 |
+| --- | --- | --- |
+| `GET /api/agent/triage/cases` | `server.js:294-297` | 20 |
+| `GET /api/alerts` | `server.js:442-444` | 20 |
+| `GET /api/trace/boards` | `server.js:239-242` | 20 |
+| `GET /api/wiki/pages` | `server.js:324-328` | **不切页，返回全部** |
 
 **取值与边界**：
 
@@ -239,10 +243,14 @@ D1 原始报文="data: {\"type\":\"progress\",\"stage\":\"查询证据\",\"detai
 
 取值写法是 `Number(url.searchParams.get('count') || 20)`：参数缺省与传空串都落回缺省值；传 `abc` 得到 `NaN`，`isSafeInteger` 判否；传 `20.5` 也不是整数，一样判否。
 
+**知识库列表的例外**（`server.js:322-333`）：`count` 缺省时**不切页**，返回全部页面——控制台知识库页目前一次取全量，改成默认 20 会静默少显示（D002 只加不改）。它用 `rawCount ? Number(rawCount) : null` 区分「没传」与「传了」，`offset` 仍缺省为 0，单独传 `offset` 就等于跳过前 N 条。显式传 `count` 时范围同表（1 到 50），`total` 永远是切页前的条数。
+
 **判定顺序**：先判后端有没有配，再判分页。
 
-- `GET /api/alerts` 先判牧云服务在不在（`server.js:423-437`），没有就回 503，分页参数根本没被读到。
-- `GET /api/agent/triage/cases` 先判研判队列在不在（`server.js:282-288`），没有就回 503。
+- `GET /api/alerts` 先判牧云服务在不在（`server.js:440-454`），没有就回 503，分页参数根本没被读到。
+- `GET /api/agent/triage/cases` 先判研判队列在不在（`server.js:292-298`），没有就回 503。
+- `GET /api/trace/boards` 先判白板服务在不在（`server.js:237-238`），没有就回 503；`?count=0` 也先吃 503。
+- `GET /api/wiki/pages` 没有「服务没配」这一层，分页参数是它唯一的 400 来源。
 
 探针实测（`/api/alerts` 有牧云服务、`/api/agent/triage/cases` 有研判队列时）：
 
@@ -261,7 +269,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 ## 8. 请求正文与错误翻译
 
-**关键路径**：`server.js:89-96`（`readJSON`）、`server.js:461-463`（未捕获异常的出口）。
+**关键路径**：`server.js:89-96`（`readJSON`）、`server.js:478-480`（未捕获异常的出口）。
 
 ### 8.1 正文长度上限
 
@@ -276,18 +284,18 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 | 上限 | 路由 | 出处 |
 | --- | --- | --- |
-| 8192（缺省） | `PUT /api/agent/triage/control`、`POST /api/wiki/sessions`、`POST /api/agent/investigations` | `server.js:290-295`、`server.js:338-365`、`server.js:389-393` |
-| 100000 | `POST /api/triage/rules/validate`、`PUT /api/triage/rules` | `server.js:260-268`、`server.js:270-280` |
-| 12000 | `POST /api/wiki/sessions/{id}/messages` | `server.js:366-387` |
-| 8192（显式传值） | `POST /api/wiki/sessions/{id}/publish` | `server.js:366-387` |
+| 8192（缺省） | `PUT /api/agent/triage/control`、`POST /api/wiki/sessions`、`POST /api/agent/investigations` | `server.js:300-305`、`server.js:355-382`、`server.js:406-430` |
+| 100000 | `POST /api/triage/rules/validate`、`PUT /api/triage/rules` | `server.js:270-278`、`server.js:280-290` |
+| 12000 | `POST /api/wiki/sessions/{id}/messages` | `server.js:383-404` |
+| 8192（显式传值） | `POST /api/wiki/sessions/{id}/publish` | `server.js:383-404` |
 
 ### 8.2 正文形状
 
-`readJSON` 只保证「是合法 JSON」，不保证形状。形状由各路由自己判：不传 `expected_revision` 的规则写请求回 400「缺少有效的规则配置版本」（`server.js:270-280`）；正文不是对象或数组的回 400「请求正文无效」（`server.js:290-295`、`server.js:389-393`）。
+`readJSON` 只保证「是合法 JSON」，不保证形状。形状由各路由自己判：不传 `expected_revision` 的规则写请求回 400「缺少有效的规则配置版本」（`server.js:280-290`）；正文不是对象或数组的回 400「请求正文无效」（`server.js:300-305`、`server.js:406-430`）。
 
 ### 8.3 错误怎么翻译
 
-未捕获的异常从最外层出口走（`server.js:461-463`）：消息里含「请求正文」四个字的回 400，其余回 502；异常没有消息时用「牧云请求失败」兜底。错误体统一是 `{ "error": "<消息>" }`（`server.js:57`）。
+未捕获的异常从最外层出口走（`server.js:478-480`）：消息里含「请求正文」四个字的回 400，其余回 502；异常没有消息时用「牧云请求失败」兜底。错误体统一是 `{ "error": "<消息>" }`（`server.js:57`）。
 
 于是「请求正文过大」和「请求正文不是 JSON」都落到 400——探针 F1/F2 实测：
 
@@ -306,21 +314,21 @@ F2 POST /api/agent/investigations 正文 8192 字节 | 400 | {"error":"请求正
 
 ### 9.2 状态码用得不太齐的地方（只陈述现状）
 
-- **405 只有一处**（`server.js:309`）。方法对不上的路径，除这一处外都落到 404。
-- **404 有两种文案**：未知 API 与非 API 路径回「接口不存在」（`server.js:459-460`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:366-387`）。
-- **503 有两类含义**：后端某一类件没配好（牧云整体没配 `server.js:97-101`、研判队列未配置 `server.js:252-253`、工具箱未配置 `server.js:215-223`），与管理员令牌没配（`server.js:271-272`、`server.js:336-337`），文案不一样。
-- **`/api/status` 不走 503**：没配牧云时回 200，用 `configured` / `connected` 两个字段说明状态；配了但连不上时回 **502**，正文仍是同一组字段（`connected:false` + `reason` 是上游错误原文）——502 在这里是业务体，不是“整个服务不可用”，前端按正文处理（`server.js:210-215`）。
-- **SSE 里没有状态码级的失败**：研判抛错也是 200，错误在帧里（`server.js:404`）。
+- **405 只有一处**（`server.js:319`）。方法对不上的路径，除这一处外都落到 404。
+- **404 有两种文案**：未知 API 与非 API 路径回「接口不存在」（`server.js:476-477`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:383-404`）。
+- **503 有两类含义**：后端某一类件没配好（牧云整体没配 `server.js:97-101`、研判队列未配置 `server.js:262-263`、工具箱未配置 `server.js:221-229`），与管理员令牌没配（`server.js:281-282`、`server.js:353-354`），文案不一样。
+- **`/api/status` 不走 503**：没配牧云时回 200，用 `configured` / `connected` 两个字段说明状态；配了但连不上时回 **502**，正文仍是同一组字段（`connected:false` + `reason` 是上游错误原文）——502 在这里是业务体，不是“整个服务不可用”，前端按正文处理（`server.js:216-221`）。
+- **SSE 里没有状态码级的失败**：研判抛错也是 200，错误在帧里（`server.js:421`）。
 
 ### 9.3 本卡没查到的
 
 1. **牧云侧的真实响应**：本机没有 `CLOUDWALKER_URL` / `CLOUDWALKER_API_TOKEN`，未发起任何外部请求。`/api/alerts`、`/api/alerts/{type}:{id}`、`/api/status` 的响应体形状只按代码里的组装逻辑描述。
 2. **模型服务的真实行为**：没有真实模型服务，SSE 的进度段条数与内容取决于研判过程本身；本页引用的探针输出用的是替身研判器。
-3. **`POST /api/wiki/sessions` 的完整链路**：令牌之后会读研判记录与案件目录（`server.js:338-365`），本卡只探到令牌与正文上限两处。
+3. **`POST /api/wiki/sessions` 的完整链路**：令牌之后会读研判记录与案件目录（`server.js:355-382`），本卡只探到令牌与正文上限两处。
 
 ### 9.4 入口判定的一个边界
 
-`server.js:467` 的入口判定会先对 `process.argv[1]` 做 `realpathSync`。以 `-` 作入口（stdin 方式跑）时该路径不存在，`realpathSync` 抛 ENOENT，模块在加载阶段就失败。用 `node --input-type=module -e "..."` 执行时 `process.argv[1]` 是 `undefined`，判定短路，不受影响——本页的探针就是这么跑的（见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md) 第 5.1 节）。
+`server.js:484` 的入口判定会先对 `process.argv[1]` 做 `realpathSync`。以 `-` 作入口（stdin 方式跑）时该路径不存在，`realpathSync` 抛 ENOENT，模块在加载阶段就失败。用 `node --input-type=module -e "..."` 执行时 `process.argv[1]` 是 `undefined`，判定短路，不受影响——本页的探针就是这么跑的（见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md) 第 5.1 节）。
 
 ## 10. 怎么复跑本页的结论
 

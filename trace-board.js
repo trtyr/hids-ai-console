@@ -155,7 +155,8 @@ export class TraceBoardService {
   }
 
   file(boardId) { return path.join(this.directory, `${validIp(boardId) ? `ip:${boardId}` : boardId}.json`); }
-  async list(limit = 20) {
+  // 全量摘要，按更新时间倒序。list / page 共用；目录不存在等同于没有白板。
+  async summaries() {
     let names;
     try { names = (await readdir(this.directory)).filter(name => name.endsWith('.json')); }
     catch (error) { if (error.code === 'ENOENT') return []; throw error; }
@@ -167,8 +168,15 @@ export class TraceBoardService {
           status: board.status, created_at: board.created_at, updated_at: board.updated_at };
       } catch { return null; }
     }));
-    return entries.filter(Boolean).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
-      .slice(0, Math.max(1, Math.min(50, limit)));
+    return entries.filter(Boolean).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+  }
+  // HTTP 列表用：切页后回本页摘要 + 切页前的总数。count / offset 的合法性由调用方校验。
+  async page({ count = 20, offset = 0 } = {}) {
+    const boards = await this.summaries();
+    return { boards: boards.slice(offset, offset + count), total: boards.length };
+  }
+  async list(limit = 20) {
+    return (await this.page({ count: Math.max(1, Math.min(50, limit)) })).boards;
   }
   async get(boardId) {
     try {

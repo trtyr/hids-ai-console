@@ -205,7 +205,13 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
     if (!hasAccess(req, access)) return requireAccess(res);
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     try {
-      if (url.pathname === '/api/session' && req.method === 'GET') return json(res, 200, { authenticated: true });
+      if (url.pathname === '/api/session' && req.method === 'GET') {
+        // B17：业务 Basic 账号是值守操作员（role 固定 operator）；管理员是维护端令牌那条线，不在这套身份里。
+        // 未配置 HIDS_BASIC_AUTH_PASSWORD 时任何人可进，没有账号可报，user / role 都回 null。
+        return json(res, 200, access?.password
+          ? { authenticated: true, user: access.user || 'admin', role: 'operator' }
+          : { authenticated: true, user: null, role: null });
+      }
       if (url.pathname === '/api/updates' && req.method === 'GET') return json(res, 200, await new UpdateStore(prompts).overview());
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
@@ -230,7 +236,11 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       }
       if (url.pathname === '/api/trace/boards' && req.method === 'GET') {
         if (!boardService) return error(res, 503, '深度溯源模型或牧云 MCP 尚未配置');
-        return json(res, 200, { boards: await boardService.list() });
+        const count = Number(url.searchParams.get('count') || 20);
+        const offset = Number(url.searchParams.get('offset') || 0);
+        if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
+          return error(res, 400, '分页参数无效');
+        return json(res, 200, await boardService.page({ count, offset }));
       }
       if (url.pathname === '/api/trace/boards' && req.method === 'POST') {
         if (!boardService) return error(res, 503, '深度溯源模型或牧云 MCP 尚未配置');
@@ -310,10 +320,17 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname === '/api/agent/prompts/upload') return error(res, 410, '提示词更新已迁移到独立维护端，业务端不允许上传');
       if (url.pathname.startsWith('/api/wiki/')) {
         if (url.pathname === '/api/wiki/pages' && req.method === 'GET') {
+          // 分页只加不改（D002）：不带 count 时照旧返回全部，只有显式传 count 才切页；total 恒给出。
+          const rawCount = url.searchParams.get('count');
+          const count = rawCount ? Number(rawCount) : null;
+          const offset = Number(url.searchParams.get('offset') || 0);
+          if ((count !== null && (!Number.isSafeInteger(count) || count < 1 || count > 50)) ||
+            !Number.isSafeInteger(offset) || offset < 0) return error(res, 400, '分页参数无效');
           const query = url.searchParams.get('q');
-          const pages = await wiki.browse();
-          return json(res, 200, { pages: query ? pages.filter(page =>
-            `${page.id} ${page.title} ${page.path}`.toLowerCase().includes(String(query).toLowerCase())).slice(0, 50) : pages });
+          const pages = query ? (await wiki.browse()).filter(page =>
+            `${page.id} ${page.title} ${page.path}`.toLowerCase().includes(String(query).toLowerCase())).slice(0, 50)
+            : await wiki.browse();
+          return json(res, 200, { pages: count === null ? pages.slice(offset) : pages.slice(offset, offset + count), total: pages.length });
         }
         // 页面读写走控制台 Basic 账号（D003），因此排在下面的管理员令牌闸之前。
         const pagePath = wikiPagePath(url.pathname);
