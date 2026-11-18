@@ -1,0 +1,233 @@
+/* 规则页样式（P003-T017）：Rego 只读列表 + 原文
+ *
+ * 新页没有设计稿：`design/rules.html` 是旧程序门禁编辑页（D017「不要当成这个」），
+ * 所以表格、提示条、失败块的每一个值都取同仓最近邻——`assets/pages/trace.css` 的列表语言
+ * （`pages/trace.js` 的 `.page-tools` / `.table-wrap` / `.empty-row`）与 `assets/pages/alerts.css`
+ * 的 `.page-error` / `.btn-primary`，原话与理由记在 `coding-reports/P003-T017.md` 的稿→码对照表。
+ * 颜色一律 `assets/theme.css` 的变量，本文件不新增色值。
+ *
+ * 选择器挂 `.rego-rules` / `.rego-detail` 前缀：单页应用，两页共用一份 head，
+ * 不能把 `.chip` / `.rule-head` 这类名字漏给别的页面。
+ */
+
+/* ---------- 列表：内容区首行 ---------- */
+.rego-rules { display: block; }
+
+.rego-rules .page-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+.rego-rules .page-total { font-size: 10.5px; color: var(--text-3); }
+.rego-rules .page-total b { color: var(--text-2); font-weight: 500; font-variant-numeric: tabular-nums; }
+.rego-rules .page-tools .textbtn { margin-left: auto; }
+.rego-rules .page-tools .textbtn:disabled .od-icon { animation: spin .8s linear infinite; }
+
+/* ---------- 列表级失败（刷新失败但表里还有上一次的结果） ---------- */
+.rego-rules .notice,
+.rego-detail .notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.rego-rules .notice strong,
+.rego-detail .notice strong { color: var(--text); font-weight: 600; }
+.rego-rules .notice .textbtn,
+.rego-detail .notice .textbtn { margin-left: auto; flex: none; }
+
+/* ---------- 列表：表格 ---------- */
+.rego-rules .table-wrap { transition: opacity var(--dur) var(--ease-out); overflow-x: auto; }
+.rego-rules .table-wrap[aria-busy="true"] { opacity: .45; }
+
+.rego-table { width: 100%; min-width: 720px; border-collapse: collapse; table-layout: fixed; }
+.rego-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--text-3);
+  text-align: left;
+  white-space: nowrap;
+}
+.rego-table tbody tr { border-bottom: 1px solid var(--line); cursor: pointer; }
+.rego-table tbody tr:hover { background: var(--bg-hover); }
+.rego-table td { padding: 9px 0; font-size: 12px; color: var(--text-2); vertical-align: middle; }
+.rego-table th + th, .rego-table td + td { padding-left: 16px; }
+.rego-table .col-name { width: 26%; }
+.rego-table .col-what { width: 40%; }
+.rego-table .col-effect { width: 92px; }
+.rego-table .col-state { width: 84px; }
+.rego-table .col-source { width: 104px; }
+
+.rego-table .rule-link {
+  display: block;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+.rego-table .rule-link:hover { color: var(--accent); }
+.rego-table .rule-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rego-table .cell-text { color: var(--text-2); }
+.rego-table .is-muted .cell-text, .rego-table .is-muted { color: var(--text-3); }
+
+/* 「效果」那格：这轮只有放行（D017），用等宽的软色标签，不给它编别的色 */
+.rego-rules .chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--accent-line);
+  border-radius: 2px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.rego-rules .state-on { color: var(--text-2); }
+.rego-rules .state-on::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 6px;
+  background: var(--accent);
+  vertical-align: 1px;
+}
+
+/* 空 / 失败 / 加载中的整行 */
+.rego-table .empty-row td {
+  padding: 30px 0;
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: center;
+  cursor: default;
+}
+.rego-table .empty-row:hover { background: none; }
+
+/* 三列展示默认值的脚注（接口没有这三项数据，见 README §13.6） */
+.rego-rules .rules-note {
+  margin: 10px 0 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+/* ---------- 原文页 ---------- */
+.rego-detail { display: block; }
+.rego-detail .page-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+.rego-detail .back-link { text-decoration: none; }
+.rego-detail .page-tools .textbtn { margin-left: auto; }
+.rego-detail .page-tools .textbtn:disabled .od-icon { animation: spin .8s linear infinite; }
+
+.rego-detail .rule-head {
+  padding: 18px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+.rego-detail .rule-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+}
+.rego-detail .what {
+  margin: 6px 0 0;
+  max-width: 76ch;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+.rego-detail .what.is-muted { color: var(--text-3); }
+.rego-detail .rule-meta {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+/* 原文：一眼看到底，不折叠、不换行截断；长了就在块内滚动（值取 alert-detail.css:153-166 的 .rego） */
+.rego-detail .rego-wrap { padding: 14px 0 0; }
+.rego-detail .rego-block {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 62vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--bg-input);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* ---------- 整块失败 / 404（值取 alerts.css:294-297 的 .page-error） ---------- */
+.rego-detail .page-error,
+.rego-rules .page-error {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 26px 0;
+  text-align: center;
+}
+.rego-detail .page-error strong,
+.rego-rules .page-error strong { font-size: 13px; color: var(--text); font-weight: 600; }
+.rego-detail .page-error p,
+.rego-rules .page-error p { margin: 0; font-size: 12px; color: var(--text-2); }
+.rego-detail .page-error .btn-primary,
+.rego-rules .page-error .btn-primary { margin-top: 6px; }
+
+.rego-detail .btn-primary,
+.rego-rules .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.rego-detail .btn-primary:hover,
+.rego-rules .btn-primary:hover { background: var(--accent-hover); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- 断点（与同仓列表页同口径：740 / 620） ---------- */
+@media (max-width: 900px) {
+  .rego-rules .page-tools, .rego-detail .page-tools { padding-inline: 0; }
+  .rego-table { min-width: 640px; }
+  .rego-table .col-what { width: 34%; }
+}
+
+@media (max-width: 620px) {
+  .rego-detail .rule-head { padding: 14px 0 12px; }
+  .rego-detail .rule-head h2 { font-size: 15px; }
+  .rego-detail .rego-block { max-height: 56vh; font-size: 11px; }
+  .rego-table { min-width: 560px; }
+}

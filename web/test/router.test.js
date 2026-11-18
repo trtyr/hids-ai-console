@@ -9,15 +9,26 @@ test('侧栏六个入口，顺序与文案照设计稿 + P003-T015 的演示入�
   assert.deepEqual(NAV_PAGES.map(page => page.id), ['overview', 'alerts', 'alerts-demo', 'trace', 'rules', 'knowledge']);
 });
 
-test('八张页面各有一个模块文件，告警详情与溯源白板不在侧栏但可路由', () => {
+test('九张页面各有一个模块文件，告警详情 / 溯源白板 / 程序门禁不在侧栏但可路由', () => {
   assert.deepEqual(PAGES.map(page => page.id),
-    ['overview', 'alerts', 'alerts-demo', 'alert-detail', 'trace', 'trace-board', 'rules', 'knowledge']);
-  for (const id of ['alert-detail', 'trace-board']) {
+    ['overview', 'alerts', 'alerts-demo', 'alert-detail', 'trace', 'trace-board', 'rules', 'rules-gate', 'knowledge']);
+  for (const id of ['alert-detail', 'trace-board', 'rules-gate']) {
     const hidden = PAGES.find(page => page.id === id);
     assert.equal(hidden.navLabel, null, `${id} 不该进侧栏`);
     assert.equal(NAV_PAGES.includes(hidden), false);
   }
   for (const page of PAGES) assert.equal(typeof page.render, 'function', `${page.id} 缺 render`);
+});
+
+test('A1：规则进去先是列表——`#/rules` 落在规则页、params 为空，`#/rules/<id>` 把 id 原样交给它', () => {
+  assert.equal(routeFromHash('#/rules').page.id, 'rules');
+  assert.deepEqual(routeFromHash('#/rules').params, []);
+  const detail = routeFromHash('#/rules/ssh_bruteforce');
+  assert.equal(detail.page.id, 'rules');
+  assert.deepEqual(detail.params, ['ssh_bruteforce']);
+  assert.equal(PAGES.find(page => page.id === 'rules').navLabel, '规则');
+  // 旧程序门禁编辑页搬到隐藏路由，不进侧栏
+  assert.equal(routeFromHash('#/rules-gate').page.id, 'rules-gate');
 });
 
 test('A1：溯源进去先是列表——`#/trace` 落在列表页，`#/trace-board/<ID>` 才是这一条的白板', () => {

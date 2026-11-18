@@ -1,30 +1,28 @@
-// pages/rules.js —— 前置规则页：六格状态矩阵 + 表单/JSON 双视图 + 校验 / 保存
-// 字段一律照接口真名（openapi.yaml:851-857 的 RuleSetResponse / validate / PUT 回包）。
+// pages/rules.js —— Rego 规则列表页（P003-T017 / D017）：A1 五列 + 六格状态 + A3 无可编辑控件
+// 字段一律照接口真名（RegoRuleSummary：id / name / description / file，openapi.yaml:1839-1847）。
+// 效果 / 开没开 / 从哪来三列是**展示默认值**，接口没有这三项——断言里把口径钉死，防止有人「顺手」从接口读假字段。
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { describeRulesError, mountRulesPage, pathLabel, pretty } from '../../pages/rules.js';
+import { DISPLAY_DEFAULTS, DISPLAY_HINTS, mountRulesPage, page, ruleHref } from '../../pages/rules.js';
+import { RegoRulesError, describeRegoRulesError } from '../../src/rego-rules.js';
 import { clearCredentials, setCredentials } from '../../src/credentials.js';
-import { byRole, flush, setupDom, text } from '../dom.js';
+import { flush, setupDom, text } from '../dom.js';
 
-let calls = [];
+let dom = null;
 
 beforeEach(() => {
-  setupDom();
-  calls = [];
+  dom = setupDom();
   clearCredentials();
   setCredentials({ user: 'hids', password: 'hids-2026' });
+  globalThis.window.location.hash = '';
 });
 
-// ---------- 夹具 ----------
-
-/** 真接口形状：GET /api/triage/rules（revision 取自示例文件时为 null，triage-rules.js:231） */
-const ruleSet = (overrides = {}) => ({
-  config: { schema_version: 1, enabled: true, rules: [{ id: 'RULE-03', event_type: 'revshell' }] },
-  revision: 'a1b2c3d4e5f60718',
-  writable: true,
-  origin: 'file',
-  ...overrides,
+/** 列表项：RegoRuleSummary 的真形状（只有四个键） */
+const summary = (overrides = {}) => ({
+  id: 'ssh_bruteforce', name: 'SSH 暴力破解来源',
+  description: '登录类告警里来源 IP 非空、命令含 ssh 的，列为需要人工复核的候选',
+  file: 'ssh_bruteforce.rego', ...overrides,
 });
 
 const respond = (body, status = 200) => ({
@@ -33,408 +31,246 @@ const respond = (body, status = 200) => ({
   json: async () => body,
 });
 
-/** 按 method + 路径分派；handler 可以是回包对象，也可以是 (url, init) => 回包；没给的分支直接抛 */
-function routes({ rules, validate, save } = {}) {
-  return async (url, init = {}) => {
+/** 一次挂载 + 可控的 fetch 队列（最后一条一直复用）；calls 供断言 */
+function mountWith(replies, options = {}) {
+  const calls = [];
+  const queue = [...replies];
+  const fetchImpl = async (url, init) => {
     calls.push({ url: String(url), init });
-    const method = init.method ?? 'GET';
-    const handler = method === 'GET' ? rules : String(url).endsWith('/validate') ? validate : save;
-    if (!handler) throw new TypeError(`未预期的请求 ${method} ${url}`);
-    return typeof handler === 'function' ? handler(url, init) : handler;
+    const next = queue.length > 1 ? queue.shift() : queue[0];
+    if (typeof next === 'function') return next(String(url), init);
+    return next;
   };
-}
-
-async function mount(fetchImpl, extra = {}) {
-  const host = mountRulesPage({ fetchImpl, ...extra });
+  const host = mountRulesPage({ fetchImpl, ...options });
   document.body.append(host);
-  await flush();
-  return host;
+  return { host, calls };
 }
 
-const region = () => document.querySelector('.rules-host');
-const form = () => region().querySelector('[data-role="form"]');
-const kind = role => region().querySelector(`[data-role="${role}"]`);
-/** 顶层字段名（不含嵌套层里的 key 控件） */
-const topKeys = () => [...form().children]
-  .filter(node => node.classList.contains('form-row'))
-  .map(row => row.querySelector('input[data-role="key"]').value);
-const click = node => node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-const typeInto = (node, value) => {
-  node.value = value;
-  node.dispatchEvent(new window.Event('input', { bubbles: true }));
-};
-const pick = (node, value) => {
-  node.value = value;
-  node.dispatchEvent(new window.Event('change', { bubbles: true }));
-};
+const rows = host => [...host.querySelectorAll('tbody tr')];
+const cells = row => [...row.querySelectorAll('td')];
 
-// ---------- 纯函数 ----------
+// ---------- A1：进去是列表，列有名字、一句话、效果、开没开、从哪来 ----------
 
-test('pretty / pathLabel / describeRulesError：给界面看的形状', () => {
-  assert.equal(pretty({ a: 1 }), '{\n  "a": 1\n}');
-  assert.equal(pathLabel(['rules', 0, 'id']), 'rules / 0 / id');
-  assert.match(describeRulesError({ kind: 'network' }), /连不上研判服务/);
-  assert.match(describeRulesError({ kind: 'conflict', message: '规则配置已变化，请刷新后重试' }), /刷新/);
-  assert.equal(describeRulesError({ kind: 'http', status: 400, message: '规则集格式无效' }), '规则集格式无效');
-});
-
-// ---------- 页面契约 ----------
-
-test('page.render：内容区只留一个根节点，编辑面板有可访问名', async () => {
-  const { page } = await import('../../pages/rules.js');
-  const content = document.createElement('div');
-  page.render(content, { params: [] });
+test('A1：进去先是表——五列表头依次是 名字 / 一句话 / 效果 / 开没开 / 从哪来，没有编辑器', async () => {
+  const { host } = mountWith([respond({ count: 1, rules: [summary()] })]);
   await flush();
-  assert.equal(content.children.length, 1);
-  assert.ok(content.querySelector('section[aria-label="规则配置编辑器"]'));
-  assert.ok(content.querySelector('aside[aria-label="规则操作"]'));
-  assert.equal(page.id, 'rules');
-  assert.equal(page.title, '规则');
-  assert.equal(page.navLabel, '规则');
+  assert.deepEqual([...host.querySelectorAll('thead th')].map(text),
+    ['名字', '一句话', '效果', '开没开', '从哪来']);
+  // 旧程序门禁编辑器的两块都不在这里（P003-T017 搬到 #/rules-gate）
+  assert.equal(host.querySelector('section[aria-label="规则配置编辑器"]'), null);
+  assert.equal(host.querySelector('aside[aria-label="规则操作"]'), null);
 });
 
-// ---------- 格 1：loading ----------
+test('A1：五列逐格对字段——名字 / 一句话 / 效果「放行」 / 开没开「开」 / 从哪来「未标注」', async () => {
+  const { host } = mountWith([respond({
+    count: 2,
+    rules: [summary(), summary({ id: 'webshell_drop', name: 'WebShell 落地脚本', description: null, file: 'webshell_drop.rego' })],
+  })]);
+  await flush();
+  const [first, second] = rows(host).map(cells);
 
-test('加载中：表单区说明在读取，按钮全禁用，区域标 aria-busy', async () => {
+  assert.equal(text(first[0]), 'SSH 暴力破解来源');
+  assert.equal(text(first[1]), summary().description);
+  assert.equal(text(first[2]), '放行');
+  assert.equal(text(first[3]), '开');
+  assert.equal(text(first[4]), '未标注');
+
+  // description 为 null（`# description:` 可选）：写「未写说明」，不空着、不编一句
+  assert.equal(text(second[1]), '未写说明');
+});
+
+test('三列展示默认值有口径说明（title 挂着为什么，不让「开」「未标注」变成没头没尾的字）', async () => {
+  const { host } = mountWith([respond({ count: 1, rules: [summary()] })]);
+  await flush();
+  const [first] = rows(host).map(cells);
+  assert.equal(first[2].querySelector('.chip').getAttribute('title'), DISPLAY_HINTS.effect);
+  assert.equal(first[3].querySelector('.state-on').getAttribute('title'), DISPLAY_HINTS.enabled);
+  assert.equal(first[4].querySelector('.cell-text').getAttribute('title'), DISPLAY_HINTS.source);
+  // 页面底部还有一行同口径的脚注
+  assert.match(text(host.querySelector('[data-role="note"]')), /展示默认/);
+});
+
+// ---------- A2 的入口：点名字进这一条的原文 ----------
+
+test('A2：名字是去原文页的真链接（`#/rules/<id>`），整行点击也跳过去', async () => {
+  const { host } = mountWith([respond({ count: 1, rules: [summary()] })]);
+  await flush();
+  const link = host.querySelector('.rule-link');
+  assert.equal(link.getAttribute('href'), '#/rules/ssh_bruteforce');
+  assert.equal(link.getAttribute('aria-label'), '打开规则 SSH 暴力破解来源 的 Rego 原文');
+  assert.equal(ruleHref('ssh_bruteforce'), '#/rules/ssh_bruteforce');
+
+  rows(host)[0].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  assert.equal(globalThis.window.location.hash, '#/rules/ssh_bruteforce');
+});
+
+test('A2：行里的文件名留在 title（表上不占一列，信息不丢）', async () => {
+  const { host } = mountWith([respond({ count: 1, rules: [summary()] })]);
+  await flush();
+  assert.match(host.querySelector('.rule-link').getAttribute('title'), /ssh_bruteforce\.rego$/);
+});
+
+// ---------- A3：这轮页面上不能编辑 ----------
+
+test('A3：列表页没有任何可编辑控件（input / textarea / select / contenteditable 全无）', async () => {
+  const { host } = mountWith([respond({ count: 2, rules: [summary(), summary({ id: 'honeypot' })] })]);
+  await flush();
+  assert.equal(host.querySelector('input, textarea, select, [contenteditable]'), null);
+  // 页面上只有「刷新」；另一个按钮是隐藏的刷新失败条里的「重试」（没有失败就不出现）
+  assert.deepEqual([...host.querySelectorAll('button')].map(text).sort(), ['刷新', '重试'].sort());
+  assert.equal(host.querySelector('[data-role="notice"]').hidden, true);
+  assert.equal(host.querySelector('button[type="submit"]'), null);
+  for (const label of ['保存', '编辑', '提交', '删除', '新增']) {
+    assert.equal(host.textContent.includes(label), false, `页面上不该出现「${label}」`);
+  }
+});
+
+// ---------- 展示默认值 vs 接口字段：不偷读 ----------
+
+test('服务端哪天多给 effect / enabled / source / updated_at，页面也不认（三列是展示默认，不是接口字段）', async () => {
+  const { host } = mountWith([respond({
+    count: 1,
+    rules: [{ ...summary(), effect: '阻断', enabled: false, source: 'false_positive', updated_at: '2026-11-01' }],
+  })]);
+  await flush();
+  const [first] = rows(host).map(cells);
+  assert.equal(text(first[2]), DISPLAY_DEFAULTS.effect);
+  assert.equal(text(first[3]), DISPLAY_DEFAULTS.enabled);
+  assert.equal(text(first[4]), DISPLAY_DEFAULTS.source);
+  assert.equal(host.textContent.includes('2026-11-01'), false, '接口没定的列不许偷偷显示');
+});
+
+// ---------- 六格状态矩阵 ----------
+
+test('格 1 loading：表里写正在读取、区域标 aria-busy、刷新禁用、共 N 条是「—」', async () => {
   const pending = new Promise(() => {});
-  await mount(async () => pending);
-  assert.match(text(form()), /正在读取规则配置/);
-  assert.equal(text(kind('rev-value')), '—');
-  assert.equal(byRole(region(), 'button', '保存规则').disabled, true);
-  assert.equal(byRole(region(), 'button', '撤销修改').disabled, true);
-  assert.equal(byRole(region(), 'button', '校验配置').disabled, true);
-  assert.equal(kind('shell').getAttribute('aria-busy'), 'true');
-});
-
-// ---------- 格 2：空配置 ----------
-
-test('空配置 {}：表单写空对象说明，revision 与可写照接口，未保存标记隐藏', async () => {
-  await mount(routes({ rules: respond(ruleSet({ config: {}, revision: null, writable: false })) }));
-  assert.match(text(form()), /当前 config 为空对象/);
-  assert.equal(text(kind('rev-label')), '无 revision');
-  assert.equal(text(kind('rev-value')), 'null');
-  assert.equal(text(kind('expected-rev')), 'null');
-  assert.equal(text(kind('writable-value')), '只读');
-  assert.equal(text(kind('writable-badge')), '只读');
-  assert.equal(kind('dirty').hidden, true);
-  assert.equal(text(kind('count-value')), '未校验');
-});
-
-test('空配置也能进 JSON 视图：textarea 是 {}，行号 1 行', async () => {
-  await mount(routes({ rules: respond(ruleSet({ config: {} })) }));
-  click(byRole(region(), 'button', 'JSON'));
-  assert.equal(kind('config').value, '{}');
-  assert.equal(kind('gutter').textContent, '1');
-  assert.equal(byRole(region(), 'button', 'JSON').getAttribute('aria-pressed'), 'true');
-  assert.equal(byRole(region(), 'button', '表单').getAttribute('aria-pressed'), 'false');
-});
-
-// ---------- 表单渲染 ----------
-
-test('表单按 config 递归生成：三个键、布尔勾选框、数组折叠头、嵌套对象折叠头', async () => {
-  await mount(routes({
-    rules: respond(ruleSet({
-      config: {
-        schema_version: 1,
-        enabled: true,
-        rules: [{ id: 'RULE-03', note: null }],
-        extra: { nested: 'x' },
-      },
-    })),
-  }));
-  assert.deepEqual(topKeys(), ['schema_version', 'enabled', 'rules', 'extra']);
-  const bool = form().querySelector('input[data-act="bool"]');
-  assert.equal(bool.checked, true);
-  const summaries = [...form().querySelectorAll('details > summary')].map(node => text(node));
-  assert.ok(summaries.includes('数组 · 1 项'), `数组折叠头缺失：${summaries}`);
-  assert.ok(summaries.includes('对象 · 1 个字段'), `对象折叠头缺失：${summaries}`);
-  assert.equal(text(form().querySelector('.null-val')), 'null');
-  // 数组默认展开、嵌套对象默认折叠（稿 §2）
-  const [arrayDetails, objectDetails] = form().querySelectorAll('details');
-  assert.equal(arrayDetails.open, true);
-  assert.equal(objectDetails.open, false);
-});
-
-// ---------- 格 3：partial / 只读 ----------
-
-test('只读（writable=false）：徽标只读、JSON 只读、表单控件禁用、保存禁用', async () => {
-  await mount(routes({ rules: respond(ruleSet({ writable: false })) }));
-  assert.equal(text(kind('writable-badge')), '只读');
-  click(byRole(region(), 'button', 'JSON'));
-  assert.equal(kind('config').readOnly, true);
-  click(byRole(region(), 'button', '表单'));
-  const inputs = [...form().querySelectorAll('input, select')];
-  assert.ok(inputs.length > 0);
-  assert.ok(inputs.every(input => input.disabled), '只读时表单控件应全部 disabled');
-  assert.equal(byRole(region(), 'button', '保存规则').disabled, true);
-});
-
-test('只读时点删除无效：模型不变', async () => {
-  await mount(routes({ rules: respond(ruleSet({ writable: false })) }));
-  click(byRole(region(), 'button', '删除字段 schema_version'));
-  assert.deepEqual(topKeys(), ['schema_version', 'enabled', 'rules']);
-  assert.equal(kind('dirty').hidden, true);
-});
-
-// ---------- 编辑 ----------
-
-test('改值 → 未保存标记出现、撤销可用；填令牌后保存才可用', async () => {
-  await mount(routes({ rules: respond(ruleSet()), save: respond({ config: {}, revision: 'f'.repeat(16) }) }));
-  const valueInput = form().querySelector('input[aria-label="值 · schema_version"]');
-  typeInto(valueInput, '2');
-  assert.equal(kind('dirty').hidden, false);
-  assert.equal(byRole(region(), 'button', '撤销修改').disabled, false);
-  const save = byRole(region(), 'button', '保存规则');
-  assert.equal(save.disabled, true, '没有令牌时不许保存');
-  typeInto(kind('token'), 'tk-1');
-  assert.equal(save.disabled, false);
-});
-
-test('字段名重复 / 为空被拒绝并记日志，原名保留', async () => {
-  await mount(routes({ rules: respond(ruleSet()) }));
-  const first = form().querySelector('input[data-role="key"]');
-  pick(first, 'enabled');
-  assert.match(text(kind('log')), /字段名不能为空或与已有字段重复/);
-  assert.deepEqual(topKeys(), ['schema_version', 'enabled', 'rules']);
-});
-
-test('添加字段 / 添加一项 / 上移下移 / 删除项 都只改本地模型', async () => {
-  await mount(routes({ rules: respond(ruleSet({ config: { rules: [{ id: 'A' }, { id: 'B' }] } })) }));
-  const topAddRow = [...form().children].find(node => node.classList.contains('add-row'));
-  topAddRow.querySelector('[data-role="new-key"]').value = 'enabled';
-  pick(topAddRow.querySelector('[data-role="new-type"]'), 'boolean');
-  click(topAddRow.querySelector('button'));
-  // 交给 JSON 视图验证模型（表单是递归重绘的，逐层点太脆）
-  click(byRole(region(), 'button', 'JSON'));
-  assert.match(kind('config').value, /"enabled": false/);
-
-  click(byRole(region(), 'button', '表单'));
-  click(byRole(region(), 'button', '下移第 1 项'));
-  click(byRole(region(), 'button', 'JSON'));
-  const model = JSON.parse(kind('config').value);
-  assert.deepEqual(model.rules.map(item => item.id), ['B', 'A']);
-
-  click(byRole(region(), 'button', '表单'));
-  click(byRole(region(), 'button', '删除第 1 项'));
-  click(byRole(region(), 'button', 'JSON'));
-  assert.deepEqual(JSON.parse(kind('config').value).rules.map(item => item.id), ['A']);
-});
-
-test('布尔勾选框切换会写回模型并同步 true/false 文案', async () => {
-  await mount(routes({ rules: respond(ruleSet()) }));
-  const bool = form().querySelector('input[data-act="bool"]');
-  bool.checked = false;
-  bool.dispatchEvent(new window.Event('change', { bubbles: true }));
-  assert.equal(text(form().querySelector('[data-role="bool-text"]')), 'false');
-  click(byRole(region(), 'button', 'JSON'));
-  assert.match(kind('config').value, /"enabled": false/);
-});
-
-// ---------- JSON 视图 ----------
-
-test('JSON 视图：改文本即时解析，语法错误就地提示并挡住切回表单', async () => {
-  await mount(routes({ rules: respond(ruleSet()) }));
-  click(byRole(region(), 'button', 'JSON'));
-  typeInto(kind('config'), '{ "schema_version": 1, ');
-  assert.equal(kind('syntax').classList.contains('is-error'), true);
-  assert.match(text(kind('syntax')), /JSON 语法错误/);
-  click(byRole(region(), 'button', '表单'));
-  assert.equal(kind('json-wrap').hidden, false, '语法错误时应停在 JSON 视图');
-  assert.match(text(kind('syntax')), /修正后才能切回表单/);
-
-  typeInto(kind('config'), '{"schema_version": 2}');
-  assert.equal(kind('syntax').classList.contains('is-error'), false);
-  click(byRole(region(), 'button', '表单'));
-  assert.equal(kind('json-wrap').hidden, true);
-  assert.deepEqual(topKeys(), ['schema_version']);
-});
-
-test('JSON 视图里 config 不是对象：切到表单后提示，且校验被拒', async () => {
-  await mount(routes({ rules: respond(ruleSet()), validate: respond({ valid: true, count: 0 }) }));
-  click(byRole(region(), 'button', 'JSON'));
-  typeInto(kind('config'), '[1, 2]');
-  click(byRole(region(), 'button', '表单'));
-  assert.match(text(form()), /config 不是对象/);
-  click(byRole(region(), 'button', '校验配置'));
+  const { host } = mountWith([async () => pending]);
   await flush();
-  assert.match(text(kind('validate-result')), /config 必须是 JSON 对象/);
-  assert.equal(calls.filter(call => call.url.endsWith('/validate')).length, 0, '不是对象时不该发校验请求');
+  assert.match(text(host), /正在读取规则库/);
+  assert.equal(host.querySelector('[data-role="table-wrap"]').getAttribute('aria-busy'), 'true');
+  assert.equal(host.querySelector('[data-role="refresh"]').disabled, true);
+  assert.equal(text(host.querySelector('[data-role="total"]')), '—');
 });
 
-// ---------- 校验 ----------
-
-test('校验通过：条目数取接口 count，结果条标 ok', async () => {
-  await mount(routes({ rules: respond(ruleSet()), validate: respond({ valid: true, count: 3 }) }));
-  click(byRole(region(), 'button', '校验配置'));
+test('格 1 loading：读完之后刷新可用、aria-busy 摘掉', async () => {
+  const { host } = mountWith([respond({ count: 0, rules: [] })]);
   await flush();
-  assert.match(text(kind('validate-result')), /校验通过 · 条目数 3/);
-  assert.equal(kind('validate-result').classList.contains('is-ok'), true);
-  assert.equal(text(kind('count-value')), '3');
-  const posted = JSON.parse(calls.find(call => call.url.endsWith('/validate')).init.body);
-  assert.deepEqual(posted, { config: ruleSet().config });
+  assert.equal(host.querySelector('[data-role="refresh"]').disabled, false);
+  assert.equal(host.querySelector('[data-role="table-wrap"]').hasAttribute('aria-busy'), false);
 });
 
-test('校验失败（400）：显示服务端原话，条目数回到 —', async () => {
-  await mount(routes({ rules: respond(ruleSet()), validate: respond({ error: '规则集格式无效' }, 400) }));
-  click(byRole(region(), 'button', '校验配置'));
+test('格 2 empty：200 + {count: 0, rules: []} 写「规则库还没有规则」，共 0 条，不摆失败块', async () => {
+  const { host } = mountWith([respond({ count: 0, rules: [] })]);
   await flush();
-  assert.match(text(kind('validate-result')), /校验失败：规则集格式无效/);
-  assert.equal(kind('validate-result').classList.contains('is-error'), true);
-  assert.equal(text(kind('count-value')), '—');
-  assert.match(text(kind('log')), /校验失败/);
+  assert.match(text(host), /规则库还没有规则/);
+  assert.equal(text(host.querySelector('[data-role="total"]')), '0');
+  assert.equal(host.querySelector('.page-error'), null);
 });
 
-// ---------- 保存 ----------
-
-test('保存成功：用接口返回的 revision，未保存标记消失，body 带 expected_revision', async () => {
-  const saved = { config: { schema_version: 2 }, revision: 'b'.repeat(16), origin: 'file' };
-  await mount(routes({ rules: respond(ruleSet()), save: respond(saved) }));
-  typeInto(form().querySelector('input[aria-label="值 · schema_version"]'), '2');
-  typeInto(kind('token'), 'tk-1');
-  click(byRole(region(), 'button', '保存规则'));
+test('格 3 partial：刷新失败但表里还有规则——挂提示、保留上一次的行', async () => {
+  const { host } = mountWith([
+    respond({ count: 1, rules: [summary()] }),
+    respond({ error: '规则库读取失败：rules/ssh_bruteforce.rego:3: 缺少 # name: 显示名' }, 502),
+  ]);
   await flush();
-  assert.match(text(kind('validate-result')), /已保存 · bbbbbbbbbbbbbbbb/);
-  assert.equal(text(kind('rev-value')), 'b'.repeat(16));
-  assert.equal(kind('dirty').hidden, true);
-  assert.equal(kind('token').value, 'tk-1', '令牌是页面本地状态，保存后不清空');
-  const put = calls.find(call => call.init.method === 'PUT');
-  assert.deepEqual(JSON.parse(put.init.body), {
-    config: { schema_version: 2, enabled: true, rules: [{ id: 'RULE-03', event_type: 'revshell' }] },
-    expected_revision: ruleSet().revision,
-  });
-  assert.equal(put.init.headers['X-Rule-Admin-Token'], 'tk-1');
-});
-
-test('保存失败（403）：提示原话、编辑与未保存标记都保留', async () => {
-  await mount(routes({ rules: respond(ruleSet()), save: respond({ error: '规则管理员令牌无效' }, 403) }));
-  typeInto(form().querySelector('input[aria-label="值 · schema_version"]'), '2');
-  typeInto(kind('token'), 'bad');
-  click(byRole(region(), 'button', '保存规则'));
+  host.querySelector('[data-role="refresh"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   await flush();
-  assert.match(text(kind('validate-result')), /保存失败：规则管理员令牌无效/);
-  assert.equal(kind('dirty').hidden, false);
-  assert.equal(form().querySelector('input[aria-label="值 · schema_version"]').value, '2');
-  assert.equal(text(kind('rev-value')), ruleSet().revision, '失败时 revision 不前进');
+
+  assert.equal(host.querySelector('[data-role="notice"]').hidden, false);
+  assert.match(text(host.querySelector('[data-role="notice"]')), /ssh_bruteforce\.rego:3/);
+  assert.equal(rows(host).length, 1, '提示归提示，行不能没');
+  assert.equal(text(cells(rows(host)[0])[0]), 'SSH 暴力破解来源');
 });
 
-test('保存冲突（409）：文案带「刷新」，不丢编辑', async () => {
-  await mount(routes({ rules: respond(ruleSet()), save: respond({ error: '规则配置已变化，请刷新后重试' }, 409) }));
-  typeInto(kind('token'), 'tk');
-  typeInto(form().querySelector('input[aria-label="值 · schema_version"]'), '9');
-  click(byRole(region(), 'button', '保存规则'));
+test('格 4 error：首次就 502——整块失败写服务端原话（带 rules/<文件>:<行>），重试成功后换成表', async () => {
+  const { host, calls } = mountWith([
+    respond({ error: '规则库读取失败：rules/broken.rego:7: 不支持的表达式：foo bar' }, 502),
+    respond({ count: 1, rules: [summary()] }),
+  ]);
   await flush();
-  assert.match(text(kind('validate-result')), /刷新后按新版本重编辑/);
-  assert.equal(kind('dirty').hidden, false);
-});
 
-// ---------- 格 5：error（整页读取失败） ----------
+  const block = host.querySelector('.page-error');
+  assert.ok(block, '应摆整块失败');
+  assert.equal(text(block.querySelector('strong')), '规则库读取失败');
+  assert.match(text(block), /rules\/broken\.rego:7/, '定位信息一个字都不能丢');
+  assert.equal(host.querySelector('[role="status"]').textContent.includes('规则库读取失败'), true);
 
-test('读取失败：整块提示 + 重试；重试成功后提示消失', async () => {
-  let attempt = 0;
-  const flaky = async () => {
-    attempt += 1;
-    if (attempt === 1) throw new TypeError('fetch failed');
-    return respond(ruleSet());
-  };
-  await mount(routes({ rules: flaky }));
-  assert.equal(kind('error').hidden, false);
-  assert.match(text(kind('error')), /连不上研判服务/);
-  assert.match(text(form()), /点上方「重试」/);
-  assert.equal(byRole(region(), 'button', '保存规则').disabled, true);
-
-  click(byRole(region(), 'button', '重试'));
+  block.querySelector('.btn-primary').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   await flush();
-  assert.equal(kind('error').hidden, true);
-  assert.deepEqual(topKeys(), ['schema_version', 'enabled', 'rules']);
+  assert.equal(calls.length, 2);
+  assert.equal(host.querySelector('.page-error'), null);
+  assert.equal(rows(host).length, 1);
 });
 
-test('读取失败 401：文案是「重新登录」，不是服务端纯文本正文', async () => {
-  await mount(routes({ rules: respond({}, 401) }));
-  assert.match(text(kind('error')), /登录已失效/);
-});
-
-test('刷新：丢弃未保存修改，重新读接口，结果条一并清掉', async () => {
-  await mount(routes({ rules: respond(ruleSet()), save: respond({ error: '规则管理员令牌无效' }, 403) }));
-  typeInto(form().querySelector('input[aria-label="值 · schema_version"]'), '7');
-  typeInto(kind('token'), 'bad');
-  click(byRole(region(), 'button', '保存规则'));
+test('格 4 error：401 文案是「登录已失效」，不是服务端纯文本', async () => {
+  const { host } = mountWith([respond({ error: '需要登录后访问' }, 401)]);
   await flush();
-  assert.match(text(kind('validate-result')), /保存失败/);
-  assert.equal(kind('dirty').hidden, false);
+  assert.match(text(host.querySelector('.page-error')), /登录已失效/);
+});
 
-  click(byRole(region(), 'button', '刷新'));
+test('格 5 long-content：超长名字 / 一句话全文进 DOM（od-truncate 只视觉截断，title 留全文）', async () => {
+  const longName = '很长的规则名字'.repeat(20);
+  const longWhat = '这句话在限制什么'.repeat(30);
+  const { host } = mountWith([respond({ count: 1, rules: [summary({ name: longName, description: longWhat })] })]);
   await flush();
-  assert.equal(kind('dirty').hidden, true);
-  assert.equal(form().querySelector('input[aria-label="值 · schema_version"]').value, '1');
-  assert.equal(kind('validate-result').hidden, true, '刷新成功后旧的失败提示不该继续挂着');
-  assert.match(text(kind('log')), /已重新读取规则配置/);
+  const [first] = rows(host).map(cells);
+  assert.equal(text(first[0]), longName);
+  assert.equal(first[0].querySelector('a').getAttribute('title'), `${longName} · ssh_bruteforce.rego`);
+  assert.equal(text(first[1]), longWhat);
+  assert.equal(first[1].querySelector('span').getAttribute('title'), longWhat);
 });
 
-test('已有数据时刷新失败：不清屏、不丢编辑，只在结果条与日志报错', async () => {
-  let attempt = 0;
-  const flaky = async () => {
-    attempt += 1;
-    if (attempt === 1) return respond(ruleSet());
-    throw new TypeError('fetch failed');
-  };
-  await mount(routes({ rules: flaky }));
-  typeInto(form().querySelector('input[aria-label="值 · schema_version"]'), '7');
-  click(byRole(region(), 'button', '刷新'));
+test('格 6 disabled：请求在飞时刷新禁用且转圈，读完恢复', async () => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const { host } = mountWith([async () => {
+    await gate;
+    return respond({ count: 0, rules: [] });
+  }]);
   await flush();
-  assert.equal(kind('error').hidden, true);
-  assert.match(text(kind('validate-result')), /刷新失败：连不上研判服务/);
-  assert.equal(kind('dirty').hidden, false);
-});
+  const refresh = host.querySelector('[data-role="refresh"]');
+  assert.equal(refresh.disabled, true);
+  assert.equal(refresh.classList.contains('is-loading'), true);
 
-// ---------- 撤销 / 复制 ----------
-
-test('撤销修改：模型回到上次保存的快照', async () => {
-  await mount(routes({ rules: respond(ruleSet()) }));
-  typeInto(form().querySelector('input[aria-label="值 · schema_version"]'), '7');
-  click(byRole(region(), 'button', '撤销修改'));
-  assert.equal(form().querySelector('input[aria-label="值 · schema_version"]').value, '1');
-  assert.equal(kind('dirty').hidden, true);
-  assert.match(text(kind('log')), /已撤销未保存修改/);
-});
-
-test('复制 JSON：剪贴板拿到格式化文本；不支持时记一条错误日志', async () => {
-  const copied = [];
-  await mount(routes({ rules: respond(ruleSet()) }), { clipboard: { writeText: async value => { copied.push(value); } } });
-  click(byRole(region(), 'button', '复制 JSON'));
+  release();
   await flush();
-  assert.deepEqual(JSON.parse(copied[0]), ruleSet().config);
-  assert.match(text(kind('log')), /已复制到剪贴板/);
-
-  setupDom();
-  clearCredentials();
-  setCredentials({ user: 'hids', password: 'hids-2026' });
-  calls = [];
-  await mount(routes({ rules: respond(ruleSet()) }), { clipboard: null });
-  click(byRole(region(), 'button', '复制 JSON'));
-  await flush();
-  assert.match(text(kind('log')), /复制失败，请手动选择/);
+  assert.equal(refresh.disabled, false);
+  assert.equal(refresh.classList.contains('is-loading'), false);
 });
 
-// ---------- 格 6：long-content ----------
+// ---------- 错误文案 ----------
 
-test('超长内容：深嵌套与长字符串照原样进控件，JSON 行号跟着行数走', async () => {
-  const longText = 'x'.repeat(4000);
-  const config = { a: { b: { c: { d: { e: longText } } } } };
-  await mount(routes({ rules: respond(ruleSet({ config })) }));
-  const nested = form().querySelectorAll('details');
-  assert.equal(nested.length, 4, '四层嵌套对象都要有折叠头');
-  click(byRole(region(), 'button', 'JSON'));
-  assert.ok(kind('config').value.includes(longText));
-  const lines = kind('config').value.split('\n').length;
-  assert.equal(kind('gutter').textContent.split('\n').length, lines);
+test('describeRegoRulesError：四类 kind 各说各的，http 用服务端原话，未知错误不漏', () => {
+  assert.equal(describeRegoRulesError(new RegoRulesError('unauthorized', '登录已失效，请重新登录')), '登录已失效，请重新登录。');
+  assert.equal(describeRegoRulesError(new RegoRulesError('network', '连接不上研判服务')), '连接不上研判服务。');
+  assert.equal(describeRegoRulesError(new RegoRulesError('invalid', '规则列表接口没有返回 count / rules')), '规则接口返回的形状不对。');
+  assert.equal(describeRegoRulesError(new RegoRulesError('http', '规则库读取失败：rules/a.rego:1: 缺少 package')), '规则库读取失败：rules/a.rego:1: 缺少 package');
+  assert.equal(describeRegoRulesError(new Error('别的东西')), '别的东西');
 });
 
-test('可访问性：值控件有可访问名，日志是 live region，编辑视图是按钮组', async () => {
-  await mount(routes({ rules: respond(ruleSet()) }));
-  const value = form().querySelector('input[aria-label="值 · schema_version"]');
-  assert.equal(value.getAttribute('aria-label'), '值 · schema_version');
-  assert.equal(kind('log').getAttribute('aria-live'), 'polite');
-  const group = region().querySelector('[role="group"][aria-label="编辑视图"]');
-  assert.ok(group);
-  assert.equal(kind('sr-status').getAttribute('role'), 'status');
+// ---------- 页面契约：一个模块两屏 ----------
+
+test('page.render：`#/rules` 出列表，`#/rules/<id>` 出原文（路由只认第一段，参数原样交回来）', async () => {
+  const replies = [
+    respond({ count: 1, rules: [summary()] }),
+    respond({ ...summary(), rego: 'package hids.rules.ssh_bruteforce\n' }),
+  ];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => replies.shift() ?? respond({ count: 0, rules: [] });
+  try {
+    const content = document.createElement('div');
+    page.render(content, { params: [] });
+    await flush();
+    assert.equal(content.children.length, 1);
+    assert.ok(content.querySelector('.rego-rules'), '没有参数是列表');
+
+    page.render(content, { params: ['ssh_bruteforce'] });
+    await flush();
+    assert.equal(content.children.length, 1);
+    assert.ok(content.querySelector('.rego-detail'), '带 id 是原文页');
+    assert.equal(page.id, 'rules');
+    assert.equal(page.navLabel, '规则');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
