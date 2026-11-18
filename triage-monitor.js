@@ -4,6 +4,9 @@ import path from 'node:path';
 import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from './syslog-input.js';
 import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './syslog-case.js';
 
+// 结论排序的档位：threat 在前，其余同档保持时间倒序；没有结论的记录排最后。
+const verdictRanks = Object.freeze({ threat: 0, uncertain: 1, false_positive: 2 });
+
 // 研判记录里的证据条目只外露这四个字段：args 可能带原始事件内容，不外露。
 const evidenceItems = entries => (Array.isArray(entries) ? entries : [])
   .map(({ evidence_id, tool, fetched_at, sha256 }) => ({ evidence_id, tool, fetched_at, sha256 }));
@@ -108,8 +111,20 @@ export class TriageMonitor {
     return { ...visible, evidence: visible.evidence || [], steps: [...(record.steps || [])] };
   }
 
-  cases({ count = 20, offset = 0 } = {}) {
-    const records = [...this.records.values()].filter(record => record.input).reverse();
+  // 列表口径：先按结论 / 事件类型 / 主机 / 事件时间筛，再倒序切页；total 是过滤后的条数。
+  // from / to 是 Unix 秒（含端点），与 eventSeconds 同一个时间源，部署端偏移一并生效。
+  cases({ count = 20, offset = 0, verdicts = [], type = null, host = null, from = null, to = null, sort = 'time' } = {}) {
+    let records = [...this.records.values()].filter(record => record.input);
+    if (verdicts.length) records = records.filter(record => verdicts.includes(record.verdict || 'review'));
+    if (type) records = records.filter(record => eventTypeFor(record.input.parsed.msgid) === type);
+    if (host) records = records.filter(record => record.input.parsed.payload.host_ip === host);
+    if (from != null || to != null) records = records.filter(record => {
+      const seconds = eventSeconds(record.input.parsed);
+      return seconds != null && (from == null || seconds >= from) && (to == null || seconds <= to);
+    });
+    records.reverse();
+    // Array#sort 是稳定排序：同档结论之间保留上面那个时间倒序。
+    if (sort === 'verdict') records.sort((left, right) => (verdictRanks[left.verdict] ?? 3) - (verdictRanks[right.verdict] ?? 3));
     return { total: records.length, cases: records.slice(offset, offset + count).map(record => ({
         alert_id: record.alert_id, matched_alert_id: record.matched_alert_id || null,
         result_alert_id: record.result_alert_id || null, status: record.status,

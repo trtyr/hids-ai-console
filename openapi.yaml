@@ -255,10 +255,20 @@ paths:
     get:
       tags: [自动研判]
       summary: 分页读取 Syslog 案件
+      description: |
+        默认按收到顺序倒序（最新在前）；`sort=verdict` 改成结论排序：threat → uncertain → false_positive → 无结论，同档仍按时间倒序。
+        `total` 是过滤后的条数，`cases` 是切出来的当前页。结论口径与 `GET /api/alerts?verdict=` 一致：记录上没有结论算 review。
+        时间筛（`from`/`to`）按 syslog 事件时间（`event_time`，含部署端 `HIDS_SYSLOG_TIME_OFFSET_MINUTES` 偏移）比，时间解析不出来的案件在带时间筛选时被排除。
       operationId: listTriageCases
       parameters:
         - $ref: '#/components/parameters/Count'
         - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Verdict'
+        - $ref: '#/components/parameters/CaseType'
+        - $ref: '#/components/parameters/CaseHost'
+        - $ref: '#/components/parameters/AlertFrom'
+        - $ref: '#/components/parameters/AlertTo'
+        - $ref: '#/components/parameters/CaseSort'
       responses:
         '200':
           description: 案件列表，包含未匹配牧云事件的记录
@@ -268,8 +278,8 @@ paths:
                 type: object
                 required: [total, cases]
                 properties:
-                  total: { type: integer }
-                  cases: { type: array, items: { $ref: '#/components/schemas/TriageCase' } }
+                  total: { type: integer, description: 过滤后的条数；不带筛选时是全部案件数 }
+                  cases: { type: array, items: { $ref: '#/components/schemas/TriageCaseListItem' } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/agent/triage/control:
@@ -885,9 +895,35 @@ components:
       name: verdict
       in: query
       required: false
-      description: 研判结论，逗号分隔可多选；研判记录没有结论（或根本没有记录）的告警算 review。其他值回 400
+      description: |
+        研判结论，逗号分隔可多选。`/api/alerts` 里没有研判记录的告警算 review；`/api/agent/triage/cases` 里记录上没有结论的案件算 review。其他值回 400
       schema: { type: string }
       example: threat
+    CaseType:
+      name: type
+      in: query
+      required: false
+      description: 事件类型；按 syslog MsgId 经 `eventTypeFor` 映射出的类型比（例如 cloudwalker-revshell → revshell）。不在枚举内回 400
+      schema:
+        type: string
+        enum: [webshell, malware, revshell, memory_webshell, brute_force, abnormal_login, elevation_process,
+          network_audit, suspicious_operation, honeypot, memory_security]
+      example: revshell
+    CaseHost:
+      name: host
+      in: query
+      required: false
+      description: 主机 IP，与案件里 syslog 的 `host_ip` 精确相等才算命中；没有 host_ip 的案件不会被匹配到
+      schema: { type: string }
+      example: 10.0.0.5
+    CaseSort:
+      name: sort
+      in: query
+      required: false
+      description: |
+        time=按收到顺序倒序（默认，同老行为）；verdict=结论排序，threat 在前，依次 uncertain / false_positive / 无结论，同档按时间倒序。其他值回 400
+      schema: { type: string, enum: [time, verdict], default: time }
+      example: verdict
     AlertId:
       name: alertId
       in: path
@@ -1278,6 +1314,68 @@ components:
             出现在三处：单条研判查询 GET /api/agent/triage/{alertId}；告警列表与详情里内嵌的 triage（server.js 把 status() 全量塞进每条告警）；仅 GET /api/agent/triage/cases 的列表项没有这个键。
             未入队的记录没有这个键；排队中、失败的记录是空数组。
           items: { $ref: '#/components/schemas/TriageStep' }
+      additionalProperties: true
+    TriageCaseListItem:
+      type: object
+      description: |
+        `GET /api/agent/triage/cases` 的列表项。只列有原始 syslog 报文的记录；字段是记录上的现状快照，`total` 为过滤后条数。
+        与单条查询（`TriageCase`）的区别：这里带 `msgid` / `event_time` / `host_ip` / `source_ip` / `command` / `repeat_count`，但没有 `steps`。
+      required: [alert_id, status, repeat_count]
+      properties:
+        alert_id:
+          type: string
+          description: syslog 案件 ID，形如 `syslog:<类型>:<指纹16位>:<秒|unknown>:<uuid>`；用它就能打开本条研判（`GET /api/agent/triage/{alertId}`），不要求先有牧云事件号
+        matched_alert_id:
+          type: [string, 'null']
+          description: 关联到的牧云事件 ID；未匹配为 null
+        result_alert_id:
+          type: [string, 'null']
+          description: 研判记录存盘时的 ID（`history.save()` 的返回）；未落盘为 null
+        status: { type: string, enum: [not_queued, queued, running, done, failed] }
+        stage: { type: string, description: 当前阶段中文名，如 等待研判、关联事件、研判完成、研判失败 }
+        detail: { type: string, description: 阶段说明；完成后是结论摘要，失败时是错误原因（截 250 字） }
+        created_at: { type: string, format: date-time, description: 记录创建时间（收到 syslog 的时刻） }
+        updated_at: { type: string, format: date-time }
+        saved_at: { type: [string, 'null'], format: date-time }
+        case_dir: { type: [string, 'null'], description: 案件目录绝对路径；还没写材料时为 null }
+        repeat_count:
+          type: integer
+          minimum: 1
+          description: |
+            重复投递次数，直接沿用记录上的 `repeat_count`（同秒重复投递合并时累加，1 表示只投递过一次）。
+            本列表不另造计数：没有 `delivery_count` / `occurrence_count` 这类第二条口径。
+        verdict:
+          type: [string, 'null']
+          enum: [threat, uncertain, false_positive, null]
+          description: 机器可读结论；还没结论为 null（结论筛里按 review 算）
+        verdict_label: { type: [string, 'null'], enum: [真实威胁, 存疑, 误报, null] }
+        summary: { type: [string, 'null'], description: 结论摘要 }
+        report: { type: [string, 'null'] }
+        missing_evidence: { type: array, items: { type: string } }
+        next_actions: { type: array, items: { type: string } }
+        evidence_refs:
+          type: array
+          description: 结论引用到的证据指针，最多 10 条
+          items:
+            type: object
+            properties:
+              evidence_id: { type: string }
+              pointer: { type: string }
+        evidence:
+          type: array
+          description: 本次研判实际取到的证据条目；未入队或排队中是空数组
+          items: { $ref: '#/components/schemas/TriageEvidence' }
+        verified_facts: { type: integer, description: 通过校验的事实条数 }
+        evidence_sources: { type: integer, description: 去重后的证据编号个数 }
+        msgid: { type: string, description: syslog MsgId，如 cloudwalker-webshell；类型筛就按它映射出的类型比 }
+        decision_source: { type: string, description: 结论来源，如 ai / rule }
+        rule_id: { type: [string, 'null'], description: 规则评估命中的规则 ID }
+        event_time:
+          type: [string, integer]
+          description: syslog 事件时间，取值 `payload.event_create_time` → `payload.event_start_time` → 报文头 `ts`；时间筛就按它（换算成秒后比）
+        host_ip: { type: [string, 'null'], description: syslog 里的主机 IP；主机筛按它精确匹配 }
+        source_ip: { type: [string, 'null'], description: 来源 IP（source_ip 或 login_ip） }
+        command: { type: [string, 'null'], description: 进程命令行 }
       additionalProperties: true
     Investigation:
       type: object
