@@ -409,6 +409,8 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           ? await triageFilteredAlerts(service, monitor, filters.query, { statuses: filters.statuses, verdicts: filters.verdicts, count, offset })
           : await service.alerts({ count, offset, ...filters.query });
         if (monitor && !triageFiltered) result.alerts = result.alerts.map(alert => ({ ...alert, triage: monitor.status(alert.id) }));
+        // 没配研判时 triage 恒为 null：前端靠这个布尔分辨「没记录」与「没配」两种空。
+        result.triage_configured = Boolean(monitor);
         return json(res, 200, result);
       }
       let decodedPath;
@@ -418,7 +420,13 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (match && req.method === 'GET') {
         if (!service) return configured(res);
         if (!Object.hasOwn(eventTypes, match[1])) return error(res, 400, '不支持的事件类型');
-        const result = await service.alert(match[1], Number(match[2]));
+        let result;
+        try { result = await service.alert(match[1], Number(match[2])); }
+        catch (cause) {
+          // 404 = 牧云可达但这条事件读不到（cloudwalker.js 标 status）；其余（不可达、上游自相矛盾）落到外层 502。
+          if (cause?.status === 404) return error(res, 404, cause.message);
+          throw cause;
+        }
         if (monitor) result.alert.triage = monitor.status(result.alert.id);
         return json(res, 200, result);
       }

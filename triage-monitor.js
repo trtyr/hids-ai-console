@@ -4,6 +4,10 @@ import path from 'node:path';
 import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from './syslog-input.js';
 import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './syslog-case.js';
 
+// 研判记录里的证据条目只外露这四个字段：args 可能带原始事件内容，不外露。
+const evidenceItems = entries => (Array.isArray(entries) ? entries : [])
+  .map(({ evidence_id, tool, fetched_at, sha256 }) => ({ evidence_id, tool, fetched_at, sha256 }));
+
 function evidenceSummary(result) {
   const claims = result?.validation?.ok || result?.validation?.removed_unverified_facts
     ? (result.verdict?.claims || []).filter(claim => Array.isArray(claim.citations) && claim.citations.length) : [];
@@ -58,9 +62,15 @@ export class TriageMonitor {
       this.dedupe = new Map(data.dedupe || []);
       this.windows = new Map(data.windows || []);
       for (const record of this.records.values()) {
-        if (record.status !== 'done' || Number.isInteger(record.verified_facts)) continue;
+        if (record.status !== 'done') continue;
+        const needsCounts = !Number.isInteger(record.verified_facts);
+        const needsEvidence = !Array.isArray(record.evidence);
+        if (!needsCounts && !needsEvidence) continue;
         const result = await this.history.latest(record.alert_id, 'triage');
-        if (result) Object.assign(record, evidenceSummary(result));
+        if (!result) continue;
+        if (needsCounts) Object.assign(record, evidenceSummary(result));
+        // 旧队列里没有 evidence[]：从研判记录就地补，不写单独迁移脚本。
+        if (needsEvidence) record.evidence = evidenceItems(result.evidence);
       }
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
@@ -106,7 +116,8 @@ export class TriageMonitor {
         verdict: record.verdict || null, verdict_label: record.verdict_label || null,
         summary: record.summary || null, report: record.report || null,
         missing_evidence: record.missing_evidence || [], next_actions: record.next_actions || [],
-        evidence_refs: record.evidence_refs || [], verified_facts: record.verified_facts || 0,
+        evidence_refs: record.evidence_refs || [], evidence: record.evidence || [],
+        verified_facts: record.verified_facts || 0,
         evidence_sources: record.evidence_sources || 0, msgid: record.input.parsed.msgid,
         decision_source: record.decision_source || 'ai', rule_id: record.rule_id || null,
         event_time: record.input.parsed.payload.event_create_time || record.input.parsed.ts,
@@ -386,6 +397,7 @@ export class TriageMonitor {
       record.next_actions = saved.verdict?.next_actions || [];
       record.evidence_refs = (saved.verdict?.claims || []).flatMap(claim => claim.citations || [])
         .slice(0, 10).map(citation => ({ evidence_id: citation.evidence_id, pointer: citation.pointer }));
+      record.evidence = evidenceItems(saved.evidence);
       Object.assign(record, evidenceSummary(saved));
     } catch (error) {
       record.status = 'failed'; record.stage = '研判失败'; record.detail = String(error.message || error).slice(0, 250);

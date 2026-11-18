@@ -266,3 +266,64 @@ test('不带筛选参数时仍只挂 triage，不改 total 与分页', async t =
   assert.equal(body.alerts[0].triage.status, 'queued');
 });
 
+
+test('HTTP 详情语义：未知事件 ID 回 404，只有牧云不可达才 502', async t => {
+  // upstream 决定 GetEvent 的返回形态；列表方法一律正常，除 mode=down 时全线失败。
+  const gateway = mode => new CloudwalkerGateway({ call: async (method, args) => {
+    if (mode === 'down') throw new Error('fetch failed');
+    if (method.endsWith('.GetEvent')) {
+      if (mode === 'rpc-error') throw new Error('牧云 /rpc -32001: 记录不存在');
+      if (mode === 'event-null') return { event: null };
+      if (mode === 'empty-object') return {};
+      if (mode === 'null') return null;
+      return { event: { event_id: args.id, cmdline: 'whoami' } };
+    }
+    return { total: 0, events: [] };
+  } });
+  // 上游五种「读不到这条事件」形态都算可达 → 404，不是 502
+  for (const mode of ['rpc-error', 'event-null', 'empty-object', 'null']) {
+    const { server, base } = await serve(gateway(mode));
+    t.after(() => server.close());
+    const response = await fetch(`${base}/api/alerts/webshell:404`);
+    assert.equal(response.status, 404, mode);
+    assert.match((await response.json()).error, /不存在或已不可见/, mode);
+  }
+  const down = await serve(gateway('down'));
+  t.after(() => down.server.close());
+  const failed = await fetch(`${down.base}/api/alerts/webshell:1`);
+  assert.equal(failed.status, 502);
+  assert.match((await failed.json()).error, /fetch failed/);
+  const ok = await serve(gateway('ok'));
+  t.after(() => ok.server.close());
+  const found = await fetch(`${ok.base}/api/alerts/webshell:1`);
+  assert.equal(found.status, 200);
+  assert.equal((await found.json()).alert.id, 'webshell:1');
+});
+
+test('HTTP 详情：上游回了别的事件仍是 502，不说成 404', async t => {
+  const gateway = new CloudwalkerGateway({ call: async () => ({ event: { event_id: 99 } }) });
+  const { server, base } = await serve(gateway);
+  t.after(() => server.close());
+  const response = await fetch(`${base}/api/alerts/webshell:1`);
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).error, /ID 与请求不符/);
+});
+
+test('/api/alerts 顶层 triage_configured 区分「没记录」与「没配研判」', async t => {
+  const page = { alerts: [{ id: 'webshell:1', verdictKey: 'review' }], total: 1, totals: { webshell: 1 },
+    errors: {}, partial: false, truncated: false, query: { count: 20, offset: 0 } };
+  const service = { alerts: async () => ({ ...page, alerts: page.alerts.map(alert => ({ ...alert })) }) };
+  const off = await serve(service);
+  t.after(() => off.server.close());
+  const withoutTriage = await (await fetch(`${off.base}/api/alerts`)).json();
+  assert.equal(withoutTriage.triage_configured, false);
+  assert.equal(Object.hasOwn(withoutTriage.alerts[0], 'triage'), false);
+  const on = await serve(service, { status: () => null });
+  t.after(() => on.server.close());
+  const withTriage = await (await fetch(`${on.base}/api/alerts`)).json();
+  assert.equal(withTriage.triage_configured, true);
+  assert.equal(withTriage.alerts[0].triage, null);
+  const filtered = await (await fetch(`${on.base}/api/alerts?triage_status=not_queued`)).json();
+  assert.equal(filtered.triage_configured, true);
+  assert.equal(filtered.total, 1);
+});
