@@ -6,7 +6,7 @@
 - 实现文件：`trace-board.js`（模块归属见 [docs/modules/_breakdown.json](_breakdown.json) 的 `trace-board` 条目）
 - 在架构里的位置：编排层，见 [architecture.md 第 4 节](../architecture.md#4-模块分层与依赖)
 - 证据约定：本页每一处 `文件:行号` 引用都能在 [evidence/recon/P001-T011.md](../../evidence/recon/P001-T011.md) 的清单表里查到；
-  清单里没有的引用不出现在本页。行号对应提交 `35530d8`。
+  清单里没有的引用不出现在本页。行号对应提交 `63f1379`；P003-T006 新增的分页入口（`page`／`summaries`）见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)。
 
 ## 1 职责
 

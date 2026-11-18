@@ -10,7 +10,7 @@ updated: 2026-11-17
 
 模块名 `knowledge-base`。覆盖文件三个：`wiki-store.js`、`wiki-workbench.js`、`wiki-replay.js`（模块划分与页面归属见 [docs/modules/_breakdown.json](_breakdown.json) 的 `knowledge-base` 条目）。
 
-这篇讲这模块对外给出什么、拿到什么、失败时是什么样。关键断言标 `文件:行号`，行号对应当前提交 `35530d8`；代码改动后请重新核对。
+这篇讲这模块对外给出什么、拿到什么、失败时是什么样。关键断言标 `文件:行号`，行号对应当前提交 `63f1379`；代码改动后请重新核对。
 
 判据正文本身不在本篇：`wiki/` 下的 Markdown 页面由本模块读写，但页面内容归 Wiki 维护流程管——[docs/index.md](../index.md) 的「文档与代码的关系」表把判据内容列为「不属于本套文档」。
 
