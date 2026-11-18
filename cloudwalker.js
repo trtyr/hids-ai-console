@@ -15,14 +15,22 @@ export const rpcMethods = Object.freeze({
 
 const string = value => typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
 const first = (...values) => values.map(string).find(Boolean) || '';
-const parseTime = value => {
+// 时间口径：纯数字按秒/毫秒自适应，其余交给 Date 解析；解析不了返回 null。
+// 对外导出，好让 server.js 的 from/to 校验与事件时间用同一套规则。
+export const parseInstant = value => {
   const n = Number(value);
   const date = Number.isFinite(n) && n > 0 ? new Date(n < 1e12 ? n * 1000 : n) : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 const levelNames = { 1: ['低危', 'low'], 2: ['中危', 'medium'], 3: ['高危', 'high'], 4: ['严重', 'critical'] };
+export const levelRanks = Object.freeze({ low: 1, medium: 2, high: 3, critical: 4 });
+// 单次请求最多扫描多少条原始事件（带后置筛选 / sort=level 时才需要扫窗口）。
+export const MAX_SCAN = 500;
 function compareAlerts(a, b) {
   return (b.createdAt || '').localeCompare(a.createdAt || '') || a.id.localeCompare(b.id);
+}
+function compareByLevel(a, b) {
+  return (levelRanks[b.levelKey] || 0) - (levelRanks[a.levelKey] || 0) || compareAlerts(a, b);
 }
 function titleOf(row, type) {
   const name = row.event_name;
@@ -41,7 +49,7 @@ export function normalizeAlert(type, row) {
     ? first(row.remote_addr, row.target, row.destination_ip, row.dst_ip, '待核查')
     : first(row.destination_ip, row.dst_ip, row.address, hostIp, '待核查');
   const level = levelNames[Number(row.level)] || ['未知', 'unknown'];
-  const when = parseTime(row.created_at ?? row.detected_at ?? row.event_time);
+  const when = parseInstant(row.created_at ?? row.detected_at ?? row.event_time);
   return {
     id: `${type}:${id}`, eventType: type, eventId: id, hostId: Number(row.host_id || host.id) || null,
     createdAt: when, time: when ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(when)) : '—',
@@ -81,11 +89,28 @@ export class CloudwalkerGateway {
     return { connected: true, eventTypes: Object.keys(eventTypes), transport: '牧云 /rpc' };
   }
 
-  async alerts({ count = 20, offset = 0 } = {}) {
+  async alerts({ count = 20, offset = 0, type, level, q, from, to, sort = 'time' } = {}) {
+    if (type !== undefined && !Object.hasOwn(eventTypes, type)) throw new Error('不支持的事件类型');
+    if (sort !== 'time' && sort !== 'level') throw new Error('不支持的排序方式');
     const pageSize = Math.min(Math.max(Number(count) || 20, 1), 50);
     const pageOffset = Math.max(Number(offset) || 0, 0);
     const batchSize = Math.max(20, pageSize);
-    const types = Object.keys(eventTypes);
+    // type 下推：只查这一类，total 随之只含该类。
+    const types = type ? [type] : Object.keys(eventTypes);
+    const levels = Array.isArray(level) && level.length ? new Set(level) : null;
+    const needle = typeof q === 'string' && q.trim() ? q.trim().toLowerCase() : null;
+    const matches = alert => {
+      if (levels && !levels.has(levelRanks[alert.levelKey] || 0)) return false;
+      if (from && !(alert.createdAt && alert.createdAt >= from)) return false;
+      if (to && !(alert.createdAt && alert.createdAt <= to)) return false;
+      if (needle) {
+        const text = [alert.id, alert.title, alert.asset, alert.source, alert.target, alert.account, alert.command];
+        if (!text.some(value => String(value ?? '').toLowerCase().includes(needle))) return false;
+      }
+      return true;
+    };
+    // 无后置筛选且按时间排时沿用流式归并（不额外扫描）；否则要扫窗口才能过滤计数与排序。
+    const scanMode = Boolean(levels || needle || from || to) || sort === 'level';
     const fetchBatch = async (type, start) => {
       const method = `${rpcMethods[type]}.${type === 'honeypot' ? 'List' : 'GetEventList'}`;
       const data = await this.rpc.call(method, { count: batchSize, offset: start });
@@ -113,8 +138,10 @@ export class CloudwalkerGateway {
       throw new Error(`全部事件类型查询失败；首个错误：${Object.values(errors)[0]}`);
     }
     const selected = [];
-    const needed = pageOffset + pageSize;
-    while (selected.length < needed) {
+    const pageLimit = pageOffset + pageSize;
+    const scanLimit = scanMode ? Math.max(pageLimit, MAX_SCAN) : pageLimit;
+    let scanned = 0;
+    while (scanned < scanLimit) {
       const empty = sources.filter(source => !source.failed && source.position >= source.events.length && source.fetched < source.total);
       if (empty.length) {
         const refills = await Promise.allSettled(empty.map(source => fetchBatch(source.type, source.fetched)));
@@ -136,13 +163,21 @@ export class CloudwalkerGateway {
       if (!available.length) break;
       available.sort((a, b) => compareAlerts(a.events[a.position], b.events[b.position]));
       const source = available[0];
-      selected.push(source.events[source.position++]);
+      const event = source.events[source.position++];
+      scanned += 1;
+      if (!scanMode || matches(event)) selected.push(event);
+      if (!scanMode && selected.length >= pageLimit) break;
     }
-    const alerts = selected.slice(pageOffset, needed);
-    const total = Object.values(totals).reduce((sum, value) => sum + value, 0);
-    return { alerts, total, totals, errors, partial: Object.keys(errors).length > 0,
+    if (scanMode) selected.sort(sort === 'level' ? compareByLevel : compareAlerts);
+    const alerts = selected.slice(pageOffset, pageOffset + pageSize);
+    const total = scanMode ? selected.length : Object.values(totals).reduce((sum, value) => sum + value, 0);
+    const truncated = scanMode && scanned >= scanLimit
+      && sources.some(source => source.position < source.events.length || (!source.failed && source.fetched < source.total));
+    return { alerts, total, totals, errors, partial: Object.keys(errors).length > 0, truncated,
       query: { count: pageSize, offset: pageOffset },
-      note: '按事件时间合并 11 类事件后分页；平台数据变化时，不同请求之间的页边界可能移动。' };
+      note: scanMode
+        ? `筛选结果按扫描窗口统计：单次最多扫描 ${MAX_SCAN} 条原始事件，truncated 为 true 时 total 只含窗口内匹配。`
+        : '按事件时间合并各类事件后分页；平台数据变化时，不同请求之间的页边界可能移动。' };
   }
 
   async alert(type, id) {
