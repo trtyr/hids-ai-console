@@ -48,6 +48,8 @@ export class TriageMonitor {
     this.pollEpoch = 0;
     this.timer = null;
     this.writeChain = Promise.resolve();
+    // syslog 输入由 server 注入接收器：绑定成败都记在这里，summary() 才看得出「收不到消息」。
+    this.syslog = { listening: false, bind: null, error: null };
   }
 
   async load() {
@@ -128,12 +130,23 @@ export class TriageMonitor {
       })) };
   }
 
+  async attachSyslog(receiver) {
+    try {
+      const address = await receiver.start();
+      this.syslog = { listening: true, bind: `udp://${address.address}:${address.port}`, error: null };
+    } catch (cause) {
+      // 绑定失败不能让队列静默收不到消息：记进 summary()，队列照常服务（HTTP 还要活）。
+      this.syslog = { listening: false, bind: null, error: String(cause?.message || cause).slice(0, 300) };
+    }
+    return this.syslog;
+  }
+
   summary() {
     const counts = { queued: 0, running: 0, done: 0, failed: 0 };
     for (const record of this.records.values()) counts[record.status] = (counts[record.status] || 0) + 1;
     return { initialized: this.initialized, enabled: this.enabled, input_mode: this.inputMode,
       last_poll_at: this.lastPollAt, last_error: this.lastError, counts,
-      ...(this.inputMode === 'poll' ? { interval_ms: this.intervalMs } : {}) };
+      ...(this.inputMode === 'poll' ? { interval_ms: this.intervalMs } : { syslog: { ...this.syslog } }) };
   }
 
   async setEnabled(enabled) {

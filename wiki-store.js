@@ -70,8 +70,15 @@ export class WikiStore {
     return rows.flat().filter(item => item.status !== 'deprecated').sort((a, b) => a.path.localeCompare(b.path));
   }
 
+  // 页面不存在时抛 404，正文只给相对路径：readFile 的 ENOENT message 带服务器绝对路径
+  // （`open '<directory>/<filename>'`），不能让它经 HTTP 404 回给调用方。
   async get(filename) {
-    const source = await readFile(this.file(filename), 'utf8');
+    let source;
+    try { source = await readFile(this.file(filename), 'utf8'); }
+    catch (cause) {
+      if (cause.code !== 'ENOENT') throw cause;
+      throw Object.assign(new Error(`知识库页面不存在：${filename}`), { status: 404, code: 'ENOENT' });
+    }
     return { ...metadata(filename, source), content: source };
   }
 

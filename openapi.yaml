@@ -46,7 +46,9 @@ paths:
       operationId: getCloudwalkerStatus
       responses:
         '200':
-          description: 配置和连接状态
+          description: |
+            配置和连接状态。未配置牧云时 configured=false 且 connected=false；配置且连通时 connected=true。
+            不返回 503：未配置不是服务不可用。
           content:
             application/json:
               schema:
@@ -58,7 +60,10 @@ paths:
                   reason: { type: string }
                 additionalProperties: true
         '502':
-          description: 牧云连接失败，仍返回配置与连接状态
+          description: |
+            牧云连接失败（配置在、连不上）。状态码 502 在这里是业务体，不是「整个服务不可用」：
+            正文仍是 {configured, connected, reason}，configured 恒为 true、connected 恒为 false，
+            reason 是上游错误原文。调用方按正文判断连接状态，不要只看状态码。
           content:
             application/json:
               schema:
@@ -911,6 +916,18 @@ components:
         initialized: { type: boolean }
         enabled: { type: boolean }
         input_mode: { type: string, enum: [syslog, poll] }
+        syslog:
+          type: object
+          description: |
+            仅 input_mode=syslog 时出现；poll 模式没有这个键（改带 interval_ms）。
+            三种状态可区分：未尝试绑定 {listening:false, bind:null, error:null}；绑上 {listening:true, bind:"udp://…", error:null}；
+            绑定失败 {listening:false, bind:null, error:"<原因>"}。listening=false 表示这条输入一条消息也收不到。
+          required: [listening, bind, error]
+          properties:
+            listening: { type: boolean, description: 是否已绑上 UDP 端口 }
+            bind: { type: [string, 'null'], description: 绑上时的 udp://<address>:<port>；否则为 null }
+            error: { type: [string, 'null'], description: 绑定失败原因（截 300 字），如 bind EADDRINUSE 127.0.0.1:15514；未失败为 null }
+          additionalProperties: false
         last_poll_at: { type: [string, 'null'] }
         last_error: { type: [string, 'null'] }
         counts:
