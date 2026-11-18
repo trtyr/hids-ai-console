@@ -125,7 +125,9 @@ probeSession(credentials, options?) → Promise<{ authenticated: true, user: str
 | `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | 已接真接口（P002-T004，见第 11 节）；参数从第二段起原样传，页面自己 `decodeURIComponent` |
 | `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | **溯源列表**（P003-T016 / D015：进去先是列表，见第 12 节） |
 | `#/trace-board/<alertId>` | —（不在侧栏） | 深度溯源 | `pages/trace-board.js` | 这一条的白板（P003-T016 / D016，见第 12 节）；参数是告警 ID，页面自己 `decodeURIComponent` |
-| `#/rules` | 规则 | 规则 | `pages/rules.js` | 已接真接口（P002-T006，见第 13 节） |
+| `#/rules` | 规则 | 规则 | `pages/rules.js` | **Rego 规则列表**（P003-T017 / D017：进去先是表，见第 13 节） |
+| `#/rules/<ruleId>` | —（同一模块） | 规则 | `pages/rules.js` → `pages/rule-detail.js` | 这一条规则的 Rego 原文（P003-T017）；参数是规则 id，`page.render` 按 `params[0]` 分发 |
+| `#/rules-gate` | —（不在侧栏） | 程序门禁 | `pages/rules-gate.js` | 旧程序门禁 JSON 编辑器（P002-T006；P003-T017 搬到隐藏路由，见第 13.10 节） |
 | `#/knowledge` | 知识库 | 知识库 | `pages/knowledge.js` | 已接真接口（P002-T007，见第 14 节） |
 
 - 空 hash、`#/`、未知 id 一律回落到总览，不报错、不空白；回落时 `params` 为空数组。
@@ -714,17 +716,145 @@ P003-T016 起按 D015 / D016 拆成两页（P002-T005 的单页「左列表 + �
 - **工具调用不进图**：D016 明确不做。
 
 
-## 13. 前置规则页（`pages/rules.js` + `src/rules.js`，P002-T006）
+## 13. 规则页（`pages/rules.js` + `pages/rule-detail.js` + `src/rego-rules.js`，P003-T017）
 
-维护「前置规则」配置：读 `GET /api/triage/rules` 的 `config` / `revision` / `writable`，
-用「表单 ⇄ JSON」双视图编辑，校验走 `POST /api/triage/rules/validate`，保存走 `PUT /api/triage/rules`。
-视觉与结构来自设计稿 `rules.html`（`rules-notes.md` 是交接说明）；颜色只用 `assets/theme.css` 的令牌。
+规则是 OPA 的 Rego，不是 JSON（D017）。这一页回答「现在有哪些规则、每一条的 Rego 到底写了什么」：
+**进去先是列表**，点一行才看这一条；**这一轮页面上不能编辑**（D020），两屏都没有 input / textarea / 可编辑控件。
 
-### 结构（稿 → 文件）
+一个页面模块两屏：`#/rules` → 列表（`mountRulesPage`），`#/rules/<id>` → 原文（`mountRuleDetailPage`，住在
+`pages/rule-detail.js`）。分发点在 `pages/rules.js` 的 `page.render`：`params[0]` 为空是列表，有值是原文。
+语义来源是 `decisions/D017.md` / `D020.md`——**新页没有设计稿**（`design/rules.html` 是旧程序门禁编辑页，
+D017 原话「不要当成这个」），视觉取同仓最近邻，逐条记账见 `coding-reports/P003-T017.md` 的稿→码对照表。
+
+### 13.1 数据来源：形态 B（本仓真接口，两个只读）
+
+| operation | 用途 | 回包字段 | 出处 |
+| --- | --- | --- | --- |
+| `GET /api/rules`（`listRegoRules`） | 列表 | `{ count, rules: [{ id, name, description, file }] }`，按 id 升序；空库是 `{count: 0, rules: []}` 不是 404 | `openapi.yaml:623-639`；实现 `server.js:559-562` → `rule-store.js:207-210` |
+| `GET /api/rules/{id}`（`getRegoRule`） | 这一条的原文 | `{ id, name, description, file, rego }`；`rego` 是整份 `.rego` 原文，含注释与空行、逐字返回 | `openapi.yaml:664-684`；实现 `server.js:570-578` → `rule-store.js:213-218` |
+
+- `description` 可选（`# description:` 不是必填，`rule-store.js:104-110`），列表与原文都可能给 `null`。
+- 两个请求都走 HTTP Basic（`credentials.js` 的内存凭据，服务端统一外壳 `server.js:130`）。
+- 本页**不调** `POST /api/rules/evaluate`（求值是分析侧的事），也**不碰** `GET|PUT /api/triage/rules`（那是门禁编辑器，见 13.10）。
+
+### 13.2 adapter 契约（`src/rego-rules.js`，adapter 之外出现 fetch 即缺陷）
+
+```js
+listRegoRules(options?)      → { count, rules: [{ id, name, description, file }] }
+getRegoRule(id, options?)    → { id, name, description, file, rego } | null    // 404 → null，不抛
+// options: { fetchImpl?, baseUrl? }   单测注入用
+```
+
+| 场景 | HTTP | 结果 |
+| --- | --- | --- |
+| 读成功 | 200 | 归一成上面四个字段；服务端多给的键（`updated_at` / `enabled` / 任何新字段）**不转发** |
+| 列表缺 `count` / `rules`，或条目缺 `id` / `name` | 200 | `RegoRulesError{kind:'invalid'}`——半截数据不上表 |
+| 原文缺 `id` / `rego` | 200 | `RegoRulesError{kind:'invalid'}` |
+| id 不存在 | 404 | **`null`**（只有 `getRegoRule`；列表没有 404 这一档） |
+| 登录失效 | 401 | `RegoRulesError{kind:'unauthorized'}`——**不解析正文**（401 正文是纯文本，`server.js:70-74`） |
+| 规则库装载失败 | 502 | `RegoRulesError{kind:'http', status:502}`，`message` 是服务端原话 `规则库读取失败：rules/<文件>:<行>: <原因>` |
+| id 不合格式 / 其它非 2xx | 400 等 | `RegoRulesError{kind:'http', status}`，`message` 尽量是服务端 `{error}` 原话 |
+| 连不上 | — | `RegoRulesError{kind:'network'}` |
+| 2xx 但不是 JSON | 200 | `RegoRulesError{kind:'invalid'}` |
+
+- 两屏的错误文案只有一份：adapter 导出的 `describeRegoRulesError(error)`（`unauthorized` → 「登录已失效，请重新登录。」、
+  `network` → 「连接不上研判服务。」、`invalid` → 「规则接口返回的形状不对。」、`http` → 服务端原话、其它 → 原 message）。
+- 空 id 不发请求，直接 `null`（原文页据此进「规则库里已没有这条」）。
+- id 进路径前 `encodeURIComponent`，不拼裸串。
+
+### 13.3 列表页：五列与字段映射
+
+列照 D017：**名字 / 一句话 / 效果 / 开没开 / 从哪来**（D017 还写了「更新时间」，接口没有 `updated_at`，这轮不画）。
+
+| 列 | 取值 | 性质 |
+| --- | --- | --- |
+| **名字** | `name`，是一枚去原文页的真链接 `#/rules/<id>`；`title` 里带 `name · file` | 接口字段 |
+| **一句话** | `description`；为 `null` 写「未写说明」（`is-muted`） | 接口字段 |
+| **效果** | 恒为「放行」 | **展示默认值**（D017：这轮只有放行，别的效果没定） |
+| **开没开** | 恒为「开」 | **展示默认值**（规则库里装载着的规则就是在用的，没有「关掉」的数据） |
+| **从哪来** | 恒为「未标注」 | **展示默认值**（接口没有来源字段，**不猜**「人建的」或「误报反哺的」） |
+
+- 三列的值只有一处定义：`pages/rules.js` 导出的 `DISPLAY_DEFAULTS`（`{effect:'放行', enabled:'开', source:'未标注'}`），
+  口径说明在 `DISPLAY_HINTS`（挂在各格 `title` 上）；页面底部还有一行脚注写明「三列是展示默认」。
+- 接口哪天多给 `effect` / `enabled` / `source`，页面**也不会读**——改这三列只在 `rowElement()` 一处换映射（单测钉着这条）。
+- 列表页没有筛选、没有分页、没有搜索框：接口一次返回全库、没有 `count` / `offset`；
+  三列都是常量，做「按效果 / 开关 / 来源筛」筛不出任何东西（D017 的这一句等后端补字段后再做，见 13.9）。
+- 列表顶部只写「共 N 条」（`count`）与「刷新」。
+
+### 13.4 原文页：三块，从上到下
+
+1. **名字** `name`（`h2`）；
+2. **这句话在放行什么** `description`（为 `null` 写「这条规则没写一句话说明。」）；
+3. **元信息**：规则 id + 文件名（`id` / `file`，等宽字体）；
+4. **原文**：`<pre class="rego-block" aria-label="这条规则的 Rego 原文">` 里是 `rego` **逐字**（含注释、空行、缩进；
+   不折叠、不换成 JSON、不渲染成表单）。长了在块内滚动（`max-height: 62vh`，样式层的事，数据层不截断）。
+
+- A2 的判据：`pre.textContent === 接口的 rego`；页面上 `textarea` / `form` / JSON 行号栏（`[data-role="gutter"]`）全部不存在。
+- A3 的判据：`input, textarea, select, [contenteditable]` 全为 `null`；按钮只有「刷新」（+ 失败时的「重试」）；
+  页面上不出现「保存 / 编辑 / 提交 / 删除 / 新增」这些字。
+- id 不存在（404）：整块写「规则库里已没有这条」，给「回规则列表」链接（`#/rules`），**不摆重试**（库里没有这条，重试也读不出来）。
+
+### 13.5 六格状态矩阵（两屏各一格，全部有单测）
+
+| 格 | 列表页 | 原文页 | 断言要点 |
+| --- | --- | --- | --- |
+| loading | 表里一行「正在读取规则库…」，`.table-wrap[aria-busy="true"]`（`opacity:.45`），刷新 `disabled` 且图标转圈，「共 N 条」是 `—` | 标题写「正在读取规则…」，`.rego-wrap[aria-busy="true"]`，刷新禁用 | `aria-busy === 'true'`；`[data-role="refresh"].disabled === true` |
+| empty | 200 + `{count:0, rules:[]}` → 「规则库还没有规则。」，「共 0 条」，不摆失败块 | 404 → 「规则库里已没有这条」+ 回列表链接；`description:null` → 「这条规则没写一句话说明。」 | 文案断言；`[data-role="total"]` 文本是 `0` |
+| partial | 已有规则、刷新失败 → `.notice[role="alert"]` 挂一条提示（服务端原话）+「重试」，**表格保留上一次的行** | 已有原文、刷新失败 → 同样挂提示，`<pre>` 里的原文**不清空** | `[data-role="notice"].hidden === false` 且行数不变 |
+| error | 首次即失败 → 整行 `.page-error[role="alert"]`：「规则库读取失败」+ 原因 +「重试」；502 的原因带 `rules/<文件>:<行>`（定位哪份 Rego 写错，一个字都不能丢）；401 写「登录已失效」 | 「规则原文读取失败」+ 原因 +「重试」（404 不算这一格） | `.page-error` 存在；文案含 `rules/` 与`:行`；点重试成功后换成表 / 原文 |
+| long-content | 名字与一句话全文进 DOM，视觉上 `od-truncate` 截断、`title` 留全文；`.table-wrap` 内横滚（表格 `min-width: 720px`） | 200 行 Rego 全文进 `<pre>`（行数一致），块内滚动 | `textContent` 与 `title` 都是原值；`pre.textContent === rego` |
+| disabled | 请求在飞：刷新禁用 + `is-loading`（图标转圈）；读完恢复 | 同左 | `disabled` 与 `classList.contains('is-loading')` 逐条断言 |
+
+- 两屏都有 `role="status" aria-live="polite"` 的 `[data-role="sr-status"]`：读成功后播「规则库已更新，共 N 条」/「已读到规则 <名字> 的 Rego 原文」，失败播原因。
+
+### 13.6 三列展示默认值的口径（记账，不许悄悄改）
+
+- 后端 `RegoRuleSummary` 只有 `id / name / description / file`（`openapi.yaml:1839-1847`），
+  **没有** `effect` / `enabled` / `source` / `updated_at`；`rules/*.rego` 里也没有来源注释（`prompts/rule-maintenance.md` 只要求 `# name:` / `# description:`）。
+- 群主 2026-11-19 拍板：五列全画，三列写展示默认（放行 / 开 / 未标注），**不许猜**「人建的」或「误报反哺的」；
+  报告记账「后端缺 effect、enabled、source、updated_at」，今晚不新开后端卡。
+- 后端补上字段后要改的地方只有两处：`pages/rules.js` 的 `DISPLAY_DEFAULTS`（删掉对应默认）与 `rowElement()` 的取值；
+  `pages/rules.js` 的单测「服务端多给 effect/enabled/source 也不认」届时反过来写。
+
+### 13.7 交互与事件
+
+| 动作 | 后果 |
+| --- | --- |
+| 点「名字」链接 / 点整行 | 跳到 `#/rules/<id>`（链接是入口，键盘可达；行点击只是给鼠标省一步） |
+| 点「刷新」（两屏） | 重新 `GET`；已有内容时失败只挂提示、不清屏；没有内容时失败进 error 格 |
+| 点失败块里的「重试」（两屏） | 同「刷新」 |
+| 点提示条里的「重试」（partial） | 同上；成功后提示条消失 |
+| 点原文页「← 规则列表」/ 404 块的「回规则列表」 | 回 `#/rules` |
+
+### 13.8 可访问性
+
+- 列表是 `<table>`：`<caption class="sr-only">` 说明「点一条规则的名字看它的 Rego 原文」，五列表头都是 `<th scope="col">`。
+- 名字链接的可访问名是「打开规则 <名字> 的 Rego 原文」；`focus-visible` 有 2px 强调色描边。
+- 原文是 `<pre aria-label="这条规则的 Rego 原文">`（读屏能拿名字）；名字是 `h2`。
+- 两屏都有 `role="status" aria-live="polite"` 的播报节点；失败块是 `role="alert"`。
+- 键盘可达：链接与按钮都是原生元素；页面没有自定义 Tab 拦截，也没有可编辑控件（Tab 只走链接和按钮）。
+
+### 13.9 已知限制（这一页故意没做）
+
+- **没有筛选 / 分页 / 搜索**：接口一次返回全库、没有 `count|offset|q`；三列是常量，筛不出东西（见 13.6）。
+- **更新时间不画**：D017 提过，但接口没有 `updated_at`。
+- **不在页面上编辑**（D020）：改规则是误报反哺那条路上的维护者（D010 / D018），入口在告警列表的「误报」，不在这里。
+- **和告警详情的 `getRule` 是两份读法**：`src/alert-detail.js:162-175` 自己有一份 `GET /api/rules/{id}`（T015 的「命中的规则」用），
+  本卡不动它；两份合并等下次动告警详情时做，现在各自有单测。
+- **旧程序门禁编辑器没删**：搬到 `#/rules-gate`（见 13.10），D020 说的「这轮不做规则页上的编辑」指的是 Rego 规则页。
+
+### 13.10 旧程序门禁编辑页（`pages/rules-gate.js` + `src/rules.js`，P002-T006；`#/rules-gate`）
+
+P003-T017 把原来的 `#/rules` 编辑器整份搬到 `web/pages/rules-gate.js`：页面 id `rules-gate`、顶栏标题「程序门禁」、
+`navLabel: null`（**不进侧栏**，`#/rules-gate` 直达）。代码、样式（`assets/pages/rules.css`）与 27 条单测
+（`test/pages/rules-gate.test.js`）一字未改，下列行为照旧有效——它维护的是 `GET|PUT /api/triage/rules` 那份
+**程序门禁 JSON 配置**，不是 Rego 规则库。
+
+#### 结构（稿 → 文件）
 
 | 稿中区块 | 落在哪 | 备注 |
 | --- | --- | --- |
-| 内容区首行「刷新」 | `pages/rules.js` 的 `.rules-tools` | 稿里在顶栏，顶栏属壳（forbidden）→ 挪进内容区，与 T005 同一条处理 |
+| 内容区首行「刷新」 | `pages/rules-gate.js` 的 `.rules-tools` | 稿里在顶栏，顶栏属壳（forbidden）→ 挪进内容区，与 T005 同一条处理 |
 | 编辑面板头部：标题 / revision / 可写徽标 / 未保存 / 视图切换 / 撤销修改 / 复制 JSON | `.pane-head` + `.title-block` + `.pane-actions` | 文案照稿 |
 | 表单区（按 config 递归生成） | `[data-role="form"]`，渲染函数 `paintForm()` / `valueEl()` | 对象 → `details.nested`（默认折叠）；数组 → `details.nested open={true}`；布尔 → 勾选框；数字 → number；字符串 → text；`null` → 原样显示，不给编辑 |
 | JSON 区（行号 + 等宽文本域） | `.editor-wrap` + `[data-role="gutter"]` + `[data-role="config"]` | 行号随 `input` 与 `scroll` 同步 |
@@ -732,7 +862,7 @@ P003-T016 起按 D015 / D016 拆成两页（P002-T005 的单页「左列表 + �
 | 右侧 320px 操作栏：状态 / 校验 / 保存 / 操作日志 | `.side` 的四个 `.panel` / `.log` | 保存卡的令牌只存在页面内存，刷新即清 |
 | 整页读取失败提示（稿没画） | `.notice` `[data-role="error"]` | 缺项：稿是演示数据，无失败态；按同批页面（T005 `.notice`）先例补 |
 
-### adapter 契约（`src/rules.js`，`adapter 之外出现 fetch 即缺陷`）
+#### adapter 契约（`src/rules.js`，`adapter 之外出现 fetch 即缺陷`）
 
 ```js
 getRules(options?)                          → { config, revision, writable, origin, error }
@@ -756,7 +886,7 @@ saveRules({ config, expectedRevision, token, ...options }) → { config, revisio
 - 每个请求都带 `Authorization: Basic`（`credentials.js` 的内存凭据）；`PUT` 另带 `X-Rule-Admin-Token`（页面令牌输入框，**不进** `credentials.js`）。
 - `saveRules` 的 body 逐字是 `{ config, expected_revision }`；成功后 revision 只取响应里的，不自造。
 
-### 状态矩阵（六格，全部有单测）
+#### 状态矩阵（六格，全部有单测）
 
 | 格 | 触发 | 界面 | 断言要点 |
 | --- | --- | --- | --- |
@@ -767,7 +897,7 @@ saveRules({ config, expectedRevision, token, ...options }) → { config, revisio
 | long-content | 深嵌套 / 超长字符串 | 表单区与 JSON 区各自内部滚动，不撑破页面；行号与行数一致 | 4 层嵌套 → 4 个 `details`；`gutter` 行数 === textarea 行数 |
 | disabled | 只读 / 加载中 / 未修改 / 没填令牌 / 请求在飞 | 保存：`!writable || !dirty || !token || busy` 任一为真即禁用；撤销：`!writable || !dirty`；校验：加载中或请求在飞时禁用；刷新：请求在飞时禁用并转圈 | 逐条断言 `disabled` |
 
-### 字段映射（稿元素 → 接口字段）
+#### 字段映射（稿元素 → 接口字段）
 
 | 界面元素 | 字段 | 备注 |
 | --- | --- | --- |
@@ -778,7 +908,7 @@ saveRules({ config, expectedRevision, token, ...options }) → { config, revisio
 | 保存 / 撤销 / 未保存 | 本地模型 vs 上次保存快照 | 纯前端状态，不来自接口 |
 | 操作日志 | 本地时间 + 事件文案 | 不来自接口 |
 
-### 交互与事件
+#### 交互与事件
 
 | 动作 | 后果 |
 | --- | --- |
@@ -794,7 +924,7 @@ saveRules({ config, expectedRevision, token, ...options }) → { config, revisio
 | 「刷新」/「重试」 | 重新 `GET`，丢弃未保存改动，清掉结果条；已有数据时刷新失败不清屏 |
 | `Ctrl/Cmd + S` | 保存按钮可用时等同点它 |
 
-### 可访问性
+#### 可访问性
 
 - 编辑面板 `section[aria-label="规则配置编辑器"]`，操作栏 `aside[aria-label="规则操作"]`；视图切换是 `role="group"` + 两枚 `aria-pressed` 按钮。
 - 每组字段：字段名输入 `aria-label="字段名"`；值控件 `aria-label="值 · <字段路径>"`（如 `值 · rules / 0 / id`）；数组项按钮可访问名是「上移第 1 项 / 下移第 1 项 / 删除第 1 项」。
@@ -803,7 +933,7 @@ saveRules({ config, expectedRevision, token, ...options }) → { config, revisio
 - 只读态除视觉置灰外，控件同时 `disabled`——键盘也改不了（稿只写「置灰不可操作」）。
 - 焦点：渲染时不给焦点；「没填令牌就保存」把焦点送回令牌框。
 
-### 已知限制（这一页故意没做）
+#### 已知限制（这一页故意没做）
 
 - **`config` 的真实约束不在前端**：`openapi.yaml:854` 写 `additionalProperties: true`，实现 `validateRuleSet` 要求恰好 `{schema_version, enabled, rules[]}` 三键（`triage-rules.js:126-138`）。页面不猜字段，校验失败显示服务端原话（`规则集格式无效`）。
 - **没有规则专用控件**（告警类型 / 主机 / 生效时间 / 条件阈值）：需要后端给 `config` 的 schema，`rules-notes.md:5` 已把这条列为后续。
