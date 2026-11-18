@@ -12,7 +12,7 @@ depth: complete
 
 这份文档回答一个问题：**一条牧云告警从进来，到变成一份可读的案件材料，中间发生了什么。**
 
-行号基准是提交 `35530d8`（与 `docs/architecture.md` 等页同一基准）。这三个文件的最后一次改动是更早的 `a16e0d5`：`git log -1 --format='%h %cI' -- triage-monitor.js syslog-input.js syslog-case.js` 给出 `a16e0d5 2026-11-17T17:34:30+08:00`；`git diff --stat 35530d8 HEAD -- triage-monitor.js syslog-input.js syslog-case.js` 输出为空，所以两个提交下行号一致。代码改了，这里的行号要重新核。
+行号基准是提交 `a16e0d5`（这三个文件最后一次进本页时的版本；`docs/architecture.md` 等页用 `35530d8`）。此后 `triage-monitor.js` 又长过两次：`3bb33b7`（+31/−5）与 P003-T009（列表筛选，+17/−2，本卡）；`server.js` 改动更多。所以**本页其余旧引用的行号都偏小，越靠后偏得越多**：读的时候按函数名对齐。§8 / §8.1 / §9 / §10 中本卡改写过的行号已按本卡提交重新取；全页重排留给文档卡。
 
 读法：
 
@@ -466,7 +466,7 @@ EOF
 | | 从暂停恢复时：游标重置为**点击那一刻的秒级时间**、`watermark_ids` 清空、`initialized` 置真，并**逐条删掉处于 `queued` 状态的记录**——暂停期间积压的任务不补跑 | `triage-monitor.js:155-162`（注释在 `triage-monitor.js:156-157`） |
 | | 恢复后 `poll` 模式会立刻再轮询一次 | `triage-monitor.js:165` |
 | `status(alertId)` | 查不到返回 `null`；返回时去掉 `input`（原始报文与解析结果），只留可见字段与步骤 | `triage-monitor.js:105-107` |
-| `cases({ count = 20, offset = 0 })` | **只列有 `input` 的记录**，也就是走 syslog 进来的那些；倒序分页 | `triage-monitor.js:111-113` |
+| `cases({ count, offset, verdicts, type, host, from, to, sort })` | **只列有 `input` 的记录**，也就是走 syslog 进来的那些；先筛后倒序分页，`total` 是过滤后条数（详见 §8.1） | `triage-monitor.js:116-128` |
 | `summary()` | `initialized`、`enabled`、`input_mode`、`last_poll_at`、`last_error`、四种状态计数；`poll` 模式额外带 `interval_ms`；`syslog` 模式带 `syslog: {listening, bind, error}`——绑定成败在这里可见，`listening:false` 等于一条 syslog 也收不到 | `triage-monitor.js:144-150` |
 | `attachSyslog(receiver)` | 启动 syslog 接收器：绑上记 `bind`（`udp://<address>:<port>`），失败记 `error`（截 300 字）且**不抛**，队列与 HTTP 继续服务 | `triage-monitor.js:133-142` |
 
@@ -661,7 +661,7 @@ triage-monitor.js: TriageMonitor
 | `start()` | 启动：读盘 → 按输入模式轮询或直接排空 | `triage-monitor.js:93` |
 | `stop()` | 停掉轮询定时器 | `triage-monitor.js:101` |
 | `status(alertId)` | 单条记录现状（去掉原始报文） | `triage-monitor.js:103` |
-| `cases({ count, offset })` | 案件列表（只列 syslog 来源） | `triage-monitor.js:111` |
+| `cases({ count, offset, verdicts, type, host, from, to, sort })` | 案件列表（只列 syslog 来源）；筛选与排序语义见 §8.1 | `triage-monitor.js:116` |
 | `summary()` | 运行态概览 | `triage-monitor.js:144` |
 | `attachSyslog(receiver)` | 启动 syslog 接收器，绑定成败入 `summary().syslog` | `triage-monitor.js:133` |
 | `setEnabled(enabled)` | 暂停 / 恢复 | `triage-monitor.js:152` |
@@ -672,6 +672,57 @@ triage-monitor.js: TriageMonitor
 | `run(record)` | 跑一条记录的完整流程 | `triage-monitor.js:350` |
 
 三个文件之间的依赖方向是单向的：`triage-monitor.js` 依赖 `syslog-input.js` 与 `syslog-case.js`（`triage-monitor.js:4-5`），`syslog-case.js` 依赖 `syslog-input.js`（`syslog-case.js:4`），`syslog-input.js` 不依赖本模块其他文件（`syslog-input.js:1-2` 只 import node 内置模块）。
+
+### 8.1 案件列表契约（`GET /api/agent/triage/cases`）
+
+`cases()`（`triage-monitor.js:116-146`）先按四类条件筛，再按收到顺序倒序（插入序是旧→新，`triage-monitor.js:125`），然后切页；`total` 是**过滤后**的条数（`triage-monitor.js:128`），不随 `count`/`offset` 变。HTTP 层参数解析与 400 文案在 `server.js:158-176`，路由在 `server.js:314-323`。
+
+| 参数 | 作用 | 语义 | 依据 |
+| --- | --- | --- | --- |
+| `verdict` | 结论 | 逗号分隔多选：`threat` / `uncertain` / `false_positive` / `review`；记录上没有结论时按 `review` 算（`review` 不是记录上的取值） | `server.js:159-160`、`triage-monitor.js:118` |
+| `type` | 事件类型 | syslog MsgId 经 `eventTypeFor` 映射出的类型（§3.4），如 `cloudwalker-revshell` → `revshell`；不在 `eventTypes` 枚举内回 400 | `server.js:161-162`、`triage-monitor.js:119` |
+| `host` | 主机 | 与案件 `input.parsed.payload.host_ip` 精确相等；没有 `host_ip` 的案件不会命中 | `server.js:173`、`triage-monitor.js:120` |
+| `from` / `to` | 事件时间窗 | RFC3339 或秒/毫秒时间戳（`parseInstant`，`cloudwalker.js:20-24`）；服务端落成 Unix 秒后与 `eventSeconds(parsed)` 比，**含端点**；`to` 早于 `from` 回 400；时间解析不出来的案件（`eventSeconds` 返回 `null`）在带时间筛时被排除 | `server.js:163-169`、`server.js:173-175`、`triage-monitor.js:121-124` |
+| `sort` | 排序 | `time`（默认）＝收到顺序倒序；`verdict`＝threat(0) → uncertain(1) → false_positive(2) → 无结论(3)，同档保持时间倒序（`Array#sort` 是稳定排序） | `server.js:170-171`、`triage-monitor.js:8`、`triage-monitor.js:126-127` |
+| `count` / `offset` | 分页 | 1–50（缺省 20）/ ≥ 0（缺省 0），越界回 400「分页参数无效」；**切页在过滤之后** | `server.js:317-319` |
+
+非法值一律 400，文案形如「筛选结论无效：x」（`server.js:159-171`）。不带任何筛选时行为与老实现一致：全量倒序 + 全量 `total`。
+
+`repeat_count` 原样沿用记录上的值（`triage-monitor.js:133`，缺省 1），列表不另造计数。
+
+**实测**（仓根跑，退出码 0）：
+
+```bash
+cat <<'EOF' | node --input-type=module
+import { TriageMonitor } from './triage-monitor.js';
+const monitor = new TriageMonitor({ file: '/tmp/none.json', service: {}, investigator: {}, history: {} });
+const add = (id, verdict, host, time, msgid, repeat) => monitor.records.set(id, { alert_id: id, status: 'done', verdict,
+  repeat_count: repeat, input: { raw: '', parsed: { msgid, ts: '2026-11-17T10:00:00Z', payload: { host_ip: host, event_create_time: time } } } });
+add('syslog:revshell:a1:1:u1', 'threat', '10.0.0.5', '2026-11-17 10:00:00', 'cloudwalker-revshell', 3);
+add('syslog:webshell:a2:2:u2', 'uncertain', '10.0.0.6', '2026-11-17 11:00:00', 'cloudwalker-webshell', 1);
+add('syslog:revshell:a3:3:u3', undefined, '10.0.0.5', '2026-11-17 12:00:00', 'cloudwalker-revshell', 1);
+const show = (label, page) => console.log(label, '| total=' + page.total, '|',
+  page.cases.map(item => `${item.msgid.slice(11)}/${item.host_ip}/${item.verdict || 'review'}/repeat=${item.repeat_count}`).join('  '));
+show('全部', monitor.cases());
+show('verdict=threat,uncertain', monitor.cases({ verdicts: ['threat', 'uncertain'] }));
+show('type=revshell host=10.0.0.5', monitor.cases({ type: 'revshell', host: '10.0.0.5' }));
+show('sort=verdict', monitor.cases({ sort: 'verdict' }));
+show('count=1 offset=1', monitor.cases({ count: 1, offset: 1 }));
+const at = value => Math.floor(Date.parse(value) / 1000);
+console.log('时间窗 11:00 ~ 11:00 ->', monitor.cases({ from: at('2026-11-17T11:00:00Z'), to: at('2026-11-17T11:00:00Z') }).total);
+EOF
+```
+
+```
+全部 | total=3 | -revshell/10.0.0.5/review/repeat=1  -webshell/10.0.0.6/uncertain/repeat=1  -revshell/10.0.0.5/threat/repeat=3
+verdict=threat,uncertain | total=2 | -webshell/10.0.0.6/uncertain/repeat=1  -revshell/10.0.0.5/threat/repeat=3
+type=revshell host=10.0.0.5 | total=2 | -revshell/10.0.0.5/review/repeat=1  -revshell/10.0.0.5/threat/repeat=3
+sort=verdict | total=3 | -revshell/10.0.0.5/threat/repeat=3  -webshell/10.0.0.6/uncertain/repeat=1  -revshell/10.0.0.5/review/repeat=1
+count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
+时间窗 11:00 ~ 11:00 -> 1
+```
+
+读法：第一行是默认（时间倒序、无筛选）；`sort=verdict` 把 `threat` 提到最前、无结论沉底；`count=1 offset=1` 的 `total` 仍是 3（`total` 只跟筛选走）；时间窗含端点所以 11:00 那一刻的那条留在窗内。
 
 ## 9 值语义
 
@@ -698,6 +749,10 @@ triage-monitor.js: TriageMonitor
 | 材料单文件读取上限 | 整数 | 字符 | 25000 | — | 超出只返回错误、不返回内容 | `syslog-case.js:144` |
 | 并发上限 `concurrency` | 整数 | 个 | ≥ 1 | 2 | — | `triage-monitor.js:20` |
 | 轮询间隔 `intervalMs` | 整数 | 毫秒 | ≥ 1 | 30000 | — | `triage-monitor.js:20` |
+| 案件列表分页 `count` | 整数 | 条 | 1–50 | 20 | 越界回 400「分页参数无效」 | `server.js:316-319` |
+| 案件列表分页 `offset` | 整数 | 条 | ≥ 0 | 0 | 越界回 400「分页参数无效」 | `server.js:317-319` |
+| 结论排序档位（`sort=verdict`） | 整数 | — | threat 0、uncertain 1、false_positive 2、无结论 3 | — | 同档保持时间倒序 | `triage-monitor.js:8`、`triage-monitor.js:127` |
+| 案件列表时间窗 `from` / `to` | 整数 | 秒（Unix，含端点） | 时间戳或 RFC3339，服务端落成秒 | `null`（不筛） | `null` ＝ 该侧不限；`eventSeconds` 为 null 的案件在带时间筛时被排除 | `server.js:165-175`、`triage-monitor.js:121-124` |
 | 轮询页大小 | 整数 | 条 | 50 | 50 | — | `triage-monitor.js:201` |
 | 轮询页数上限 | 整数 | 页 | 20 | 20 | — | `triage-monitor.js:200` |
 | 步骤留痕上限 | 整数 | 条 | 80 | 80 | 超出丢最早一条 | `triage-monitor.js:382` |
@@ -731,7 +786,7 @@ triage-monitor.js: TriageMonitor
 | --- | --- |
 | 不保证每条告警都匹配到牧云事件；匹配失败是正常分支 | `syslog-case.js:19-55` |
 | 不保证同一告警只研判一次；不同秒的重复投递会生成新记录 | `triage-monitor.js:276-280` |
-| 不保证 `cases()` 能列出研判记录；它只列有原始报文的记录 | `triage-monitor.js:112` |
+| 不保证 `cases()` 能列出研判记录；它只列有原始报文的记录 | `triage-monitor.js:117` |
 | 不保证结论正确；结论由 `investigator` 产出，本模块只搬运 | `triage-monitor.js:385-389` |
 | 不保证事件时间准确；取决于部署方给的偏移量，越界按 0 | `syslog-input.js:61`、`69` |
 | 不保证研判一定成功；`investigator` 抛错就是 `failed` | `triage-monitor.js:416-417` |

@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { TriageMonitor } from './triage-monitor.js';
+import { eventSeconds } from './syslog-input.js';
 import { InvestigationStore } from './investigation-store.js';
 
 test('new alerts enter triage once and the cursor survives restart', async t => {
@@ -139,4 +140,86 @@ test('排队中与研判失败的 TriageCase 也带空的 evidence[]', async t =
   const queued = await paused.enqueue('honeypot:9');
   assert.equal(queued.status, 'queued');
   assert.deepEqual(queued.evidence, []);
+});
+
+// cases() 的筛选 / 排序只看记录上的 input 与结论字段，用最小记录搭矩阵，不跑研判。
+function caseRecord(alertId, { msgid, hostIp, eventTime, verdict, repeatCount }) {
+  return { alert_id: alertId, status: 'done', verdict, repeat_count: repeatCount,
+    created_at: '2026-11-03T08:00:00.000Z', updated_at: '2026-11-03T08:00:00.000Z',
+    input: { raw: '', parsed: { msgid, ts: '2026-11-03T08:00:00Z', payload: { host_ip: hostIp, event_create_time: eventTime } } } };
+}
+const caseId = (type, index) => `syslog:${type}:${String(index).padStart(16, '0')}:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e${String(index).padStart(2, '0')}`;
+function casesMatrix() {
+  const monitor = new TriageMonitor({ file: '/tmp/hids-cases-matrix.json', service: {}, investigator: {}, history: {} });
+  const rows = [
+    caseRecord(caseId('revshell', 1), { msgid: 'cloudwalker-revshell', hostIp: '10.0.0.5', eventTime: '2026-11-03 10:00:00', verdict: 'threat', repeatCount: 1 }),
+    caseRecord(caseId('webshell', 2), { msgid: 'cloudwalker-webshell', hostIp: '10.0.0.6', eventTime: '2026-11-03 11:00:00', verdict: 'uncertain', repeatCount: 3 }),
+    caseRecord(caseId('revshell', 3), { msgid: 'cloudwalker-revshell', hostIp: '10.0.0.5', eventTime: '2026-11-03 12:00:00', verdict: 'false_positive', repeatCount: 1 }),
+    caseRecord(caseId('revshell', 4), { msgid: 'cloudwalker-revshell', hostIp: '10.0.0.5', eventTime: '2026-11-03 13:00:00', repeatCount: 1 }),
+    caseRecord(caseId('honeypot', 5), { msgid: 'cloudwalker-honeypot', hostIp: '10.0.0.7', eventTime: '2026-11-03 14:00:00', verdict: 'threat', repeatCount: 2 })
+  ];
+  for (const row of rows) monitor.records.set(row.alert_id, row);
+  return { monitor, rows };
+}
+
+test('cases() 按结论 / 类型 / 主机 / 时间筛，total 是过滤后条数', t => {
+  const { monitor, rows } = casesMatrix();
+  const [threatOld, , falsePositive, noVerdict, threatNew] = rows;
+  // 结论：threat 两条；没有结论的记录按 review 算（与 GET /api/alerts?verdict= 同一口径）
+  assert.deepEqual(monitor.cases({ verdicts: ['threat'] }).cases.map(item => item.alert_id), [threatNew.alert_id, threatOld.alert_id]);
+  assert.equal(monitor.cases({ verdicts: ['threat'] }).total, 2);
+  assert.deepEqual(monitor.cases({ verdicts: ['review'] }).cases.map(item => item.alert_id), [noVerdict.alert_id]);
+  assert.equal(monitor.cases({ verdicts: ['threat', 'uncertain'] }).total, 3);
+  // 类型：syslog MsgId 映射出的类型（cloudwalker-revshell → revshell）
+  assert.equal(monitor.cases({ type: 'revshell' }).total, 3);
+  assert.deepEqual(monitor.cases({ type: 'honeypot' }).cases.map(item => item.alert_id), [threatNew.alert_id]);
+  assert.equal(monitor.cases({ type: 'memory_security' }).total, 0);
+  // 主机：精确匹配 host_ip
+  assert.equal(monitor.cases({ host: '10.0.0.5' }).total, 3);
+  assert.equal(monitor.cases({ host: '10.0.0.6' }).total, 1);
+  assert.equal(monitor.cases({ host: '10.0.0.9' }).total, 0);
+  // 时间：含端点，按 eventSeconds（部署端偏移口径）比
+  const secondsOf = index => eventSeconds(rows[index].input.parsed, 0);
+  assert.deepEqual(monitor.cases({ from: secondsOf(1), to: secondsOf(3) }).cases.map(item => item.alert_id),
+    [noVerdict.alert_id, falsePositive.alert_id, rows[1].alert_id]);
+  assert.deepEqual(monitor.cases({ from: secondsOf(2), to: secondsOf(2) }).cases.map(item => item.alert_id), [falsePositive.alert_id]);
+  assert.equal(monitor.cases({ to: secondsOf(0) }).total, 1);
+  // 组合筛
+  assert.deepEqual(monitor.cases({ verdicts: ['threat'], type: 'revshell', host: '10.0.0.5' }).cases.map(item => item.alert_id),
+    [threatOld.alert_id]);
+  // 分页在过滤之后切：total 不随 count/offset 变
+  const page = monitor.cases({ count: 2, offset: 1 });
+  assert.equal(page.total, 5);
+  assert.deepEqual(page.cases.map(item => item.alert_id), [noVerdict.alert_id, falsePositive.alert_id]);
+  assert.equal(monitor.cases({ count: 2, offset: 4 }).cases.length, 1);
+  assert.equal(monitor.cases({ count: 20, offset: 5 }).cases.length, 0);
+  // 默认（不带筛）仍是全部 5 条，时间倒序
+  assert.deepEqual(monitor.cases().cases.map(item => item.alert_id), rows.map(row => row.alert_id).reverse());
+});
+
+test('cases({ sort: "verdict" }) 把 threat 排前面，同档保持时间倒序，无结论排最后', t => {
+  const { monitor, rows } = casesMatrix();
+  const [threatOld, uncertain, falsePositive, noVerdict, threatNew] = rows;
+  assert.deepEqual(monitor.cases({ sort: 'verdict' }).cases.map(item => item.alert_id),
+    [threatNew.alert_id, threatOld.alert_id, uncertain.alert_id, falsePositive.alert_id, noVerdict.alert_id]);
+  // 排序与筛选叠加：筛出来的子集内部同样按结论档排
+  assert.deepEqual(monitor.cases({ sort: 'verdict', verdicts: ['uncertain', 'threat'] }).cases.map(item => item.alert_id),
+    [threatNew.alert_id, threatOld.alert_id, uncertain.alert_id]);
+  // 默认排序没被改：还是时间倒序
+  assert.deepEqual(monitor.cases({ sort: 'time' }).cases.map(item => item.alert_id), rows.map(row => row.alert_id).reverse());
+});
+
+test('列表的重复次数沿用例记录上的 repeat_count，不另造计数', t => {
+  const { monitor, rows } = casesMatrix();
+  const byId = new Map(monitor.cases().cases.map(item => [item.alert_id, item]));
+  assert.equal(byId.get(rows[1].alert_id).repeat_count, 3);
+  assert.equal(byId.get(rows[4].alert_id).repeat_count, 2);
+  // 只有 repeat_count 一条口径：没有 occurrence_count / delivery_count 之类的第二份计数
+  for (const item of byId.values()) {
+    assert.equal('occurrence_count' in item, false);
+    assert.equal('delivery_count' in item, false);
+  }
+  // 记录上没有 repeat_count 时落到 1，不是 0
+  monitor.records.get(rows[0].alert_id).repeat_count = undefined;
+  assert.equal(monitor.cases().cases.find(item => item.alert_id === rows[0].alert_id).repeat_count, 1);
 });

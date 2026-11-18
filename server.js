@@ -153,6 +153,28 @@ function alertQuery(params) {
     from: fromTime || undefined, to: toTime || undefined, sort }, statuses, verdicts };
 }
 
+// 解析 /api/agent/triage/cases 的查询参数：筛选用法与 /api/alerts 同一套（逗号分隔多选），非法值回 400。
+// 结论口径一致：记录上没有结论算 review；事件类型按 syslog MsgId 映射出的类型比。
+function caseQuery(params) {
+  const verdicts = paramList(params, 'verdict');
+  for (const value of verdicts) if (!verdictFilters.has(value)) return { error: `筛选结论无效：${value}` };
+  const type = params.get('type')?.trim() || null;
+  if (type && !Object.hasOwn(eventTypes, type)) return { error: `筛选事件类型无效：${type}` };
+  const from = params.get('from')?.trim();
+  const to = params.get('to')?.trim();
+  const fromTime = from ? parseInstant(from) : null;
+  const toTime = to ? parseInstant(to) : null;
+  if (from && !fromTime) return { error: `筛选起始时间无效：${from}` };
+  if (to && !toTime) return { error: `筛选结束时间无效：${to}` };
+  if (fromTime && toTime && fromTime > toTime) return { error: '筛选起始时间晚于结束时间' };
+  const sort = params.get('sort')?.trim() || 'time';
+  if (sort !== 'time' && sort !== 'verdict') return { error: `排序方式无效：${sort}` };
+  // 案件记录上的事件时间是秒级 Unix 时间（eventSeconds 口径），这里把入参也落成秒再比。
+  return { filters: { verdicts, type, host: params.get('host')?.trim() || null,
+    from: fromTime ? Math.floor(Date.parse(fromTime) / 1000) : null,
+    to: toTime ? Math.floor(Date.parse(toTime) / 1000) : null, sort } };
+}
+
 // 研判侧筛选：逐页拉取、挂 triage 后过滤，翻到流末或扫描上限后再切页。
 // 没有研判记录的告警按 not_queued / review 参与筛选（与 TriageCase.status 口径一致）。
 async function triageFilteredAlerts(service, monitor, query, { statuses, verdicts, count, offset }) {
@@ -295,7 +317,9 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const offset = Number(url.searchParams.get('offset') || 0);
         if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
           return error(res, 400, '分页参数无效');
-        return json(res, 200, monitor.cases({ count, offset }));
+        const parsed = caseQuery(url.searchParams);
+        if (parsed.error) return error(res, 400, parsed.error);
+        return json(res, 200, monitor.cases({ count, offset, ...parsed.filters }));
       }
       if (url.pathname === '/api/agent/triage/control' && req.method === 'PUT') {
         if (!monitor) return error(res, 503, '自动研判尚未配置');
