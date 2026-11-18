@@ -14,12 +14,14 @@ import { page as knowledge } from '../pages/knowledge.js';
 import { page as overview } from '../pages/overview.js';
 import { page as rules } from '../pages/rules.js';
 import { page as trace } from '../pages/trace.js';
+import { page as traceBoard } from '../pages/trace-board.js';
 
 /**
  * 全部页面。顺序即侧栏顺序（navLabel 为空的不进侧栏）。
  * `alerts-demo` 是牧云现查的单独入口（D020：标成演示）；主列表是 `alerts`（研判记录）。
+ * `trace` 是溯源**列表**（D015：进去先是列表），`trace-board` 是这一条的白板（D016，`#/trace-board/<告警 ID>`）。
  */
-export const PAGES = [overview, alerts, alertsDemo, alertDetail, trace, rules, knowledge];
+export const PAGES = [overview, alerts, alertsDemo, alertDetail, trace, traceBoard, rules, knowledge];
 
 /** 侧栏上的入口：总览 / 告警 / 牧云现查（演示） / 深度溯源 / 规则 / 知识库 */
 export const NAV_PAGES = PAGES.filter(page => page.navLabel);

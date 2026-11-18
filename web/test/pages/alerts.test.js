@@ -448,7 +448,7 @@ test('每行都能进详情与深度溯源：链接带编码后的案件 ID', as
   await flush();
   const links = [...host.querySelectorAll('.col-ops a')].map(a => a.getAttribute('href'));
   const id = encodeURIComponent('syslog:revshell:0123456789abcdef:1:uuid-1');
-  assert.deepEqual(links, [`#/alert-detail/${id}`, `#/trace/${id}`]);
+  assert.deepEqual(links, [`#/alert-detail/${id}`, `#/trace-board/${id}`]);
 });
 
 test('可访问性：表格有 caption 与 th scope，队列条是带名字的 group，读屏有 aria-live', async () => {

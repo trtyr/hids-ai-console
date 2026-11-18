@@ -123,7 +123,8 @@ probeSession(credentials, options?) → Promise<{ authenticated: true, user: str
 | `#/alerts` | 告警 | 告警 | `pages/alerts.js` | **研判记录主列表**（P003-T015 换源，见第 10 节） |
 | `#/alerts-demo` | 牧云现查（演示） | 牧云现查（演示） | `pages/alerts-demo.js` | 牧云现查的单独入口，标成演示（D020，见第 10.9 节）；牧云没配时只有这一页不可用 |
 | `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | 已接真接口（P002-T004，见第 11 节）；参数从第二段起原样传，页面自己 `decodeURIComponent` |
-| `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | 已接真接口（P002-T005，见第 12 节） |
+| `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | **溯源列表**（P003-T016 / D015：进去先是列表，见第 12 节） |
+| `#/trace-board/<alertId>` | —（不在侧栏） | 深度溯源 | `pages/trace-board.js` | 这一条的白板（P003-T016 / D016，见第 12 节）；参数是告警 ID，页面自己 `decodeURIComponent` |
 | `#/rules` | 规则 | 规则 | `pages/rules.js` | 已接真接口（P002-T006，见第 13 节） |
 | `#/knowledge` | 知识库 | 知识库 | `pages/knowledge.js` | 已接真接口（P002-T007，见第 14 节） |
 
@@ -196,7 +197,7 @@ web/
   serve.js              静态服务 + /api 反代
   assets/               theme.css / theme.js / fonts/ / app.css
   pages/                一页一个文件：overview / alerts（研判记录主列表）/ alerts-demo（牧云现查·演示）/
-                        alert-detail / trace / rules / knowledge
+                        alert-detail / trace / trace-board / rules / knowledge
   src/
     app.js              组装：登录 ↔ 壳、hash 路由、退出
     session.js          会话 adapter（唯一 HTTP 处）
@@ -372,7 +373,7 @@ setQueueEnabled(enabled, options?) → Promise<同上形态>        // PUT，正
 | **重复** | `.col-dup`，`×N` | `repeat_count`（1 表示只投递过一次） |
 | **命中规则** | `.col-rule` | `rule_id`；`status === 'done'` 但没有 `rule_id` → 「没有套上」；未完成 → 「—」 |
 | **维护** | `.col-maint` | `maintenance.rule.status` / `maintenance.wiki.status` → 「规则 更新中 · 知识库 已更新」；语气色 `is-updating` / `is-failed` |
-| **操作** | `.col-ops` | 「详情」→ `#/alert-detail/<编码 ID>`；「溯源」→ `#/trace/<编码 ID>`；「标为误报」按钮 |
+| **操作** | `.col-ops` | 「详情」→ `#/alert-detail/<编码 ID>`；「溯源」→ `#/trace-board/<编码 ID>`；「标为误报」按钮 |
 
 ### 10.4 状态矩阵（六格）
 
@@ -396,7 +397,7 @@ setQueueEnabled(enabled, options?) → Promise<同上形态>        // PUT，正
 | 分页 / 每页 20·50 | `offset` / `count` 跟着走；每页切换回第一页；总页数缩水时游标拉回最后一页并重拉一次 |
 | 「标为误报」 | 在该行下面展开理由表单（`textarea` 获得焦点，`aria-label="给 <id> 填误报理由"`）；Esc / 「取消」收起并把焦点还给按钮 |
 | 提交误报 | 理由不足 10 字或超过 4000 字 → 就地报错、**不发请求**；合格 → `POST …/false-positive`（正文只有 `{reason}`）→ 202 后**这一行立刻变误报**，`maintenance` 写进「维护」列，表单收起，播报「已把 <id> 标成误报，理由已记录」；409 → 表单内报「研判还没结束，不能登记误报」，行不变 |
-| 「详情」/「溯源」 | 真链接：`#/alert-detail/<encodeURIComponent(alert_id)>`、`#/trace/<encodeURIComponent(alert_id)>` |
+| 「详情」/「溯源」 | 真链接：`#/alert-detail/<encodeURIComponent(alert_id)>`、`#/trace-board/<encodeURIComponent(alert_id)>` |
 
 ### 10.6 可访问性
 
@@ -455,7 +456,7 @@ D020 的落法：**牧云现查仍在，但是单独入口并标成演示**；`/
 | 2 | `GET /api/alerts/{alertId}`（`getAlert`） | `openapi.yaml:158-176`；`server.js:347-355` | 牧云事件标题/等级/资产 + 原始事件 `detail`（**可选**） | 失败不清空页面：题干说明「牧云事件没有读到（原因），下面按研判记录显示。」 |
 | 3 | `GET /api/agent/investigations/{alertId}?mode=triage|deep` | `openapi.yaml:295-312`；`server.js:326-333` | 短结果的 `summary`、`report`、claims、`required_evidence`、核验/复核、**`verdict.rego`**、**`verdict.wiki`** | partial：那一块写「读取失败：<原因>」 |
 | 4 | `GET /api/rules/{id}`（`getRule`） | `openapi.yaml:660-680`；`server.js:570-578` → `rule-store.js` | 命中规则的**名字与整份 Rego 原文** | 404 → 页面写「规则库里已没有这条」，不挡页面 |
-| 5 | `GET /api/trace/boards/{target}` | `openapi.yaml:353-371`；`server.js:169-176` | 关联实体（`nodes[]`） | 404 → `null`，区块隐藏 |
+| 5 | `GET /api/trace/boards/{target}` | `openapi.yaml:544-560`；`server.js:515-524` | 关联实体（`nodes[]`） | 404 → `null`，区块隐藏 |
 | 6 | `POST /api/agent/triage/{alertId}`（`retryTriage`） | `server.js:646`（202） | 「加入研判队列 / 重新研判」 | 播报「提交失败：<原因>」，按钮恢复 |
 
 **读不到 ≠ 整页失败**：只有「研判记录与牧云事件两边都读不到」才整页错误；其余情况是哪块读不到就哪块说读不到。
@@ -511,7 +512,7 @@ enqueueTriage(alertId, options?)             → Promise<TriageCase>          //
 | 复制告警 ID | `navigator.clipboard.writeText(alert.id)`；成功播报「已复制 <ID>」，不可用/失败播报「复制失败，请手动选择 <ID>」 |
 | 刷新 | 重新走 1→2→4→5 四轮取数；加载中禁用 |
 | 加入研判队列 / 重新研判 | `POST /api/agent/triage/{当前案件 ID}`（研判记录的 `alert_id` 优先，其次牧云事件 ID）；用 202 回包更新状态（不乐观改），成功后按钮转「已在队列中」并禁用；失败播报「提交失败：<原因>」且按钮恢复 |
-| 深度溯源 | `<a href="#/trace/<encodeURIComponent(alertId)>">`——trace 页从 `params[0]` 取 |
+| 深度溯源 | `<a href="#/trace-board/<encodeURIComponent(alertId)>">`——白板页从 `params[0]` 取；没有 ID 时退回 `#/trace` 列表 |
 | 原始事件 / 原始 JSON | 原生 `<details>` 折叠，默认收起 |
 
 播报容器：`[data-role="note"]`（`role="status"` + `aria-live="polite"`，可见文本）。
@@ -571,112 +572,146 @@ D020 明写详情要这四样，稿没画对应区块 → 版式取同页既有 
 稿 → 码：`alert-detail.html:797-801`（区块）、`:407-441`（分组 / 条目样式）、`:1199-1215`（分组折叠 + 组名 + 条数）→
 `pages/alert-detail.js` 的 `paintEvidence()` / `paintClaims()` + `assets/pages/alert-detail.css` 的 `.ev-group` / `.ev-item` / `.claim-ref .is-missing`。
 
-## 12. 深度溯源页（`pages/trace.js` + `src/trace.js`，P002-T005）
+## 12. 深度溯源：列表 + 白板（`pages/trace.js` / `pages/trace-board.js` + `src/trace.js` + `src/trace-view.js`）
 
-以关系图的方式看一次溯源调研：左侧白板列表 + 新建目标，右侧点阵画布（圆点节点 + 细线关系）按调研顺序
-逐个长出节点，检查器给白板摘要 / 缺口 / 调研时间线，选中节点或关系时列该对象的全部字段。
-视觉照 `design/trace.html`，字段只来自本仓接口。样式在 `assets/pages/trace.css`，首次 render 时注入
-（`<link data-page-style="trace">`），选择器全部挂 `.trace-page` 前缀。
+P003-T016 起按 D015 / D016 拆成两页（P002-T005 的单页「左列表 + 右白板」形态作废）：
 
-### 结构（稿 → 文件）
-
-| 稿上的区块 | 落在哪 |
-| --- | --- |
-| 顶栏「刷新」 | 稿在壳顶栏，本卡不改壳 → 落到内容区首行 `.trace-tools`（同 T003） |
-| 左侧白板列表 / 新建目标 / 提示行 | `.side` → `.side-head`（标题 + `N 个`）/ `.new-board`（输入 + 新建）/ `.board-list` / `.side-note`（`role="status"`） |
-| 画布顶栏（白板 ID · 状态 · 节点/关系数 · 回放 · 缩放） | `.stage-bar` → `.stage-title` / `.playback` / `.zoom` |
-| 画布（点阵背景、圆点节点、细线关系） | `.canvas` > `.world` > `svg.edges` + `.nodes` |
-| 检查器 | `.inspector`（`aria-label="检查器"`）：节点/关系字段 或 白板概览 |
-| 列表级失败提示（稿没有） | `.notice[role="alert"]` + 「重试」 |
-
-### adapter 契约（`src/trace.js`，`adapter 之外出现 fetch 即缺陷`）
-
-| 方法 | operation | 成功返回 | 说明 |
+| 页 | 路由 | 回答什么 | 文件 |
 | --- | --- | --- | --- |
-| `listTraceBoards(options?)` | `GET /api/trace/boards` | `boards[]`，每项只有 `id/title/status/created_at/updated_at` | 不传参数（接口没有分页） |
-| `getTraceBoard(target, options?)` | `GET /api/trace/boards/{target}` | 整块 `TraceBoard` | `target` 会 `encodeURIComponent`（冒号要编码） |
-| `startTraceBoard(target, options?)` | `POST /api/trace/boards` | 202 + `TraceBoard` | 正文只有 `{ target }` |
+| 列表 | `#/trace` | 看哪一条（列、筛选、分页，**不画链**） | `pages/trace.js` |
+| 白板 | `#/trace-board/<告警 ID>` | 这一条怎么触发的（告警在右、原因往左） | `pages/trace-board.js` |
+
+两页共用 `src/trace-view.js`（状态四词 / 种类六词 / 时间 / 短标识 / 错误一句话，纯函数），
+样式共用 `assets/pages/trace.css`（首次 render 注入 `<link data-page-style="trace">`；`.trace-list` 与
+`.trace-page.trace-board` 两个前缀互不覆盖）。
+
+**入口**：告警主列表每一行的「溯源」、告警详情的「深度溯源」都链到 `#/trace-board/<这条的 ID>`；
+没有告警 ID 时退回 `#/trace` 列表。侧栏「深度溯源」进列表。
+
+### 12.1 数据来源：形态 B（三个 operation，主数据是 hops / links / gaps / discovery）
+
+| 用途 | operation | 成功返回 |
+| --- | --- | --- |
+| 列表 | `GET /api/trace/boards?count&offset&status&type&host&from&to` | `{ boards: TraceBoardSummary[], total }` |
+| 白板详情 | `GET /api/trace/boards/{target}` | `TraceBoard`（`hops/links/gaps/discovery` + `alert/chain_length/has_gaps`） |
+| 打开或创建 | `POST /api/trace/boards`，正文 `{ target }` | 已有白板 **200**、新建 **202**，都是整块 `TraceBoard` |
+
+`status` 可逗号多选（服务端 `paramList` 拆逗号，`server.js:333`）；`from` 只算起点（`to` 不传＝到现在）。
+列表**不在列表上放结论**（威胁 / 误报是告警分析的事，D015）。
+
+### 12.2 adapter 契约（`src/trace.js`，`adapter 之外出现 fetch 即缺陷`）
+
+| 方法 | 说明 |
+| --- | --- |
+| `listTraceBoards(query, options?)` | `query = { count, offset, statuses, type, host, from, to }`；空值不占参数位；`total` 缺失时退回本页条数（不编总数） |
+| `getTraceBoard(target, options?)` | `target` 会 `encodeURIComponent`（冒号要编码）；回包必须含 `id` + `hops`/`links`/`discovery` 三个数组，`gaps` 缺失归一成 `[]` |
+| `startTraceBoard(target, options?)` | 正文只有 `{ target }`；200（已有）与 202（新建）都当成功 |
 
 失败一律抛 `TraceError{kind, status}`，`kind ∈ unauthorized | unavailable | notfound | http | network | invalid`：
 
 | 场景 | kind | 页面怎么表现 |
 | --- | --- | --- |
-| 401 | `unauthorized` | 整页提示「登录已失效，请重新登录。」 |
-| 503（模型或牧云 MCP 未配置） | `unavailable` | 整页提示带服务端原话 |
-| 404（该目标还没有白板） | `notfound` | **不是故障**：画布说「没有这个白板」，列表仍可切换 |
-| 400 / 422 / 502 | `http` | 提示带状态码与服务端原话（新建时进 `.side-note`） |
+| 401 | `unauthorized` | 列表给整块错误；白板给空态说明「登录已失效」 |
+| 503（模型或牧云 MCP 未配置） | `unavailable` | 带服务端原话 |
+| 404（详情） | `notfound` | **不是故障**：白板页自动走 `POST` 创建（D015「没有就创建并开始」） |
+| 400 / 422 / 502 | `http` | 带状态码与服务端原话（422 = 这条告警没有可用资产，不假装有白板） |
 | fetch 抛 | `network` | 「连不上研判服务，请检查网络或稍后重试。」 |
 | 2xx 形状不对 | `invalid` | 「服务返回的形状不对。」 |
 
-### 状态矩阵（六格，全部有单测）
+### 12.3 列表页的状态矩阵（六格，全部有单测）
 
 | 格 | 触发 | 界面 | 断言要点 |
 | --- | --- | --- | --- |
-| 加载中 | 首次取列表 / 取选中白板详情 | 列表与画布都写「正在读取白板…」，`.trace-shell[aria-busy="true"]`，刷新与新建禁用（进行中） | `aria-busy`、`refresh.disabled` |
-| 空态 | 列表成功但 `boards` 为空 | 列表「还没有白板。」；画布「没有白板」+「在左侧输入告警 ID 或 IPv4 新建。」；回放三键禁用 | `replay/pause/latest.disabled === true` |
-| 部分失败 | **列表成功、选中白板详情失败** | 列表照常可点；画布按错误分两种标题：「没有这个白板」（404）/「白板读取失败」（503 等） | 列表项仍在、画布标题与说明、整页 alert 不出现 |
-| 错误 | 列表接口失败 | `.notice[role="alert"]`：标题 + 服务端原话 + 「重试」；列表与画布都说失败 | `role="alert"`、重试再请求一次 |
-| 超长内容 | 节点标签 / 白板 ID / 摘要 / 缺口很长 | 全部原样进 DOM（CSS 负责 `overflow-wrap` 与省略号），不截断数据 | 节点按钮文本 === 完整 label；摘要全文；缺口条数不变 |
+| 加载中 | 首次取列表 | 行里「正在读取溯源…」，`.table-wrap[aria-busy="true"]`，刷新与四个筛选禁用 | `aria-busy`、`refresh.disabled` |
+| 空态 | 成功但 `boards` 为空 | 「暂无溯源。从告警列表点某一行的『溯源』……」；分页两键禁用 | 两句文案都在 |
+| 部分失败 | 已有数据、这次刷新失败 | 顶部 `.notice[role="alert"]`「刷新失败…（下表是上一次读到的结果）」，表格保留上一次结果与条数 | `notice.hidden === false`、行数不变 |
+| 错误 | 首屏失败 | 表格内 `.page-error[role="alert"]` + 「重试」 | 重试再发一轮请求并渲染 |
+| 超长内容 | 长主机 / 长 ID | 全文进 `textContent` 与 `title`，屏幕上靠 CSS 省略（短标识只缩显示，`href` 与 `title` 是全 ID） | 文本全等 |
 | 禁用 | 见下 | — | 逐条断言 `disabled` |
 
-禁用矩阵：加载中 → 刷新、新建禁用；空态 / 无节点 → 重放、暂停、跳到最新禁用；新建 POST 在飞 → 新建禁用；
-白板播放完毕 → 跳到最新、暂停禁用；时间线上「节点还没出现」的条目禁用；只有一个节点 → 不启动定时器。
+禁用矩阵：加载中 → 刷新 + 四个筛选禁用；`offset === 0` → 上一页禁用；最后一页 → 下一页禁用；非 `ready` → 分页两键禁用。
 
-白板 `status` 另有三个状态（接口真值，照稿显示原值、不做中文映射）：`running`（强调色点）/`done` /
-`failed`（危险色；无节点时画布写「任务失败」+ 接口 `summary`）——`interrupted` 走默认灰点（稿没有这一档）。
+### 12.4 白板页的状态矩阵（六格，全部有单测）
 
-### 字段映射（稿元素 → 接口字段）
+| 格 | 触发 | 界面 | 断言要点 |
+| --- | --- | --- | --- |
+| 加载中 | 首次取详情 | 画布「正在读取白板…」，`.canvas[aria-busy="true"]`，刷新禁用 | 标题文案、`disabled` |
+| 空态 | 成功但 `hops` 为空 | 进行中：「还没有跳 / 任务在跑，新的一跳会自己从左边长出来」；已完成：「这条链没有跳」 | 两句文案 |
+| 部分失败 | 已有白板、刷新失败 | 顶部 `.notice[role="alert"]`，链保持原样（不清空） | 节点数不变 |
+| 错误 | 首屏 GET 与随后的 POST 都失败 | 画布只有失败文案：「白板读取失败」+ 服务端原话，**画布内没有按钮**（重试就是顶栏「刷新」）；没带目标时「没有指定这一条」且**不发请求** | 文案、请求次数、画布内可见按钮数 0（e2e「可见重试 = 0」同一口径） |
+| 超长内容 | 长标签 / 长断点原因 | 标签全文进 `.gnode-label`（CSS 不截断数据），断点原因全文 + `title` | 文本全等 |
+| 禁用 | 见下 | — | 逐条断言 `hidden` / `disabled` |
+
+禁用矩阵：进行中 → 重放 / 暂停 / 跳到最新三键 `hidden`（D016「进行中没有别的按钮」），只有轮询；没有跳 →
+重放与跳到最新禁用且不启动定时器；**暂停中「继续」可点**（暂停只是停定时器，不再禁用按钮——「停」不是单程门，
+再点「继续」接着播）；播到最新（`count >= steps.length`）才把「继续」与「跳到最新」一起禁用。
+
+白板 `status` 四值（`running` / `done` / `failed` / `interrupted`）走 `statusLabel()` 显示**进行中 / 已完成 / 失败 / 中断**；
+失败与中断在顶栏多一行原因（`board.summary`，接口没给就写「接口没有返回原因」），已经画出的链不清掉（D016「实时」）。
+
+### 12.5 字段映射（界面元素 → 接口字段）
 
 | 界面元素 | 字段 | 备注 |
 | --- | --- | --- |
-| 白板列表项 | `id`、`status` | 列表接口只给这五个键，**节点数 / 关系数 / 摘要不画**（A2） |
-| 画布顶栏 | `id`、`status`、`nodes.length`、`edges.length` | 计数由已返回数组算，不是接口独有字段 |
-| 节点标签 | `label`（缺了退回 `id`） | 圆点位置由前端力导向布局算（接口没有坐标） |
-| 关系文字 | `rel` | 只取第一个可用关系字段，不拼接 |
-| 关系端点 | `from` / `to`（都是 `node.id`） | 两端都对上节点、且两端都已出现才画 |
-| 检查器（选中节点/关系） | 对象的**全部键**原样列出 | 嵌套对象转 JSON 字符串 |
-| 白板概览 | `summary`、`gaps[]`、`status` | 摘要为空写「接口未返回摘要。」，缺口为空写「接口未返回缺口。」 |
-| 调研过程 | `activity[].at` / `title` / `node` | `at` 转本地 `HH:MM:SS`；`detail` 不进时间线（稿每行只有一段文字） |
-| 渐进显示顺序 | `activity[].node` 出现的先后，其余按 `nodes[]` 原顺序 | 见 `discoveryOrder()` |
+| 列表「告警」列 | `type`（→ 中文，未知原样）+ `id` | 长 ID 只显示首尾（`shortBoardId`），`title`/`href` 是全的 |
+| 列表「主机 / 告警时间 / 更新时间」 | `host` / `occurred_at` / `updated_at` | 空值给「—」 |
+| 列表「状态 / 链长 / 断点」 | `status` / `chain_length` / `has_gaps` | 链长显示 `N 跳`；断点 `有` / `没有` |
+| 告警点（钉在右） | `hops[]` 里 `kind === 'alert'` 的那一跳（没有标记退回第一跳） | 位置 `x = 0`，不可拖 |
+| 其余点（往左一列） | `hops[]` 全部 + `links[]` 算出的深度 | `x = -190 × 深度`，同列按 `discovered` 竖排 64px |
+| 线 | `links[]`：`from`（更晚、靠告警）→ `to`（更早的原因） | 箭头画在 `to` 那一端（从右往左指）；`rel` 是线上那四个字 |
+| 断点 | `gaps[]`：`hop_id` + `reason` | 写在断了的那一跳左边；`hop_id` 为 `null` 时放最左一列 |
+| 重放顺序 | `discovery[]`（按 `step`） | 未知 id 丢弃；旧白板没有 `discovery` 时退回「先跳、再线」 |
+| 检查器（点跳） | `kind` / `host` / `occurred_at` / `evidence_id` | 证据正文不在白板接口里（见 12.8） |
+| 检查器（点线） | `rel` / `from` / `to` / `evidence_id` | — |
+| 检查器（未选中） | `summary` / `gaps[]` / `status` | 白板概览 |
+| 顶栏 | `alert.title` / `status` / `hops.length` / `gaps.length` | 链长 = `hops` 个数（含告警那一跳） |
 
-### 交互与事件
+### 12.6 交互与事件
 
 | 动作 | 后果 |
 | --- | --- |
-| 点白板列表项 | `GET` 该白板详情 → 重置选中、重新布局、**从第一个节点重放**；慢请求后到时按 id 丢弃 |
-| 输入框 + 「新建」/ 回车 | 空 → 提示并聚焦；格式不对 → 提示、不发请求；目标已有白板 → 直接切过去；否则 `POST` → 新白板进列表并选中，输入框清空 |
-| 「刷新」 | 重新取列表与当前白板详情；请求在飞时按钮禁用并转圈 |
-| 「重放」 | 从第一个节点重新开始（900ms 一个） |
-| 「暂停 / 继续」 | 停掉 / 恢复定时器；按钮文案随之切换 |
-| 「跳到最新」 | 一次显示全部节点与关系，停止播放 |
-| 「跟随」 | `aria-pressed` 切换；开启时新节点自动居中，播放结束自动适应全图 |
-| 「− / % / + / 适应」 | 缩放夹在 25%–250%；「适应」按画布尺寸算 |
-| 滚轮 | 以指针为中心缩放（25%–250%） |
-| 拖空白 | 平移画布（`world` 的 transform） |
-| 拖节点 | 移动圆点，连线实时跟随；**拖动时自动暂停回放** |
-| 点节点 | 选中，检查器列该节点全部字段，节点带 `aria-pressed="true"` |
-| 点关系命中线 / 焦点上按 Enter 或空格 | 选中关系，检查器列关系字段（键盘可达） |
-| 点调研过程条目 | 定位到对应节点；节点未出现时条目禁用 |
-| 「取消选择」 | 回到白板概览（选中态才显示） |
+| 列表行点击 / 行内链接 / 键盘回车在链接上 | 进 `#/trace-board/<编码后的 ID>` |
+| 列表筛选（状态 / 类型 / 主机 / 时间）| 下推 `status`/`type`/`host`/`from`，`offset` 回 0；「清除筛选」一次清空四个 |
+| 列表分页 / 每页 20·50 | 下推 `offset` / `count`，换每页条数回第一页 |
+| 打开白板 | `GET` → 404 就 `POST` 创建 → 画出来；`done` 的白板打开后**自动按 discovery 重放**（稿 §3）|
+| 进行中的白板 | 每 5s `GET` 一次（`POLL_MS`），新跳从它该在的左边位置冒出来；路由切走即停 |
+| 「重放 / 暂停 · 继续 / 跳到最新」 | 只有 `done` 显示；900ms 一步（`REVEAL_STEP_MS`，稿 §3），线晚于两端；「跳到最新」一次给全 |
+| 「跟随」 | `aria-pressed` 切换；开启时新跳出现与播完都自动适应视图 |
+| 拖点 | 只改这一个是点在图上的位置，不改谁引起谁；**告警点钉死不拖**；松手写进 `localStorage` |
+| 拖空白 / 滚轮 / 「− % + 适应」 | 平移画布 / 以指针为中心缩放（25%–250%）/ 适应视图；只动视图不动数据 |
+| 点跳 / 点线 / 键盘 Enter·空格在线命中区 | 右侧检查器展开；再点同一点或点空白收起 |
 
-### 可访问性
+### 12.7 可访问性
 
-- 白板列表项、节点、回放按钮、缩放按钮都是 `<button>`；节点带 `aria-pressed` 表示选中态。
-- 关系是 SVG 线：`.edge-hit` 带 `tabindex="0"`、`role="button"` 与可访问名「关系：A → B（rel）」，Enter / 空格可选中。
-- 「新建」输入框有 `aria-label="新建溯源目标"`；提示行与播报走 `role="status" aria-live="polite"`。
-- 画布容器有 `section aria-label="溯源白板"`，检查器 `aria-label="检查器"`。
-- 颜色全部取 `theme.css` 令牌，深浅两套跟随主题脚本；`prefers-reduced-motion` 下动效降到 0.001ms。
+- 列表：`<table>` + `caption` + `th scope="col"`；行内入口是 `<a href>`（键盘可达，`aria-label` 带类型与 ID）；筛选控件都有 `aria-label`。
+- 白板：跳是 `<button aria-pressed>`；线是 SVG 命中线（`tabindex="0"`、`role="button"`、可访问名「关系：A → B」），Enter / 空格可选中；
+  画布是 `section[aria-label="溯源白板"]`，检查器 `aria-label="检查器"`，播报走 `role="status" aria-live="polite"`。
+- 颜色全部取 `theme.css` 令牌；`prefers-reduced-motion` 下动效降到 0.001ms。
 
-### 已知限制（这一页故意没做）
+### 12.8 与稿的差异（逐条记账；稿是 `design/trace.html` + `trace-notes.md`）
 
-- **不自动轮询**：`POST` 之后只有 202 + 当前白板，没有进度流；跑着的白板要看进度只能点「刷新」。
-  稿的 `trace-notes.md` §7 把「真实任务进度驱动」列为待补。
-- **列表项不显示节点数 / 关系数 / 摘要**：`GET /api/trace/boards` 只回五个键（A2，记进 `backend-findings.md`）。
-- **节点没有类型中文名**：接口只有 `kind`（`asset|external_ip`）与 `address`，检查器显示 `kind` 原值，不做分组配色。
-- **动效时长**：稿本页 `--dur: 160ms`，本仓全局令牌是 220ms（`app.css:96`）；本页跟着全局令牌，差 60ms 记账。
-- **入口**：稿是 `trace.html?target=<id>`，本仓是 `#/trace/<target>`（第二段进 `params[0]`）；命中已有白板就选中，
-  没有只预填输入框并提示点「新建」，不自动发起任务。
-- 节点拖动位置只在当前会话有效，刷新 / 重新布局会重算（稿 §7 同样列为待补）。
+| 稿 | 现在 | 为什么 |
+| --- | --- | --- |
+| 左列表 + 右白板同屏，新建目标输入框 | 列表独立成页；**没有新建输入框** | D015：「这个形态不对」+「不带告警、手填 IP 的入口不是这轮的事」；D020：「页面上不留输入框」 |
+| 力导向布局，节点位置前端算 | 固定方向：告警 `x=0`、原因每列 `-190px` | D016：「不按力导向自己飘」「越往左越早」 |
+| 节点只有标签 | 标签 + 机器（`.gnode-host`） | D016：「点上只写两样：标签，和机器」 |
+| 检查器列节点全部字段（含 `profile/findings`） | 只列种类 / 机器 / 时间 / 证据 | D016「点开」只要求这四样；`activity` 与节点字段不再是主数据 |
+| 未选中时列「调研过程」时间线（`activity`） | 白板概览：摘要 + 断点列表 | D016：「`activity` 不再当主数据」 |
+| 缺口只在检查器里 | 断点直接写在图上那一跳左边 | D016：「不点开，也能看得见」 |
+| 位置只在当前会话有效（稿 §7 待补） | 拖过的位置记在 `localStorage`（相对告警点） | D016：「拖过的位置要记住」。接口没有写位置的入口 → 见 12.9 |
+| 回放只有「重放 / 暂停 / 跳到最新 / 跟随」 | 同左，但进行中不出现（自己长） | D016：「进行中没有『重放』按钮，它自己就在长」 |
+| 点阵背景 / 9px 圆点 / 11px 标签 / 1.2px 线 / 280px 检查器 / 25%–250% | 一字未改 | 视觉稿照搬 |
+
+### 12.9 已知限制（这一版故意没做 / 接口不够）
+
+- **位置记忆在浏览器本地**：D016 要求「写在这一跳上（`x`/`y`，相对告警点）」，但三个 operation 里没有写位置的入口
+  （`openapi.yaml:456-560`），所以存在 `localStorage`（键 `hids.trace.positions.<白板 ID>`）。换机器 / 换浏览器会丢。
+  读写只在 `readSavedPositions` / `savePosition` 两个函数里，后端补了 PATCH 换过去即可（P003-T016 未决 1）。
+- **证据正文不在白板接口里**：D016 要「证据里能看的那几行」，`hops[]`/`links[]` 只给 `evidence_id`，没有原文。
+  检查器如实写「证据正文在告警详情里看」（未决 2）。
+- **进行中靠 5s 轮询**：没有 SSE / 进度流；`POLL_MS` 是页面常量（未决 3）。
+- **列表与白板不做结论列**：D015 明确列表上不放威胁 / 误报。
+- **工具调用不进图**：D016 明确不做。
 
 
 ## 13. 前置规则页（`pages/rules.js` + `src/rules.js`，P002-T006）

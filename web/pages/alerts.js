@@ -390,7 +390,7 @@ export function mountAlertsPage(options = {}) {
   function opsCell(record, index) {
     const id = String(record?.alert_id ?? '');
     const detail = el(document, 'a', { class: 'textbtn ops-link', href: `#/alert-detail/${encodeURIComponent(id)}`, text: '详情' });
-    const trace = el(document, 'a', { class: 'textbtn ops-link', href: `#/trace/${encodeURIComponent(id)}`, text: '溯源' });
+    const trace = el(document, 'a', { class: 'textbtn ops-link', href: `#/trace-board/${encodeURIComponent(id)}`, text: '溯源' });
     const canFalsePositive = record?.status === 'done' && verdictOf(record) !== '误报';
     const fp = el(document, 'button', {
       type: 'button',
