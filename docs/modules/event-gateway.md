@@ -319,7 +319,7 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 
 - 同一个键在不同类型里含义不同：`type` 在 `network_audit` 是网络类型，在 `suspicious_operation` 是连接类型，在 `honeypot` 是蜜罐类型（`triage-rules.js:36-46`）。
 - 没有的键就是没有，不是空值：下游要按类型取键，不能假设 11 类都有同一套字段（`triage-rules.js:36-46`）。
-- 身份校验：`event_id ?? id` 必须是正安全整数且等于请求的事件号，否则按 404 处理（`cloudwalker.js:204-207`）。
+- 身份校验：`event_id ?? id` 必须是正安全整数且等于请求的事件号。不是正安全整数按 404（`cloudwalker.js:204-207`）；是正整数但与请求不符，抛普通 Error，走 502（`cloudwalker.js:208`）。
 
 **通用可读键（10 个）**：详情证据函数只挑这 10 个，其余字段不展示（`cloudwalker.js:68-81`）：
 

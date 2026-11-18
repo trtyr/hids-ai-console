@@ -1248,7 +1248,7 @@ components:
           description: |
             研判步骤流水，按发生顺序；只保留最近 80 条。
             出现在三处：单条研判查询 GET /api/agent/triage/{alertId}；告警列表与详情里内嵌的 triage（server.js 把 status() 全量塞进每条告警）；仅 GET /api/agent/triage/cases 的列表项没有这个键。
-            未入队、排队中、失败的记录是空数组。
+            未入队的记录没有这个键；排队中、失败的记录是空数组。
           items: { $ref: '#/components/schemas/TriageStep' }
       additionalProperties: true
     Investigation:

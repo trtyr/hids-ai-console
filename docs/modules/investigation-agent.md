@@ -338,7 +338,7 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | `detail` | string | 是 | 这一阶段的说明；规则评估阶段写命中或跳过的原因 | `triage-monitor.js:368-372`、`triage-monitor.js:381` |
 | `at` | string（date-time） | 是 | 写入时间，UTC ISO 串 | `triage-monitor.js:372`、`triage-monitor.js:381` |
 
-条数上限 80，超出时丢最早的（`triage-monitor.js:382`）。`steps` 出现在三处：单条查询 `status()`（`triage-monitor.js:108`）、告警列表与详情里内嵌的 `triage`（`server.js` 把 `status()` 全量塞进每条告警）；仅列表 `cases()` 的每项里**没有 `steps` 键**（`triage-monitor.js:110-125`）。未入队、排队中、失败的记录是空数组，不缺键。
+条数上限 80，超出时丢最早的（`triage-monitor.js:382`）。`steps` 出现在三处：单条查询 `status()`（`triage-monitor.js:108`）、告警列表与详情里内嵌的 `triage`（`server.js` 把 `status()` 全量塞进每条告警）；仅列表 `cases()` 的每项里**没有 `steps` 键**（`triage-monitor.js:110-125`）。未入队的记录没有 `steps` 键；排队中、失败的记录是空数组。
 
 **`claims[]` 与 `citations[]`：已核验事实**
 
