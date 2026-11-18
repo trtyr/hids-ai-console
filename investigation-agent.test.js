@@ -4,9 +4,10 @@ import { AgentToolbox } from './agent-tools.js';
 import { InvestigationAgent, boundedToolArgs } from './investigation-agent.js';
 import { KnowledgeStore } from './knowledge-store.js';
 import { KnowledgeWorkbench, knowledgeFields } from './knowledge-workbench.js';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { RuleStore } from './rule-store.js';
 
 test('常规研判将必查空页与不可用来源写入结果，深度模式保持原有取证路径', async () => {
   const calls = [];
@@ -406,4 +407,158 @@ test('high-risk false positive requires independent positive benign evidence', a
   assert.equal(result.validation.ok, true);
   assert.equal(result.verdict.verdict, 'uncertain');
   assert.match(result.verdict.missing_evidence.join('；'), /2 条可引用/);
+});
+
+// --- P003-T012：注入 Rego、必查知识库、结论经工具写出 ----------------------------------
+
+const testRego = `package hids.rules.test_probe
+
+# name: 测试探测规则
+# description: 类型、主机和命令都命中
+
+default match := false
+
+match if {
+  input.type == "suspicious_operation"
+  input.host == "10.0.0.5"
+  input.command == "id"
+}
+`;
+
+async function tempRuleStore(t) {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-rego-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(path.join(directory, 'test_probe.rego'), testRego);
+  return new RuleStore(directory);
+}
+
+function syslogContext(command = 'id', hostIp = '10.0.0.5') {
+  return { parsed: { msgid: 'cloudwalker-suspicious-command', ts: '2026-11-03T08:00:00Z',
+    payload_format: 'keyvalue', payload: { event_id: '7', host_ip: hostIp, source_ip: '192.0.2.2',
+      target_ip: '10.0.0.5', user_name: 'root', process_command_line: command } },
+    context: {}, match: { matched: false }, caseInfo: { files: [] } };
+}
+
+const suspiciousToolbox = () => new AgentToolbox({
+  listTools: async () => [{ name: 'get_suspicious_operation_event',
+    inputSchema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } }],
+  callTool: async () => ({ id: 7, host_view: { host_id: 41, host_ip: '10.0.0.5' }, cmdline: 'id' })
+});
+
+const wikiStore = () => ({
+  agentIndex: async () => ({ category: 'webshell',
+    pages: [{ id: 'WS-13', title: 'WebShell 判定', path: 'webshell/WS-13.md' }] }),
+  agentContextPages: async () => [],
+  agentPage: async (type, id) => ({ id, title: 'WebShell 判定', path: 'webshell/WS-13.md', content: '# 判据\n检查文件是否被调用。' }),
+  agentSearch: async () => [],
+  publishedFor: async () => []
+});
+
+// 按脚本逐轮发起工具调用；tools 为空时的调用是独立复核。
+function scriptedModel(script) {
+  let index = 0;
+  return { model: 'fake', complete: async (messages, tools) => {
+    if (!tools.length) return { content: JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
+    const call = script[index++];
+    if (!call) throw new Error('测试脚本已用完');
+    return { tool_calls: [{ id: `call-${index}`, type: 'function', function: call }] };
+  } };
+}
+
+test('A1 套上的 Rego 连整段正文进分析上下文，没命中就写明没有', async t => {
+  const rules = await tempRuleStore(t);
+  let system = '';
+  const model = { model: 'fake', complete: async (messages, tools) => {
+    if (!tools.length) return { content: JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
+    system = messages[0].content;
+    return { content: JSON.stringify({ verdict: '存疑', confidence: '低', summary: '需核查命令后续行为',
+      claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }], missing_data: [] }) };
+  } };
+  const agent = new InvestigationAgent(suspiciousToolbox(), model, undefined, null, rules);
+  const hit = await agent.run('suspicious_operation:7', { mode: 'triage', streamContext: syslogContext('id') });
+  assert.match(system, /# 套上的 Rego 规则/);
+  assert.match(system, /测试探测规则/);
+  assert.match(system, /package hids\.rules\.test_probe/);
+  assert.match(system, /input\.command == "id"/);
+  assert.deepEqual(hit.verdict.rego, { status: 'matched', rule_ids: ['test_probe'] });
+  assert.deepEqual(hit.trace.find(item => item.kind === 'rego'),
+    { kind: 'rego', status: 'matched', rule_ids: ['test_probe'] });
+
+  const miss = await agent.run('suspicious_operation:7', { mode: 'triage',
+    streamContext: syslogContext('whoami', '10.0.0.9') });
+  assert.match(system, /本次没有套上的 Rego 规则（规则库对本次告警事实求值无命中）/);
+  assert.doesNotMatch(system, /测试探测规则/);
+  assert.deepEqual(miss.verdict.rego, { status: 'none', rule_ids: [] });
+});
+
+test('A2 有知识库时先交结论被退回；采纳页写进结果', async t => {
+  const submitted = [];
+  const model = scriptedModel([
+    { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '先交结论' }) },
+    { name: 'wiki_page', arguments: JSON.stringify({ id: 'WS-13' }) },
+    { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '警'.repeat(501), wiki_adopted: ['WS-13'] }) },
+    { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '警'.repeat(500), wiki_adopted: ['WS-13'],
+      claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }] }) }
+  ]);
+  const complete = model.complete;
+  model.complete = async (messages, tools) => {
+    const last = messages.at(-1);
+    if (last?.role === 'tool') submitted.push(last.content);
+    return complete(messages, tools);
+  };
+  const result = await new InvestigationAgent(suspiciousToolbox(), model, undefined, wikiStore(), await tempRuleStore(t))
+    .run('suspicious_operation:7', { mode: 'triage' });
+  assert.match(submitted[0], /没有调用知识库工具/);
+  assert.match(submitted[2], /500 字上限/);
+  assert.equal(result.validation.ok, true);
+  assert.deepEqual(result.verdict.wiki, { consulted: ['WS-13'], adopted: ['WS-13'], reason: '' });
+  const conclusion = result.trace.find(item => item.kind === 'conclusion');
+  assert.equal(conclusion.summary_chars, 500);
+  assert.equal(result.trace.some(item => item.kind === 'wiki' && item.action === 'page' && item.id === 'WS-13'), true);
+  assert.equal([...result.verdict.summary].length <= 500, true);
+});
+
+test('A2 查过判据不采纳时，结果里写原因；没写原因被退回', async t => {
+  const submitted = [];
+  const model = scriptedModel([
+    { name: 'wiki_page', arguments: JSON.stringify({ id: 'WS-13' }) },
+    { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '不影响结论', wiki_adopted: [] }) },
+    { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '不影响结论', wiki_adopted: [],
+      wiki_reason: '判据页与本告警的证据边界不符',
+      claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }] }) }
+  ]);
+  const complete = model.complete;
+  model.complete = async (messages, tools) => {
+    const last = messages.at(-1);
+    if (last?.role === 'tool') submitted.push(last.content);
+    return complete(messages, tools);
+  };
+  const result = await new InvestigationAgent(suspiciousToolbox(), model, undefined, wikiStore(), await tempRuleStore(t))
+    .run('suspicious_operation:7', { mode: 'triage' });
+  assert.match(submitted[1], /必须写明采纳了哪一页/);
+  assert.deepEqual(result.verdict.wiki,
+    { consulted: ['WS-13'], adopted: [], reason: '判据页与本告警的证据边界不符' });
+});
+
+test('A3 结论经 submit_conclusion 写出：501 字被退，500 字原样收下', async t => {
+  const submitted = [];
+  const model = scriptedModel([
+    { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '警'.repeat(501) }) },
+    { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '警'.repeat(500),
+      claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }] }) }
+  ]);
+  const complete = model.complete;
+  model.complete = async (messages, tools) => {
+    const last = messages.at(-1);
+    if (last?.role === 'tool') submitted.push(last.content);
+    return complete(messages, tools);
+  };
+  const result = await new InvestigationAgent(suspiciousToolbox(), model, undefined, null, await tempRuleStore(t))
+    .run('suspicious_operation:7');
+  assert.match(submitted[0], /500 字上限/);
+  assert.equal(result.validation.ok, true);
+  assert.equal([...result.verdict.summary].length, 500);
+  const conclusion = result.trace.find(item => item.kind === 'conclusion');
+  assert.deepEqual({ tool: conclusion.tool, summary_chars: conclusion.summary_chars },
+    { tool: 'submit_conclusion', summary_chars: 500 });
 });
