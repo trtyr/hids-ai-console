@@ -20,7 +20,8 @@ const AT = '2026-11-20T00:00:00.000Z';
 
 const workspace = async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'hids-log-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  // maxRetries 只是兜底：真进程用例自己按 kill→rm 的注册顺序收尾（见 A1 真进程那条的注释）。
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
   return { dir, file: path.join(dir, 'hids.log') };
 };
 
@@ -106,7 +107,11 @@ test('A1 配了路径：同一行既给 stdout 又落文件（同份），先写
 });
 
 test('A1 真进程：配了 HIDS_LOG_FILE，server.started 同时出现在文件与 stdout', async t => {
-  const { dir, file } = await workspace(t);
+  // 这条要真 spawn，所以不用 workspace(t)：它一进来就注册 rm 钩子，而 node:test 的 t.after 按注册顺序跑
+  // （先注册先跑，我用 5 行小例实测过）。顺序反了就是 rm 在子进程还活着时删目录 → ENOTEMPTY，
+  // 更糟的是钩子抛错会吞掉后面的 kill（同样实测），子进程就不由套件回收了。故：kill 先注册、rm 后注册。
+  const dir = await mkdtemp(path.join(tmpdir(), 'hids-log-'));
+  const file = path.join(dir, 'hids.log');
   const child = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'],
     env: { PATH: process.env.PATH, HIDS_HOST: '127.0.0.1', HIDS_PORT: '0', HIDS_DATA_DIR: path.join(dir, 'data'),
       HIDS_LOG_FILE: file, CLOUDWALKER_URL: 'http://127.0.0.1:1', CLOUDWALKER_API_TOKEN: 'fake-token-123456',
@@ -114,11 +119,14 @@ test('A1 真进程：配了 HIDS_LOG_FILE，server.started 同时出现在文件
       HIDS_TRIAGE_INPUT_MODE: 'poll' } });
   let stdout = '';
   child.stdout.on('data', chunk => { stdout += chunk; });
+  // 先注册：杀掉子进程并等它真退出
   t.after(() => new Promise(done => {
     if (child.exitCode !== null) { done(); return; }
     child.once('exit', () => done());
     child.kill('SIGKILL');
   }));
+  // 后注册：子进程退出之后才删目录（maxRetries 只兜 ENOTEMPTY 的极端残影）
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
   const deadline = Date.now() + 8000;
   let fileLine = null;
   while (!fileLine) {

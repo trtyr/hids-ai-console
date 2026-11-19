@@ -45,8 +45,22 @@ function freePort() {
   });
 }
 
-// 真进程启动：docs §3.8.1 的 env 键 + T025 闸门必填五项；HIDS_PORT=0 由 server.started 报端口。
-async function boot(tag, { file, maxBytes, keep } = {}) {
+// 真进程启动：docs §3.8.1 的 env 键 + T025 闸门必填五项；端口由 server.started 报（探针先借一个空闲端口）。
+// freePort() 借端口 → 交给子进程 之间是 TOCTOU 窗：8 并行下别的实例可能先绑上（实测 1/64 EADDRINUSE），
+// 所以外层 boot 对上 EADDRINUSE 重试换端口；只有 EADDRINUSE 重试，其它启动错误照抛。
+async function boot(tag, options = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try { return await bootOnce(tag, options); } catch (error) {
+      lastError = error;
+      if (!/EADDRINUSE/.test(String(error && error.message))) throw error;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+  throw lastError;
+}
+
+async function bootOnce(tag, { file, maxBytes, keep } = {}) {
   const root = await makeRoot(tag);
   const env = {
     PATH: process.env.PATH,
@@ -93,8 +107,14 @@ async function boot(tag, { file, maxBytes, keep } = {}) {
   while (!started) {
     started = seen.lines.find(line => line.event === 'server.started') ?? null;
     if (started) break;
-    if (child.exitCode !== null) throw new Error(`server 起不来：exit=${child.exitCode} stderr=${seen.stderr}`);
-    if (Date.now() > deadline) throw new Error(`15s 内等不到 server.started：stdout=${seen.stdout.slice(-500)} stderr=${seen.stderr.slice(-500)}`);
+    if (child.exitCode !== null) {
+      await rm(root, { recursive: true, force: true });
+      throw new Error(`server 起不来：exit=${child.exitCode} stderr=${seen.stderr}`);
+    }
+    if (Date.now() > deadline) {
+      await rm(root, { recursive: true, force: true });
+      throw new Error(`15s 内等不到 server.started：stdout=${seen.stdout.slice(-500)} stderr=${seen.stderr.slice(-500)}`);
+    }
     await sleeps();
   }
   return { root, file, child, seen, stop, port: started.port, base: `http://127.0.0.1:${started.port}` };
@@ -350,16 +370,41 @@ async function main() {
     const s = await boot('rotate', { file, maxBytes: 200, keep: 2 });
     try {
       for (let i = 0; i < 12; i += 1) await getLogs(s.base, '?event=probe.never');
+      // 响应返回 ≠ 那一行 http.request 已经写完；没写完就可能再触发一次轮转（rename→unlink），
+      // 采样正撞上就 ENOENT（12 忙 + 8 并行下实测 64 跑撞到 1 次：快照里的历史文件被 unlink 掉了）。
+      // 先等活动文件两次采样等大小（= sink 落定），再取快照。
+      let lastSize = -1;
+      const quietDeadline = Date.now() + 3000;
+      while (Date.now() < quietDeadline) {
+        let size = -1;
+        try { size = (await stat(file)).size; } catch { /* rename 完还没重建，属窗口内 */ }
+        if (size >= 0 && size === lastSize) break;
+        lastSize = size;
+        await new Promise(resolve => setTimeout(resolve, 40));
+      }
       const list = await names(root);
       const rotated = rotatedOf(list);
       ok('A2 超上限就会轮转出历史文件（真进程）', rotated.length >= 1, list.join(','));
       ok('A2 轮转命名 <名>.<ISO>.log 且落在同一目录（docs §3.8.1 命名段）',
         rotated.every(name => ROTATED_NAME.test(name)), rotated.join(','));
       ok('A2 保留份数 keep=2：历史文件只留 2 份', rotated.length <= 2, `${rotated.length} 份：${rotated.join(',')}`);
-      ok('A2 当前活动文件还在且非空', (await stat(file)).size > 0, `size=${(await stat(file)).size}`);
+      // 轮转是 rename(hids.log → 历史名) 之后才重建 hids.log：两个动作之间活动文件短暂不存在。
+      // 请求已经返回 ≠ sink 那行日志已落盘完（16 忙进程 + 8 并行下实测撞到过 stat ENOENT 1/32），
+      // 所以有界重采 2s；回不来说明活动文件真没了，照判红。
+      const activeDeadline = Date.now() + 2000;
+      let activeSize = -1;
+      while (Date.now() < activeDeadline) {
+        try { activeSize = (await stat(file)).size; break; } catch { await new Promise(resolve => setTimeout(resolve, 20)); }
+      }
+      ok('A2 当前活动文件还在且非空', activeSize > 0, `size=${activeSize}`);
       let bad = 0;
       for (const name of list) {
-        const lines = await readJsonLines(path.join(root, name));
+        // 快照之后的 unlink 是窗口内的合法中间态：文件没了就跳过（不做「有文件必须可读」的假设）
+        let lines;
+        try { lines = await readJsonLines(path.join(root, name)); } catch (error) {
+          if (error.code === 'ENOENT') continue;
+          throw error;
+        }
         bad += lines.filter(line => line.__bad !== undefined).length;
       }
       ok('A2 轮转不把行切断：所有文件每一行都能解析成 JSON', bad === 0, `坏行 ${bad} 条 / 文件 ${list.join(',')}`);
@@ -385,8 +430,13 @@ async function main() {
         await new Promise(resolve => setTimeout(resolve, 20));
         rotated = rotatedOf(await names(root));
       }
+      // detail 分两支，别把「超时判红」说成「窗口后落定」（审计 P003-T045 :389）：
+      // 最终 5 份且有重采 → 真的撞窗重采通过；最终不是 5 份 → 2s 内重采仍不符，是契约违约、不是瞬态。
+      const outcome = rotated.length === 5
+        ? (windows ? `撞 rename→unlink 窗口 ${windows} 次后重采通过` : '')
+        : `2s 内重采 ${windows} 次仍不符（非瞬态违约，不是撞窗）`;
       ok('A2 缺省 HIDS_LOG_KEEP=5：历史文件只留 5 份', rotated.length === 5,
-        `${rotated.length} 份：${rotated.join(',')}${windows ? `（撞 rename→unlink 窗口 ${windows} 次后重采落定）` : ''}`);
+        `${rotated.length} 份：${rotated.join(',')}${outcome ? `（${outcome}）` : ''}`);
     } finally { await s.stop(); await rm(root, { recursive: true, force: true }); }
   }
 
