@@ -350,8 +350,8 @@ paths:
           schema: { type: string }
         - name: level
           in: query
-          description: 日志级别，逗号分隔可多选
-          schema: { type: string, enum: [info, warn, error] }
+          description: 日志级别，逗号分隔可多选（info/warn/error 之外的值回 400，实现不校验 enum 而按描述语义处理）
+          schema: { type: string }
         - name: from
           in: query
           description: 起始时间（含），ISO 8601 或 Unix 秒/毫秒
