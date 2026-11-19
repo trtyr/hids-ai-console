@@ -39,28 +39,28 @@
 
 | 件 | 位置 | 缺配置时的结果 |
 | --- | --- | --- |
-| 运行态目录 `runtime`（9 条路径） | `server.js:29`、`server.js:1005-1018` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
+| 运行态目录 `runtime`（9 条路径） | `server.js:29`、`server.js:1010-1022` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
 | 监听地址与端口 | `server.js:28-29` | `HIDS_HOST` 缺省 `127.0.0.1`，`HIDS_PORT` 缺省 `8080` |
 | 牧云网关 `gateway` 与 API 工具箱 `apiToolbox` | `server.js:30-34` | 牧云地址或 Token 缺一个 → 两者为 `null` |
 | 模型 `model` 与两个研判器 | `server.js:35-40` | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项 → `model` 为 `null`，两个研判器也是 `null` |
 | 研判记录、规则集、研判队列、判据工作台、溯源白板 | `server.js:46-59`、`server.js:126` | 队列要 `gateway` 与研判器、白板要 MCP 工具箱与模型，缺任一则该件为 `null` |
 
-运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1005-1018`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
+运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1010-1022`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
 
 **`createServer` 是依赖注入点**（`server.js:257-261`）：14 个参数都带默认值，默认指向模块级单例。测试与探针靠传替身换掉 `service`、`investigator`、`history`、`monitor`、`wiki`、`wikiAgent` 这些件。其中 `monitor` 与 `boardService` 的默认值写成「`service` 是不是模块级 `gateway`」的条件式——换了 `service`，就不再挂默认的研判队列与溯源白板。
 
 **规则预筛挂在 `investigate()` 闭包上**（`server.js:262-273`）：`mode === 'triage'` 且 `monitor.ruleEngine` 存在时，先跑一次规则评估，把结果作为 `rule_evaluation` 挂到结论上；评估抛错就记成 `{ status: 'error' }` 继续往下走，不中断研判。
 
-**进程入口**（`server.js:1023-1047`，P003-T025 扩过）：`process.argv[1]` 的真实路径等于本文件路径时才算真进程启动，顺序是「先核配置，再监听」。闸门有**两类问题，一个出口**（`server.js:1026-1035`）：
+**进程入口**（`server.js:1071-1095`，P003-T025 扩过）：`process.argv[1]` 的真实路径等于本文件路径时才算真进程启动，顺序是「先核配置，再监听」。闸门有**两类问题，一个出口**（`server.js:1076-1083`）：
 
-1. **缺必填**——`configSummary()`（`server.js:1009`）算一遍必填差额。五项必填 `CLOUDWALKER_URL` / `CLOUDWALKER_API_TOKEN` / `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项（**空串算缺**，`.env.example` 的占位就是空串）：不 `listen`，把缺的键名逐个写进 stderr（`缺少必填配置：A、B、…`）。
-2. **取值非法**——`invalidConfigValues()`（`server.js:1000`）管唯一一处取值校验：`HIDS_TRIAGE_INPUT_MODE` 只能是 `syslog` 或 `poll`；不设或空串＝缺省 `syslog`（不算非法），其他值一律拒启动，stderr 写 `配置值无效：HIDS_TRIAGE_INPUT_MODE=<坏值>（只能是 syslog 或 poll）`。**不许静默按 `poll` 跑**——那会把 syslog 接收器悄悄关掉，而配置页还回显那个错值。
+1. **缺必填**——`configSummary()`（`server.js:1057`）算一遍必填差额。五项必填 `CLOUDWALKER_URL` / `CLOUDWALKER_API_TOKEN` / `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项（**空串算缺**，`.env.example` 的占位就是空串）：不 `listen`，把缺的键名逐个写进 stderr（`缺少必填配置：A、B、…`）。
+2. **取值非法**——`invalidConfigValues()`（`server.js:1048`）管唯一一处取值校验：`HIDS_TRIAGE_INPUT_MODE` 只能是 `syslog` 或 `poll`；不设或空串＝缺省 `syslog`（不算非法），其他值一律拒启动，stderr 写 `配置值无效：HIDS_TRIAGE_INPUT_MODE=<坏值>（只能是 syslog 或 poll）`。**不许静默按 `poll` 跑**——那会把 syslog 接收器悄悄关掉，而配置页还回显那个错值。
 3. 两类都有时两行都写，然后统一 `process.exitCode = 1`，并打一条 `server.start_failed`（`what: "config"`；`missing` 是缺的键名数组，`invalid` 每条 `{key, value, allowed}`，`error` 是 stderr 那几行拼起来的原话）。**退出码非 0 是契约**，部署脚本按它判「起来没起来」。
-4. 两类都干净才 `createServer().listen(...)` 并打 `server.started`（`host`/`port` 两个字段）；随后若生效的输入模式是 `syslog`，再起一个 UDP 接收器（`server.js:1037-1047`）。
+4. 两类都干净才 `createServer().listen(...)` 并打 `server.started`（`host`/`port` 两个字段）；随后若生效的输入模式是 `syslog`，再起一个 UDP 接收器（`server.js:1086-1093`）。
 
 **闸门只拦真进程**：`createServer()` 被直接调用（测试、探针、别的入口）时不跑闸门，缺件照旧置空、相关路由 503（见 [architecture.md §3.5](../architecture.md)）。要有意造一个缺件进程做实验，用 `createServer()` 起，别指望 `node server.js` 能起来。
 
-**一份判定三处用**：`configSummary(env = process.env)`（`server.js:1009`）报生效值，`triageInputModeOf(env)`（`server.js:994`）给模块级装配与 `/api/config` 定生效模式（合法值原样、空值缺省 `syslog`、**坏值不在这里兜**），`invalidConfigValues(env)`（`server.js:1000`）给闸门判坏值——取值表只有一份（`triageInputModes()`，`server.js:988`）。三者都只读环境变量、不探上游、不碰模块级单例：判的是「键在不在、值在不在表里」，值的形状（URL 前缀、Token 长度）仍由装配处抛（`rpc-client.js:4-5`、`model-client.js:22-24`）。
+**一份判定三处用**：`configSummary(env = process.env)`（`server.js:1057`）报生效值，`triageInputModeOf(env)`（`server.js:1042`）给模块级装配与 `/api/config` 定生效模式（合法值原样、空值缺省 `syslog`、**坏值不在这里兜**），`invalidConfigValues(env)`（`server.js:1048`）给闸门判坏值——取值表只有一份（`triageInputModes()`，`server.js:1036`）。三者都只读环境变量、不探上游、不碰模块级单例：判的是「键在不在、值在不在表里」，值的形状（URL 前缀、Token 长度）仍由装配处抛（`rpc-client.js:4-5`、`model-client.js:22-24`）。
 
 ## 3. 路由分发
 
@@ -124,11 +124,11 @@
 
 | 条件 | 状态 | 正文 | 出处 |
 | --- | --- | --- | --- |
-| `/api/agent/prompts` 用了非 GET 方法 | 405 | 请使用提示词文件上传入口 | `server.js:319` |
-| `/api/agent/prompts/upload` | 410 | 提示词更新已迁移到独立维护端，业务端不允许上传 | `server.js:316-320` |
+| `/api/agent/prompts` 用了非 GET 方法 | 405 | 请使用提示词文件上传入口 | `server.js:836` |
+| `/api/agent/prompts/upload` | 410 | 提示词更新已迁移到独立维护端，业务端不允许上传 | `server.js:836-837` |
 | `/api/` 开头的未知路径 | 404 | 接口不存在 | `server.js:793-794` |
 
-405 在整个文件里只有这一处（`grep -n "405" server.js` 只命中 `server.js:319`）。**方法对不上的路径，除这一处外都落到 404**：`POST /api/session` 与 `POST /api/triage/rules` 都回 404「接口不存在」。非 API 路径（如 `/`）也回同一句 404（`server.js:793-794`）。但 404 有两种文案——`/api/` 下的未知路径回「接口不存在」（`server.js:793-794`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:721`）。
+405 在整个文件里只有这一处（`grep -n "405" server.js` 只命中 `server.js:836`）。**方法对不上的路径，除这一处外都落到 404**：`POST /api/session` 与 `POST /api/triage/rules` 都回 404「接口不存在」。非 API 路径（如 `/`）也回同一句 404（`server.js:989-990`）。但 404 有两种文案——`/api/` 下的未知路径回「接口不存在」（`server.js:989-990`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:912`）。
 
 ### 3.3 路径里的 ID
 
@@ -223,11 +223,11 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 ### 3.5 生效配置（`GET /api/config`，P003-T025）
 
-**是什么**：一处能看进程实际生效的配置——不用登机器翻环境变量。实现只有一行路由（`server.js:642`），响应体就是 `configSummary(config.env)`（`server.js:1047-1059`）的返回值——`config.env` 缺省就是 `process.env`，写配置盖进去的覆盖层立刻反映在这里（§3.6）；OpenAPI 契约见 `openapi.yaml` 的 `getConfig`。
+**是什么**：一处能看进程实际生效的配置——不用登机器翻环境变量。实现只有一行路由（`server.js:642`），响应体就是 `configSummary(config.env)`（`server.js:1057-1069`）的返回值——`config.env` 缺省就是 `process.env`，写配置盖进去的覆盖层立刻反映在这里（§3.6）；OpenAPI 契约见 `openapi.yaml` 的 `getConfig`。
 
 **请求**：`GET /api/config`，无参数、无正文。和其它业务路由一样过 Basic 认证闸门（§4）：启用认证时没凭据回 401 纯文本。
 
-**响应**：`200`，`Cache-Control: no-store`，JSON 正文八键恒在（`server.js:1047-1059`）：
+**响应**：`200`，`Cache-Control: no-store`，JSON 正文八键恒在（`server.js:1057-1069`）：
 
 | 字段 | 类型 | 取值 | 说明 |
 | --- | --- | --- | --- |
@@ -389,7 +389,7 @@ A6 空密码放行 | 200 | {"authenticated":true,"user":null,"role":null}
 | 令牌不匹配 | 403 | 规则管理员令牌无效 |
 | 令牌匹配 | 进业务分支 | — |
 
-知识库侧同构，只是文案换成「尚未配置知识库管理员凭据」与「知识库管理员凭据无效」（`server.js:424-425`）。
+知识库侧同构，只是文案换成「尚未配置知识库管理员凭据」与「知识库管理员凭据无效」（`server.js:870-871`）。
 
 **一个容易看错的后果**：知识库分支里，两个读接口排在令牌判定之前（`server.js:392-425`），所以 `GET /api/wiki/pages` 与 `GET /api/wiki/pages/{path}` 只要过了 Basic 认证就能读，不需要管理员令牌。但也因此，`/api/wiki/` 底下**别的**路径——包括不存在的路径——会先撞上令牌判定：探针里不带令牌请求 `/api/wiki/unknown-path` 得到的是 403「知识库管理员凭据无效」，不是 404。
 
@@ -493,8 +493,8 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 | 情况 | 抛出 | 出处 |
 | --- | --- | --- |
-| 长度超过上限 | 请求正文过大 | `server.js:420` |
-| 不是合法 JSON | 请求正文不是 JSON | `server.js:422` |
+| 长度超过上限 | 请求正文过大 | `server.js:449` |
+| 不是合法 JSON | 请求正文不是 JSON | `server.js:451` |
 
 各路由传进去的上限不一样：
 
@@ -507,7 +507,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 ### 8.2 正文形状
 
-`readJSON` 只保证「是合法 JSON」，不保证形状。形状由各路由自己判：不传 `expected_revision` 的规则写请求回 400「缺少有效的规则配置版本」（`server.js:351-361`）；正文不是对象或数组的回 400「请求正文无效」（`server.js:371-376`、`server.js:477-501`）。
+`readJSON` 只保证「是合法 JSON」，不保证形状。形状由各路由自己判：不传 `expected_revision` 的规则写请求回 400「缺少有效的规则配置版本」（`server.js:735`）；正文不是对象或数组的回 400「请求正文无效」（`server.js:774`、`server.js:916`）。
 
 ### 8.3 错误怎么翻译：四类，一类一个稳定 code（P003-T024）
 
@@ -571,7 +571,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 | 403 | 管理令牌不对 | 规则管理员令牌（`server.js:688`）、知识库管理员凭据（`server.js:824`） |
 | 404 | 目标不存在 | 未知 API（`server.js:943-944`）、知识库页面/会话、研判记录、告警事件 |
 | 405 | 方法不对（只有提示词入口一处，`server.js:790`） | `POST /api/agent/prompts` |
-| 409 | 状态冲突 | 研判未完成不能登记误报（`server.js:752`）、页面版本过期、缺可维护判据页 |
+| 409 | 状态冲突 | 研判未完成不能登记误报（`server.js:793`）、页面版本过期、缺可维护判据页 |
 | 410 | 入口已下线 | `POST /api/agent/prompts/upload`（`server.js:791`） |
 | 422 | 目标无法溯源 | 白板启动时告警没资产（`trace-board.js:344-355`） |
 

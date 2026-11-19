@@ -20,11 +20,11 @@ updated: 2026-11-17
 
 ### 1.1 做什么
 
-- **判据页读写**。`WikiStore` 提供目录浏览（`wiki-store.js:41`）、判据清单（`wiki-store.js:60`）、按路径读页（`wiki-store.js:75`）、按编号取页（`wiki-store.js:85`）、标题与编号检索（`wiki-store.js:91`）、一致性体检（`wiki-store.js:172`）与单页修订（`wiki-store.js:195`）。
+- **判据页读写**。`WikiStore` 提供目录浏览（`wiki-store.js:49`）、判据清单（`wiki-store.js:92`）、按路径读页（`wiki-store.js:111`）、按编号取页（`wiki-store.js:121`）、标题与编号检索（`wiki-store.js:127`）、一致性体检（`wiki-store.js:172`）与单页修订（`wiki-store.js:195`）。
 - **发布前检查**。`checkBundle()` 对一组草案逐条核对格式、编号、状态、日期、来源与引用，返回问题清单而不是直接改（`wiki-store.js:224-268`）。
 - **维护会话**。`WikiWorkbench` 把「改判据」变成多轮对话：会话以 JSON 落盘，模型每轮只产出 JSON 草案，不写库（`wiki-workbench.js:65`、`wiki-workbench.js:94`、`wiki-workbench.js:135`）。
 - **发布前回放**。`runWikiReplay()` 取冻结的案件材料，分别配旧判据与草案判据各跑一遍，比较结论变化（`wiki-replay.js:79-115`）。
-- **客户经验发布**。新建客户经验走独立一条路：会话产出草案，人工审核补上三态结论与复核期限后，由 `createExperience()` 落成 `customer-experience/EX-*.md`（`wiki-workbench.js:271-285`、`wiki-store.js:345-366`）。
+- **客户经验发布**。新建客户经验走独立一条路：会话产出草案，人工审核补上三态结论与复核期限后，由 `createExperience()` 落成 `customer-experience/EX-*.md`（`wiki-workbench.js:271-285`、`wiki-store.js:345-365`）。
 - **判据页的批量发布**。`publishBundle()` 一次写 1 至 6 页，写前备份旧版到历史目录，写后追加一条 `log.md` 记录（`wiki-store.js:269-343`）。
 
 ### 1.2 不做什么
@@ -43,14 +43,14 @@ updated: 2026-11-17
 | 构件 | 是什么 | 定义处 |
 | --- | --- | --- |
 | **判据页读写** | `WikiStore`：判据目录的读、检索、体检、单页修订与批量发布 | `wiki-store.js:29` |
-| **发布前检查** | `WikiStore.checkBundle()`：对草案组做格式与引用核对，返回问题清单 | `wiki-store.js:188` |
+| **发布前检查** | `WikiStore.checkBundle()`：对草案组做格式与引用核对，返回问题清单 | `wiki-store.js:224` |
 | **维护会话** | `WikiWorkbench`：多轮对话式维护，会话落盘为 JSON，产出草案等人工审核 | `wiki-workbench.js:65` |
 | **发布前回放** | `runWikiReplay()`：用冻结案件材料对比旧判据与草案判据的结论变化 | `wiki-replay.js:79` |
 | **客户经验发布** | `WikiWorkbench.publish()` 的新经验分支 + `WikiStore.createExperience()`：经验页落盘并写进经验目录 | `wiki-workbench.js:271-285`、`wiki-store.js:345` |
 
 五者的关系一句话：**判据页读写**是底座（页面与文件的唯一出入口），**维护会话**在上面收集信息并产出草案，**发布前检查**卡在草案与落盘之间，**发布前回放**是发布前的最后一道人工凭据，**客户经验发布**是另一类页面（`customer-experience/EX-*.md`）的专属出口，它不走回放那一套。
 
-注意 `customer-experience` 页在两处规则不同：单页修订 `update()` 允许它（路径正则含该目录，`wiki-store.js:8`），但发布前检查 `checkBundle()` 与批量发布 `publishBundle()` 明确拒绝它（`wiki-store.js:206`、`wiki-store.js:243`）——客户经验有自己的一条发布通道。
+注意 `customer-experience` 页在两处规则不同：单页修订 `update()` 允许它（路径正则含该目录，`wiki-store.js:8`），但发布前检查 `checkBundle()` 与批量发布 `publishBundle()` 明确拒绝它（`wiki-store.js:242`、`wiki-store.js:279`）——客户经验有自己的一条发布通道。
 
 ## 3 对外能力
 
@@ -66,22 +66,22 @@ updated: 2026-11-17
 
 | 方法 | 形状 | 返回 | 定义处 |
 | --- | --- | --- | --- |
-| `browse()` | — | 目录下全部 `.md` 页的元数据数组，含 `deprecated` 页，按固定优先级排序 | `wiki-store.js:41` |
-| `list()` | — | 符合判据页路径格式且非 `deprecated` 的页数组，按路径排序。**P003-T037 起按 mtime 缓存**（见 §4.1 末段） | `wiki-store.js:90-105` |
-| `get(filename)` | — | 一页的元数据 + 全文 `content`；页面不存在时抛 404，文案 `知识库页面不存在：<相对路径>` | `wiki-store.js:75-83` |
-| `getById(id)` | — | 按编号取页；编号不合格式或查不到时返回 `null` | `wiki-store.js:85` |
-| `search(query, limit=8)` | — | 编号或标题命中的页数组；关键词为空或超 100 字时返回空数组 | `wiki-store.js:91` |
-| `agentIndex(eventType)` | — | 该告警类型下的可用判据目录 + 选读提示 | `wiki-store.js:98` |
-| `agentPage(eventType, id)` | — | 一页判据正文（去掉 frontmatter，截 9000 字） | `wiki-store.js:108` |
-| `agentContextPages(eventType)` | — | 该场景的判据正文，最多 4 页 | `wiki-store.js:117` |
-| `agentSearch(eventType, keyword)` | — | 命中片段列表，最多 8 条 | `wiki-store.js:124` |
+| `browse()` | — | 目录下全部 `.md` 页的元数据数组，含 `deprecated` 页，按固定优先级排序 | `wiki-store.js:49` |
+| `list()` | — | 符合判据页路径格式且非 `deprecated` 的页数组，按路径排序。**P003-T037 起按 mtime 缓存**（见 §4.1 末段） | `wiki-store.js:92-107` |
+| `get(filename)` | — | 一页的元数据 + 全文 `content`；页面不存在时抛 404，文案 `知识库页面不存在：<相对路径>` | `wiki-store.js:111-119` |
+| `getById(id)` | — | 按编号取页；编号不合格式或查不到时返回 `null` | `wiki-store.js:121` |
+| `search(query, limit=8)` | — | 编号或标题命中的页数组；关键词为空或超 100 字时返回空数组 | `wiki-store.js:127` |
+| `agentIndex(eventType)` | — | 该告警类型下的可用判据目录 + 选读提示 | `wiki-store.js:134` |
+| `agentPage(eventType, id)` | — | 一页判据正文（去掉 frontmatter，截 9000 字） | `wiki-store.js:144` |
+| `agentContextPages(eventType)` | — | 该场景的判据正文，最多 4 页 | `wiki-store.js:153` |
+| `agentSearch(eventType, keyword)` | — | 命中片段列表，最多 8 条 | `wiki-store.js:160` |
 | `health()` | — | `{ checked_at, active_pages, issues[] }` | `wiki-store.js:172` |
 | `update(filename, content, expectedRevision)` | — | 修订后的页 | `wiki-store.js:195` |
-| `checkBundle(changes, evidence=null)` | — | 问题清单数组；空数组表示通过 | `wiki-store.js:188` |
-| `publishBundle(changes, evidence, audit)` | — | 已发布页的数组 | `wiki-store.js:233` |
+| `checkBundle(changes, evidence=null)` | — | 问题清单数组；空数组表示通过 | `wiki-store.js:224` |
+| `publishBundle(changes, evidence, audit)` | — | 已发布页的数组 | `wiki-store.js:269` |
 | `createExperience(filename, content)` | — | 新建的经验页 | `wiki-store.js:345` |
 | `publishedFor(scenarioId)` | — | 该场景下未过复核期的经验记录，最多 8 条 | `wiki-store.js:367` |
-| `file(filename)` | — | 拼出的磁盘路径；路径不合法时抛 400 | `wiki-store.js:32` |
+| `file(filename)` | — | 拼出的磁盘路径；路径不合法时抛 400 | `wiki-store.js:40` |
 
 **`WikiWorkbench` 的公开方法**（8 个）：
 
@@ -109,16 +109,16 @@ updated: 2026-11-17
 
 研判侧读判据走的是 `agentIndex()` → `agentPage()` 两步：
 
-1. **按告警类型定分类**。`classForEvent` 把 13 个告警类型映射到 12 个判据目录（`wiki-store.js:12-17`；`suspicious_operation` 与 `command_whitelist` 都落在 `suspicious-command`）；映射不到的类型直接抛「Wiki 没有 `<类型>` 对应的判据分类」（`wiki-store.js:134`）。
-2. **筛出可用判据**。只取 `status: active` 且路径在 `common/` 或本类目录下的页（`wiki-store.js:135-136`）；一页都没有时抛「Wiki 分类 `<类>` 没有可用判据」（`wiki-store.js:137`）。
-3. **读正文**。`agentPage()` 在上一步的目录里找编号，找不到抛「当前场景不可读取 Wiki 判据 `<编号>`」（`wiki-store.js:145`）；读到的正文去掉 frontmatter 并截到 9000 字（`wiki-store.js:148`）。
-4. **检索**。`agentSearch()` 先过一道参数检查：关键词长度不在 2 到 80 字之间直接抛「Wiki 检索词需为 2 到 80 字」（`wiki-store.js:196`）；命中片段取关键词前后各 80 / 120 字，最多 8 条（`wiki-store.js:163-167`）。
+1. **按告警类型定分类**。`classForEvent` 把 13 个告警类型映射到 12 个判据目录（`wiki-store.js:12-17`；`suspicious_operation` 与 `command_whitelist` 都落在 `suspicious-command`）；映射不到的类型直接抛「Wiki 没有 `<类型>` 对应的判据分类」（`wiki-store.js:136`）。
+2. **筛出可用判据**。只取 `status: active` 且路径在 `common/` 或本类目录下的页（`wiki-store.js:137-138`）；一页都没有时抛「Wiki 分类 `<类>` 没有可用判据」（`wiki-store.js:139`）。
+3. **读正文**。`agentPage()` 在上一步的目录里找编号，找不到抛「当前场景不可读取 Wiki 判据 `<编号>`」（`wiki-store.js:147`）；读到的正文去掉 frontmatter 并截到 9000 字（`wiki-store.js:150`）。
+4. **检索**。`agentSearch()` 先过一道参数检查：关键词长度不在 2 到 80 字之间直接抛「Wiki 检索词需为 2 到 80 字」（`wiki-store.js:162`）；命中片段取关键词前后各 80 / 120 字，最多 8 条（`wiki-store.js:165-169`）。
 
-**目录索引的 mtime 缓存（P003-T037）。** `agentIndex()` 的数据源只有 `list()`（`wiki-store.js:132-138`），
+**目录索引的 mtime 缓存（P003-T037）。** `agentIndex()` 的数据源只有 `list()`（`wiki-store.js:134-140`），
 它每次先算一个签名：顶层每个判据目录下、路径符合判据页格式的文件，逐个 `stat` 取 `mtimeMs` 与 `size`，
-拼成排序后的字符串（`wiki-store.js:67-88`）。签名与上次相同就直接返回上次解析好的行（浅拷贝，
-调用方排序/改数组改不到缓存），不再逐文件 `readFile` 与解析 frontmatter（`wiki-store.js:90-93`）；
-签名变了才重读重解析并刷新缓存（`wiki-store.js:94-105`）。
+拼成排序后的字符串（`wiki-store.js:69-90`）。签名与上次相同就直接返回上次解析好的行（浅拷贝，
+调用方排序/改数组改不到缓存），不再逐文件 `readFile` 与解析 frontmatter（`wiki-store.js:92-95`）；
+签名变了才重读重解析并刷新缓存（`wiki-store.js:96-107`）。
 一次研判里 `agentIndex` → `agentPage` → `agentContextPages` 会反复要目录，这里就是它们共用的那一份。
 缓存失效的判据是「文件 mtime 或大小变了」——维护流水线写页面后 mtime 自然变化，不需要额外清缓存；
 **代价**：同一毫秒内改写且字节数不变的页面，要等下一次 mtime 变化才会被看到（§4.1 的代价，不是 bug）。
@@ -149,7 +149,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 '
 ```
 
-运维看一致性用 `health()`：它对**生效中**的判据页逐页检查来源、失效引用与缺失证据页，并单独报告重复编号；`index.md`、`rules.md` 这类根文档不在检查范围内，因为筛选条件是路径符合判据页格式（`wiki-store.js:138-155`）。
+运维看一致性用 `health()`：它对**生效中**的判据页逐页检查来源、失效引用与缺失证据页，并单独报告重复编号；`index.md`、`rules.md` 这类根文档不在检查范围内，因为筛选条件是路径符合判据页格式（`wiki-store.js:174-191`）。
 
 ### 4.2 维护会话：从对话到草案
 
@@ -162,7 +162,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 这条路上有两个容易看错的地方：
 
-- **模型输出里的错误不会抛出**。`reply()` 内层的校验失败会被 `catch` 住，变成一条助手消息「本轮输入已保存；自动整理暂时失败：<原因>」（`wiki-workbench.js:240-242`），会话继续停在 `collecting`。实测：反馈会话里模型没给 `diagnosis`，会话不会报错，只多出一条这样的助手消息。
+- **模型输出里的错误不会抛出**。`reply()` 内层的校验失败会被 `catch` 住，变成一条助手消息「本轮输入已保存；自动整理暂时失败：<原因>」（`wiki-workbench.js:257-259`），会话继续停在 `collecting`。实测：反馈会话里模型没给 `diagnosis`，会话不会报错，只多出一条这样的助手消息。
 - **多页草案的页面范围被限死**。允许修改的页面只有当前页与被判为「相关」的判据页（`wiki-workbench.js:209`），页数不超过 6，且必须包含当前页（`wiki-workbench.js:207-208`）。
 
 ### 4.3 发布前检查
@@ -172,25 +172,25 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 **新证据页**（传了 `evidence` 才查）：
 
 - 路径要匹配 `_evidence/<8 到 100 位小写字母数字或连字符>.md`，正文要有 frontmatter、`id: EV-...`、`source:`、`supports: [...]`（`wiki-store.js:232-237`）。
-- 路径或编号不能与既有页撞车（`wiki-store.js:202-203`）。
+- 路径或编号不能与既有页撞车（`wiki-store.js:238-239`）。
 
-**每条草案变更**（`wiki-store.js:204-228`）：
+**每条草案变更**（`wiki-store.js:240-264`）：
 
 | 检查项 | 判定依据 |
 | --- | --- |
-| 路径必须是判据页格式，且不能是 `customer-experience/` | `wiki-store.js:206` |
-| 编号与路径文件名一致，且正文有明确的 `id:` 行 | `wiki-store.js:211-213` |
-| 状态 ∈ `active` / `draft` / `deprecated` | `wiki-store.js:214` |
-| 有 `evidence: [...]` 或 `source:` 之一 | `wiki-store.js:215-216` |
-| `title`、`applies_to`、`status`、`updated` 四个字段都有非空值 | `wiki-store.js:217-218` |
-| `updated` 是 `YYYY-MM-DD` | `wiki-store.js:219` |
-| `refs:` 里的编号在全库存在 | `wiki-store.js:220-221` |
-| `evidence:` 里的路径格式合法且指向存在的证据页 | `wiki-store.js:222-226` |
-| 标为 `deprecated` 时必须写 `deprecated_reason:` | `wiki-store.js:227-228` |
+| 路径必须是判据页格式，且不能是 `customer-experience/` | `wiki-store.js:242` |
+| 编号与路径文件名一致，且正文有明确的 `id:` 行 | `wiki-store.js:247-249` |
+| 状态 ∈ `active` / `draft` / `deprecated` | `wiki-store.js:250` |
+| 有 `evidence: [...]` 或 `source:` 之一 | `wiki-store.js:251-252` |
+| `title`、`applies_to`、`status`、`updated` 四个字段都有非空值 | `wiki-store.js:253-254` |
+| `updated` 是 `YYYY-MM-DD` | `wiki-store.js:255` |
+| `refs:` 里的编号在全库存在 | `wiki-store.js:256-257` |
+| `evidence:` 里的路径格式合法且指向存在的证据页 | `wiki-store.js:258-262` |
+| 标为 `deprecated` 时必须写 `deprecated_reason:` | `wiki-store.js:263-264` |
 
 另外还会报一条全库级的「判据编号重复 N 次」（`wiki-store.js:229-231`）。
 
-两处调用它：`reply()` 出草案时先查一遍，不通过就把前 3 条拼成错误抛在内部（`wiki-workbench.js:222-223`）；`publishBundle()` 落盘前再查一遍，不通过抛 400 并带上前 5 条（`wiki-store.js:240-241`）。
+两处调用它：`reply()` 出草案时先查一遍，不通过就把前 3 条拼成错误抛在内部（`wiki-workbench.js:222-223`）；`publishBundle()` 落盘前再查一遍，不通过抛 400 并带上前 5 条（`wiki-store.js:276-277`）。
 
 实测（命令与输出见 §10.2）：拿一页真实判据改坏三个字段，检查结果精确指出「状态无效」「缺少 title」「更新日期无效」三项。
 
@@ -198,7 +198,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 回放回答的是「换了判据之后，同一份案件材料的结论会不会变」。它比的不是新旧结论谁对，而是变化本身（`wiki-replay.js:103-107`）。
 
-1. **前置条件**。会话状态必须是 `ready_for_review` 且草案里有变更，否则抛 409「当前没有可回放的判据草案」（`wiki-workbench.js:254-255`）。
+1. **前置条件**。会话状态必须是 `ready_for_review` 且草案里有变更，否则抛 409「当前没有可回放的判据草案」（`wiki-workbench.js:276-277`）。
 2. **版本对账**。每条变更的 `page_revision` 要与当前页的 revision 一致，否则抛 409「判据 `<编号>` 已更新，请重新整理草案」（`wiki-replay.js:83-87`）。
 3. **选样本**。`loadCases()` 扫会话目录，取文件名是 UUID 的 `.json` 会话中 `status === 'published'` 且带审核人与反馈的那些（`wiki-replay.js:23-26`），按审核时间倒序（`wiki-replay.js:27`），再加上当前会话自己的反馈（标「待审核反馈」）与别的已发布会话（标「已审核反馈」）（`wiki-replay.js:28-29`）。
 4. **样本过滤**。预期结论必须是三态之一、`case_id` 不重复、原始告警与研判事实都不为空、该事件类型能算出判据目录，且目录里至少有一页在本次变更清单里（`wiki-replay.js:33-38`）。最多取 5 条，并记下 `eligible` 与 `omitted`（`wiki-replay.js:45`）。
@@ -222,12 +222,12 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 `publishBundle(changes, evidence, audit)` 是判据页唯一的批量发布通道（`wiki-store.js:269-343`）：
 
-1. **入参把关**。变更 1 至 6 条，审核人姓名去空白后不少于 2 个字，否则抛 400「维护发布需要 1 至 6 条判据修订及审核人」（`wiki-store.js:235-237`）。
-2. **先检查再写**。`checkBundle()` 有任何一条问题就停在这里，错误消息带前 5 条（`wiki-store.js:240-241`）。
-3. **逐页对账**。路径合法、不重复、不属于 `customer-experience/`（`wiki-store.js:243-245`）；`page_revision` 与当前页一致，否则 409「判据 `<编号>` 已更新，请重新整理草案」（`wiki-store.js:247-248`）；正文 100 到 30000 字且不含空字符（`wiki-store.js:250-251`）；编号、状态、`title`、`updated`、`applies_to`、来源都要齐（`wiki-store.js:253-257`）。
-4. **证据页约束**。格式不合法抛 400「反馈证据页格式无效」（`wiki-store.js:261-265`）；每一条被发布的判据正文都必须引用这个证据页，否则 400「判据 `<编号>` 未引用本次反馈证据」（`wiki-store.js:266-267`）；证据页不得已存在，否则 409「反馈证据页已存在」（`wiki-store.js:268-270`）。
-5. **写入顺序**。先备份旧版到历史目录（`wiki-store.js:274-280`），再写证据页（`wiki-store.js:281-284`），再逐页「临时文件 + rename」原子替换（`wiki-store.js:285-291`），最后追一条 `log.md`（`wiki-store.js:328-329`）。`log.md` 那条记录包含审核人、反馈案件号、证据页路径、回放状态与样本数、审核要点（截 500 字）。
-6. **失败回滚**。中途出错时，把已经写过的页改回旧内容，并删掉刚写的证据页，然后重抛（`wiki-store.js:294-302`）。
+1. **入参把关**。变更 1 至 6 条，审核人姓名去空白后不少于 2 个字，否则抛 400「维护发布需要 1 至 6 条判据修订及审核人」（`wiki-store.js:273-275`）。
+2. **先检查再写**。`checkBundle()` 有任何一条问题就停在这里，错误消息带前 5 条（`wiki-store.js:276-277`）。
+3. **逐页对账**。路径合法、不重复、不属于 `customer-experience/`（`wiki-store.js:279-281`）；`page_revision` 与当前页一致，否则 409「判据 `<编号>` 已更新，请重新整理草案」（`wiki-store.js:284-285`）；正文 100 到 30000 字且不含空字符（`wiki-store.js:286-287`）；编号、状态、`title`、`updated`、`applies_to`、来源都要齐（`wiki-store.js:289-293`）。
+4. **证据页约束**。格式不合法抛 400「反馈证据页格式无效」（`wiki-store.js:301-305`）；每一条被发布的判据正文都必须引用这个证据页，否则 400「判据 `<编号>` 未引用本次反馈证据」（`wiki-store.js:303-304`）；证据页不得已存在，否则 409「反馈证据页已存在」（`wiki-store.js:305-307`）。
+5. **写入顺序**。先备份旧版到历史目录（`wiki-store.js:311-316`），再写证据页（`wiki-store.js:317-320`），再逐页「临时文件 + rename」原子替换（`wiki-store.js:321-326`），最后追一条 `log.md`（`wiki-store.js:328-329`）。`log.md` 那条记录包含审核人、反馈案件号、证据页路径、回放状态与样本数、审核要点（截 500 字）。
+6. **失败回滚**。中途出错时，把已经写过的页改回旧内容，并删掉刚写的证据页，然后重抛（`wiki-store.js:330-338`）。
 
 同一时刻只允许一次写：`WikiStore` 的三个写方法 `update()`、`publishBundle()`、`createExperience()` 都挂在同一条 `pending` promise 链上（`wiki-store.js:34` 建链，三个写方法各自 `this.pending = job.catch`：`wiki-store.js:220`、`wiki-store.js:341`、`wiki-store.js:363`）。
 
@@ -237,9 +237,9 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 1. **开会话**。`create('new-experience')` 生成文件名 `customer-experience/EX-<时间戳><随机数>.md`，正文是一份 `status: draft` 的模板（`wiki-workbench.js:124-126`、`wiki-workbench.js:57`）。
 2. **草案校验**。模板里的 JSON 块要写满九项字段（`record_ref`、`customer_scope`、`subject_scope`、`behavior`、`reason`、`supporting_evidence`、`applicability`、`counterexample`、`validity`，见 `wiki-workbench.js:13-14`）；`id` 要等于文件名、`scenario_id` 要落在已知事件类型里、每项字段的 `source_quote` 都要逐字出现在用户发过的消息里，缺一项就拒绝（`wiki-workbench.js:198-201`）。
-3. **人工审核**。审核人要选三态结论之一、填一个未来 366 天以内的复核截止日（按 `+08:00` 时区解析）、写至少 5 字的审核说明，缺一抛 400「请选择三态结论、未来一年内的复核日期，并填写至少 5 字审核说明」（`wiki-workbench.js:274-279`）。
+3. **人工审核**。审核人要选三态结论之一、填一个未来 366 天以内的复核截止日（按 `+08:00` 时区解析）、写至少 5 字的审核说明，缺一抛 400「请选择三态结论、未来一年内的复核日期，并填写至少 5 字审核说明」（`wiki-workbench.js:300-305`）。
 4. **落盘**。审核结果写进 JSON 块的 `review` 字段，块内状态置 `published`，frontmatter 的 `status: draft` 改成 `status: active`（`wiki-workbench.js:280-284`），然后交给 `createExperience()`（`wiki-workbench.js:285`）。
-5. **`createExperience()` 的校验**。路径要匹配 `customer-experience/EX-<数字>.md`，编号要等于文件名，状态要已经是 `active`，要有 `source:`，正文不超过 30000 字，缺一抛 400「客户经验缺少有效编号、发布状态或来源」（`wiki-store.js:347-352`）。
+5. **`createExperience()` 的校验**。路径要匹配 `customer-experience/EX-<数字>.md`，编号要等于文件名，状态要已经是 `active`，要有 `source:`，正文不超过 30000 字，缺一抛 400「客户经验缺少有效编号、发布状态或来源」（`wiki-store.js:352-357`）。
 6. **目录与日志**。`customer-experience/index.md` 不存在则建，然后追一行 `- [<编号>](<文件名>) · <标题>`（`wiki-store.js:355-358`）；`log.md` 追加一条 `ingest` 记录（`wiki-store.js:359-360`）。
 7. **复用**。`publishedFor(scenarioId)` 取 `customer-experience/` 下 `status: active` 的页，解析页内 JSON 块，筛出 `scenario_id` 匹配、有 `review`、且 `expires_at` 晚于当前时刻的记录，最多 8 条（`wiki-store.js:367-376`）。它不校验 `review.verdict` 的取值——只按场景与复核期限过滤（`wiki-store.js:375`）。
 
@@ -252,15 +252,15 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 | 参数 | 出现在 | 含义 | 合法域 | 违反时 | 依据 |
 | --- | --- | --- | --- | --- | --- |
 | `directory` | 构造 | 判据库目录 | 存在的目录 | 后续读写抛文件错误 | `wiki-store.js:30`；缺省取 `HIDS_WIKI_DIR`，再缺省为仓内 `wiki/`（`wiki-store.js:6`） |
-| `filename` | `get` / `update` | 页面路径 | 两段式 `<目录>/<文件名>.md`（目录在 16 个约定目录内）或根文档 `index.md`/`rules.md`/`log.md`/`_schema.md` | 抛 400「知识库页面路径无效」；路径合法但文件不存在抛 404「知识库页面不存在：`<相对路径>`」 | `wiki-store.js:32-38`、`wiki-store.js:75-83` |
-| `expectedRevision` | `update` | 期望的当前版本指纹 | 必须等于当前页的 `revision` | 抛 409「知识库页面已更新，请刷新后再提交」 | `wiki-store.js:163` |
-| `content` | `update` | 新正文 | 1 到 30000 字，不含空字符 | 抛 400「页面正文必须为 1 到 30000 字」 | `wiki-store.js:164-165` |
-| `changes[].path` | `checkBundle` / `publishBundle` | 被修订页的路径 | 判据页格式，且不是 `customer-experience/` | 检查阶段报「无效的判据路径」 | `wiki-store.js:206`、`wiki-store.js:243` |
-| `changes[].content` | 同上 | 新正文 | `publishBundle` 下 100 到 30000 字 | 抛 400「判据 `<编号>` 正文无效」 | `wiki-store.js:250-251` |
-| `changes[].page_revision` | 同上 | 起草时的页版本指纹 | 必须等于当前页 `revision` | 抛 409「判据 `<编号>` 已更新，请重新整理草案」 | `wiki-store.js:247-248` |
-| `audit.reviewer` | `publishBundle` | 审核人姓名 | 去空白后至少 2 字 | 抛 400「维护发布需要 1 至 6 条判据修订及审核人」 | `wiki-store.js:236-237` |
-| `evidence.path` | `publishBundle` | 新证据页路径 | `_evidence/<8 到 100 位小写字母数字或连字符>.md` | 抛 400「反馈证据页格式无效」 | `wiki-store.js:261` |
-| `evidence.content` | 同上 | 新证据页正文 | 不超过 12000 字，含 `id: EV-...` 与 `source:` | 同上 | `wiki-store.js:262-264` |
+| `filename` | `get` / `update` | 页面路径 | 两段式 `<目录>/<文件名>.md`（目录在 16 个约定目录内）或根文档 `index.md`/`rules.md`/`log.md`/`_schema.md` | 抛 400「知识库页面路径无效」；路径合法但文件不存在抛 404「知识库页面不存在：`<相对路径>`」 | `wiki-store.js:40-46`、`wiki-store.js:111-119` |
+| `expectedRevision` | `update` | 期望的当前版本指纹 | 必须等于当前页的 `revision` | 抛 409「知识库页面已更新，请刷新后再提交」 | `wiki-store.js:199` |
+| `content` | `update` | 新正文 | 1 到 30000 字，不含空字符 | 抛 400「页面正文必须为 1 到 30000 字」 | `wiki-store.js:200-201` |
+| `changes[].path` | `checkBundle` / `publishBundle` | 被修订页的路径 | 判据页格式，且不是 `customer-experience/` | 检查阶段报「无效的判据路径」 | `wiki-store.js:242`、`wiki-store.js:279` |
+| `changes[].content` | 同上 | 新正文 | `publishBundle` 下 100 到 30000 字 | 抛 400「判据 `<编号>` 正文无效」 | `wiki-store.js:286-287` |
+| `changes[].page_revision` | 同上 | 起草时的页版本指纹 | 必须等于当前页 `revision` | 抛 409「判据 `<编号>` 已更新，请重新整理草案」 | `wiki-store.js:283-284` |
+| `audit.reviewer` | `publishBundle` | 审核人姓名 | 去空白后至少 2 字 | 抛 400「维护发布需要 1 至 6 条判据修订及审核人」 | `wiki-store.js:272-273` |
+| `evidence.path` | `publishBundle` | 新证据页路径 | `_evidence/<8 到 100 位小写字母数字或连字符>.md` | 抛 400「反馈证据页格式无效」 | `wiki-store.js:297` |
+| `evidence.content` | 同上 | 新证据页正文 | 不超过 12000 字，含 `id: EV-...` 与 `source:` | 同上 | `wiki-store.js:298-300` |
 | `scenarioId` | `publishedFor` | 告警场景标识 | 场景标识字符串；匹配不上就返回空数组 | 不抛错 | `wiki-store.js:367` |
 
 **`WikiWorkbench`**
@@ -278,14 +278,14 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 | `review.reviewer` / `review.note` | `publish` | 判据页发布的审核人与说明 | 审核人 2 到 100 字，说明 10 到 500 字 | 抛 400「请填写审核人和至少 10 字审核说明」 | `wiki-workbench.js:287-290` |
 | `review.verdict` / `review.valid_until` / `review.note` | `publish` | 客户经验发布的审核三件套 | 结论三选一；日期 `YYYY-MM-DD` 且落在未来 366 天内；说明 5 到 500 字 | 抛 400「请选择三态结论、未来一年内的复核日期，并填写至少 5 字审核说明」 | `wiki-workbench.js:274-279` |
 | `review.replay_no_cases_ack` | `publish` | 回放无样本时的确认 | 必须是 `true` | 抛 400「没有可用的已保存案件；请确认样本覆盖缺口」 | `wiki-workbench.js:298-299` |
-| `review.replay_override_reason` | `publish` | 回放需人工复核时的理由 | 至少 20 字 | 抛 400「回放存在结论不符、退化或无效结果；须说明至少 20 字的人工复核理由」 | `wiki-workbench.js:300-302` |
+| `review.replay_override_reason` | `publish` | 回放需人工复核时的理由 | 至少 20 字 | 抛 400「回放存在结论不符、退化或无效结果；须说明至少 20 字的人工复核理由」 | `wiki-workbench.js:323-325` |
 | `review.source_verified` | `publish` | 外部原文已核查的确认 | 外部证据时必须是 `true` | 抛 400「请先核查新证据原文、摘录及适用边界，再确认来源已核查」 | `wiki-workbench.js:306-307` |
 
 ### 5.2 返回值
 
 **页面元数据**（`metadata()`，`wiki-store.js:20-27`）：`path`、`id`（缺 `id:` 字段时取文件名）、`title`（缺 `title:` 时取正文首个一级标题，再缺取文件名）、`status`（缺 `status:` 时为 `reference`）、`updated`、`revision`（页面源文件全文的 SHA-256 前 16 位，含 frontmatter 围栏与字段行）、`characters`（页面源文件全文的字符数，含 frontmatter）。两个值都由 `hash(source)` / `source.length` 算出，入参是整份页面文本而非去掉 frontmatter 的正文（`wiki-store.js:26`）。
 
-**体检结果**（`health()`，`wiki-store.js:156`）：`checked_at`（ISO 时间戳）、`active_pages`（生效中判据页数）、`issues`（数组，每条含 `path`、`kind`、`message`；`kind` 取 `duplicate_id`、`missing_source`、`broken_ref`、`missing_evidence`，见 `wiki-store.js:146`、`wiki-store.js:150`、`wiki-store.js:152`、`wiki-store.js:154`）。
+**体检结果**（`health()`，`wiki-store.js:172`）：`checked_at`（ISO 时间戳）、`active_pages`（生效中判据页数）、`issues`（数组，每条含 `path`、`kind`、`message`；`kind` 取 `duplicate_id`、`missing_source`、`broken_ref`、`missing_evidence`，见 `wiki-store.js:182`、`wiki-store.js:186`、`wiki-store.js:188`、`wiki-store.js:190`）。
 
 **会话记录**（`WikiWorkbench` 落盘的 JSON，`wiki-workbench.js:128-133`）：`id`、`page`、`new_experience`、`feedback`、`template`、`page_revision`、`status`、`created_at`、`updated_at`、`messages[]`；多轮之后追加 `diagnosis`、`diagnosis_note`、`follow_up`、`proposal`（`wiki-workbench.js:228-237`），发布之后追加 `published_pages`、`audit`（`wiki-workbench.js:315-319`）。`list()` 只暴露其中一部分字段：`id`、`page`、`updated_at`、`status`、`message_count`（`wiki-workbench.js:92`）。
 
@@ -307,7 +307,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 | 外部库 | `node:crypto` | `createHash`（三个文件都用）与 `randomUUID`（只有前两个文件用） | `wiki-store.js:1`、`wiki-workbench.js:1`、`wiki-replay.js:5` |
 | 外部库 | `node:fs/promises` | 读写文件、建目录、改名、追加日志 | `wiki-store.js:2`、`wiki-workbench.js:2`、`wiki-replay.js:2` |
 | 外部库 | `node:path` / `node:url` | 拼路径、定位模块所在目录 | `wiki-store.js:3-4`、`wiki-replay.js:3` |
-| 上游 | 研判智能体 | 读判据的四个方法（`agentIndex` / `agentPage` / `agentContextPages` / `agentSearch`），属 investigation-agent 模块，本页不展开 | `wiki-store.js:98`、`wiki-store.js:108`、`wiki-store.js:117`、`wiki-store.js:124` |
+| 上游 | 研判智能体 | 读判据的四个方法（`agentIndex` / `agentPage` / `agentContextPages` / `agentSearch`），属 investigation-agent 模块，本页不展开 | `wiki-store.js:134`、`wiki-store.js:144`、`wiki-store.js:153`、`wiki-store.js:160` |
 
 ## 7 数据归属
 
@@ -337,29 +337,29 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 | `updated` | string | 是 | frontmatter 的 `updated:`（`YYYY-MM-DD`）；缺省是**空串**，不是 null | `wiki-store.js:25` |
 | `revision` | string | 是 | 正文全文的 SHA-256 前 16 位十六进制 | `wiki-store.js:18`、`wiki-store.js:26` |
 | `characters` | integer | 是 | 正文全文（含 frontmatter）的 JS 字符串 `length`：按 UTF-16 码元计，一个汉字算 1，一个基本平面外字符算 2 | `wiki-store.js:26` |
-| `content` | string | 只在 `WikiPage` | 含 frontmatter 的完整 Markdown 正文 | `wiki-store.js:82` |
+| `content` | string | 只在 `WikiPage` | 含 frontmatter 的完整 Markdown 正文 | `wiki-store.js:118` |
 
 `status` 四个取值（枚举）：
 
 | 取值 | 含义 | 依据 |
 | --- | --- | --- |
-| `active` | 生效的判据；智能体只读这一类（`agentIndex` 只取 active） | `wiki-store.js:101`、`wiki-store.js:167` |
-| `draft` | 草案，不进智能体目录 | `wiki-store.js:167` |
-| `deprecated` | 作废；`list()` 直接过滤掉，但 `browse()` 仍列出 | `wiki-store.js:70`、`wiki-store.js:167`、`wiki-store.js:214` |
+| `active` | 生效的判据；智能体只读这一类（`agentIndex` 只取 active） | `wiki-store.js:137`、`wiki-store.js:203` |
+| `draft` | 草案，不进智能体目录 | `wiki-store.js:203` |
+| `deprecated` | 作废；`list()` 直接过滤掉，但 `browse()` 仍列出 | `wiki-store.js:104`、`wiki-store.js:203`、`wiki-store.js:250` |
 | `reference` | 不是 frontmatter 能写的值，而是**缺 `status:` 时的读时默认值** | `wiki-store.js:25` |
 
 写入面（`PUT /api/wiki/pages/{pagePath}` 与发布流程）只接受前三个：状态不在 `active` / `draft` / `deprecated` 里就抛 400
-（`wiki-store.js:167`、`wiki-store.js:214`、`wiki-store.js:253`）。
+（`wiki-store.js:203`、`wiki-store.js:250`、`wiki-store.js:289`）。
 
 ### 7.2 列表分页（`GET /api/wiki/pages`）
 
-列表走 `browse()`（一次读全部页的元数据，含 `deprecated`），分页在 HTTP 层做（`server.js:322-333`）：
+列表走 `browse()`（一次读全部页的元数据，含 `deprecated`），分页在 HTTP 层做（`server.js:839-850`）：
 
 | 参数 | 缺省 | 合法域 | 违反时 | 依据 |
 | --- | --- | --- | --- | --- |
-| `q` | 无 | 任意字符串，匹配 `id` / `title` / `path`（小写包含） | ——（无匹配就回空数组） | `server.js:329-332` |
-| `count` | **不切页，返回全部** | 1 到 50 的安全整数 | 400「分页参数无效」 | `server.js:324-328` |
-| `offset` | 0 | 大于等于 0 的安全整数 | 400「分页参数无效」 | `server.js:326-328` |
+| `q` | 无 | 任意字符串，匹配 `id` / `title` / `path`（小写包含） | ——（无匹配就回空数组） | `server.js:846-849` |
+| `count` | **不切页，返回全部** | 1 到 50 的安全整数 | 400「分页参数无效」 | `server.js:841-845` |
+| `offset` | 0 | 大于等于 0 的安全整数 | 400「分页参数无效」 | `server.js:843-845` |
 
 响应固定是 `{ pages, total }`：`total` 是切页前的条数，带 `q` 时是过滤后（且被 50 条上限截断后）的条数。顺序是「过滤 → 切页」，所以 `total` 与页内条数能对上。
 `count` 缺省不切页是为了向后兼容：控制台知识库页现在一次取全量，默认 20 会让它静默少显示（D002 只加不改）。
@@ -368,18 +368,18 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 | 编号 | 陈述 | 反例 | 依据 | 违反症状 |
 | --- | --- | --- | --- | --- |
-| `R-KB-01` | 修订判据页时页的编号不得变 | 提交一份改了 `id:` 的正文 | `wiki-store.js:167` | 抛 400「页面 ID 必须保持一致，状态须为 active、draft 或 deprecated」 |
-| `R-KB-02` | 判据页状态只能是 `active` / `draft` / `deprecated` | 状态写成别的 | `wiki-store.js:167`、`wiki-store.js:214` | 抛 400 或报「状态无效」 |
-| `R-KB-03` | 判据页要有 `evidence:` 或 `source:` 之一 | 两个都没有 | `wiki-store.js:169-170` | 抛 400「判据需要 evidence 或 source 出处」 |
-| `R-KB-04` | 单页修订靠版本指纹防覆盖 | 用旧 `expectedRevision` 提交 | `wiki-store.js:163` | 抛 409「知识库页面已更新，请刷新后再提交」，不写盘 |
-| `R-KB-05` | 批量发布一次 1 至 6 页，且路径不重复 | 传 7 条或两条同路径 | `wiki-store.js:235`、`wiki-store.js:243-245` | 抛 400 |
+| `R-KB-01` | 修订判据页时页的编号不得变 | 提交一份改了 `id:` 的正文 | `wiki-store.js:203` | 抛 400「页面 ID 必须保持一致，状态须为 active、draft 或 deprecated」 |
+| `R-KB-02` | 判据页状态只能是 `active` / `draft` / `deprecated` | 状态写成别的 | `wiki-store.js:203`、`wiki-store.js:250` | 抛 400 或报「状态无效」 |
+| `R-KB-03` | 判据页要有 `evidence:` 或 `source:` 之一 | 两个都没有 | `wiki-store.js:205-206` | 抛 400「判据需要 evidence 或 source 出处」 |
+| `R-KB-04` | 单页修订靠版本指纹防覆盖 | 用旧 `expectedRevision` 提交 | `wiki-store.js:199` | 抛 409「知识库页面已更新，请刷新后再提交」，不写盘 |
+| `R-KB-05` | 批量发布一次 1 至 6 页，且路径不重复 | 传 7 条或两条同路径 | `wiki-store.js:271`、`wiki-store.js:279-281` | 抛 400 |
 | `R-KB-06` | 判据页发布前必须先回放，且回放对应同一份草案 | 直接发布或草案改过 | `wiki-workbench.js:294-295` | 抛 409「发布前请先回放当前判据草案」 |
 | `R-KB-07` | 发布时的提示词版本要与回放时一致 | 回放后提示词升级了 | `wiki-workbench.js:296-297` | 抛 409「研判提示词版本已变化，请重新回放」 |
 | `R-KB-08` | 回放结论的两段摘录要逐字出现在冻结材料与判据里 | 模型编一段不在输入里的原文 | `wiki-replay.js:70-73` | 该条判为 `invalid`，报告状态转 `needs_review` |
 | `R-KB-09` | 客户经验九项字段的 `source_quote` 要逐字出现在用户发过的消息里 | 字段里写了一段没说过的话 | `wiki-workbench.js:199-200` | 抛 400「客户经验尚缺告警场景、九项字段或原话出处，请继续补充」 |
 | `R-KB-10` | 客户经验的复核期限在一年以内，过期后不再复用 | 填一个两年后的日期，或期限已过 | `wiki-workbench.js:277`、`wiki-store.js:375-376` | 抛 400；过期后 `publishedFor()` 不再返回它 |
-| `R-KB-11` | 判据库的写操作串行执行，不并发 | 同时发起两次修订 | `wiki-store.js:30`、`wiki-store.js:196`、`wiki-store.js:220` | 后一条排队等前一条完成 |
-| `R-KB-12` | 批量发布中途失败要回滚到旧内容 | 写第二页时出错 | `wiki-store.js:294-302` | 已写页改回旧内容，证据页被删 |
+| `R-KB-11` | 判据库的写操作串行执行，不并发 | 同时发起两次修订 | `wiki-store.js:30`、`wiki-store.js:232`、`wiki-store.js:256` | 后一条排队等前一条完成 |
+| `R-KB-12` | 批量发布中途失败要回滚到旧内容 | 写第二页时出错 | `wiki-store.js:330-338` | 已写页改回旧内容，证据页被删 |
 | `R-KB-13` | 模型只能产出草案，不能直接写库 | 模型想直接改文件 | `wiki-workbench.js:176` | 写库只发生在 `publish()` 里 |
 | `R-KB-14` | 一个会话最多 80 条消息 | 第 81 条 | `wiki-workbench.js:142` | 抛 400「会话已达到上限，请新建会话」 |
 
@@ -391,63 +391,63 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 | 场景 | 文案 | status | 依据 |
 | --- | --- | --- | --- |
-| 页面路径不合法 | 知识库页面路径无效 | 400 | `wiki-store.js:37` |
-| 页面不存在（`get`，以及经 `get` 读旧版的 `update`） | 知识库页面不存在：`<相对路径>` | 404 | `wiki-store.js:75-83` |
-| 修订的路径不是判据页 | 只允许修订判据页和客户经验页 | 400 | `wiki-store.js:161` |
-| 版本指纹对不上 | 知识库页面已更新，请刷新后再提交 | 409 | `wiki-store.js:163` |
-| 正文超长或含空字符 | 页面正文必须为 1 到 30000 字 | 400 | `wiki-store.js:164-165` |
-| 编号变了或状态非法 | 页面 ID 必须保持一致，状态须为 active、draft 或 deprecated | 400 | `wiki-store.js:167-168` |
-| 缺来源 | 判据需要 evidence 或 source 出处 | 400 | `wiki-store.js:169-170` |
-| 发布参数不合规 | 维护发布需要 1 至 6 条判据修订及审核人 | 400 | `wiki-store.js:237` |
-| 发布前检查不通过 | 维护草案未通过检查：<前 5 条问题> | 400 | `wiki-store.js:241` |
-| 路径重复或非法 | 维护草案包含重复或无效的判据路径 | 400 | `wiki-store.js:244` |
-| 页版本对不上 | 判据 `<编号>` 已更新，请重新整理草案 | 409 | `wiki-store.js:248` |
-| 正文不合规 | 判据 `<编号>` 正文无效 | 400 | `wiki-store.js:251` |
-| 元数据缺项 | 判据 `<编号>` 缺少编号、适用范围、状态、日期或来源 | 400 | `wiki-store.js:257` |
-| 证据页格式不合规 | 反馈证据页格式无效 | 400 | `wiki-store.js:265` |
-| 判据没引用本次证据 | 判据 `<编号>` 未引用本次反馈证据 | 400 | `wiki-store.js:267` |
-| 证据页已存在 | 反馈证据页已存在 | 409 | `wiki-store.js:269` |
+| 页面路径不合法 | 知识库页面路径无效 | 400 | `wiki-store.js:45` |
+| 页面不存在（`get`，以及经 `get` 读旧版的 `update`） | 知识库页面不存在：`<相对路径>` | 404 | `wiki-store.js:116-124` |
+| 修订的路径不是判据页 | 只允许修订判据页和客户经验页 | 400 | `wiki-store.js:197` |
+| 版本指纹对不上 | 知识库页面已更新，请刷新后再提交 | 409 | `wiki-store.js:199` |
+| 正文超长或含空字符 | 页面正文必须为 1 到 30000 字 | 400 | `wiki-store.js:201-202` |
+| 编号变了或状态非法 | 页面 ID 必须保持一致，状态须为 active、draft 或 deprecated | 400 | `wiki-store.js:204-205` |
+| 缺来源 | 判据需要 evidence 或 source 出处 | 400 | `wiki-store.js:206-207` |
+| 发布参数不合规 | 维护发布需要 1 至 6 条判据修订及审核人 | 400 | `wiki-store.js:273` |
+| 发布前检查不通过 | 维护草案未通过检查：<前 5 条问题> | 400 | `wiki-store.js:277` |
+| 路径重复或非法 | 维护草案包含重复或无效的判据路径 | 400 | `wiki-store.js:280` |
+| 页版本对不上 | 判据 `<编号>` 已更新，请重新整理草案 | 409 | `wiki-store.js:284` |
+| 正文不合规 | 判据 `<编号>` 正文无效 | 400 | `wiki-store.js:287` |
+| 元数据缺项 | 判据 `<编号>` 缺少编号、适用范围、状态、日期或来源 | 400 | `wiki-store.js:293` |
+| 证据页格式不合规 | 反馈证据页格式无效 | 400 | `wiki-store.js:301` |
+| 判据没引用本次证据 | 判据 `<编号>` 未引用本次反馈证据 | 400 | `wiki-store.js:303` |
+| 证据页已存在 | 反馈证据页已存在 | 409 | `wiki-store.js:305` |
 | 经验页路径不合规 | 客户经验页面路径无效 | 400 | `wiki-store.js:348` |
 | 经验页缺编号、状态或来源 | 客户经验缺少有效编号、发布状态或来源 | 400 | `wiki-store.js:352` |
-| 告警类型没有对应分类 | Wiki 没有 `<类型>` 对应的判据分类 | 无 | `wiki-store.js:100` |
-| 分类下没有可用判据 | Wiki 分类 `<类>` 没有可用判据 | 无 | `wiki-store.js:103` |
-| 编号不在当前场景目录里 | 当前场景不可读取 Wiki 判据 `<编号>` | 无 | `wiki-store.js:111` |
-| 检索词长度不合法 | Wiki 检索词需为 2 到 80 字 | 无 | `wiki-store.js:126` |
+| 告警类型没有对应分类 | Wiki 没有 `<类型>` 对应的判据分类 | 无 | `wiki-store.js:136` |
+| 分类下没有可用判据 | Wiki 分类 `<类>` 没有可用判据 | 无 | `wiki-store.js:139` |
+| 编号不在当前场景目录里 | 当前场景不可读取 Wiki 判据 `<编号>` | 无 | `wiki-store.js:147` |
+| 检索词长度不合法 | Wiki 检索词需为 2 到 80 字 | 无 | `wiki-store.js:162` |
 
 **`wiki-workbench.js`**
 
 | 场景 | 文案 | status | 依据 |
 | --- | --- | --- | --- |
-| 输入不是 1 到 4000 字 | 输入必须为 1 到 4000 字 | 400 | `wiki-workbench.js:137` |
-| 同一会话上一轮未完 | 上一轮知识整理仍在进行 | 409 | `wiki-workbench.js:138` |
+| 输入不是 1 到 4000 字 | 输入必须为 1 到 4000 字 | 400 | `wiki-workbench.js:149` |
+| 同一会话上一轮未完 | 上一轮知识整理仍在进行 | 409 | `wiki-workbench.js:150` |
 | 会话不存在 | 知识维护会话不存在 | 404 | `wiki-workbench.js:141`、`wiki-workbench.js:253` |
-| 消息已达 80 条 | 会话已达到上限，请新建会话 | 400 | `wiki-workbench.js:142` |
-| 模型未配置 | 知识维护模型尚未配置 | 无 | `wiki-workbench.js:149` |
-| 反馈参数不全 | 反馈需要案件、预期结论、至少 10 字理由和反馈人 | 400 | `wiki-workbench.js:101` |
-| 案件材料缺件 | 案件缺少原始告警或研判事实，无法建立反馈 | 400 | `wiki-workbench.js:116` |
-| 模型没返回 JSON 对象 | 知识维护模型未返回 JSON 对象 | 无 | `wiki-workbench.js:10` |
-| 反馈会话没定诊断 | 案件反馈必须先区分判据、数据、提示词、来源或个案问题 | 无 | `wiki-workbench.js:193` |
-| 多页草案超 6 页或漏当前页 | 多页草案必须包含当前判据且不超过 6 页 | 无 | `wiki-workbench.js:208` |
-| 多页草案越界或重复 | 多页草案包含重复页面或超出当前场景 | 无 | `wiki-workbench.js:213` |
-| 草案没过检查 | 草案未通过发布前检查：<前 3 条问题> | 无 | `wiki-workbench.js:223` |
-| 外部证据不合规 | 新证据须包含 HTTPS 原文、标题、核查日期、客户提供的原文片段、支持命题和适用边界 | 无 | `wiki-workbench.js:36` |
-| 外部证据缺 URL | 新证据缺少可核查的原文 URL | 无 | `wiki-workbench.js:30` |
-| 经验页缺 JSON 块 | 客户经验草案缺少 JSON 结构 | 400 | `wiki-workbench.js:60` |
-| 经验页 JSON 块解析失败 | 客户经验 JSON 结构无效 | 400 | `wiki-workbench.js:62` |
-| 经验九项字段不全 | 客户经验尚缺告警场景、九项字段或原话出处，请继续补充 | 400 | `wiki-workbench.js:201` |
-| 没有可回放的草案 | 当前没有可回放的判据草案 | 409 | `wiki-workbench.js:255` |
-| 同一会话有操作在跑 | 知识维护操作仍在进行 | 409 | `wiki-workbench.js:250` |
-| 没有可审核的草案 | 当前没有可审核的修订草案 | 409 | `wiki-workbench.js:269` |
+| 消息已达 80 条 | 会话已达到上限，请新建会话 | 400 | `wiki-workbench.js:154` |
+| 模型未配置 | 知识维护模型尚未配置 | 无 | `wiki-workbench.js:162` |
+| 反馈参数不全 | 反馈需要案件、预期结论、至少 10 字理由和反馈人 | 400 | `wiki-workbench.js:113` |
+| 案件材料缺件 | 案件缺少原始告警或研判事实，无法建立反馈 | 400 | `wiki-workbench.js:128` |
+| 模型没返回 JSON 对象 | 知识维护模型未返回 JSON 对象 | 无 | `wiki-workbench.js:12` |
+| 反馈会话没定诊断 | 案件反馈必须先区分判据、数据、提示词、来源或个案问题 | 无 | `wiki-workbench.js:208` |
+| 多页草案超 6 页或漏当前页 | 多页草案必须包含当前判据且不超过 6 页 | 无 | `wiki-workbench.js:223` |
+| 多页草案越界或重复 | 多页草案包含重复页面或超出当前场景 | 无 | `wiki-workbench.js:228` |
+| 草案没过检查 | 草案未通过发布前检查：<前 3 条问题> | 无 | `wiki-workbench.js:238` |
+| 外部证据不合规 | 新证据须包含 HTTPS 原文、标题、核查日期、客户提供的原文片段、支持命题和适用边界 | 无 | `wiki-workbench.js:48` |
+| 外部证据缺 URL | 新证据缺少可核查的原文 URL | 无 | `wiki-workbench.js:42` |
+| 经验页缺 JSON 块 | 客户经验草案缺少 JSON 结构 | 400 | `wiki-workbench.js:72` |
+| 经验页 JSON 块解析失败 | 客户经验 JSON 结构无效 | 400 | `wiki-workbench.js:74` |
+| 经验九项字段不全 | 客户经验尚缺告警场景、九项字段或原话出处，请继续补充 | 400 | `wiki-workbench.js:216` |
+| 没有可回放的草案 | 当前没有可回放的判据草案 | 409 | `wiki-workbench.js:276` |
+| 同一会话有操作在跑 | 知识维护操作仍在进行 | 409 | `wiki-workbench.js:271` |
+| 没有可审核的草案 | 当前没有可审核的修订草案 | 409 | `wiki-workbench.js:290` |
 | 整理仍在进行 | 知识整理仍在进行 | 409 | `wiki-workbench.js:266` |
-| 审核人或说明不合规 | 请填写审核人和至少 10 字审核说明 | 400 | `wiki-workbench.js:290` |
-| 没回放就发布 | 发布前请先回放当前判据草案 | 409 | `wiki-workbench.js:295` |
-| 提示词版本变了 | 研判提示词版本已变化，请重新回放 | 409 | `wiki-workbench.js:297` |
-| 无样本且未确认 | 没有可用的已保存案件；请确认样本覆盖缺口 | 400 | `wiki-workbench.js:299` |
-| 回放需复核但没写理由 | 回放存在结论不符、退化或无效结果；须说明至少 20 字的人工复核理由 | 400 | `wiki-workbench.js:302` |
-| 回放状态非法 | 回放状态无效，请重新回放 | 409 | `wiki-workbench.js:304` |
-| 外部证据没核查 | 请先核查新证据原文、摘录及适用边界，再确认来源已核查 | 400 | `wiki-workbench.js:307` |
-| 经验审核三件套不齐 | 请选择三态结论、未来一年内的复核日期，并填写至少 5 字审核说明 | 400 | `wiki-workbench.js:279` |
-| 本轮内部整理失败 | 本轮输入已保存；自动整理暂时失败：<原因> | 不抛出，转成助手消息 | `wiki-workbench.js:241` |
+| 审核人或说明不合规 | 请填写审核人和至少 10 字审核说明 | 400 | `wiki-workbench.js:311` |
+| 没回放就发布 | 发布前请先回放当前判据草案 | 409 | `wiki-workbench.js:316` |
+| 提示词版本变了 | 研判提示词版本已变化，请重新回放 | 409 | `wiki-workbench.js:318` |
+| 无样本且未确认 | 没有可用的已保存案件；请确认样本覆盖缺口 | 400 | `wiki-workbench.js:320` |
+| 回放需复核但没写理由 | 回放存在结论不符、退化或无效结果；须说明至少 20 字的人工复核理由 | 400 | `wiki-workbench.js:323` |
+| 回放状态非法 | 回放状态无效，请重新回放 | 409 | `wiki-workbench.js:325` |
+| 外部证据没核查 | 请先核查新证据原文、摘录及适用边界，再确认来源已核查 | 400 | `wiki-workbench.js:328` |
+| 经验审核三件套不齐 | 请选择三态结论、未来一年内的复核日期，并填写至少 5 字审核说明 | 400 | `wiki-workbench.js:300` |
+| 本轮内部整理失败 | 本轮输入已保存；自动整理暂时失败：<原因> | 不抛出，转成助手消息 | `wiki-workbench.js:257` |
 
 **`wiki-replay.js`**
 
@@ -481,23 +481,23 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 | 项 | 数值 | 依据 |
 | --- | --- | --- |
-| 单页修订正文字数 | 1 到 30000 | `wiki-store.js:164` |
-| 批量发布正文字数 | 100 到 30000 | `wiki-store.js:250` |
-| 批量发布页数 | 1 到 6 | `wiki-store.js:235` |
-| 新证据页正文字数 | 不超过 12000 | `wiki-store.js:262` |
-| 新证据页路径长度 | 8 到 100 位小写字母数字或连字符 | `wiki-store.js:261` |
-| 检查问题的展示条数 | 发布时 5 条、对话时 3 条 | `wiki-store.js:241`、`wiki-workbench.js:223` |
-| 判据正文截断（给模型看） | 9000 字 | `wiki-store.js:114` |
-| 场景上下文页数 | 最多 4 页 | `wiki-store.js:120` |
-| 检索词长度 | 2 到 80 字；命中最多 8 条 | `wiki-store.js:126`、`wiki-store.js:133` |
-| 标题检索词长度 | 不超过 100 字；默认返回 8 条 | `wiki-store.js:93`、`wiki-store.js:95` |
-| 单轮用户输入 | 1 到 4000 字 | `wiki-workbench.js:136` |
+| 单页修订正文字数 | 1 到 30000 | `wiki-store.js:201` |
+| 批量发布正文字数 | 100 到 30000 | `wiki-store.js:286` |
+| 批量发布页数 | 1 到 6 | `wiki-store.js:271` |
+| 新证据页正文字数 | 不超过 12000 | `wiki-store.js:298` |
+| 新证据页路径长度 | 8 到 100 位小写字母数字或连字符 | `wiki-store.js:297` |
+| 检查问题的展示条数 | 发布时 5 条、对话时 3 条 | `wiki-store.js:277`、`wiki-workbench.js:223` |
+| 判据正文截断（给模型看） | 9000 字 | `wiki-store.js:150` |
+| 场景上下文页数 | 最多 4 页 | `wiki-store.js:156` |
+| 检索词长度 | 2 到 80 字；命中最多 8 条 | `wiki-store.js:162`、`wiki-store.js:169` |
+| 标题检索词长度 | 不超过 100 字；默认返回 8 条 | `wiki-store.js:129`、`wiki-store.js:131` |
+| 单轮用户输入 | 1 到 4000 字 | `wiki-workbench.js:149` |
 | 会话消息条数 | 最多 80 | `wiki-workbench.js:142` |
 | 案件快照单文件 | 截 12000 字 | `wiki-workbench.js:110` |
 | 回看的用户消息 | 最近 16 条 | `wiki-workbench.js:185` |
 | 相关证据页 | 最多 3 个，各截 3000 字 | `wiki-workbench.js:154`、`wiki-workbench.js:156` |
 | 相关判据页 | 正文不超过 12000 字，最多 5 页 | `wiki-workbench.js:164`、`wiki-workbench.js:172` |
-| 多页草案页数 | 最多 6 页 | `wiki-workbench.js:207` |
+| 多页草案页数 | 最多 6 页 | `wiki-workbench.js:187` |
 | `_schema.md` 读入量 | 截 14000 字 | `wiki-workbench.js:176` |
 | 回放样本数 | 最多 5 条 | `wiki-replay.js:45` |
 | 回放单页判据上下文 | 截 15000 字 | `wiki-replay.js:54` |
@@ -638,7 +638,7 @@ proposal: null
 ### 11.2 限制
 
 - **目录与映射写死**。新增一类告警或新开一个判据目录，要改 `wikiDirectories` 与 `classForEvent`（`wiki-store.js:9-17`）。
-- **单页修订不跑完整的发布前检查**。`update()` 只查路径、版本、正文长度、编号与状态、来源五项（`wiki-store.js:161-170`），不查 `title` / `applies_to` / `updated` 格式，也不查 `refs` 与 `evidence` 指向的页是否存在（那些检查在 `checkBundle()`，`wiki-store.js:217-226`）。
+- **单页修订不跑完整的发布前检查**。`update()` 只查路径、版本、正文长度、编号与状态、来源五项（`wiki-store.js:197-206`），不查 `title` / `applies_to` / `updated` 格式，也不查 `refs` 与 `evidence` 指向的页是否存在（那些检查在 `checkBundle()`，`wiki-store.js:253-262`）。
 - **回放样本只来自会话目录**。样本必须是文件名像 UUID 的会话文件，且带 `status: published`、审核人与反馈（`wiki-replay.js:23-26`）；判据库目录本身不提供样本。
 - **回放不重新取证**（`wiki-replay.js:93`），所以它能回答「判据变了结论变没变」，回答不了「现在的判据对不对」。
 - **回放只比变化不比对错**。结论定性只依据「与预期一致与否」和「与旧判据是否不同」（`wiki-replay.js:103-107`）。
@@ -649,7 +649,7 @@ proposal: null
 ### 11.3 已知坑
 
 - **`reply()` 里 `sourceEvidence()` 被调了两次**，入参相同（`wiki-workbench.js:220` 与 `wiki-workbench.js:226`）。第一次抛错就不会走到第二次。代码与注释里都没写为什么这么写，**没查到**。
-- **单页修订的历史备份写在全部校验之后**。所以「参数不合规」与「版本冲突」两种失败不会在历史目录里留下任何东西（`wiki-store.js:161-174`）——想从历史目录反查失败原因是不行的。
+- **单页修订的历史备份写在全部校验之后**。所以「参数不合规」与「版本冲突」两种失败不会在历史目录里留下任何东西（`wiki-store.js:197-210`）——想从历史目录反查失败原因是不行的。
 - **`publishedFor()` 不校验 `review.verdict`**（`wiki-store.js:375`）。实测仓库里有一条 `review.verdict` 为 `unsuccessful_attack` 的经验同样被返回（`wiki-store.js:367-376`）。
 - **回放的 `before` 一侧用的是空 candidate**（`wiki-replay.js:98`），也就是旧判据正文；但 `wikiContext()` 仍会重新读一遍磁盘（`wiki-replay.js:50`），所以“旧”指的是回放那一刻磁盘上的版本，不是起草时的版本。
 
@@ -664,9 +664,9 @@ proposal: null
 **本页未决**：
 
 1. **模型的实际行为没验证**。本机没有模型服务，本卡用假模型验证了本模块的分支逻辑（摘录校验、诊断缺失、证据校验），不代表模型真会按这个格式返回。
-2. **判据库目录的内容没逐页读**。本卡的证据源限 `wiki-store.js`、`wiki-workbench.js`、`wiki-replay.js` 三个实现文件，判据页正文与 `_schema.md` 的具体内容没查。因此「操作手册」（`wiki-workbench.js:152` 读入的那份）具体要求了什么，本页只能给出代码层面的要求。
+2. **判据库目录的内容没逐页读**。本卡的证据源限 `wiki-store.js`、`wiki-workbench.js`、`wiki-replay.js` 三个实现文件，判据页正文与 `_schema.md` 的具体内容没查。因此「操作手册」（`wiki-workbench.js:191` 读入的那份）具体要求了什么，本页只能给出代码层面的要求。
 3. **为什么客户经验不走回放那一套**，代码与注释里都没写，没查到。
 4. **单页修订不跑 `checkBundle()` 是设计还是遗漏**，代码里没有说明，没查到。
 5. **回放样本依赖别的会话已经发布过**，这条链路在真实使用中的覆盖情况没查到——本卡的实测样本是现造的。
-6. **`_evidence/` 下已有 17 个 `.md` 文件**（实测清点，含一个 `index.md`），但这三个文件里没有任何一处统计证据页的引用关系，`health()` 只查被引用方是否存在（`wiki-store.js:153-154`），孤儿证据页查不出来。
+6. **`_evidence/` 下已有 17 个 `.md` 文件**（实测清点，含一个 `index.md`），但这三个文件里没有任何一处统计证据页的引用关系，`health()` 只查被引用方是否存在（`wiki-store.js:189-190`），孤儿证据页查不出来。
  |

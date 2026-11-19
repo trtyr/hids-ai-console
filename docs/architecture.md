@@ -25,7 +25,7 @@
 - **MCP**：牧云暴露的 Model Context Protocol 服务，地址 `/api/mcp`，本后端用它做只读取证。
 - **RPC**：牧云的 `/rpc` JSON-RPC 接口，本后端用它读事件列表与事件详情。
 - **常规研判（triage）** 与 **深度研判（deep）**：同一套研判智能体的两种模式，取证工具池和结论口径不同，见第 5 节。
-- **三态**：结论只有「真实威胁 / 存疑 / 误报」三种，取值与中文标签的映射写在 `investigation-agent.js:9-14` 与 `triage-output.js:2`。
+- **三态**：结论只有「真实威胁 / 存疑 / 误报」三种，取值与中文标签的映射写在 `investigation-agent.js:125-130` 与 `triage-output.js:2`。
 
 ## 2. 一条告警的完整旅程
 
@@ -52,7 +52,7 @@
 
 ### 3.1 业务 API（`server.js`）
 
-`node server.js` 启动，默认监听 `127.0.0.1:8080`（`server.js:25-26`、`server.js:364`）。`npm start` 与之等价；`npm run start:local` 会带上 `--env-file=.env.local`（`package.json:6-7`）。启动时若 `HIDS_TRIAGE_INPUT_MODE` 为 `syslog`，会在监听 HTTP 之后另起一个 UDP 接收器（`server.js:365-370`）。
+`node server.js` 启动，默认监听 `127.0.0.1:8080`（`server.js:33-34`、`server.js:1086-1093`）。`npm start` 与之等价；`npm run start:local` 会带上 `--env-file=.env.local`（`package.json:6-7`）。启动时若 `HIDS_TRIAGE_INPUT_MODE` 为 `syslog`，会在监听 HTTP 之后另起一个 UDP 接收器（`server.js:1086-1093`）。
 
 ### 3.2 维护 API（`maintenance-server.js`）
 
@@ -73,11 +73,11 @@
 
 ### 3.5 缺配置时会怎样
 
-**启动看闸门，起来看实效**（P003-T025）。三处共用一份判定：导出的 `configSummary(env)`（`server.js:1009`）、`triageInputModeOf(env)`（`server.js:994`）与 `invalidConfigValues(env)`（`server.js:1000`）。
+**启动看闸门，起来看实效**（P003-T025）。三处共用一份判定：导出的 `configSummary(env)`（`server.js:1057`）、`triageInputModeOf(env)`（`server.js:1042`）与 `invalidConfigValues(env)`（`server.js:1048`）。
 
 **闸门两类问题，一个出口**：缺必填、取值非法，都是「不监听」。
 
-**(1) 缺必填**：下面五项缺任一项（**空串算缺**），`node server.js` 就不监听——把缺的键名逐个写到 stderr（`缺少必填配置：…`）、退出码非 0，并打一条 `server.start_failed` 日志（`server.js:1026-1035`）：
+**(1) 缺必填**：下面五项缺任一项（**空串算缺**），`node server.js` 就不监听——把缺的键名逐个写到 stderr（`缺少必填配置：…`）、退出码非 0，并打一条 `server.start_failed` 日志（`server.js:1076-1083`）：
 
 | 必填项 | 作用 |
 | --- | --- |
@@ -245,7 +245,7 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 1. 首次不通过，退回模型重写，最多两次（`investigation-agent.js:509-524`）。
 2. 仍不通过，就删掉没通过校验的事实，并把 `validation.removed_unverified_facts` 置为 true（`investigation-agent.js:525-531`）。
-3. 再不行，结论降为存疑、置信度降为低、缺口里加一条「模型引用校验未通过」（`investigation-agent.js:532-536`）。
+3. 再不行，结论降为存疑、置信度降为低、缺口里加一条「模型引用校验未通过」（`investigation-agent.js:956-960`）。
 
 ### 6.4 误报结论的额外门槛
 
@@ -313,7 +313,7 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 
 `customer-experience/EX-*.md` 是另一类页面，正文里嵌一段 JSON 记录这条经验的适用条件与人工复核结论。`publishedFor()`（`wiki-store.js:367-378`）只返回 `status: active`、场景匹配、且复核期限未过的经验。
 
-常规研判在取证后会尝试复用这些经验：让模型在候选中挑一条，并逐项核对适用条件；核对不通过或证据不足就继续完整研判（`investigation-agent.js:266-345`）。命中时结论直接复用该经验的历史判定，并附一条「若出现经验的失效条件，撤回经验并重新研判」的建议（`investigation-agent.js:323-337`）。
+常规研判在取证后会尝试复用这些经验：让模型在候选中挑一条，并逐项核对适用条件；核对不通过或证据不足就继续完整研判（`investigation-agent.js:266-345`）。命中时结论直接复用该经验的历史判定，并附一条「若出现经验的失效条件，撤回经验并重新研判」的建议（`investigation-agent.js:591-605`）。
 
 ### 7.4 维护工作台的四步
 
@@ -403,9 +403,9 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 ### 9.1 业务 API 的 Basic 认证
 
-`server.js:58-65` 的 `hasAccess()` 逻辑是：**只有当 `HIDS_BASIC_AUTH_PASSWORD` 配了时才校验**；没配密码就放行（`server.js:59` 直接 `return true`）。校验时把请求头里的 Base64 解出来，与 `user:password` 做 `timingSafeEqual`（长度不等直接判否）。失败时返回纯文本 401「需要登录后访问」，并带 `WWW-Authenticate` 头（`server.js:66-70`）。
+`server.js:413-419` 的 `hasAccess()` 逻辑是：**只有当 `HIDS_BASIC_AUTH_PASSWORD` 配了时才校验**；没配密码就放行（`server.js:414` 直接 `return true`）。校验时把请求头里的 Base64 解出来，与 `user:password` 做 `timingSafeEqual`（长度不等直接判否）。失败时返回纯文本 401「需要登录后访问」，并带 `WWW-Authenticate` 头（`server.js:421-427`）。
 
-默认监听 `127.0.0.1`（`server.js:25`），所以在默认配置下接口只在回环地址可达；开认证是给「前端反向代理到后端」这种部署形态用的。
+默认监听 `127.0.0.1`（`server.js:33`），所以在默认配置下接口只在回环地址可达；开认证是给「前端反向代理到后端」这种部署形态用的。
 
 ### 9.2 管理员令牌
 
@@ -414,7 +414,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 - 知识库：读接口（`/api/wiki/pages`、`/api/wiki/pages/{path}`）对已通过 Basic 认证的调用方开放；健康检查、维护会话、发布等写操作要求管理员令牌（`server.js:248-249`）。令牌没配置时写接口返回 503。
 - 规则：`GET /api/triage/rules` 开放，并在响应里带 `writable` 字段说明当前能不能写（`server.js:181-187`）；`PUT /api/triage/rules` 要求规则管理员令牌，并要求请求带上 `expected_revision` 做乐观并发控制（`server.js:193-202`）。
 
-提示词上传在业务端被明确关闭：`POST /api/agent/prompts/upload` 返回 410「提示词更新已迁移到独立维护端，业务端不允许上传」（`server.js:233`）。
+提示词上传在业务端被明确关闭：`POST /api/agent/prompts/upload` 返回 410「提示词更新已迁移到独立维护端，业务端不允许上传」（`server.js:837`）。
 
 ### 9.3 牧云侧的只读约束
 
@@ -444,7 +444,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 ### 9.6 本系统不下指令
 
-整条链路上没有「隔离」「封禁」「加白」的执行动作。研判记录里的 `auto_action: false`（`investigation-agent.js:560`）就是这个意思；规则命中也只是「交由 AI 复核」的候选（`server.js:122`、`triage-monitor.js:357`）。
+整条链路上没有「隔离」「封禁」「加白」的执行动作。研判记录里的 `auto_action: false`（`investigation-agent.js:560`）就是这个意思；规则命中也只是「交由 AI 复核」的候选（`server.js:608`、`triage-monitor.js:957`）。
 
 ## 10. 配置项速查
 
@@ -454,7 +454,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 | 变量 | 缺省 | 作用 | 读取位置 |
 | --- | --- | --- | --- |
-| `HIDS_HOST` | `127.0.0.1` | 业务 API 监听地址 | `server.js:25` |
+| `HIDS_HOST` | `127.0.0.1` | 业务 API 监听地址 | `server.js:33` |
 | `HIDS_PORT` | `8080` | 业务 API 监听端口 | `server.js:26` |
 | `CLOUDWALKER_URL` | 无 | 牧云地址，同时用于 RPC 与 MCP | `server.js:27`、`server.js:29`、`agent-tools.js:120` |
 | `CLOUDWALKER_API_TOKEN` | 无 | 牧云 Token；少于 6 位会被拒 | `server.js:28`、`rpc-client.js:5`、`mcp-client.js:6` |
@@ -462,7 +462,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `LLM_API_KEY` | 无 | 模型服务密钥 | `model-client.js:4` |
 | `LLM_MODEL` | 无 | 模型名 | `model-client.js:5` |
 | `LLM_TIMEOUT_MS` | `90000` | 单次模型请求超时（毫秒） | `model-client.js:36` |
-| `HIDS_TRIAGE_INPUT_MODE` | `syslog` | 自动研判输入方式：`syslog` 或 `poll`；**其他值拒绝启动**（空串＝缺省，见 §3.5 闸门 (2)） | `server.js:46`、`server.js:994` |
+| `HIDS_TRIAGE_INPUT_MODE` | `syslog` | 自动研判输入方式：`syslog` 或 `poll`；**其他值拒绝启动**（空串＝缺省，见 §3.5 闸门 (2)） | `server.js:50`、`server.js:1042` |
 | `HIDS_SYSLOG_HOST` | `127.0.0.1` | syslog UDP 监听地址 | `server.js:367` |
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |

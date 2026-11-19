@@ -336,7 +336,7 @@
 - **`conclude`**：至少调查过一个节点才能结束；`summary` 截断到 2500 字符，`gaps` 最多 8 条、每条 240 字符（`trace-board.js:568-576`）。
 - **动作没过校验**：把错误回灌给模型并记一条 `tool_error`；连续 5 次失败就抛错（`trace-board.js:577-583`）。
 - **消息体裁剪**：超过 70000 字符时，从第 3 条起裁到只剩最近 8 条（`trace-board.js:584-589`）。
-- **32 轮用尽**：状态置 `done`，摘要写明已达轮次上限，`gaps` 添一条「未完成的路径需继续人工核查」（`trace-board.js:591-592`）。
+- **32 轮用尽**：状态置 `done`，摘要写明已达轮次上限，`gaps` 添一条「未完成的路径需继续人工核查」（`trace-board.js:627-628`）。
 - **抛错的后果**：整张白板状态置 `failed`，错误进 `gaps`，并记一条 `error` 活动（`trace-board.js:362-367`）。
 
 ### 5.4 白板持久化
@@ -347,7 +347,7 @@
 - **落盘很频繁**：每次工具调用后（成功或失败）都存一次（`trace-board.js:377-392`）。调查收尾也存一次（`trace-board.js:481-484`），后面这几处动作执行完同样存：
   `trace-board.js:536-541`、`trace-board.js:546-566`、`trace-board.js:568-576`、`trace-board.js:577-583`。
 - **读**：`get()` 读不到文件返回 `null`；读到状态是 `running` 而进程内没有对应在跑任务时（一般是进程重启过），改写成 `interrupted`、
-  追加一条「调查已中断」活动并回写（`trace-board.js:297-307`）。
+  追加一条「调查已中断」活动并回写（`trace-board.js:339-349`）。
 - **列**：`list()` 扫目录里的 `.json`，逐个读出 `id`／`title`／`status`／`created_at`／`updated_at`，读坏的文件跳过，按 `updated_at` 倒序，
   条数夹在 1–50（`trace-board.js:294-295`）。目录不存在时返回空数组（`trace-board.js:294-295`）。
 - **并发读**：写入是「临时文件 + rename」，并发读不会读到写了一半的文件——仓内测试盯的就是这一条（`trace-board.test.js:8-34`）。
