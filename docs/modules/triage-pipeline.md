@@ -788,12 +788,13 @@ md 行 -> 重复投递：2 次
 | `rule.file` / `rule.action` | 写进 `rules/` 的那份文件名与 `add` / `update` / `unchanged`——一次只碰一个文件 |
 | `wiki.page` / `wiki.pages` / `wiki.revision` / `wiki.session_id` | 判据页路径、本次写入的全部页、写入后的页面版本、那份知识维护会话的 id |
 | `sides` | 这一轮**真的写了库**的边（`rule` / `wiki`）：动哪边、为什么一眼能看出来（`decision.why` 是决策理由） |
-| `decision` | `source`（`model` 决策模型给的 / `fallback` 没配模型按请求的库逐个尝试）、`libraries`、`why` |
+| `decision` | `source`（`model` 决策模型给的 / `fallback` 没配模型按请求的库逐个尝试 / `idempotent` 请求的库都已在同一版本维护过、本轮没写盘）、`libraries`、`why` |
 | `session_id` | 这份误报维护会话的 id（`fp-sessions/<id>.json`） |
-| `auto_verdict` | 恒为 `{enabled: false, pending: "A/B 口径待拍板", note}`：自动判定没生效，维护产出照写 |
+| `auto_verdict` | 恒为 `{enabled: true, criterion: "rego", trust: "single", note}`：A/B 已拍板，闭环自动判定以 Rego 为准（研判管线同源、信任链单源），JSON 规则集修订照写留痕但不是生效判据 |
 
-**补跑与幂等**：同一案件再登记一次就是补跑入口，正文 `libraries` 只跑需要的那一侧。已成功的一侧（上一轮 `state: updated` 且
-它记下的 `revision` 等于这一轮算出来的库版本）记 `state: skipped`，**不调模型、不写盘**；幂等键是 `case_id:库:版本`
+**补跑与幂等**：同一案件再登记一次就是补跑入口，正文 `libraries` 只跑需要的那一侧。已成功的一侧（上一轮 `state` 是
+`updated` 或 `skipped`、且它记下的 `revision` 等于这一轮算出来的库版本）记 `state: skipped`，**不调模型、不写盘**；
+单腿补跑时没请求的那一侧保住上一轮的 `revision` / `idempotency_key`（成功 → 单腿 → 全量 这条序列上它不会被重跑）；幂等键是 `case_id:库:版本`
 （规则侧的版本是规则库摘要，知识库侧是判据页 revision）。失败的一侧照常重跑，单腿补跑时没请求的那一侧记
 `status: updated` + `state: skipped`，总态不会因此被钉在 `updating`。
 

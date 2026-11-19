@@ -2597,7 +2597,10 @@ components:
           type: object
           description: 这一次动哪几边、为什么（决策轮的产出）
           properties:
-            source: { type: string, enum: [model, fallback], description: 'model=决策模型给的；fallback=没配模型或回包解不出来，按请求的库逐个尝试' }
+            source:
+              type: string
+              enum: [model, fallback, idempotent]
+              description: 'model=决策模型给的；fallback=没配模型或回包解不出来，按请求的库逐个尝试；idempotent=请求的库都已在同一版本维护过，本轮没写盘、没调决策模型'
             libraries: { type: array, items: { type: string, enum: [rule, wiki] } }
             why: { type: [string, 'null'] }
           additionalProperties: true
@@ -2612,13 +2615,14 @@ components:
     FpAutoVerdict:
       type: object
       description: |
-        自动判定闭环的开关状态（P003-T047 A7）。A/B 口径没拍板之前恒为 `enabled: false`：
-        维护产出照写（规则与判据页该改就改），但「AI 结论直接生效」这条路没开，也不改案件结论。
-      required: [enabled, pending]
+        闭环自动判定的生效口径（P003-T047 A7；A/B 已拍板）。生效判据是 Rego 规则库：研判管线读的和规则维护写的
+        是同一本库（同源），信任链只走这一条（单源）；JSON 规则集（`triage-rules.json`）的修订照写留痕，但不是生效判据。
+      required: [enabled, criterion]
       properties:
-        enabled: { type: boolean, enum: [false] }
-        pending: { type: string, description: 待拍板的口径名，当前是「A/B 口径待拍板」 }
-        note: { type: string }
+        enabled: { type: boolean, description: 闭环自动判定是否启用（A/B 拍板后为 true） }
+        criterion: { type: string, enum: [rego], description: 生效判据：`rego`＝规则库（研判管线同源） }
+        trust: { type: string, enum: [single], description: 信任链：`single`＝只认 Rego 这一条源 }
+        note: { type: string, description: 一句话口径说明（含「JSON 规则集修订照写留痕、不作为生效判据」） }
       additionalProperties: false
     FpMaintenanceSessionSummary:
       type: object

@@ -208,7 +208,9 @@ P003-T047 又加了两条误报维护会话查询（`/api/false-positive/session
 | 只动知识库 | `state: no_change` | `state: updated` | `["wiki"]` |
 | 两边都动 | `state: updated` | `state: updated` | `["rule", "wiki"]` |
 
-`decision.source` 只有两个值：`model`（决策模型给的）与 `fallback`（没配决策模型 / 决策模型回包解不出来时，按请求的库逐个尝试）。
+`decision.source` 只有三个值（`fp-maintainer.js` 的 `FP_DECISION_SOURCES` 与 openapi 的 enum 是同一份）：`model`（决策模型给的）、
+`fallback`（没配决策模型 / 决策模型回包解不出来时，按请求的库逐个尝试）、`idempotent`（请求的库都已在同一版本上维护过——
+这一轮不写盘、不调决策模型，见本节「补跑与幂等」）。
 决策模型复用规则维护者那一格（`HIDS_LLM_MODEL_RULE_MAINTAINER` → `LLM_*` 回退），提示词是 `prompts/false-positive.md`，**不新增配置键**。
 
 **写入只有两条老路**（A3）：Agent 自己不碰 `rules/` 与 `wiki/`，两条写入都走 P003-T041 的维护接口。
@@ -262,6 +264,9 @@ P003-T047 又加了两条误报维护会话查询（`/api/false-positive/session
 - 否则 `updated`。
 
 失败只写 `maintenance.rule.error` / `maintenance.wiki.error`（各截 300 字），**`verdict` 与 `feedback` 一个字节都不动**。
+两条 error 在**写之前**过一道凭据擦除（`Basic` / `Bearer` 凭据、`token=` / `api_key=` / `password=` / `secret=` 的值换 `[redacted]`，
+`fp-maintainer.js` 的 `scrubCredentials`）：上游 401 / 网络错误会把请求头拼进文案，而这两格会随 `triage-monitor.json` 落盘并随
+`GET /api/agent/triage/{alertId}` 外发。
 
 **补跑与幂等**（A4）：同一案件再 POST 一次就是补跑入口，`libraries` 决定只跑哪一侧（不填＝两侧都试，仍受幂等约束）。
 判据是**这一条案件上一轮的 `record.maintenance`**（落盘在 `triage-monitor.json` 里，进程重启后还在；不扫会话目录，不会跨案件串味）：
@@ -271,12 +276,19 @@ P003-T047 又加了两条误报维护会话查询（`/api/false-positive/session
 - 规则侧的「版本」是**规则库摘要**：有案件命中的规则就只算那几条的 `id:revision`，没有就整库算，sha256 前 16 位；
 - 知识库侧的「版本」是目标判据页的 `revision`。
 
-失败的一侧照常重跑（`state: 'failed'` 不构成跳过），补跑成功后它自己的 `revision` 也换成新一轮的。单腿补跑时没请求的那一侧
-记 `status: 'updated'` + `state: 'skipped'` + `why: 本次只补跑 …`——既不谎报「改完了」，也不把总态永久钉在 `updating`。
+某一侧上一轮是 `state: 'skipped'`（单腿补跑时没请求它、或它当轮被幂等跳过）但**记着 `revision`** 时，同样按「已成功过」处理：
+判据看的是「这一侧在同一库版本上成功过」，不是「上一轮恰好跑了它」。单腿补跑时没请求的那一侧记
+`status: 'updated'` + `state: 'skipped'` + `why: 本次只补跑 …`，**并且原样保住上一轮的 `revision` / `idempotency_key`
+（以及规则侧的文件名、知识库侧的页面）**——它们下一次全量登记时就是「已成功一侧不重复执行」的判据；
+既不谎报「改完了」，也不把总态永久钉在 `updating`，还不会把幂等判据洗掉（成功 → 单腿 → 全量 这条序列上仍然只跑一次）。
 
-**自动判定待启用**（A7）：`maintenance.auto_verdict` 恒为 `{enabled: false, pending: "A/B 口径待拍板", note: …}`——
-A/B 口径没拍板之前，Agent 的维护产出照写（规则 / 判据页该改就改），但「AI 结论直接生效」这条闭环没开，也不改案件结论。
-会话里同一格原样留档，回头看能说清「当时为什么没自动生效」。
+失败的一侧照常重跑（`state: 'failed'` 不构成跳过），补跑成功后它自己的 `revision` 也换成新一轮的。
+
+**闭环自动判定以 Rego 为准**（A7，A/B 已拍板）：`maintenance.auto_verdict` 恒为
+`{enabled: true, criterion: "rego", trust: "single", note: …}`——
+自动判定的生效判据是 **Rego 规则库**：研判管线读的和规则维护写的是同一本库（同源），信任链只走这一条（单源）；
+JSON 规则集（`triage-rules.json`）的修订照写留痕，但**不是**生效判据。Agent 的维护产出照写（规则 / 判据页该改就改），
+会话里同一格原样留档，回头看能说清「当时按哪条口径生效」。
 
 **每轮 AI 调用都进事件**（A5）：决策轮（`role: fp_maintainer`，`phase: propose`）、规则维护轮（`role: rule_maintainer`）、
 知识库维护轮（`role: wiki_maintainer`）统一记 `event=ai.model_call`、`domain=false_positive`（误报维护域）。

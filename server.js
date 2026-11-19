@@ -24,7 +24,7 @@ import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
 import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
 import { FalsePositiveMaintainer, FP_LIBRARIES, FpSessionStore, fpSessionDirectory,
-  maintenanceSide, maintenanceSides, wikiFeedbackTarget } from './fp-maintainer.js';
+  maintenanceSide, maintenanceSides, scrubCredentials, wikiFeedbackTarget } from './fp-maintainer.js';
 import { createConfigStore, dataRoot } from './config-store.js';
 
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
@@ -327,8 +327,13 @@ async function maintainFalsePositive({ monitor, record, maintainer, libraries = 
   const parsed = record.input?.parsed;
   const startedAt = new Date().toISOString();
   // 没请求的一侧（单腿补跑）如实标 skipped：既不谎报成「改完了」，也不把总态永久钉在 updating。
-  const untouched = library => ({ status: 'updated', state: 'skipped', at: startedAt,
-    why: `本次只补跑 ${libraries.join('、')}：${library} 侧未执行` });
+  // 上一轮的 revision / 幂等键照样留着（A4 的判据载体，见路由里同名的 untouchedSide）。
+  const untouched = library => {
+    const side = previous?.[library] || {};
+    const { status, state, why, error, at: previousAt, ...kept } = side;
+    return { ...kept, status: 'updated', state: 'skipped', at: startedAt,
+      why: `本次只补跑 ${libraries.join('、')}：${library} 侧未执行` };
+  };
   try {
     if (!maintainer) throw new Error('误报维护 Agent 未配置');
     const session = await maintainer.maintain({ caseId: record.alert_id, caseDir: record.case_dir || null,
@@ -380,11 +385,7 @@ const failureClasses = Object.freeze({
 const INTERNAL_ERROR_MESSAGE = '服务器内部错误';
 
 // 错误原文里可能带上游回显的凭据（Authorization 头、查询串里的 token/api_key）：正文出口统一擦一遍（A4）。
-function scrubCredentials(text) {
-  return String(text ?? '')
-    .replace(/\b(Basic|Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [redacted]')
-    .replace(/\b(token|api[_-]?key|password|secret)=[^\s&"'，。；]+/gi, '$1=[redacted]');
-}
+// 实现只有一份，在 `fp-maintainer.js` 里导出（维护侧的 error 也要在**写之前**擦，函数放这边会成环）。
 
 function failureBody(kind, message) {
   const { code } = failureClasses[kind];
@@ -1166,9 +1167,17 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         record.verdict = 'false_positive'; record.verdict_label = '误报'; record.decision_source = 'human';
         record.feedback = { reason, who, recorded_at: at };
         record.detail = `人工登记误报（${who}）：${reason}`.slice(0, 250);
+        // 单腿补跑：没请求的那一侧不许把上一轮的 revision / 幂等键洗掉——它是下一次全量登记时
+        // 「已成功的一侧不重复执行」唯一的判据载体（A4）。只换掉状态与理由，`kept` 原样保留。
+        const untouchedSide = library => {
+          const side = previousMaintenance?.[library] || {};
+          const { status, state, why, error, at: previousAt, ...kept } = side;
+          return { ...kept, status: 'updated', state: 'skipped', at,
+            why: `本次只补跑 ${libraries.join('、')}：${library} 侧未执行` };
+        };
         record.maintenance = { status: 'updating', updated_at: at,
-          rule: libraries.includes('rule') ? { status: 'updating', at } : { status: 'updated', state: 'skipped', at },
-          wiki: libraries.includes('wiki') ? { status: 'updating', at } : { status: 'updated', state: 'skipped', at },
+          rule: libraries.includes('rule') ? { status: 'updating', at } : untouchedSide('rule'),
+          wiki: libraries.includes('wiki') ? { status: 'updating', at } : untouchedSide('wiki'),
           libraries };
         record.updated_at = at;
         await monitor.persist?.();

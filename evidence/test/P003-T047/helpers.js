@@ -91,6 +91,9 @@ export async function stack({ decide = null, ruleMode = 'ok', wikiMode = 'ok' } 
   let wikiCalls = 0;
   const ruleModel = { complete: async () => {
     if (modes.rule === 'fail') throw new Error('规则模型不可用（单测）');
+    // 上游 401 常把请求头带进文案：用来验「写进 maintenance 之前先擦凭据」
+    if (modes.rule === 'authError')
+      throw new Error('模型接口 401：Authorization: Bearer sk-live-SECRET-TOKEN-123456; token=abcdef123456');
     return ruleModelProposal().complete();
   } };
   const wikiModel = { complete: async messages => {

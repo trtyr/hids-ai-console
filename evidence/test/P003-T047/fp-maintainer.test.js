@@ -196,18 +196,33 @@ test('A6 替身模型三路径 + 补跑不重发：三条路径都验过，补�
   assert.equal(s.wikiCalls, 2, `知识库侧的调用次数不符：${s.wikiCalls}（第一次失败 + 补跑成功）`);
 });
 
-test('A7 自动判定依赖 A/B 口径：未拍板前产出照写，闭环标注待启用', async () => {
+test('A7 闭环自动判定以 Rego 为准（A/B 已拍板）：产出照写，口径落在会话上', async () => {
   const s = await stack({ decide: decideWith(['rule']) });
   const record = await s.maintainer.maintain(s.args);
 
   assert.deepEqual(record.auto_verdict, { ...FP_AUTO_VERDICT });
-  assert.equal(record.auto_verdict.enabled, false);
-  assert.equal(record.auto_verdict.pending, 'A/B 口径待拍板');
-  // 产出照写：规则真的落了盘，会话里有 outcome
+  assert.equal(record.auto_verdict.enabled, true);
+  assert.equal(record.auto_verdict.criterion, 'rego', '生效判据不是 Rego');
+  assert.equal(record.auto_verdict.trust, 'single');
+  assert.match(record.auto_verdict.note, /JSON 规则集修订照写留痕/);
+  // 产出照写：Rego 规则真的落了盘（它就是研判管线读的那一份），会话里有 outcome
   assert.equal(record.outcomes.rule.state, 'updated');
   assert.match((await s.ruleStore.read('honeypot_probe')).rego, /input\.source_ip != "203\.0\.113\.9"/);
-  // 没拍板就不许动案件结论——会话里没有「自动判定」这类结论字段
+  // 维护只写库，不在会话里自己判结论：结论链仍在研判管线那一侧
   assert.equal('verdict' in record, false);
+});
+
+test('A4 单边失败的 error 写进会话之前先擦凭据（上游 401 带 Authorization / token=）', async () => {
+  const s = await stack({ decide: decideWith(['rule', 'wiki']), ruleMode: 'authError' });
+  const record = await s.maintainer.maintain(s.args);
+
+  assert.equal(record.outcomes.rule.state, 'failed');
+  const error = record.outcomes.rule.error;
+  assert.match(error, /401/, `失败原因没留下：${error}`);
+  assert.match(error, /\[redacted\]/, `凭据没被擦：${error}`);
+  assert.equal(error.includes('sk-live-SECRET-TOKEN-123456'), false, `Bearer 凭据原样落盘：${error}`);
+  assert.equal(error.includes('abcdef123456'), false, `token= 凭据原样落盘：${error}`);
+  assert.ok(error.length <= 300, 'error 超过 300 字');
 });
 
 test('A2 没配决策模型时退化为「按请求的库逐个尝试」，决策来源如实记 fallback', async () => {

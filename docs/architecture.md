@@ -141,14 +141,20 @@
 | `triage.enqueued` | 进入研判队列 | `alert_id` `source`（`manual` / `retry` / `poll`） |
 | `triage.done` / `triage.failed` | 研判完成 / 失败 | `alert_id` `verdict` `attempts` `duration_ms` / `alert_id` `attempts` `error` |
 | `triage.persist_failed` / `triage.poll_failed` | 状态落盘失败 / 轮询失败 | `alert_id` `error` / `error` |
-| `maintenance.result` | 误报维护收尾（两侧都落定） | `alert_id` `status` `rule` `wiki` `rule_error` `wiki_error` |
+| `maintenance.result` | 误报维护收尾（两侧都落定） | `alert_id` `status` `session_id` `sides` `rule` `wiki` `rule_state` `wiki_state` `rule_error` `wiki_error`（P003-T047 补了会话 id、真写了库的边与单边 `state`） |
 | `maintenance.listening` | 维护端 `server.listen` 成功 | `host` `port` `preview` `message`（旧的中文启动文案） |
 | `policy.keys_created` / `policy.package_built` | `package-policy.js` 生成密钥 / 做成升级包 | `directory` `files` / `output` `version` `sequence` `target`，两条都带 `message`（旧的中文提示文案） |
 | `policy.usage` | `package-policy.js` 参数不对，打印用法后退出码 1 | `message`（`level=error`） |
 | `log.serialize_failed` | 日志字段序列化不出来，兜底一条 | `level=error` |
 | `log.cleaned` | `POST /api/logs/cleanup` 真删了历史文件（dry-run 不落） | `by`（`age` / `size` / `age+size`）`count` `bytes`；不记文件名与内容 |
-| `ai.model_call`（`direction: request`） | 三域（研判 / 规则维护 / wiki 维护）**每一次模型调用发出去时**（P003-T046） | `domain`（`triage` / `rule` / `wiki`）`role`（`triage` / `review` / `rule_maintainer` / `wiki_maintainer`）`turn` `phase` `attempt` `input_chars` `messages` `tools`；有则带 `alert_id` / `session_id` / `model` |
+| `ai.model_call`（`direction: request`） | 四域（研判 / 规则维护 / wiki 维护 / 误报维护）**每一次模型调用发出去时**（P003-T046 立三域，P003-T047 补 `false_positive`） | `domain`（`triage` / `rule` / `wiki` / `false_positive`）`role`（`triage` / `review` / `rule_maintainer` / `wiki_maintainer` / `fp_maintainer`）`turn` `phase` `attempt` `input_chars` `messages` `tools`；有则带 `alert_id` / `session_id` / `model` |
 | `ai.model_call`（`direction: response`） | 同一次调用收回来时：成功、超时、回包解不出 JSON、调用报错都落这一条 | 同上定位字段 + `input_chars` `output_chars` `duration_ms` `outcome`（`ok` / `timeout` / `invalid_json` / `error`）`tool_calls`，失败时多一个 `error`（≤120 字） |
+
+**误报维护域（`domain: false_positive`，P003-T047）**：一次误报维护会落三条调用，域都是 `false_positive`——
+决策轮 `role: fp_maintainer`（`phase: propose`，`session_id` ＝误报维护会话）、规则维护轮 `role: rule_maintainer`、
+知识库维护轮 `role: wiki_maintainer`（`session_id` 是它自己那份 wiki 维护会话，记在误报会话的 `outcomes.wiki.session_id` 上）。
+同一个模型实例（`models.rule_maintainer`）在别的场景仍记 `rule` 域：域跟着**场景**走，不跟实例走——
+`RegoRuleMaintainer.maintain()` 只有收到 `domain` 入参时才改域（`server.js` 里误报维护这条链才传）。
 
 **`ai.model_call` 为什么要两条**（P003-T046）：一次模型调用按方向拆成 request / response 两条，`request` 在调用发出去时落（那一刻只能知道输入计量），`response` 在回包或失败时落（带 `output_chars` / `duration_ms` / `outcome`）。拆开是因为调用挂死或进程被 kill 时，只有 request 那条能证明「这次确实发出去了」；单条事件做不到。合成一次调用看 `(domain, role, turn, attempt, direction)` 定位，一次调用必是一对（失败也有 response）。事件由 `log.js:107-149` 的 `traceModelCall()` 统一落，正文与密钥一个字都不进字段——请求体只在函数栈上算长度；域 / 角色 / 结局口径见 [modules/investigation-agent.md §3.11](modules/investigation-agent.md#311-逐轮快照与研判会话回放p003-t046) 与 [modules/http-api.md §3.10](modules/http-api.md#310-研判会话回放get-apiagentinvestigationsalertidreplayp003-t046)。
 

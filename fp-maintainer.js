@@ -24,6 +24,8 @@ const SESSION_ID = /^[0-9a-f-]{36}$/i;
 
 /** 两个可维护的库：规则库（Rego）与知识库（判据页）。 */
 export const FP_LIBRARIES = Object.freeze(['rule', 'wiki']);
+/** 决策轮 `decision.source` 的取值表：契约（openapi + 两页文档）与实现共用这一份。 */
+export const FP_DECISION_SOURCES = Object.freeze(['model', 'fallback', 'idempotent']);
 /** T046 事件里这一域的域名（`ai.model_call.domain`）：误报维护。 */
 export const FP_DOMAIN = 'false_positive';
 /** 这一域的模型角色名。决策模型复用 `models.rule_maintainer` 实例，角色标签单独记。 */
@@ -31,13 +33,17 @@ export const FP_ROLE = 'fp_maintainer';
 /** 维护会话的终态：这三种都不会再自动往下跑。 */
 export const FP_TERMINAL = Object.freeze(['done', 'partial', 'failed']);
 /**
- * 自动判定的闭环开关（A7）：A/B 口径待拍板之前恒为 `enabled: false`。
- * 会话与 `record.maintenance` 都带上这一格——产出照写，但「AI 结论直接生效」这条路没开。
+ * 闭环自动判定的生效口径（A7，A/B 已拍板）。
+ *
+ * 结论：**以 Rego 为准**——研判管线与规则维护读的是同一份 Rego 库（`RuleStore`，「同源」），
+ * 自动判定只认这一条信任链（「单源」）；JSON 规则集（`triage-rules.json`）的修订照写留痕，
+ * 但不是生效判据。会话与 `record.maintenance` 都带这一格，回头能说清「当时按哪条口径生效」。
  */
 export const FP_AUTO_VERDICT = Object.freeze({
-  enabled: false,
-  pending: 'A/B 口径待拍板',
-  note: '未拍板前只写维护产出，不把 AI 结论落成案件结论'
+  enabled: true,
+  criterion: 'rego',
+  trust: 'single',
+  note: 'A/B 已拍板：闭环自动判定以 Rego 规则库为准（研判管线同源、信任链单源）；JSON 规则集修订照写留痕，不作为生效判据'
 });
 
 export const fpSessionDirectory = root => path.join(root, 'fp-sessions');
@@ -46,6 +52,19 @@ export const defaultFpPromptFile = path.join(here, 'prompts', 'false-positive.md
 const nowIso = () => new Date().toISOString();
 const text = value => String(value ?? '').replace(/[\r\n\0]/g, ' ').trim();
 const clipped = (value, limit) => String(value ?? '').slice(0, limit);
+
+/**
+ * 失败原因出记录/响应之前的凭据擦除（P003-T013 A4 的口径）。
+ *
+ * 上游模型客户端的报错常把请求头或 URL 拼进文案（`Authorization: Bearer …`、`?token=…`），
+ * 维护侧的单边 `error` 会落进 `<数据根>/triage-monitor.json` 并经 `GET /api/agent/triage/{alertId}` 外发，
+ * 所以**写之前**擦，而不是等出口再擦。实现只此一份：`server.js` 从这里 import（反向 import 会成环）。
+ */
+export function scrubCredentials(text) {
+  return String(text ?? '')
+    .replace(/\b(Basic|Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [redacted]')
+    .replace(/\b(token|api[_-]?key|password|secret)=[^\s&"'，。；]+/gi, '$1=[redacted]');
+}
 
 // 案件里命中的 Rego 规则 id：结果落盘的 result.json 里就有，没有就当没命中（旧案件可能没有这条轨迹）。
 export async function caseRegoRuleIds(caseDir) {
@@ -337,7 +356,8 @@ export class FalsePositiveMaintainer {
     } catch (cause) {
       // 失败原因挂上会话 id 与它当前的状态：草案留在 `ready_for_review` 时，人工还能接着审核发布。
       const error = cause instanceof Error ? cause : new Error(String(cause));
-      const current = await this.wikiAgent.get(session.id).catch(() => null) || wikiSession;
+      const current = typeof this.wikiAgent.get === 'function'
+        ? await this.wikiAgent.get(session.id).catch(() => null) || wikiSession : wikiSession;
       Object.assign(error, { wiki_session_id: session.id, wiki_session_status: current?.status || null });
       throw error;
     }
@@ -390,9 +410,11 @@ export class FalsePositiveMaintainer {
       let pending = [];
       for (const library of requested) {
         // 已成功的一侧：上一轮写完之后库停在这个版本上，现在还是这个版本 → 这一轮不重复执行。
-        // 判据只用「state=updated + revision」两项（幂等键 `case_id:库:版本` 原样记在 outcome 上）。
+        // `skipped` 也算「已成功过」：单腿补跑（只跑另一侧）那一轮会把这一侧标 skipped 但保住 revision，
+        // 补完之后再全量登记时，这一侧仍然是同一版本 —— A4 的承诺在「成功 → 单腿 → 全量」序列上才成立。
         const side = previous?.[library] || null;
-        const done = side && side.state === 'updated' && side.revision && side.revision === currentRevision[library];
+        const done = side && ['updated', 'skipped'].includes(side.state) && side.revision &&
+          side.revision === currentRevision[library];
         if (done) {
           outcomes[library] = { library, state: 'skipped', status: 'updated', why: '幂等：同一案卷、同一库、同一版本已经维护过',
             idempotency_key: idempotencyKey(caseId, library, currentRevision[library]), revision: currentRevision[library],
@@ -440,8 +462,9 @@ export class FalsePositiveMaintainer {
             idempotency_key: idempotencyKey(caseId, library, after),
             ...(failedCheck ? { state: 'failed', status: 'failed', error: `自校验未通过：${failedCheck.name}` } : {}) };
         } catch (cause) {
+          // 先擦凭据再落：这条 error 会进 `record.maintenance.<边>.error` 并随记录外发（T013 A4）。
           outcomes[library] = { library, state: 'failed', status: 'failed',
-            why: decision.why, error: clipped(text(cause?.message || cause), 300),
+            why: decision.why, error: clipped(scrubCredentials(cause?.message || cause), 300),
             idempotency_key: idempotencyKey(caseId, library, currentRevision[library]),
             revision: currentRevision[library], at: this.now(),
             ...(cause?.wiki_session_id ? { session_id: cause.wiki_session_id, wiki_session_status: cause.wiki_session_status } : {}) };
@@ -461,7 +484,7 @@ export class FalsePositiveMaintainer {
       return record;
     } catch (cause) {
       record = await this.#step(record, { status: 'failed', terminal: true,
-        error: clipped(text(cause?.message || cause), 300) });
+        error: clipped(scrubCredentials(cause?.message || cause), 300) });
       throw cause;
     }
   }
