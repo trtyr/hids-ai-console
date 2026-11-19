@@ -1,0 +1,8 @@
+# 干净树重放（同上树）：cd /tmp/p27-clean-a2o1zl && timeout 900 node --test *.test.js
+# EXIT=1（唯一红是改前既有的 maintenance-startup.test.js，见报告 §4.2）
+✖ maintenance CLI starts when the deployment current path is a symlink (93.617097ms)
+ℹ tests 198
+ℹ pass 197
+ℹ fail 1
+✖ failing tests:
+✖ maintenance CLI starts when the deployment current path is a symlink (93.617097ms)
