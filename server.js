@@ -127,6 +127,71 @@ async function validateRego(id, rego) {
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
+// 一份规则正文里的条件行（`match if { }` 体内，按出现顺序）。
+// **这里不校验语法**：候选正文先过 `validateRego`、原规则由装载器读进来，两边都是规则子集内的合法正文，
+// 抽取只为比对。认不出的行留着 `raw` 原文，比对时按「无法证明没放宽」处理（见 `atLeastAsStrict`）。
+function ruleExpressions(rego) {
+  const expressions = [];
+  let inside = false;
+  for (const line of String(rego).split(/\r?\n/)) {
+    const text = line.trim();
+    if (!text) continue;
+    if (!inside) {
+      if (/^match\s*(?:if\s*)?\{\s*$/.test(text)) inside = true;
+      continue;
+    }
+    if (text === '}') { inside = false; continue; }
+    let rest = text;
+    const negated = /^not\s+/.test(rest);
+    if (negated) rest = rest.replace(/^not\s+/, '');
+    const call = rest.match(/^(contains|startswith|endswith)\s*\(\s*input\.([a-z][a-z0-9_]*)\s*,\s*(.+?)\s*\)$/);
+    const compare = call ? null : rest.match(/^input\.([a-z][a-z0-9_]*)\s*(==|!=)\s*(.+)$/);
+    if (call) expressions.push({ text, negated, kind: 'call', op: call[1], field: call[2], raw: call[3], value: stringLiteral(call[3]) });
+    else if (compare) expressions.push({ text, negated, kind: 'compare', op: compare[2], field: compare[1], raw: compare[3], value: stringLiteral(compare[3]) });
+    else expressions.push({ text, negated, kind: 'opaque', op: null, field: null, raw: null, value: null });
+  }
+  return expressions;
+}
+
+// 字面量里只有字符串能做「包含/前缀/后缀」比较；其它类型（数字、true / false / null）只认同值。
+function stringLiteral(raw) {
+  if (!/^"(?:[^"\\]|\\.)*"$/.test(raw)) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+// 「被限定的那组事实，新的是旧的子集」——相同 kind / op 下逐个比：
+// startswith 新值以旧值打头（`/tmp/` → `/tmp/webshell` 更严）、endswith 新值以旧值结尾（`.jsp` → `shell.jsp` 更严）、
+// contains 新值含旧值（`tmp` → `tmp/shell` 更严）、`==` / `!=` 必须同值。跨 op / 跨类型一律判「不算更严」。
+function innerAtLeastAsStrict(previous, next) {
+  if (previous.kind === 'opaque' || next.kind === 'opaque') return previous.text === next.text;
+  if (previous.kind !== next.kind || previous.op !== next.op) return false;
+  if (previous.value === null || next.value === null) return previous.raw === next.raw;
+  if (previous.kind === 'compare') return previous.value === next.value;
+  if (previous.op === 'startswith') return next.value.startsWith(previous.value);
+  if (previous.op === 'endswith') return next.value.endsWith(previous.value);
+  return next.value.includes(previous.value);
+}
+
+// 新条件是否至少和旧条件一样严。取反要翻方向：`not A` 比 `not B` 更严 ⇔ A 比 B 更宽。
+function atLeastAsStrict(previous, next) {
+  if (!next || previous.field !== next.field || previous.negated !== next.negated) return false;
+  return previous.negated ? innerAtLeastAsStrict(next, previous) : innerAtLeastAsStrict(previous, next);
+}
+
+// A1（P003-T020）：改已有规则时，原有限制条件必须还在、且不许更宽——把 `/tmp/` 收成 `/tmp` 这种前缀放宽
+// 会让这一类攻击静默漏报。逐条给旧条件配一条「至少同样严」的新条件（一对一），配不上的就是被放宽/删掉了。
+// 新增规则没有原条件可放宽，不走这条。
+function widenedConditions(previousRego, nextRego) {
+  const remaining = ruleExpressions(nextRego);
+  const widened = [];
+  for (const previous of ruleExpressions(previousRego)) {
+    const index = remaining.findIndex(candidate => atLeastAsStrict(previous, candidate));
+    if (index < 0) widened.push(previous.text);
+    else remaining.splice(index, 1);
+  }
+  return widened;
+}
+
 // 写一份规则：临时文件 + rename，写完再整库装载一次——宁可这次维护失败，也不留半截规则或重复 id。
 async function writeRuleFile(directory, file, rego) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -168,6 +233,12 @@ export class RegoRuleMaintainer {
     if (!rego.trim()) throw new Error('规则正文为空');
     const read = await validateRego(id, rego);
     const existing = await this.ruleStore.read(id);
+    // 第三道校验：改已有规则时原条件不许更宽。放在写盘之前——校验不过就一个字都不落，维护判 failed。
+    if (existing) {
+      const widened = widenedConditions(existing.rego, rego);
+      if (widened.length)
+        throw new Error(`规则修订放宽了原有限制条件，拒绝落盘：${widened.join('；').slice(0, 200)}`);
+    }
     // 已有规则的 id 可能住在别的文件名里：改它就要写回它自己那份，不能另起一个同 id 的文件。
     const file = existing?.file || `${id}.rego`;
     await writeRuleFile(this.ruleStore.directory, file, rego);
