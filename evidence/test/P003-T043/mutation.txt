@@ -105,3 +105,16 @@ M11 变异：GEN-13 的「没有判定消费者」改回「没有程序消费者
 ✖ failing tests:
 ✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 (0.870291ms)
 
+
+── 测试复核轮（重交审计，判词 P003-T043-gc-backend-test-review-mwo3qwul.json：1 major + 6 minor 之后）──
+三条 A4 守卫本轮亲手重做，均「改坏 → 恰红 1 条 12/13 exit 1 → git checkout 复原 → 13/13 exit 0」：
+M9  wiki/log.md:23 规则层行挂回 `command_whitelist` 场景提示 →
+    ✖ A4 wiki/log.md 的本次登记与 GEN-13 的分层口径一致 · pass 12 / fail 1 · EXIT=1 → 复原 13/13 EXIT=0
+M10 GEN-13:97 同目录引用 [GEN-12](GEN-12.md) → [GEN-01](GEN-01.md)（deprecated）→
+    ✖ A4 判据页只引用当前 active 页，不引 deprecated 页 · pass 12 / fail 1 · EXIT=1 → 复原 13/13 EXIT=0
+M11 GEN-13:87 「没有判定消费者」→「没有程序消费者」→
+    ✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 · pass 12 / fail 1 · EXIT=1 → 复原 13/13 EXIT=0
+
+A6 文件级判据（old-locations.sh）可失败性自证：
+    造 .data/baseline.json → 「✖ .data 命中」+「✖ A6 旧位判据有命中」· EXIT=1
+    rm -rf .data → 「✔ A6 旧位判据（文件级）全部满足」· EXIT=0

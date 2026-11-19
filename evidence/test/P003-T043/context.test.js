@@ -29,6 +29,8 @@ test('A1 runtimePaths 只剩七个具名路径，baseline/intel 两键不在其�
   assert.equal('intel' in paths, false, 'intel 键又回来了');
 });
 
+// 静态守卫，不是行为断言：这三条只是对源码字样做 grep，实现注释里出现这两个词就会误红。
+// A1 的行为证据在 :25-29（runtimePaths 七键）/ :41-63（坏 JSON 不致命 + contextFor 六键）两条用例。
 test('A1 server.js 里不再出现 baselineFile/intelFile 与 runtime.baseline/runtime.intel', async () => {
   const source = await doc('server.js');
   assert.equal(/baselineFile|intelFile/.test(source), false, 'server.js 还把 baselineFile/intelFile 传给 TriageMonitor');
@@ -108,7 +110,7 @@ test('A3 GEN-13 覆盖原 baseline.json 的四类信息', async () => {
 
 // ── A4：白名单命令的分层口径写进判据页 ──────────────────────────────────────
 // 分层必须自洽：规则层只收「程序可复算」的载体（rego 规则库 + 误报规则集）；
-// `command_whitelist` 的场景提示是纯提示词（`prompts/scenarios.json`，无程序消费者），不能算硬判定。
+// `command_whitelist` 的场景提示是纯提示词（`prompts/scenarios.json`，没有判定消费者；装配侧仍会被读入），不能算硬判定。
 const tableRow = (source, label) => {
   const row = source.split('\n').find(line => line.startsWith('|') && line.includes(label));
   assert.ok(row, `GEN-13 的分层表缺了「${label}」这一行`);

@@ -156,11 +156,13 @@ try {
     `数据根里出现了 baseline/intel：${dataFiles.filter(file => /baseline|intel/.test(file)).join(',')}`);
   ok('数据根没有 baseline.json / intel.json', `${dataFiles.length} 个运行态文件`);
 
-  // ── 段 5：七条具名路径的目录结构照旧（案卷 / 队列 / 库都在，只少了两份文件） ─
-  for (const expected of ['cases', 'wiki', 'triage-monitor.json'])
-    assert.ok(existsSync(join(dataDir, expected)) || existsSync(join(casesDir, '..', expected)),
-      `注入根里缺 ${expected}`);
-  ok('单测/探针断言收尾', `模型替身被打 ${modelCalls.length} 次（研判链路真跑起来了，不是空转）`);
+  // ── 段 5：注入数据根里的具名目录/文件照旧（库、队列都在，只少了两份文件） ────
+  // 只钉 dataDir 下两项。原先的 `|| existsSync(join(casesDir, '..', X))` 在 X==='cases' 时右半边
+  // 就是 casesDir 本身、恒真（审计 P003-T043-gc-backend-test-review-mwo3qwul 指出，已删）。
+  for (const expected of ['wiki', 'triage-monitor.json'])
+    assert.ok(existsSync(join(dataDir, expected)), `注入根里缺 ${expected}`);
+  ok('注入数据根里 wiki/ 与 triage-monitor.json 都在',
+    `模型替身调用 ${modelCalls.length} 次${modelCalls.length === 0 ? '（模型侧未被触达，不据此判链路跑通）' : ''}`);
 } catch (error) {
   failed = error;
 } finally {
