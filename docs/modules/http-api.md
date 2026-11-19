@@ -77,10 +77,11 @@ P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inven
 
 > 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）；P003-T044 再加两条数据管理路由（`GET /api/data/inventory`、`POST /api/data/cleanup`，见 §3.7）。
 > `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 39 行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
-41 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
+43 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
+P003-T045 加了两条日志路由（`GET /api/logs`、`POST /api/logs/cleanup`，见 §3.8）：41 → 43。
 
 > 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）。P003-T041 把规则维护做成正式接口，补了 `PUT /api/rules/{id}`、`GET /api/rules/{id}/history`、`POST /api/rules/{id}/rollback`、`GET /api/rules/sessions` 四条。
-> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 40 行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
+> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 44 行；P003-T045 的两条日志路由各占一行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
 
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
@@ -89,6 +90,8 @@ P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inven
 | POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写五键；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:646-650` |
 | GET | `/api/data/inventory` | 200 七类存储的条数与字节（`{data_dir, stores, total}`，见 §3.7） | —（只读本地运行态目录：不探上游、不碰模型，缺目录按 0 报，不 503） | `server.js:864` |
 | POST | `/api/data/cleanup` | 200 `{dry_run, kind, action, threshold, candidates, applied, inventory}`（见 §3.7） | 默认 dry-run；`kind` / 阈值 / 动作 / `execute` 不合法回 400；候选里有没完结的案件回 409；没装配研判队列时清 `queue` 回 503 | `server.js:866-870` |
+| GET | `/api/logs` | 200 `{logs, total, files, truncated, echo}`（见 §3.8） | 没配 `HIDS_LOG_FILE` 回 503 `not_configured`（日志只上 stdout，没文件可读）；分页 / `level` / `from` / `to` 不合法回 400。**读的是盘上的文件** | `server.js:929-938` |
+| POST | `/api/logs/cleanup` | 200 `{dry_run, threshold, candidates, applied, remaining}`（见 §3.8） | 没配 `HIDS_LOG_FILE` 回 503；阈值一条都不给 / `execute` 非布尔 / 未知参数回 400；默认 dry-run，只清轮转出的历史文件 | `server.js:940-944` |
 | GET | `/api/updates` | 200 升级包概览 | — | `server.js:215` |
 | GET | `/api/status` | 200 / 502 | 未配牧云回 200（`configured:false`）；配了但连不上回 502，正文仍是 `{configured, connected:false, reason}`。**探活结果缓存 45 秒**（`HIDS_STATUS_TTL_MS`，P003-T037）：窗口内不再发牧云 RPC，并发请求共用同一次探活；失败不缓存 | `server.js:216-220`、`cloudwalker.js:120-133` |
 | GET | `/api/agent/tools` | 200 工具清单 | 无 API 工具箱回 503 | `server.js:221-225` |
@@ -369,11 +372,11 @@ node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 
 | `boards` | 溯源白板 | `boardService.directory` → `.data/trace-boards` | 一个 `*.json` | 文件 mtime |
 | `wiki_sessions` | 知识库会话 | `wikiAgent.directory` → `.data/wiki-sessions` | 一个 `*.json` | 文件 mtime |
 | `queue` | 研判队列 | `monitor.file` → `.data/triage-monitor.json` | 一条队列记录 | 记录上 `updated_at` → `saved_at` → `created_at` 第一个能解析的 |
-| `logs` | 日志 | `.data/` 目录本身 | `.data/` **顶层**的一个 `*.log` | 文件 mtime |
+| `logs` | 日志 | `HIDS_LOG_FILE` 的目录（缺省＝数据根，即 `.data/`） | 该目录**顶层**的一个 `*.log`（当前活动文件 + 轮转出的历史文件） | 文件 mtime |
 | `config_overrides` | 配置覆盖层 | `config.file` → `.data/config-overrides.json` | 那一个文件（0 或 1） | 文件 mtime |
 
 - **路径全部取自注入件**（`createServer` 的 `history` / `monitor` / `boardService` / `wikiAgent` / `config`）：换替身就是换盘点对象，测试不必碰仓内 `.data/`。
-- **`logs` 的真相**：后端日志只上 stdout、不落文件（`docs/architecture.md` §3.6 末句）。这一类只盘点**部署端自己**把 stdout 重定向到 `.data/*.log` 时产生的文件，正常部署下恒为 `count: 0`；子目录里的 `*.log` 不算（只认顶层）。
+- **`logs` 的真相**（P003-T045 起）：后端**配了 `HIDS_LOG_FILE` 就落文件**，不配仍只上 stdout（见 §3.8）。所以这一类现在有两拨来源：进程自己写的 `*.log`（含轮转出的 `<名>.<时刻>.log`），以及部署端把 stdout 重定向到同目录时产生的文件。**没配 `HIDS_LOG_FILE` 的正常部署恒为 `count: 0`**；子目录里的 `*.log` 不算（只认顶层）。
 - **`bytes` 口径**：文件取 `stat.size`；案卷按目录内文件递归累加；`queue` 是队列文件 + 同名 `.archive.jsonl`；读不到的条目按 0 算（一个断掉的符号链接不该让整次盘点 500）。
 - **`exists`**：路径在不在盘上。缺目录不报错，回 `count: 0`、`bytes: 0`、`exists: false`。
 - **每次请求现扫盘**，没有缓存：清完再盘点，数字立刻是清后的（A5）。
@@ -500,6 +503,118 @@ bash evidence/test/P003-T044/mutation-round2.sh   # 20 条实现变异逐条打�
 
 单测全部在 tmp 目录里跑（`mkdtemp`）：替身目录 + 内存队列 + 进程内 HTTP 请求，mtime 用 `utimes` 钉死，不碰真实网络、不碰仓内 `.data/`、不依赖真实时钟。
 
+### 3.8 日志落盘与查询清理（`GET /api/logs`、`POST /api/logs/cleanup`，P003-T045）
+
+**关键路径**：两个分支在 `server.js:929-944`；参数解析 `logQuery()` 在 `server.js:582-597`，清理入口 `logCleanup()` 在 `server.js:838-860`；文件侧全部在 `log.js`：env 解析 `logFileOptions()`（`log.js:89-94`）、文件 sink 与轮转 `createFileSink()`（`log.js:129-155`）、改 journal `useLogFile()`（`log.js:157-162`）、列文件 `logFiles()`（`log.js:112-124`）、查询 `readLogEntries()`（`log.js:177-205`）、清理 `pruneLogFiles()`（`log.js:207-231`）。装 sink 的两行在 `server.js:31-32`（**在 `createConfigStore` 之前**）。OpenAPI 契约见 `openapi.yaml` 的 `getLogs` / `cleanLogs`。
+
+**它管什么**：把「日志只上 stdout」扩成**可选落盘**——配了路径就同份写文件、单文件超限轮转、历史按份数自动清；再给两个接口让人按事件名/级别/时间翻日志、按时间或总大小清旧文件。**不管**页面（`web/**` 不在 scope）、不管日志内容本身（事件名表在 [architecture.md](../architecture.md) §3.6）、不引入日志依赖（只用 `node:fs`）。
+
+#### 3.8.1 落盘：三个配置键与文件布局
+
+| 键 | 缺省 | 作用 | 不配 / 非法时 |
+| --- | --- | --- | --- |
+| `HIDS_LOG_FILE` | 空 | 日志文件路径（相对路径按进程 cwd 绝对化） | **空／纯空白＝不落文件**，行为与 P003-T023 起完全一样（只上 stdout） |
+| `HIDS_LOG_MAX_BYTES` | `10485760`（10 MiB） | 单文件字节上限，超了就轮转 | 0 / 负数 / 小数 / 非数回落缺省（`positiveInt()`，`log.js:82-85`） |
+| `HIDS_LOG_KEEP` | `5` | 轮转出的历史文件最多留几份 | 同上回落缺省 |
+
+- 三个键都**不进启动闸门**（`configSummary` 的八键形状不变）：不配是合法部署。
+- **同份**：同一行既给 stdout 又给文件，逐字相同；先写文件再写 stdout（sink 自己吞异常，stdout 断了不至于让文件那份丢，`log.js:157-162`）。
+- **轮转命名**：`<名>.<2026-11-20T02-44-01-123Z><扩展名>`，落在**同一个目录**（`hids.log` → `hids.2026-11-20T02-44-01-123Z.log`）。同一毫秒轮转两次时后加 `-1`、`-2`（`log.js:102-108`）。轮转出的文件仍以 `.log` 结尾，所以 §3.7 的 `logs` 盘点看得见它们。
+- **轮转时机**：写之前判 `已有字节 + 这一行 > 上限`，且**文件非空**才轮转——**当前这一行写进轮转后的新文件，不丢**（`log.js:129-155`）。反过来：一行本身就比上限大时，空文件不轮转，照样写进去（单文件可以超上限）。
+- **重启接续**：进程起来后 sink 第一次写之前先 `stat` 现有文件，按盘上大小接着算——不会把老内容当 0 从头上限。
+- **目录**建不出来就退化成只上 stdout；写盘失败（盘满、权限、rename 失败）一律吞掉，不改上抛业务。
+
+#### 3.8.2 查询 `GET /api/logs`
+
+**读的是盘上的文件**：当前活动文件 + 轮转出的历史文件，现读现解析（没有内存缓存，也没有索引）。
+
+| 参数 | 缺省 | 合法值 | 不合法时 |
+| --- | --- | --- | --- |
+| `count` | 20 | 1 到 50 的整数 | 400「分页参数无效」（§7 同一套） |
+| `offset` | 0 | ≥0 的整数 | 400「分页参数无效」 |
+| `event` | 不过滤 | 事件名，**逗号分隔可多选**（精确匹配） | 不校验取值（事件名表之外的值只是查不到，不 400） |
+| `level` | 不过滤 | `info` / `warn` / `error`，逗号分隔可多选（大小写不敏感） | 400「筛选等级无效：trace」 |
+| `from` / `to` | 不过滤 | ISO 8601 或 Unix 秒/毫秒（`parseInstant`，与 `/api/alerts` 同一套） | 400「筛选起始时间无效：…」/「筛选结束时间无效：…」；`from` 晚于 `to` 回 400「筛选起始时间晚于结束时间」 |
+
+- 时间范围是**闭区间**（含 `from` / `to` 那一刻）。多个过滤条件是 **AND**。
+- 结果按 `time` **倒序**（新的在前）。
+- `total` 是**筛选后、切页前**的条数；`echo` 回显本次的 `count` / `offset`。
+- `files` 是这次读了几个文件——测试拿它证明「读的是盘，不是内存」。
+- **上限**：命中超过 20000 条时只收前 20000 条并回 `truncated: true`（`log.js:176` 的 `QUERY_SCAN_LIMIT`）：调窄时间范围再查。
+- 不是 JSON 对象、没有字符串 `time` / `event` 的行（截断的半行、人手写的空行）直接跳过，不报错（`parseLogLine()`，`log.js:164-175`）。
+- **脱敏第三道闸**：落盘那行已经过脱敏，读的时候按同一套规则**再擦一遍**——盘上的文件可能是人手改过或老版本写的。
+
+响应（200）：
+
+```json
+{"logs":[{"time":"2026-11-20T00:00:09.000Z","level":"warn","event":"external.row"},
+         {"time":"2026-11-20T00:00:01.000Z","level":"info","event":"log.cleaned","by":"size","count":3,"bytes":216}],
+ "total":3,"files":2,"truncated":false,"echo":{"count":2,"offset":0}}
+```
+
+**没配 `HIDS_LOG_FILE` 时回 503**：`{"error":"日志未落盘：未配置 HIDS_LOG_FILE","code":"not_configured"}`——不拿「空列表」冒充「没有日志」，两种状态在日志里查不出区别是运维事故。
+
+#### 3.8.3 清理 `POST /api/logs/cleanup`
+
+**只清轮转出来的历史文件**：当前活动文件（正在追加的那一份）**永不在候选里**——删了它，正在写的那行就断在半行上。
+
+| 正文键 | 类型 | 说明 |
+| --- | --- | --- |
+| `older_than` | ISO 8601 字符串 | 历史文件 **mtime 早于**它的进候选 |
+| `max_bytes` | ≥0 的整数 | 历史文件**总字节**上限；超了从**最老的**删起，删到不超为止 |
+| `execute` | 布尔，缺省 `false` | 不给或 `false`＝dry-run，盘上一个字节都不动 |
+
+- 两条阈值**至少给一条**（都给取并集，不重复计）；一条都不给回 400——不许无阈值一把抹掉。
+- 值校验与失败文案见下表；`logCleanup()` 在 `server.js:838-860`，挑候选与删文件在 `pruneLogFiles()`（`log.js:207-231`）。
+- **留痕**：`execute: true` 时落一条 `log.cleaned`，字段只有 `by`（`age` / `size` / `age+size`）、`count`、`bytes`——与 `data.cleaned` 同口径：**不记文件名、不记日志内容**。dry-run 不留痕。
+- `remaining` 是执行后**重新扫出来**的历史文件余量（删不掉的会体现在这里，不假装成功）。
+
+响应（200）：
+
+```json
+{"dry_run":false,
+ "threshold":{"older_than":null,"max_bytes":0},
+ "candidates":{"count":2,"bytes":144,"items":[{"name":"hids.2026-11-20T00-00-03-000Z.log","bytes":72,"at":"2026-11-20T00:00:03.000Z"},
+                                               {"name":"hids.2026-11-20T00-00-05-000Z.log","bytes":72,"at":"2026-11-20T00:00:05.000Z"}],
+               "truncated":false},
+ "applied":{"count":2,"bytes":144},
+ "remaining":{"count":0,"bytes":0}}
+```
+
+失败口径：
+
+| 情况 | 状态 | `code` | 正文 |
+| --- | --- | --- | --- |
+| 两条路由在没配 `HIDS_LOG_FILE` 时被调用 | 503 | `not_configured` | 「日志未落盘：未配置 HIDS_LOG_FILE」 |
+| 分页 / `level` / `from` / `to` 不合法 | 400 | `caller_error` | 见 §3.8.2 的表 |
+| 正文不是 JSON 对象 | 400 | `caller_error` | 「请求正文必须是 JSON 对象」 |
+| 带未知参数 | 400 | `caller_error` | 「不认识的参数：keep」 |
+| `execute` 不是布尔 | 400 | `caller_error` | 「execute 必须是布尔值」 |
+| `older_than` 解析不出时间 | 400 | `caller_error` | 「older_than 必须是可解析的时间（ISO 8601）」 |
+| `max_bytes` 不是非负整数 | 400 | `caller_error` | 「max_bytes 必须是不小于 0 的整数」 |
+| 两条阈值都没给 | 400 | `caller_error` | 「至少要给一个阈值：older_than（早于某时间）或 max_bytes（历史文件总字节上限）」 |
+
+**鉴权**：与其它业务路由同一个 Basic 闸门（§4），**没有**独立令牌——与 `/api/data/*` 同口径（日志里的凭据已经过脱敏三道闸，A5）。
+
+**不做什么**（测试别按这些写期望）：
+
+- 不动 `web/**`、不装日志依赖（`package.json` 不变）。
+- 不按天/按行分割、不压缩、不做跨进程文件锁：单进程一套实例（`log.js:67` 的模块级 `log`）。
+- 不改 stdout 行形状与 `createJournal` 签名（既有四套日志测试靠这条缝）。
+- 清理不删当前活动文件，也不按行裁剪（要缩当前文件请先轮转：调小 `HIDS_LOG_MAX_BYTES` 后重启，下一次写就会轮转）。
+- 查询不做全文检索/正则，`event` 只做精确匹配。
+
+**可重放证据**（`evidence/test/P003-T045/log-file.test.js`，15 条，约 280ms）：
+
+```bash
+cd /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T045
+node --test evidence/test/P003-T045/log-file.test.js          # 15 条全绿
+node --test evidence/test/P003-T025/config-check.test.js      # A4 键集双向一致（新键已进 .env.example）
+grep -cE '^[A-Z0-9_]+=' .env.example                          # 41（头部注释写的也是 41）
+```
+
+单测全在 tmp 目录跑：注入时钟与写入器，进程内 HTTP 请求；只有 A1 那条真进程小样碰 `spawn`（验「同份落文件」）。
+
 ## 4. Basic 认证
 
 **关键路径**：`server.js:276`（闸门位置）、`server.js:58-65`（`hasAccess`）、`server.js:66-72`（`requireAccess`）。
@@ -598,15 +713,16 @@ D1 原始报文="data: {\"type\":\"progress\",\"stage\":\"查询证据\",\"detai
 
 ## 7. 分页参数校验
 
-**关键路径**：`server.js:365-368`（案件目录）、`server.js:513-515`（告警列表）、`server.js:310-313`（白板列表）、`server.js:395-399`（知识库列表）。
+**关键路径**：`server.js:365-368`（案件目录）、`server.js:513-515`（告警列表）、`server.js:310-313`（白板列表）、`server.js:395-399`（知识库列表）、`server.js:931-932`（日志，P003-T045 加，行号按加完两条日志路由之后重数）。
 
-分页参数出现在四条路由上，缺省与边界基本一样，只有知识库列表的 `count` 例外：
+分页参数出现在五条路由上，缺省与边界基本一样，只有知识库列表的 `count` 例外：
 
 | 路由 | 出处 | `count` 缺省 |
 | --- | --- | --- |
 | `GET /api/agent/triage/cases` | `server.js:365-368` | 20 |
 | `GET /api/alerts` | `server.js:513-515` | 20 |
 | `GET /api/trace/boards` | `server.js:310-313` | 20 |
+| `GET /api/logs` | `server.js:931-932` | 20 |
 | `GET /api/wiki/pages` | `server.js:395-399` | **不切页，返回全部** |
 
 **取值与边界**：

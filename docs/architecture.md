@@ -113,11 +113,11 @@
 {"time":"2026-11-19T09:12:03.114Z","level":"info","event":"http.request","method":"GET","path":"/api/status","status":200,"duration_ms":3}
 ```
 
-- `time` 是调用时刻的 ISO-8601 UTC 字符串，`level` 取 `info | warn | error`，`event` 是下表的事件名。**字段里的 `event` / `time` / `level` 覆盖不了这三个键**（`log.js:39-46`、`log.js:49-56`）。
+- `time` 是调用时刻的 ISO-8601 UTC 字符串，`level` 取 `info | warn | error`，`event` 是下表的事件名。**字段里的 `event` / `time` / `level` 覆盖不了这三个键**（`log.js:46-53`、`log.js:55-63`）。
 - 能对上告警的事件带 `alert_id`：syslog 告警是 `syslog:<type>:<指纹>:<秒>:<uuid>`，牧云事件是 `<type>:<id>`（如 `honeypot:7`）。
-- **脱敏（A4）**：键名命中 `authorization | cookie | token | password | secret | api_key` 的值一律写成 `[redacted]`，递归进对象与数组、4 层封顶（`log.js:9`、`log.js:24-37`）；字符串值里的 `Basic …` / `Bearer …` / `token=…` 再擦一遍（`log.js:10-12`、`log.js:17-22`）。`server.js:544-545` 只取 `req.method` 与去掉 query 的路径，请求头一个字段都不进日志。
-- 字段取值抛错（getter 抛、循环引用）或写入器抛错（管道断开）都不抛给业务：前者落一条 `log.serialize_failed`，后者静默丢弃（`log.js:52-54`）。
-- **单测注入缝**：`useJournal(createJournal({ write, now }))` 换成内存 journal，不碰真实 stdout 与真实时钟（`log.js:48`、`log.js:62`）。
+- **脱敏（A4）**：键名命中 `authorization | cookie | token | password | secret | api_key` 的值一律写成 `[redacted]`，递归进对象与数组、4 层封顶（`log.js:16`、`log.js:31-44`）；字符串值里的 `Basic …` / `Bearer …` / `token=…` 再擦一遍（`log.js:17-19`、`log.js:24-29`）。`server.js:890-891` 只取 `req.method` 与去掉 query 的路径，请求头一个字段都不进日志。
+- 字段取值抛错（getter 抛、循环引用）或写入器抛错（管道断开）都不抛给业务：前者落一条 `log.serialize_failed`，后者静默丢弃（`log.js:59-61`）。
+- **单测注入缝**：`useJournal(createJournal({ write, now }))` 换成内存 journal，不碰真实 stdout 与真实时钟（`log.js:55`、`log.js:69`）。
 
 事件名表（加事件先补这张表，再加调用）：
 
@@ -144,6 +144,7 @@
 | `policy.keys_created` / `policy.package_built` | `package-policy.js` 生成密钥 / 做成升级包 | `directory` `files` / `output` `version` `sequence` `target`，两条都带 `message`（旧的中文提示文案） |
 | `policy.usage` | `package-policy.js` 参数不对，打印用法后退出码 1 | `message`（`level=error`） |
 | `log.serialize_failed` | 日志字段序列化不出来，兜底一条 | `level=error` |
+| `log.cleaned` | `POST /api/logs/cleanup` 真删了历史文件（dry-run 不落） | `by`（`age` / `size` / `age+size`）`count` `bytes`；不记文件名与内容 |
 
 `cloudwalker.call_failed` 的 `op` 取值：`status` / `alerts` / `alert`（告警详情）/ `tools`（牧云 API 工具列表）/ `mcp_tools` / `call_tool` / `list_events`（syslog 事件匹配）。
 
@@ -157,7 +158,7 @@
 | `time_window` | 同主机 ±5 分钟时间窗 | `window_seconds`、`candidates`、`nearest_gap_seconds`（最近一条差多远）；查询本身失败时带 `reason` |
 
 `syslog.match_failed` 的字段名是 `type`，不叫 `event_type`——`event_type` 是 `syslog.received` 那条事件的键名。`type` 只在已知事件类型时出现（`msgid_map` 与 `payload` 两条分支没有它）。
-日志只上 stdout，不落文件、不轮转；采集交给部署端（本卡不引入日志依赖）。
+**落盘（P003-T045）**：默认仍只上 stdout、不建任何文件；配了 `HIDS_LOG_FILE` 才在 stdout 之外**同份**再写一份，单文件超 `HIDS_LOG_MAX_BYTES`（缺省 10 MiB）轮转成 `<名>.<2026-11-20T02-44-01-123Z>.log`，历史文件只留最新 `HIDS_LOG_KEEP` 份（缺省 5）——**当前这条写进轮转后的新文件，不丢**，且活动文件永不被清理删掉。三个键都不进启动闸门（不配＝合法部署），非法值回落缺省。文件侧在 `log.js:74-231`（`logFileOptions()` / `createFileSink()` / `useLogFile()` / `logFiles()` / `readLogEntries()` / `pruneLogFiles()`），装 sink 的两行在 `server.js:31-32`（必须在 `createConfigStore` 之前：覆盖层读不出来时会落 `config.load_failed`）。查询与清理两个接口见 [modules/http-api.md](modules/http-api.md#38-日志落盘与查询清理get-apilogs-post-apilogscleanupp003-t045)。脱敏三道闸对文件与查询结果同样生效（落盘的行已经过闸，读路径按同一套规则再擦一遍）。
 
 ## 4. 模块分层与依赖
 
