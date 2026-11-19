@@ -85,7 +85,9 @@
 | --- | --- |
 | `CLOUDWALKER_URL` | 牧云地址，同时用于 RPC 与 MCP |
 | `CLOUDWALKER_API_TOKEN` | 牧云 Token（少于 6 位由 `rpc-client.js:4-5` 在装配时拒） |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 模型服务地址、密钥、模型名 |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 主判模型的服务地址、密钥、模型名（研判用；P003-T042 起新两组的回退基线） |
+| `LLM_REVIEW_BASE_URL` / `LLM_REVIEW_API_KEY` / `LLM_REVIEW_MODEL` | 复核组：独立复核那一轮的地址、密钥、模型名；逐键回退主判（P003-T042） |
+| `LLM_LIGHT_BASE_URL` / `LLM_LIGHT_API_KEY` / `LLM_LIGHT_MODEL` | 轻量组：两个维护者与溯源白板的地址、密钥、模型名；逐键回退主判（P003-T042） |
 
 **(2) 取值非法**：`HIDS_TRIAGE_INPUT_MODE` 只能是 `syslog` 或 `poll`（不设或空串＝缺省 `syslog`，不算非法）。其他值同样拒启动：stderr 写 `配置值无效：HIDS_TRIAGE_INPUT_MODE=<坏值>（只能是 syslog 或 poll）`，`server.start_failed` 里 `invalid` 每条带 `{key, value, allowed}`。**不许静默按 `poll` 跑**：那等于打错一个字就悄悄关掉 syslog 接收器，而 `/api/config` 还会回显那个错值——契约（`openapi.yaml` 的 enum）与实测就会对不上。
 
@@ -512,10 +514,16 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_PORT` | `8080` | 业务 API 监听端口 | `server.js:26` |
 | `CLOUDWALKER_URL` | 无 | 牧云地址，同时用于 RPC 与 MCP | `server.js:27`、`server.js:29`、`agent-tools.js:120` |
 | `CLOUDWALKER_API_TOKEN` | 无 | 牧云 Token；少于 6 位会被拒 | `server.js:28`、`rpc-client.js:5`、`mcp-client.js:6` |
-| `LLM_BASE_URL` | 无 | 模型服务地址 | `model-client.js:3` |
-| `LLM_API_KEY` | 无 | 模型服务密钥 | `model-client.js:4` |
-| `LLM_MODEL` | 无 | 模型名 | `model-client.js:5` |
-| `LLM_TIMEOUT_MS` | `90000` | 单次模型请求超时（毫秒） | `model-client.js:36` |
+| `LLM_BASE_URL` | 无 | 主判模型服务地址 | `model-client.js:15`、`model-client.js:90-91` |
+| `LLM_API_KEY` | 无 | 主判模型密钥 | `model-client.js:16`、`model-client.js:90-91` |
+| `LLM_MODEL` | 无 | 主判模型名 | `model-client.js:17`、`model-client.js:90-91` |
+| `LLM_TIMEOUT_MS` | `90000` | 单次模型请求超时（毫秒）；五个角色（研判 / 独立复核 / 两个维护者 / 溯源白板）共用 | `model-client.js:116` |
+| `LLM_REVIEW_BASE_URL` | 无（回退 `LLM_BASE_URL`） | 复核组地址：独立复核那一轮用 | `model-client.js:65`、`model-client.js:73-91` |
+| `LLM_REVIEW_API_KEY` | 无（回退 `LLM_API_KEY`） | 复核组密钥 | 同上 |
+| `LLM_REVIEW_MODEL` | 无（回退 `LLM_MODEL`） | 复核组模型名 | 同上 |
+| `LLM_LIGHT_BASE_URL` | 无（回退 `LLM_BASE_URL`） | 轻量组地址：规则维护者 / wiki 维护者 / 溯源白板用 | `model-client.js:65`、`model-client.js:73-91` |
+| `LLM_LIGHT_API_KEY` | 无（回退 `LLM_API_KEY`） | 轻量组密钥 | 同上 |
+| `LLM_LIGHT_MODEL` | 无（回退 `LLM_MODEL`） | 轻量组模型名 | 同上 |
 | `HIDS_TRIAGE_INPUT_MODE` | `syslog` | 自动研判输入方式：`syslog` 或 `poll`；**其他值拒绝启动**（空串＝缺省，见 §3.5 闸门 (2)） | `server.js:46`、`server.js:994` |
 | `HIDS_SYSLOG_HOST` | `127.0.0.1` | syslog UDP 监听地址 | `server.js:367` |
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
@@ -635,7 +643,7 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 | `http-api` | [modules/http-api.md](modules/http-api.md) | `server.js` | 路由分发、Basic 认证、管理员令牌校验、SSE 流式响应、分页参数校验 | 业务 HTTP 接口的唯一入口，把编排层的能力包成路由 |
 | `event-gateway` | [modules/event-gateway.md](modules/event-gateway.md) | `cloudwalker.js`、`rpc-client.js` | 事件类型表、RPC 方法映射、只读 RPC 白名单、事件归一化、多类型合并分页 | 读牧云事件列表与详情，并把不同类型的原始行归一成同一形状 |
 | `evidence-tools` | [modules/evidence-tools.md](modules/evidence-tools.md) | `mcp-client.js`、`agent-tools.js`、`api-tools.js` | MCP 客户端、API 取证工具箱、MCP 取证工具箱、常规研判工具箱、取证会话、工具白名单 | 把「一次取证」包装成模型可调用的工具，并限制可调范围 |
-| `model-client` | [modules/model-client.md](modules/model-client.md) | `model-client.js` | 对话补全、工具调用请求、超时与错误翻译、环境变量装配 | 与模型服务对话的唯一通道 |
+| `model-client` | [modules/model-client.md](modules/model-client.md) | `model-client.js` | 对话补全、工具调用请求、超时与错误翻译、环境变量装配；P003-T042 起还负责把三组配置解析成五个角色实例（`createModelRolesFromEnv`） | 与模型服务对话的唯一通道 |
 | `evidence-view` | [modules/evidence-view.md](modules/evidence-view.md) | `evidence-view.js` | 字段投影、JSON Pointer、预聚合计数、上下文裁剪 | 把工具原始返回压成模型看得懂、引用得了的精简视图 |
 | `investigation-agent` | [modules/investigation-agent.md](modules/investigation-agent.md) | `investigation-agent.js`、`required-evidence.js`、`triage-output.js` | 三态结论映射、工具轮次与调用上限、独立复核、引用校验与降级、必查项清单、客户报告整形 | 研判的决策内核：取证、质疑、校验、降级、出报告 |
 | `triage-pipeline` | [modules/triage-pipeline.md](modules/triage-pipeline.md) | `triage-monitor.js`、`syslog-input.js`、`syslog-case.js` | syslog 接收与解析、指纹去重、队列与游标、案件目录、结果写回 | 把告警变成一条排队中的研判任务，并落好案件材料 |

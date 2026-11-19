@@ -97,10 +97,24 @@ paths:
                       configured: { type: boolean, description: CLOUDWALKER_URL 与 CLOUDWALKER_API_TOKEN 是否都在 }
                   model:
                     type: object
-                    required: [configured, name]
+                    description: |
+                      主判口径（`configured` / `name`）与分层后的角色口径（`roles`）在同一段里。
+                      `roles` 是 P003-T042 的模型分层：五个角色各用一组配置，组里某个键空就**逐键**回退主判的同名后缀字段，
+                      三个键全空时这一组与主判完全一致。只报模型名与来源，不报地址与密钥。
+                    required: [configured, name, roles]
                     properties:
                       configured: { type: boolean, description: LLM_BASE_URL / LLM_API_KEY / LLM_MODEL 三项是否齐全 }
                       name: { type: [string, 'null'], description: LLM_MODEL 的值；未配为 null }
+                      roles:
+                        type: object
+                        description: 五个角色各自 resolved 到的模型名与来源（P003-T042）
+                        required: [triage, review, rule_maintainer, wiki_maintainer, trace_board]
+                        properties:
+                          triage: { $ref: '#/components/schemas/ModelRoleResolved' }
+                          review: { $ref: '#/components/schemas/ModelRoleResolved' }
+                          rule_maintainer: { $ref: '#/components/schemas/ModelRoleResolved' }
+                          wiki_maintainer: { $ref: '#/components/schemas/ModelRoleResolved' }
+                          trace_board: { $ref: '#/components/schemas/ModelRoleResolved' }
                   auth:
                     type: object
                     required: [basic_auth_enabled]
@@ -128,7 +142,10 @@ paths:
       summary: 写配置（运行中改牧云与模型，持久化且不回显）
       operationId: writeConfig
       description: |
-        运行中改牧云与模型的五项：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。
+        运行中改牧云与模型的十一项：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`，
+        以及模型分层的复核组 `LLM_REVIEW_BASE_URL` / `LLM_REVIEW_API_KEY` / `LLM_REVIEW_MODEL` 与轻量组
+        `LLM_LIGHT_BASE_URL` / `LLM_LIGHT_API_KEY` / `LLM_LIGHT_MODEL`（P003-T042，走同一套覆盖层）。
+        新六键都是可选的：不写它们时五个角色逐键回退主判三项，行为与分层前一致。
         写成功之后：
         - `GET /api/config` 立刻报新值（不用重启进程）；
         - 后续牧云 / 模型调用立刻走新地址与新凭据（进程内客户端原地换值，不新建进程）；
@@ -158,6 +175,12 @@ paths:
                 LLM_BASE_URL: { type: string, description: 模型接口基址，必须以 http(s):// 开头 }
                 LLM_API_KEY: { type: string, description: 模型密钥，非空 }
                 LLM_MODEL: { type: string, description: 模型名，非空 }
+                LLM_REVIEW_BASE_URL: { type: string, description: 复核组：独立复核用的地址，必须以 http(s):// 开头；空则回退 LLM_BASE_URL }
+                LLM_REVIEW_API_KEY: { type: string, description: 复核组：独立复核用的密钥，非空；空则回退 LLM_API_KEY }
+                LLM_REVIEW_MODEL: { type: string, description: 复核组：独立复核用的模型名，非空；空则回退 LLM_MODEL }
+                LLM_LIGHT_BASE_URL: { type: string, description: 轻量组：两个维护者与溯源白板用的地址，必须以 http(s):// 开头；空则回退 LLM_BASE_URL }
+                LLM_LIGHT_API_KEY: { type: string, description: 轻量组：密钥，非空；空则回退 LLM_API_KEY }
+                LLM_LIGHT_MODEL: { type: string, description: 轻量组：模型名，非空；空则回退 LLM_MODEL }
             examples:
               changeModel:
                 summary: 只换模型名（部分更新，其余四项不动）
@@ -177,7 +200,9 @@ paths:
                     type: array
                     items:
                       type: string
-                      enum: [CLOUDWALKER_URL, CLOUDWALKER_API_TOKEN, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL]
+                      enum: [CLOUDWALKER_URL, CLOUDWALKER_API_TOKEN, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL,
+                        LLM_REVIEW_BASE_URL, LLM_REVIEW_API_KEY, LLM_REVIEW_MODEL,
+                        LLM_LIGHT_BASE_URL, LLM_LIGHT_API_KEY, LLM_LIGHT_MODEL]
                   config:
                     type: object
                     additionalProperties: true
@@ -192,7 +217,15 @@ paths:
                       port: 8080
                       triage_input_mode: syslog
                       cloudwalker: { configured: true }
-                      model: { configured: true, name: qwen2.5-72b-instruct }
+                      model:
+                        configured: true
+                        name: qwen2.5-72b-instruct
+                        roles:
+                          triage: { model: qwen2.5-72b-instruct, source: primary }
+                          review: { model: qwen3-32b-review, source: own }
+                          rule_maintainer: { model: qwen-flash, source: own }
+                          wiki_maintainer: { model: qwen-flash, source: own }
+                          trace_board: { model: qwen-flash, source: own }
                       auth: { basic_auth_enabled: true }
                       secrets:
                         CLOUDWALKER_API_TOKEN: true
@@ -1567,6 +1600,16 @@ components:
       schema: { type: string, const: '1' }
       description: 写入请求还会校验 Origin 和 Sec-Fetch-Site
   schemas:
+    ModelRoleResolved:
+      type: object
+      description: |
+        一个角色 resolved 到的模型名与这一组配置的来源（P003-T042）。
+        `source`：`primary` = 这一组三个键全空、逐键回退主判；`own` = 三个键全有、全用自己那组；
+        `mixed` = 部分有、逐键回退主判。只报模型名，不报地址与密钥。
+      required: [model, source]
+      properties:
+        model: { type: [string, 'null'], description: '这个角色实际用的模型名：先取这一组的模型名，没设就逐键回退主判 LLM_MODEL，两者都没设才是 null（不看实例是否装配；主判未配而该组自带模型名时仍是那个名字）' }
+        source: { type: string, enum: [primary, own, mixed], description: 这一组配置的来源三态 }
     DataStoreUsage:
       type: object
       description: 一类运行态存储的占用：条数与字节，外加这一类的条目时刻区间。

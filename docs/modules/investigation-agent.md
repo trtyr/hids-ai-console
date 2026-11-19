@@ -17,6 +17,7 @@ P003-T035 改写的段落（页内标了「P003-T035」的地方）行号对提�
 P003-T039 新增/改写的段落（页内标「P003-T039」的地方，含 §3.9 整节、§3.2 的两条、§3.3 的复核输入、§3.8 的 D 小节）行号对提交 `10a8942`；
 P003-T039 复审修复（BUG1-BUG3，页内标「复审」的地方：§3.8 的 B/D 两条、§3.9 的 A4/A5 行）行号对复审修复提交 `241c0da`。
 P003-T040 新增/改写的段落（页内标「P003-T040」的地方：§3.5 末段、§3.7 的 `evidence[]` 表 `view` 行与四字段说明、§3.10 整节）行号对提交 `201d278`。
+P003-T042 只动两处（页内标「P003-T042」的地方）：构造器多第 6 参 `reviewModel`（`investigation-agent.js:418-423`）、§3.3 的复核调用改用它（`investigation-agent.js:857`）。这两处之后的行号整体 +2，旧段落里的数字不再对应本 HEAD，按内容对码。
 全文只描述现状，不评价该改成什么。
 
 **术语**（第一次出现先给一句话解释，后面直接用）：
@@ -298,6 +299,8 @@ max_turns, max_tool_calls, conclusion_retries}`（`investigation-agent.js:665-66
 ### 3.3 独立复核
 
 调查出草稿后，会再发一次独立的模型调用当「质疑者」（`investigation-agent.js:703-709`）。
+P003-T042 起这次调用走构造器第 6 参 `reviewModel`（`this.reviewModel`，`investigation-agent.js:421`）：进程装配时给的是复核组的实例
+（`LLM_REVIEW_*`，逐键回退主判），不传就等于沿用研判模型——`docs/modules/http-api.md` §3.5 的 `model.roles.review` 报的就是它。
 **降级结论那条路上没有这次调用**：轮数用尽时直接记 `review.assessment = 'unavailable'`（§3.2.1）。
 
 - **提示词**写明「你是独立质疑者……不继承调查员私有推理」，并列出要查的四类问题：引用是否支持事实、是否误把空查询当良性、
@@ -696,7 +699,7 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 
 | 导出 | 签名 / 形态 | 作用 | 证据 |
 | --- | --- | --- | --- |
-| `InvestigationAgent` | `new InvestigationAgent(toolbox, model, promptStore?, knowledgeStore?, ruleStore?)` | 研判智能体。五个构造参数依次是取证工具箱、模型客户端、提示词存储、知识库、Rego 规则库（`server.js` 传数据根库；不传时缺省读仓内 `rules/`，仅供单测与探针） | `investigation-agent.js:285-288`、`server.js:45`、`server.js:47-50` |
+| `InvestigationAgent` | `new InvestigationAgent(toolbox, model, promptStore?, knowledgeStore?, ruleStore?, reviewModel?)` | 研判智能体。六个构造参数依次是取证工具箱、研判模型客户端、提示词存储、知识库、Rego 规则库（`server.js` 传数据根库；不传时缺省读仓内 `rules/`，仅供单测与探针）、**复核模型客户端**（P003-T042：独立复核那一轮用它；不传就沿用 `model`，即分层前的行为） | `investigation-agent.js:418-423`、`server.js:50-53` |
 | `.run(alertId, options)` | `Promise<研判记录>` | 主路径，见 [2.2](#22-主路径的阶段) | `investigation-agent.js:214` |
 | `.runUnmatchedSyslog(input, matchResult, caseInfo, onProgress?)` | `Promise<研判记录>` | 未匹配 syslog 的旁路，见 [2.4](#24-未匹配-syslog-的旁路) | `investigation-agent.js:728` |
 | `.prompts()` / `.updatePrompt(section, content, revision)` | `Promise<…>` | 读 / 改提示词，转调提示词存储 | `investigation-agent.js:211-212` |

@@ -9,7 +9,7 @@ import { RpcClient } from './rpc-client.js';
 import { CloudwalkerGateway, eventTypes, parseInstant } from './cloudwalker.js';
 import { createAgentToolboxFromEnv, TriageEvidenceToolbox } from './agent-tools.js';
 import { ApiEvidenceToolbox } from './api-tools.js';
-import { createModelFromEnv } from './model-client.js';
+import { applyModelValues, createModelRolesFromEnv, modelRoleSummary, modelRoleValues, MODEL_ROLES } from './model-client.js';
 import { InvestigationAgent } from './investigation-agent.js';
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
@@ -37,7 +37,10 @@ const gateway = baseUrl && token ? new CloudwalkerGateway(new RpcClient(baseUrl,
 const apiToolbox = gateway ? new ApiEvidenceToolbox(gateway.rpc) : null;
 const agentToolbox = createAgentToolboxFromEnv();
 const triageToolbox = apiToolbox && agentToolbox ? new TriageEvidenceToolbox(apiToolbox, agentToolbox) : apiToolbox;
-const model = createModelFromEnv();
+// 模型分层（P003-T042）：五个角色各一个实例（研判 / 独立复核 / 规则维护者 / wiki 维护者 / 溯源白板）。
+// 不设新键时逐键回退主判三项，四个角色 resolved 到的就是 `LLM_*`——行为与分层前一致。
+const models = createModelRolesFromEnv();
+const model = models?.triage ?? null; // 研判实例；既有引用（agent / status 路由）照旧读它
 const promptStore = new PromptStore();
 // 判据库（P003-T041）：缺省库＝数据根下的 `wiki/`，仓内 `wiki/` 只当种子源，首次读时初始化一次。
 const wikiStore = new WikiStore();
@@ -45,10 +48,10 @@ const wikiStore = new WikiStore();
 // 研判 Agent 与维护者**共用这一个实例**：维护者改了规则，下一次研判读到的就是改过的那份。
 const regoRuleStore = new RuleStore();
 const defaultRuleSessions = new RuleSessionStore();
-const agent = triageToolbox && model
-  ? new InvestigationAgent(triageToolbox, model, promptStore, wikiStore, regoRuleStore) : null;
-const deepInvestigator = agentToolbox && model
-  ? new InvestigationAgent(agentToolbox, model, promptStore, wikiStore, regoRuleStore) : null;
+const agent = triageToolbox && models
+  ? new InvestigationAgent(triageToolbox, models.triage, promptStore, wikiStore, regoRuleStore, models.review) : null;
+const deepInvestigator = agentToolbox && models
+  ? new InvestigationAgent(agentToolbox, models.triage, promptStore, wikiStore, regoRuleStore, models.review) : null;
 const investigationStore = new InvestigationStore(runtime.investigations);
 const triageRuleEngine = new TriageRuleEngine(runtime.triageRules);
 const triageInputMode = triageInputModeOf();
@@ -60,14 +63,16 @@ const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, i
   casesDirectory: process.env.HIDS_CASES_DIR || runtime.cases,
   baselineFile: runtime.baseline,
   intelFile: runtime.intel }) : null;
-const wikiWorkbench = new WikiWorkbench(wikiStore, model, promptStore, runtime.wikiSessions);
+const wikiWorkbench = new WikiWorkbench(wikiStore, models?.wiki_maintainer ?? null, promptStore, runtime.wikiSessions);
 
 // 写配置之后的生效（P003-T029 A1）：活着的客户端对象**原地换值**，后续调用立刻走新地址与新凭据。
 // 不重建对象：createServer 的 service / toolbox / investigator / monitor 都是值捕获，重建等于换了一批引用，
 // 路由手里的还是旧对象。持有这些引用的下游（apiToolbox、triageToolbox、两个 InvestigationAgent、
 // wikiWorkbench、triageMonitor.service）是同一批对象，跟着一起变。targets 可注入：单测传假对象验映射。
+// P003-T042：传 models（五个角色）时按新值**重新解析**逐角色原地换值——回退主判的角色（source=primary/mixed）
+// 会跟着主判三项一起动，否则「写配置只改了研判，两个维护者与白板还拿旧地址」。旧 `model` 单目标分支保留。
 export function applyLiveConfig(targets, values) {
-  const { gateway, model: chatModel, agentToolbox } = targets || {};
+  const { gateway, model: chatModel, agentToolbox, models } = targets || {};
   if (gateway?.rpc && values.CLOUDWALKER_URL && values.CLOUDWALKER_API_TOKEN) {
     gateway.rpc.baseUrl = new URL(values.CLOUDWALKER_URL);
     gateway.rpc.token = values.CLOUDWALKER_API_TOKEN;
@@ -78,11 +83,11 @@ export function applyLiveConfig(targets, values) {
     mcp.token = values.CLOUDWALKER_API_TOKEN;
     mcp.initialized = false; // 换了服务端：MCP 会话要重新 initialize，旧会话 id 不能接着用
   }
-  if (chatModel && values.LLM_BASE_URL && values.LLM_API_KEY && values.LLM_MODEL) {
-    const base = values.LLM_BASE_URL.endsWith('/') ? values.LLM_BASE_URL : `${values.LLM_BASE_URL}/`;
-    chatModel.url = new URL('chat/completions', base);
-    chatModel.apiKey = values.LLM_API_KEY;
-    chatModel.model = values.LLM_MODEL;
+  if (models) {
+    const resolved = modelRoleValues(values);
+    for (const role of MODEL_ROLES) applyModelValues(models[role], resolved[role]);
+  } else {
+    applyModelValues(chatModel, { baseUrl: values.LLM_BASE_URL, apiKey: values.LLM_API_KEY, model: values.LLM_MODEL });
   }
   return targets;
 }
@@ -126,7 +131,7 @@ export function createAnalysisProvider({ monitor = null, history = null } = {}) 
   };
 }
 
-const traceBoard = agentToolbox && model ? new TraceBoardService({ toolbox: agentToolbox, model, promptStore,
+const traceBoard = agentToolbox && models ? new TraceBoardService({ toolbox: agentToolbox, model: models.trace_board, promptStore,
   directory: runtime.traceBoards,
   analysis: createAnalysisProvider({ monitor: triageMonitor, history: investigationStore }) }) : null;
 
@@ -290,7 +295,7 @@ export class RegoRuleMaintainer {
   }
 }
 
-const regoMaintainer = model ? new RegoRuleMaintainer(model, regoRuleStore, promptStore, defaultRuleSessions) : null;
+const regoMaintainer = models ? new RegoRuleMaintainer(models.rule_maintainer, regoRuleStore, promptStore, defaultRuleSessions) : null;
 
 // 案件里命中的 Rego 规则 id：结果落盘的 result.json 里就有，没有就当没命中（旧案件可能没有这条轨迹）。
 async function caseRegoRuleIds(record) {
@@ -869,7 +874,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       // 响应只回「改了哪几个键 + 生效摘要」：机密永远只以布尔出现（A2）。
       if (url.pathname === '/api/config' && req.method === 'POST') {
         const updated = await config.update(await readJSON(req));
-        applyLiveConfig({ gateway, model, agentToolbox }, config.values());
+        applyLiveConfig({ gateway, models, agentToolbox }, config.values());
         return json(res, 200, { updated, config: configSummary(config.env) });
       }
       // 数据管理（P003-T044）：盘点七类运行态的条数与字节；清理按类型与阈值归档或删除（默认 dry-run）。
@@ -1343,7 +1348,11 @@ export function configSummary(env = process.env) {
     port: Number(env.HIDS_PORT || 8080),
     triage_input_mode: triageInputModeOf(env),
     cloudwalker: { configured: Boolean(env.CLOUDWALKER_URL && env.CLOUDWALKER_API_TOKEN) },
-    model: { configured: Boolean(env.LLM_BASE_URL && env.LLM_API_KEY && env.LLM_MODEL), name: env.LLM_MODEL || null },
+    // 模型分层（P003-T042）：`configured` / `name` 仍是主判三项的口径（老客户端与文档照旧读它们）；
+    // `roles` 报五个角色各 resolved 到哪个模型、以及这一组的来源三态（primary / own / mixed），
+    // 只报模型名与来源，不报地址与密钥。
+    model: { configured: Boolean(env.LLM_BASE_URL && env.LLM_API_KEY && env.LLM_MODEL), name: env.LLM_MODEL || null,
+      roles: modelRoleSummary(env) },
     // 不配 Basic 口令 = 不启用鉴权（hasAccess 见 server.js:413），这是合法部署，不是缺配置。
     auth: { basic_auth_enabled: Boolean(env.HIDS_BASIC_AUTH_PASSWORD) },
     secrets: Object.fromEntries(SECRET_CONFIG_KEYS.map(name => [name, Boolean(env[name])])),

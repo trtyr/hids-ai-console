@@ -1,6 +1,7 @@
 // P003-T029：配置可写——牧云与模型运行中可改，持久化且不回显。
 // 口径见 docs/modules/http-api.md §3.5/§3.6 与 openapi.yaml 的 `writeConfig`：
-//   A1 不重启进程写五项，GET /api/config 立刻反映；活着的客户端对象原地换值（applyLiveConfig）
+//   A1 不重启进程写五项（P003-T042 起同一张写表共十一项：多了模型分层的复核组 / 轻量组六键），
+//      GET /api/config 立刻反映（model.roles 也跟着重解析）；活着的客户端对象原地换值（applyLiveConfig）
 //   A2 任何响应（写成功的、写失败的）里都不出现 Token 与密码原文
 //   A3 写操作过 Basic 认证闸门；没启用鉴权（没配 HIDS_BASIC_AUTH_PASSWORD）时放行——文档写明
 //   A4 改过的值落盘、重启仍生效；没改过的键继续读环境变量；覆盖层文件坏了不影响启动
@@ -71,7 +72,13 @@ test('A1 写五项后 GET /api/config 立刻反映，updated 逐键回键名（�
   assert.deepEqual(body.updated, ['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN', 'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL']);
 
   const summary = await (await fetch(`${base}/api/config`)).json();
-  assert.deepEqual(summary.model, { configured: true, name: 'new-model' });
+  // P003-T042：model 段多出 roles（五个角色各自 resolved 到谁）；不设新键时五个角色全回退主判，结论与分层前一致。
+  assert.equal(summary.model.configured, true);
+  assert.equal(summary.model.name, 'new-model');
+  assert.deepEqual(Object.keys(summary.model.roles).sort(),
+    ['review', 'rule_maintainer', 'trace_board', 'triage', 'wiki_maintainer']);
+  for (const [role, entry] of Object.entries(summary.model.roles))
+    assert.deepEqual(entry, { model: 'new-model', source: 'primary' }, `${role} 应逐键回退主判`);
   assert.equal(summary.cloudwalker.configured, true);
   assert.deepEqual(summary.missing_required, []);
   // 写之后的响应与随后的 GET 报的是同一份生效值：GET 走的就是被覆盖层盖过的 env。
@@ -225,9 +232,12 @@ test('写接口的拒绝面：表外的键、空值、非对象正文、空正�
   assert.equal((await fetch(`${base}/api/config`, { method: 'PUT' })).status, 404);
 });
 
-test('可写键表钉死五项：多一项少一项都算契约被改', () => {
+test('可写键表钉死十一项：多一项少一项都算契约被改', () => {
+  // P003-T042 把模型分层六键（复核组 / 轻量组）加进同一张表：覆盖层机制没变，只是能写的键多了六项。
   assert.deepEqual([...WRITABLE_CONFIG_KEYS], ['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN',
-    'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL']);
+    'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL',
+    'LLM_REVIEW_BASE_URL', 'LLM_REVIEW_API_KEY', 'LLM_REVIEW_MODEL',
+    'LLM_LIGHT_BASE_URL', 'LLM_LIGHT_API_KEY', 'LLM_LIGHT_MODEL']);
 });
 
 // 写盘失败的清理（复审 nit）：目标路径被目录占住 → rename 必失败，失败后同目录不许留 `<file>.<pid>.tmp`。

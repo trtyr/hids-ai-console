@@ -15,12 +15,14 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { log } from './log.js';
 import { RpcClient } from './rpc-client.js';
-import { ChatModelClient } from './model-client.js';
+import { ChatModelClient, MODEL_GROUP_KEYS, MODEL_ROLE_GROUPS, MODEL_ROLES, modelGroupValues, modelRoleValues } from './model-client.js';
 
-// 能写的只有这五项（A1 逐字点名：牧云地址/令牌、模型地址/密钥/模型名）。表外的键一律 400：
+// 能写的只有这十一项：牧云三项 + 模型的三个组（主判 / 复核 / 轻量，P003-T042 加后两组六键）。表外的键一律 400：
 // HIDS_HOST/HIDS_PORT/HIDS_TRIAGE_INPUT_MODE 改起来必须重启进程；Basic 口令与两个 admin 令牌是鉴权凭据本身，写进来等于自己给自己开门。
 export const WRITABLE_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN',
-  'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL']);
+  'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL',
+  'LLM_REVIEW_BASE_URL', 'LLM_REVIEW_API_KEY', 'LLM_REVIEW_MODEL',
+  'LLM_LIGHT_BASE_URL', 'LLM_LIGHT_API_KEY', 'LLM_LIGHT_MODEL']);
 
 // 运行态数据根的唯一定义（P003-T034）：`HIDS_DATA_DIR` 指向哪就落哪，没设就落机器全局的
 // `~/.local/share/hids-ai-console/`。**仓库里一个字都不写**——测试与探针注入 tmp 目录，别让它们写真实全局根。
@@ -44,11 +46,33 @@ function callerError(message) {
 }
 
 // 建一次客户端只为让装配处的构造器判值：抛出来的原话只点键名，不带值（rpc-client.js:4-5、model-client.js:22-24）。
+// 模型部分整组逐角色判（P003-T042）：校验对象是「合并后的生效值」——只写复核组一个键时，
+// 另外两项逐键回退主判，所以不会因为「只写一个键」被拒。报错里的键名换成这一组真正该改的键
+// （回退来的字段仍点主判键名，不然会让人去改一个没出问题的键）。
 export function validateConfigValues(values) {
   if (values.CLOUDWALKER_URL || values.CLOUDWALKER_API_TOKEN)
     new RpcClient(values.CLOUDWALKER_URL, values.CLOUDWALKER_API_TOKEN);
-  if (values.LLM_BASE_URL || values.LLM_API_KEY || values.LLM_MODEL)
-    new ChatModelClient({ baseUrl: values.LLM_BASE_URL, apiKey: values.LLM_API_KEY, model: values.LLM_MODEL });
+  const resolved = modelRoleValues(values);
+  for (const role of MODEL_ROLES) {
+    const group = MODEL_ROLE_GROUPS[role];
+    const own = modelGroupValues(group, values);
+    const { baseUrl, apiKey, model } = resolved[role];
+    // 模型三项全空就不在这里判（与分层前的口径一致：缺必填由启动闸门报，写配置不会因此回 400）。
+    if (!baseUrl && !apiKey && !model) continue;
+    try { new ChatModelClient({ baseUrl, apiKey, model }); }
+    catch (cause) { throw Object.assign(new Error(groupKeyNames(group, own, cause?.message || '配置值不合法')), { cause }); }
+  }
+}
+
+// 构造器的报错原话只点主判键名；这一组自己设了的字段换成组内键名，回退来的字段保持主判键名。
+function groupKeyNames(group, own, message) {
+  const primary = MODEL_GROUP_KEYS.primary;
+  const names = MODEL_GROUP_KEYS[group];
+  let text = message;
+  for (const field of ['baseUrl', 'apiKey', 'model'])
+    if (names[field] !== primary[field])
+      text = text.split(primary[field]).join(own[field] ? names[field] : primary[field]);
+  return text;
 }
 
 // 覆盖层文件只认可写键 + 非空字符串：手改坏的文件不能把进程带偏，也不能让表外的键混进 env。
