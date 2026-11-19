@@ -13,32 +13,32 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "403-403",
+  "old": "403",
   "new": "1043",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "413-413",
+  "old": "413",
   "new": "1053",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "373-373",
+  "old": "373",
   "new": "976-982",
   "status": "manual"
  },
  {
   "file": "syslog-case.js",
-  "old": "32-32",
-  "new": "32-32",
+  "old": "32",
+  "new": "32",
   "status": "verified"
  },
  {
   "file": "syslog-case.js",
-  "old": "61-61",
-  "new": "61-61",
+  "old": "61",
+  "new": "61",
   "status": "verified"
  },
  {
@@ -61,19 +61,19 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "321-321",
-  "new": "562-562",
+  "old": "321",
+  "new": "562",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "914-914",
-  "new": "914-914",
+  "old": "914",
+  "new": "914",
   "status": "manual"
  },
  {
   "file": "syslog-input.js",
-  "old": "110-110",
+  "old": "110",
   "new": "111",
   "status": "manual"
  },
@@ -91,86 +91,86 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "254-254",
-  "new": "254-254",
+  "old": "254",
+  "new": "254",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "182-182",
-  "new": "182-182",
+  "old": "182",
+  "new": "182",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "165-165",
-  "new": "165-165",
+  "old": "165",
+  "new": "165",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "108-108",
-  "new": "108-108",
+  "old": "108",
+  "new": "108",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "42-42",
-  "new": "42-42",
+  "old": "42",
+  "new": "42",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "92-92",
-  "new": "92-92",
+  "old": "92",
+  "new": "92",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "260-260",
-  "new": "260-260",
+  "old": "260",
+  "new": "260",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "202-202",
-  "new": "202-202",
+  "old": "202",
+  "new": "202",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "349-349",
-  "new": "349-349",
+  "old": "349",
+  "new": "349",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "160-160",
-  "new": "160-160",
+  "old": "160",
+  "new": "160",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "92-92",
-  "new": "92-92",
+  "old": "92",
+  "new": "92",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "23-23",
-  "new": "23-23",
+  "old": "23",
+  "new": "23",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "117-117",
-  "new": "117-117",
+  "old": "117",
+  "new": "117",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "149-149",
-  "new": "149-149",
+  "old": "149",
+  "new": "149",
   "status": "ok"
  },
  {
@@ -181,8 +181,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "884-884",
-  "new": "884-884",
+  "old": "884",
+  "new": "884",
   "status": "manual"
  },
  {
@@ -193,14 +193,14 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "104-104",
-  "new": "104-104",
+  "old": "104",
+  "new": "104",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "110-110",
-  "new": "110-110",
+  "old": "110",
+  "new": "110",
   "status": "ok"
  },
  {
@@ -211,8 +211,8 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "112-112",
-  "new": "112-112",
+  "old": "112",
+  "new": "112",
   "status": "ok"
  },
  {
@@ -229,8 +229,8 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "121-121",
-  "new": "121-121",
+  "old": "121",
+  "new": "121",
   "status": "ok"
  },
  {
@@ -241,20 +241,20 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "56-56",
-  "new": "56-56",
+  "old": "56",
+  "new": "56",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "8-8",
-  "new": "8-8",
+  "old": "8",
+  "new": "8",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "56-56",
-  "new": "56-56",
+  "old": "56",
+  "new": "56",
   "status": "ok"
  },
  {
@@ -283,20 +283,20 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "55-55",
-  "new": "55-55",
+  "old": "55",
+  "new": "55",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "50-50",
-  "new": "50-50",
+  "old": "50",
+  "new": "50",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "5-5",
-  "new": "5-5",
+  "old": "5",
+  "new": "5",
   "status": "ok"
  },
  {
@@ -307,8 +307,8 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "59-59",
-  "new": "59-59",
+  "old": "59",
+  "new": "59",
   "status": "ok"
  },
  {
@@ -319,8 +319,8 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "59-59",
-  "new": "59-59",
+  "old": "59",
+  "new": "59",
   "status": "ok"
  },
  {
@@ -331,14 +331,14 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "32-32",
-  "new": "32-32",
+  "old": "32",
+  "new": "32",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "97-97",
-  "new": "97-97",
+  "old": "97",
+  "new": "97",
   "status": "ok"
  },
  {
@@ -355,20 +355,20 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "62-62",
-  "new": "62-62",
+  "old": "62",
+  "new": "62",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "63-63",
-  "new": "63-63",
+  "old": "63",
+  "new": "63",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "65-65",
-  "new": "65-65",
+  "old": "65",
+  "new": "65",
   "status": "ok"
  },
  {
@@ -379,19 +379,19 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "69-69",
-  "new": "69-69",
+  "old": "69",
+  "new": "69",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "71-71",
-  "new": "71-71",
+  "old": "71",
+  "new": "71",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "61-61",
+  "old": "61",
   "new": "62",
   "status": "manual"
  },
@@ -409,13 +409,13 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "86-86",
-  "new": "86-86",
+  "old": "86",
+  "new": "86",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "87-87",
+  "old": "87",
   "new": "88",
   "status": "manual"
  },
@@ -427,8 +427,8 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "88-88",
-  "new": "88-88",
+  "old": "88",
+  "new": "88",
   "status": "ok"
  },
  {
@@ -469,8 +469,8 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "100-100",
-  "new": "100-100",
+  "old": "100",
+  "new": "100",
   "status": "ok"
  },
  {
@@ -487,7 +487,7 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "36-36",
+  "old": "36",
   "new": "124",
   "status": "manual"
  },
@@ -553,7 +553,7 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "284-284",
+  "old": "284",
   "new": "871",
   "status": "manual"
  },
@@ -565,14 +565,14 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "287-287",
-  "new": "287-287",
+  "old": "287",
+  "new": "287",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "293-293",
-  "new": "293-293",
+  "old": "293",
+  "new": "293",
   "status": "ok"
  },
  {
@@ -595,20 +595,20 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "231-231",
-  "new": "231-231",
+  "old": "231",
+  "new": "231",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "259-259",
-  "new": "259-259",
+  "old": "259",
+  "new": "259",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "246-246",
-  "new": "246-246",
+  "old": "246",
+  "new": "246",
   "status": "ok"
  },
  {
@@ -619,8 +619,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "280-280",
-  "new": "280-280",
+  "old": "280",
+  "new": "280",
   "status": "ok"
  },
  {
@@ -655,8 +655,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "115-115",
-  "new": "115-115",
+  "old": "115",
+  "new": "115",
   "status": "ok"
  },
  {
@@ -673,14 +673,14 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "644-644",
-  "new": "708-708",
+  "old": "644",
+  "new": "708",
   "status": "drift"
  },
  {
   "file": "triage-monitor.js",
-  "old": "108-108",
-  "new": "108-108",
+  "old": "108",
+  "new": "108",
   "status": "ok"
  },
  {
@@ -709,13 +709,13 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "353-353",
-  "new": "353-353",
+  "old": "353",
+  "new": "353",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "351-351",
+  "old": "351",
   "new": "715",
   "status": "manual"
  },
@@ -733,7 +733,7 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "362-362",
+  "old": "362",
   "new": "726",
   "status": "manual"
  },
@@ -751,7 +751,7 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "374-374",
+  "old": "374",
   "new": "737",
   "status": "manual"
  },
@@ -763,13 +763,13 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "381-381",
-  "new": "381-381",
+  "old": "381",
+  "new": "381",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "382-382",
+  "old": "382",
   "new": "747",
   "status": "manual"
  },
@@ -787,8 +787,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "709-709",
-  "new": "773-773",
+  "old": "709",
+  "new": "773",
   "status": "drift"
  },
  {
@@ -799,8 +799,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "112-112",
-  "new": "112-112",
+  "old": "112",
+  "new": "112",
   "status": "ok"
  },
  {
@@ -865,8 +865,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "365-365",
-  "new": "365-365",
+  "old": "365",
+  "new": "365",
   "status": "ok"
  },
  {
@@ -913,8 +913,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "413-413",
-  "new": "413-413",
+  "old": "413",
+  "new": "413",
   "status": "ok"
  },
  {
@@ -931,19 +931,19 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "404-404",
-  "new": "404-404",
+  "old": "404",
+  "new": "404",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "374-374",
+  "old": "374",
   "new": "1013",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "400-400",
+  "old": "400",
   "new": "1040",
   "status": "manual"
  },
@@ -1021,13 +1021,13 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "564-564",
-  "new": "628-628",
+  "old": "564",
+  "new": "628",
   "status": "drift"
  },
  {
   "file": "triage-monitor.js",
-  "old": "565-565",
+  "old": "565",
   "new": "629",
   "status": "manual"
  },
@@ -1057,8 +1057,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "588-588",
-  "new": "652-652",
+  "old": "588",
+  "new": "652",
   "status": "drift"
  },
  {
@@ -1195,8 +1195,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "112-112",
-  "new": "112-112",
+  "old": "112",
+  "new": "112",
   "status": "ok"
  },
  {
@@ -1225,8 +1225,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "32-32",
-  "new": "32-32",
+  "old": "32",
+  "new": "32",
   "status": "verified"
  },
  {
@@ -1237,8 +1237,8 @@
  },
  {
   "file": "triage-rules.js",
-  "old": "279-279",
-  "new": "279-279",
+  "old": "279",
+  "new": "279",
   "status": "ok"
  },
  {
@@ -1291,8 +1291,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "30-30",
-  "new": "30-30",
+  "old": "30",
+  "new": "30",
   "status": "verified"
  },
  {
@@ -1303,14 +1303,14 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "31-31",
-  "new": "31-31",
+  "old": "31",
+  "new": "31",
   "status": "verified"
  },
  {
   "file": "triage-monitor.js",
-  "old": "111-111",
-  "new": "111-111",
+  "old": "111",
+  "new": "111",
   "status": "verified"
  },
  {
@@ -1351,20 +1351,20 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "97-97",
-  "new": "97-97",
+  "old": "97",
+  "new": "97",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "97-97",
-  "new": "97-97",
+  "old": "97",
+  "new": "97",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "94-94",
-  "new": "94-94",
+  "old": "94",
+  "new": "94",
   "status": "ok"
  },
  {
@@ -1375,14 +1375,14 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "97-97",
-  "new": "97-97",
+  "old": "97",
+  "new": "97",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "98-98",
-  "new": "98-98",
+  "old": "98",
+  "new": "98",
   "status": "ok"
  },
  {
@@ -1399,32 +1399,32 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "102-102",
-  "new": "102-102",
+  "old": "102",
+  "new": "102",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "103-103",
-  "new": "103-103",
+  "old": "103",
+  "new": "103",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "104-104",
-  "new": "104-104",
+  "old": "104",
+  "new": "104",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "105-105",
-  "new": "105-105",
+  "old": "105",
+  "new": "105",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "106-106",
-  "new": "106-106",
+  "old": "106",
+  "new": "106",
   "status": "ok"
  },
  {
@@ -1459,8 +1459,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "114-114",
-  "new": "114-114",
+  "old": "114",
+  "new": "114",
   "status": "ok"
  },
  {
@@ -1471,8 +1471,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "204-204",
-  "new": "204-204",
+  "old": "204",
+  "new": "204",
   "status": "ok"
  },
  {
@@ -1483,8 +1483,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "180-180",
-  "new": "180-180",
+  "old": "180",
+  "new": "180",
   "status": "verified"
  },
  {
@@ -1501,8 +1501,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "172-172",
-  "new": "172-172",
+  "old": "172",
+  "new": "172",
   "status": "ok"
  },
  {
@@ -1525,14 +1525,14 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "30-30",
-  "new": "30-30",
+  "old": "30",
+  "new": "30",
   "status": "verified"
  },
  {
   "file": "syslog-case.js",
-  "old": "32-32",
-  "new": "32-32",
+  "old": "32",
+  "new": "32",
   "status": "verified"
  },
  {
@@ -1555,8 +1555,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "51-51",
-  "new": "51-51",
+  "old": "51",
+  "new": "51",
   "status": "verified"
  },
  {
@@ -1567,8 +1567,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "61-61",
-  "new": "61-61",
+  "old": "61",
+  "new": "61",
   "status": "verified"
  },
  {
@@ -1597,8 +1597,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "81-81",
-  "new": "81-81",
+  "old": "81",
+  "new": "81",
   "status": "verified"
  },
  {
@@ -1621,14 +1621,14 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "170-170",
-  "new": "170-170",
+  "old": "170",
+  "new": "170",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "172-172",
-  "new": "172-172",
+  "old": "172",
+  "new": "172",
   "status": "ok"
  },
  {
@@ -1645,68 +1645,68 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "140-140",
-  "new": "140-140",
+  "old": "140",
+  "new": "140",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "122-122",
-  "new": "122-122",
+  "old": "122",
+  "new": "122",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "123-123",
-  "new": "123-123",
+  "old": "123",
+  "new": "123",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "124-124",
-  "new": "124-124",
+  "old": "124",
+  "new": "124",
   "status": "verified"
  },
  {
   "file": "syslog-case.js",
-  "old": "125-125",
-  "new": "125-125",
+  "old": "125",
+  "new": "125",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "129-129",
-  "new": "129-129",
+  "old": "129",
+  "new": "129",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "133-133",
-  "new": "133-133",
+  "old": "133",
+  "new": "133",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "133-133",
-  "new": "133-133",
+  "old": "133",
+  "new": "133",
   "status": "verified"
  },
  {
   "file": "syslog-case.js",
-  "old": "134-134",
-  "new": "134-134",
+  "old": "134",
+  "new": "134",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "135-135",
-  "new": "135-135",
+  "old": "135",
+  "new": "135",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "137-137",
-  "new": "137-137",
+  "old": "137",
+  "new": "137",
   "status": "verified"
  },
  {
@@ -1723,13 +1723,13 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "411-411",
+  "old": "411",
   "new": "1051",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "413-413",
+  "old": "413",
   "new": "1053",
   "status": "manual"
  },
@@ -1741,8 +1741,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "398-398",
-  "new": "398-398",
+  "old": "398",
+  "new": "398",
   "status": "ok"
  },
  {
@@ -1753,32 +1753,32 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "155-155",
-  "new": "155-155",
+  "old": "155",
+  "new": "155",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "156-156",
-  "new": "156-156",
+  "old": "156",
+  "new": "156",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "161-161",
-  "new": "161-161",
+  "old": "161",
+  "new": "161",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "150-150",
-  "new": "150-150",
+  "old": "150",
+  "new": "150",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "154-154",
-  "new": "154-154",
+  "old": "154",
+  "new": "154",
   "status": "ok"
  },
  {
@@ -1789,7 +1789,7 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "284-284",
+  "old": "284",
   "new": "840-843",
   "status": "manual"
  },
@@ -1825,7 +1825,7 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "13-13",
+  "old": "13",
   "new": "63",
   "status": "manual"
  },
@@ -1837,8 +1837,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "13-13",
-  "new": "13-13",
+  "old": "13",
+  "new": "13",
   "status": "ok"
  },
  {
@@ -1873,8 +1873,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "246-246",
-  "new": "246-246",
+  "old": "246",
+  "new": "246",
   "status": "ok"
  },
  {
@@ -1993,8 +1993,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "4-4",
-  "new": "4-4",
+  "old": "4",
+  "new": "4",
   "status": "ok"
  },
  {
@@ -2011,13 +2011,13 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "138-138",
+  "old": "138",
   "new": "533",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "141-141",
+  "old": "141",
   "new": "536",
   "status": "manual"
  },
@@ -2041,7 +2041,7 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "131-131",
+  "old": "131",
   "new": "526",
   "status": "manual"
  },
@@ -2053,19 +2053,19 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "132-132",
+  "old": "132",
   "new": "527",
   "status": "manual"
  },
  {
   "file": "server.js",
-  "old": "173-173",
+  "old": "173",
   "new": "551",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "133-133",
+  "old": "133",
   "new": "528",
   "status": "manual"
  },
@@ -2101,7 +2101,7 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "8-8",
+  "old": "8",
   "new": "10",
   "status": "manual"
  },
@@ -2125,97 +2125,97 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "146-146",
+  "old": "146",
   "new": "541",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "158-158",
+  "old": "158",
   "new": "691",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "157-157",
+  "old": "157",
   "new": "950",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "316-316",
+  "old": "316",
   "new": "1056",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "378-378",
+  "old": "378",
   "new": "1082",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "391-391",
+  "old": "391",
   "new": "884",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "63-63",
+  "old": "63",
   "new": "696",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "157-157",
+  "old": "157",
   "new": "377",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "317-317",
+  "old": "317",
   "new": "951",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "334-334",
+  "old": "334",
   "new": "1011",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "378-378",
+  "old": "378",
   "new": "1056",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "391-391",
+  "old": "391",
   "new": "1078",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "357-357",
+  "old": "357",
   "new": "953",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "158-158",
+  "old": "158",
   "new": "889",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "277-277",
+  "old": "277",
   "new": "887",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "259-259",
+  "old": "259",
   "new": "835",
   "status": "manual"
  },
@@ -2227,37 +2227,37 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "299-299",
+  "old": "299",
   "new": "888-889",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "300-300",
+  "old": "300",
   "new": "890",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "40-40",
+  "old": "40",
   "new": "128",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "52-52",
+  "old": "52",
   "new": "281",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "41-41",
+  "old": "41",
   "new": "129",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "53-53",
+  "old": "53",
   "new": "282",
   "status": "manual"
  },
@@ -2269,85 +2269,85 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "61-61",
+  "old": "61",
   "new": "62",
   "status": "manual"
  },
  {
   "file": "syslog-input.js",
-  "old": "69-69",
+  "old": "69",
   "new": "70",
   "status": "manual"
  },
  {
   "file": "syslog-case.js",
-  "old": "50-50",
-  "new": "50-50",
+  "old": "50",
+  "new": "50",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "80-80",
-  "new": "80-80",
+  "old": "80",
+  "new": "80",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "51-51",
-  "new": "51-51",
+  "old": "51",
+  "new": "51",
   "status": "verified"
  },
  {
   "file": "syslog-case.js",
-  "old": "81-81",
-  "new": "81-81",
+  "old": "81",
+  "new": "81",
   "status": "verified"
  },
  {
   "file": "triage-monitor.js",
-  "old": "319-319",
+  "old": "319",
   "new": "937",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "306-306",
+  "old": "306",
   "new": "911",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "329-329",
+  "old": "329",
   "new": "922",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "327-327",
+  "old": "327",
   "new": "916-920",
   "status": "manual"
  },
  {
   "file": "syslog-case.js",
-  "old": "172-172",
-  "new": "172-172",
+  "old": "172",
+  "new": "172",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "30-30",
-  "new": "30-30",
+  "old": "30",
+  "new": "30",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "35-35",
-  "new": "35-35",
+  "old": "35",
+  "new": "35",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "20-20",
+  "old": "20",
   "new": "92",
   "status": "manual"
  },
@@ -2365,14 +2365,14 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "8-8",
-  "new": "8-8",
+  "old": "8",
+  "new": "8",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "140-140",
-  "new": "140-140",
+  "old": "140",
+  "new": "140",
   "status": "ok"
  },
  {
@@ -2389,20 +2389,20 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "214-214",
-  "new": "214-214",
+  "old": "214",
+  "new": "214",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "213-213",
-  "new": "213-213",
+  "old": "213",
+  "new": "213",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "395-395",
-  "new": "395-395",
+  "old": "395",
+  "new": "395",
   "status": "ok"
  },
  {
@@ -2419,32 +2419,32 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "100-100",
-  "new": "100-100",
+  "old": "100",
+  "new": "100",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "96-96",
-  "new": "96-96",
+  "old": "96",
+  "new": "96",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "271-271",
-  "new": "271-271",
+  "old": "271",
+  "new": "271",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "289-289",
-  "new": "289-289",
+  "old": "289",
+  "new": "289",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "69-69",
-  "new": "69-69",
+  "old": "69",
+  "new": "69",
   "status": "ok"
  },
  {
@@ -2467,19 +2467,19 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "354-354",
+  "old": "354",
   "new": "403",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "416-416",
+  "old": "416",
   "new": "1056",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "430-430",
+  "old": "430",
   "new": "1078",
   "status": "manual"
  },
@@ -2491,8 +2491,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "398-398",
-  "new": "398-398",
+  "old": "398",
+  "new": "398",
   "status": "ok"
  },
  {
@@ -2533,14 +2533,14 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "662-662",
-  "new": "726-726",
+  "old": "662",
+  "new": "726",
   "status": "drift"
  },
  {
   "file": "triage-monitor.js",
-  "old": "697-697",
-  "new": "761-761",
+  "old": "697",
+  "new": "761",
   "status": "drift"
  },
  {
@@ -2551,8 +2551,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "980-980",
-  "new": "1044-1044",
+  "old": "980",
+  "new": "1044",
   "status": "drift"
  },
  {
@@ -2575,13 +2575,13 @@
  },
  {
   "file": "triage-rules.js",
-  "old": "279-279",
-  "new": "279-279",
+  "old": "279",
+  "new": "279",
   "status": "verified"
  },
  {
   "file": "investigation-agent.js",
-  "old": "360-360",
+  "old": "360",
   "new": "458-462",
   "status": "manual"
  },
@@ -2659,8 +2659,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "130-130",
-  "new": "130-130",
+  "old": "130",
+  "new": "130",
   "status": "ok"
  },
  {
@@ -2671,14 +2671,14 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "61-61",
-  "new": "61-61",
+  "old": "61",
+  "new": "61",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "69-69",
-  "new": "69-69",
+  "old": "69",
+  "new": "69",
   "status": "ok"
  },
  {
@@ -2695,14 +2695,14 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "55-55",
-  "new": "55-55",
+  "old": "55",
+  "new": "55",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "50-50",
-  "new": "50-50",
+  "old": "50",
+  "new": "50",
   "status": "ok"
  },
  {
@@ -2713,31 +2713,31 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "210-210",
-  "new": "210-210",
+  "old": "210",
+  "new": "210",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "177-177",
-  "new": "177-177",
+  "old": "177",
+  "new": "177",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "662-662",
+  "old": "662",
   "new": "726",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "697-697",
+  "old": "697",
   "new": "768",
   "status": "manual"
  },
  {
   "file": "triage-monitor.js",
-  "old": "681-681",
+  "old": "681",
   "new": "745",
   "status": "manual"
  },
@@ -2809,32 +2809,32 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "154-154",
-  "new": "154-154",
+  "old": "154",
+  "new": "154",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "172-172",
-  "new": "172-172",
+  "old": "172",
+  "new": "172",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "170-170",
-  "new": "170-170",
+  "old": "170",
+  "new": "170",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "30-30",
-  "new": "30-30",
+  "old": "30",
+  "new": "30",
   "status": "verified"
  },
  {
   "file": "triage-monitor.js",
-  "old": "35-35",
-  "new": "35-35",
+  "old": "35",
+  "new": "35",
   "status": "verified"
  },
  {
@@ -2845,20 +2845,20 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "13-13",
-  "new": "13-13",
+  "old": "13",
+  "new": "13",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "14-14",
-  "new": "14-14",
+  "old": "14",
+  "new": "14",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "112-112",
-  "new": "112-112",
+  "old": "112",
+  "new": "112",
   "status": "verified"
  },
  {
@@ -2869,14 +2869,14 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "31-31",
-  "new": "31-31",
+  "old": "31",
+  "new": "31",
   "status": "ok"
  },
  {
   "file": "triage-monitor.js",
-  "old": "111-111",
-  "new": "111-111",
+  "old": "111",
+  "new": "111",
   "status": "ok"
  },
  {
@@ -2917,14 +2917,14 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "848-848",
-  "new": "912-912",
+  "old": "848",
+  "new": "912",
   "status": "drift"
  },
  {
   "file": "triage-monitor.js",
-  "old": "873-873",
-  "new": "937-937",
+  "old": "873",
+  "new": "937",
   "status": "drift"
  },
  {
@@ -2935,26 +2935,26 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "856-856",
-  "new": "920-920",
+  "old": "856",
+  "new": "920",
   "status": "drift"
  },
  {
   "file": "triage-monitor.js",
-  "old": "970-970",
-  "new": "1034-1034",
+  "old": "970",
+  "new": "1034",
   "status": "drift"
  },
  {
   "file": "syslog-case.js",
-  "old": "172-172",
-  "new": "172-172",
+  "old": "172",
+  "new": "172",
   "status": "ok"
  },
  {
   "file": "syslog-input.js",
-  "old": "100-100",
-  "new": "100-100",
+  "old": "100",
+  "new": "100",
   "status": "ok"
  },
  {
@@ -2971,8 +2971,8 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "8-8",
-  "new": "8-8",
+  "old": "8",
+  "new": "8",
   "status": "ok"
  },
  {
@@ -2983,20 +2983,20 @@
  },
  {
   "file": "syslog-input.js",
-  "old": "61-61",
-  "new": "61-61",
+  "old": "61",
+  "new": "61",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "61-61",
-  "new": "61-61",
+  "old": "61",
+  "new": "61",
   "status": "ok"
  },
  {
   "file": "syslog-case.js",
-  "old": "81-81",
-  "new": "81-81",
+  "old": "81",
+  "new": "81",
   "status": "ok"
  },
  {
@@ -3037,8 +3037,8 @@
  },
  {
   "file": "syslog-case.js",
-  "old": "22-22",
-  "new": "22-22",
+  "old": "22",
+  "new": "22",
   "status": "ok"
  },
  {
@@ -3049,8 +3049,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "763-763",
-  "new": "827-827",
+  "old": "763",
+  "new": "827",
   "status": "drift"
  },
  {
@@ -3061,8 +3061,8 @@
  },
  {
   "file": "triage-monitor.js",
-  "old": "243-243",
-  "new": "243-243",
+  "old": "243",
+  "new": "243",
   "status": "ok"
  },
  {

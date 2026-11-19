@@ -4,80 +4,80 @@ doc:40	triage-monitor.js	1015-1025	manual	yes	grep -nF "if (this.ruleEngine) {" 
 doc:40	triage-monitor.js	1043	manual	yes	grep -nF "result.rule_evaluation = ruleDecision;" triage-monitor.js	result.rule_evaluation = ruleDecision;
 doc:41	triage-monitor.js	1053	manual	yes	grep -nF "const saved = await this.history.save(re" triage-monitor.js	const saved = await this.history.save(re
 doc:42	triage-monitor.js	976-982	manual	yes	grep -nF "observedToolbox(detailCache = new Map())" triage-monitor.js	observedToolbox(detailCache = new Map())
-doc:42	syslog-case.js	32-32	verified	yes	grep -nF "const event = await toolbox.callTool(`ge" syslog-case.js	const event = await toolbox.callTool(`ge
-doc:42	syslog-case.js	61-61	verified	yes	grep -nF "const list = await toolbox.listEvents(ty" syslog-case.js	const list = await toolbox.listEvents(ty
+doc:42	syslog-case.js	32	verified	yes	grep -nF "const event = await toolbox.callTool(`ge" syslog-case.js	const event = await toolbox.callTool(`ge
+doc:42	syslog-case.js	61	verified	yes	grep -nF "const list = await toolbox.listEvents(ty" syslog-case.js	const list = await toolbox.listEvents(ty
 doc:43	triage-monitor.js	1-5	ok	yes	grep -nF "import { randomUUID } from 'node:crypto'" triage-monitor.js	import { randomUUID } from 'node:crypto'
 doc:43	syslog-input.js	1-2	ok	yes	grep -nF "import dgram from 'node:dgram';" syslog-input.js	import dgram from 'node:dgram';
 doc:43	syslog-case.js	1-4	ok	yes	grep -nF "import { createHash, randomUUID } from '" syslog-case.js	import { createHash, randomUUID } from '
-doc:52	triage-monitor.js	562-562	manual	yes	grep -nF "// 绑定失败不能让队列静默收不到消息：记进 summary()，队列照常服务（" triage-monitor.js	// 绑定失败不能让队列静默收不到消息：记进 summary()，队列照常服务（
-doc:53	triage-monitor.js	914-914	manual	yes	grep -nF "{ test_tool_paths: [], authorized_operat" triage-monitor.js	{ test_tool_paths: [], authorized_operat
+doc:52	triage-monitor.js	562	manual	yes	grep -nF "// 绑定失败不能让队列静默收不到消息：记进 summary()，队列照常服务（" triage-monitor.js	// 绑定失败不能让队列静默收不到消息：记进 summary()，队列照常服务（
+doc:53	triage-monitor.js	914	manual	yes	grep -nF "{ test_tool_paths: [], authorized_operat" triage-monitor.js	{ test_tool_paths: [], authorized_operat
 doc:60	syslog-input.js	111	manual	yes	grep -nF "socket.on('message', data => void Promis" syslog-input.js	socket.on('message', data => void Promis
 doc:61	triage-monitor.js	317-325	ok	yes	grep -nF "async start() {" triage-monitor.js	async start() {
 doc:61	triage-monitor.js	331-336	ok	yes	grep -nF "#schedule() {" triage-monitor.js	#schedule() {
-doc:62	triage-monitor.js	254-254	ok	yes	grep -nF "}" triage-monitor.js	}
-doc:62	triage-monitor.js	182-182	ok	yes	grep -nF "this.lastReceivedAt = data.last_received" triage-monitor.js	this.lastReceivedAt = data.last_received
-doc:62	triage-monitor.js	165-165	ok	yes	grep -nF "this.pausedDropped = 0;" triage-monitor.js	this.pausedDropped = 0;
-doc:70	syslog-input.js	108-108	ok	yes	grep -nF "" syslog-input.js	
-doc:70	syslog-input.js	42-42	ok	yes	grep -nF "" syslog-input.js	
-doc:71	syslog-input.js	92-92	ok	yes	grep -nF "" syslog-input.js	
-doc:71	triage-monitor.js	260-260	ok	yes	grep -nF "if (!this.flushing && this.writtenGen >=" triage-monitor.js	if (!this.flushing && this.writtenGen >=
-doc:72	triage-monitor.js	202-202	ok	yes	grep -nF "const needsEvidence = !Array.isArray(rec" triage-monitor.js	const needsEvidence = !Array.isArray(rec
-doc:72	triage-monitor.js	349-349	ok	yes	grep -nF "if (this.flushTimer) clearTimeout(this.f" triage-monitor.js	if (this.flushTimer) clearTimeout(this.f
-doc:72	triage-monitor.js	160-160	ok	yes	grep -nF "this.retryTimers = new Map();" triage-monitor.js	this.retryTimers = new Map();
-doc:73	syslog-case.js	92-92	ok	yes	grep -nF "export async function writeSyslogCase({ " syslog-case.js	export async function writeSyslogCase({ 
-doc:73	syslog-case.js	23-23	ok	yes	grep -nF "export async function matchSyslogEvent(t" syslog-case.js	export async function matchSyslogEvent(t
-doc:74	syslog-case.js	117-117	ok	yes	grep -nF "export async function writeSyslogResult(" syslog-case.js	export async function writeSyslogResult(
-doc:74	syslog-case.js	149-149	ok	yes	grep -nF "export async function updateSyslogDelive" syslog-case.js	export async function updateSyslogDelive
+doc:62	triage-monitor.js	254	ok	yes	grep -nF "}" triage-monitor.js	}
+doc:62	triage-monitor.js	182	ok	yes	grep -nF "this.lastReceivedAt = data.last_received" triage-monitor.js	this.lastReceivedAt = data.last_received
+doc:62	triage-monitor.js	165	ok	yes	grep -nF "this.pausedDropped = 0;" triage-monitor.js	this.pausedDropped = 0;
+doc:70	syslog-input.js	108	ok	yes	grep -nF "" syslog-input.js	
+doc:70	syslog-input.js	42	ok	yes	grep -nF "" syslog-input.js	
+doc:71	syslog-input.js	92	ok	yes	grep -nF "" syslog-input.js	
+doc:71	triage-monitor.js	260	ok	yes	grep -nF "if (!this.flushing && this.writtenGen >=" triage-monitor.js	if (!this.flushing && this.writtenGen >=
+doc:72	triage-monitor.js	202	ok	yes	grep -nF "const needsEvidence = !Array.isArray(rec" triage-monitor.js	const needsEvidence = !Array.isArray(rec
+doc:72	triage-monitor.js	349	ok	yes	grep -nF "if (this.flushTimer) clearTimeout(this.f" triage-monitor.js	if (this.flushTimer) clearTimeout(this.f
+doc:72	triage-monitor.js	160	ok	yes	grep -nF "this.retryTimers = new Map();" triage-monitor.js	this.retryTimers = new Map();
+doc:73	syslog-case.js	92	ok	yes	grep -nF "export async function writeSyslogCase({ " syslog-case.js	export async function writeSyslogCase({ 
+doc:73	syslog-case.js	23	ok	yes	grep -nF "export async function matchSyslogEvent(t" syslog-case.js	export async function matchSyslogEvent(t
+doc:74	syslog-case.js	117	ok	yes	grep -nF "export async function writeSyslogResult(" syslog-case.js	export async function writeSyslogResult(
+doc:74	syslog-case.js	149	ok	yes	grep -nF "export async function updateSyslogDelive" syslog-case.js	export async function updateSyslogDelive
 doc:88	triage-monitor.js	757	manual	yes	grep -nF "this.records.set(alertId, { alert_id: al" triage-monitor.js	this.records.set(alertId, { alert_id: al
-doc:88	triage-monitor.js	884-884	manual	yes	grep -nF "this.records.set(alertId, { alert_id: al" triage-monitor.js	this.records.set(alertId, { alert_id: al
+doc:88	triage-monitor.js	884	manual	yes	grep -nF "this.records.set(alertId, { alert_id: al" triage-monitor.js	this.records.set(alertId, { alert_id: al
 doc:94	syslog-input.js	103-122	ok	yes	grep -nF "" syslog-input.js	
-doc:98	syslog-input.js	104-104	ok	yes	grep -nF "export class SyslogReceiver {" syslog-input.js	export class SyslogReceiver {
-doc:99	syslog-input.js	110-110	ok	yes	grep -nF "const socket = dgram.createSocket('udp4'" syslog-input.js	const socket = dgram.createSocket('udp4'
+doc:98	syslog-input.js	104	ok	yes	grep -nF "export class SyslogReceiver {" syslog-input.js	export class SyslogReceiver {
+doc:99	syslog-input.js	110	ok	yes	grep -nF "const socket = dgram.createSocket('udp4'" syslog-input.js	const socket = dgram.createSocket('udp4'
 doc:100	syslog-input.js	110-111	ok	yes	grep -nF "const socket = dgram.createSocket('udp4'" syslog-input.js	const socket = dgram.createSocket('udp4'
-doc:101	syslog-input.js	112-112	ok	yes	grep -nF "log('syslog.handler_failed', { error: er" syslog-input.js	log('syslog.handler_failed', { error: er
+doc:101	syslog-input.js	112	ok	yes	grep -nF "log('syslog.handler_failed', { error: er" syslog-input.js	log('syslog.handler_failed', { error: er
 doc:102	syslog-input.js	113-118	ok	yes	grep -nF "socket.on('error', error => log('syslog." syslog-input.js	socket.on('error', error => log('syslog.
 doc:103	triage-monitor.js	556-567	manual	yes	grep -nF "async attachSyslog(receiver) {" triage-monitor.js	async attachSyslog(receiver) {
-doc:104	syslog-input.js	121-121	ok	yes	grep -nF "" syslog-input.js	
+doc:104	syslog-input.js	121	ok	yes	grep -nF "" syslog-input.js	
 doc:110	syslog-input.js	42-57	ok	yes	grep -nF "" syslog-input.js	
-doc:114	syslog-input.js	56-56	ok	yes	grep -nF "if (!Object.keys(payload).length) throw " syslog-input.js	if (!Object.keys(payload).length) throw 
-doc:114	syslog-input.js	8-8	ok	yes	grep -nF "const sdStart = /\\[([A-Za-z0-9_.:-]{1,32" syslog-input.js	const sdStart = /\[([A-Za-z0-9_.:-]{1,32
-doc:115	syslog-input.js	56-56	ok	yes	grep -nF "if (!Object.keys(payload).length) throw " syslog-input.js	if (!Object.keys(payload).length) throw 
+doc:114	syslog-input.js	56	ok	yes	grep -nF "if (!Object.keys(payload).length) throw " syslog-input.js	if (!Object.keys(payload).length) throw 
+doc:114	syslog-input.js	8	ok	yes	grep -nF "const sdStart = /\\[([A-Za-z0-9_.:-]{1,32" syslog-input.js	const sdStart = /\[([A-Za-z0-9_.:-]{1,32
+doc:115	syslog-input.js	56	ok	yes	grep -nF "if (!Object.keys(payload).length) throw " syslog-input.js	if (!Object.keys(payload).length) throw 
 doc:116	syslog-input.js	48-54	ok	yes	grep -nF "let payload, payloadFormat;" syslog-input.js	let payload, payloadFormat;
 doc:119	syslog-input.js	48-54	ok	yes	grep -nF "let payload, payloadFormat;" syslog-input.js	let payload, payloadFormat;
 doc:119	syslog-input.js	52-53	ok	yes	grep -nF "if (!payload || typeof payload !== 'obje" syslog-input.js	if (!payload || typeof payload !== 'obje
 doc:146	syslog-input.js	44-45	ok	yes	grep -nF "const raw = String(line || '').trim();" syslog-input.js	const raw = String(line || '').trim();
-doc:147	syslog-input.js	55-55	ok	yes	grep -nF "} else { payload = pairs(body); payloadF" syslog-input.js	} else { payload = pairs(body); payloadF
-doc:148	syslog-input.js	50-50	ok	yes	grep -nF "else if (body.startsWith('{')) {" syslog-input.js	else if (body.startsWith('{')) {
-doc:149	syslog-input.js	5-5	ok	yes	grep -nF "// 牧云 SysLog 数据格式 2.0：RFC5424 行首，正文有结构化数" syslog-input.js	// 牧云 SysLog 数据格式 2.0：RFC5424 行首，正文有结构化数
+doc:147	syslog-input.js	55	ok	yes	grep -nF "} else { payload = pairs(body); payloadF" syslog-input.js	} else { payload = pairs(body); payloadF
+doc:148	syslog-input.js	50	ok	yes	grep -nF "else if (body.startsWith('{')) {" syslog-input.js	else if (body.startsWith('{')) {
+doc:149	syslog-input.js	5	ok	yes	grep -nF "// 牧云 SysLog 数据格式 2.0：RFC5424 行首，正文有结构化数" syslog-input.js	// 牧云 SysLog 数据格式 2.0：RFC5424 行首，正文有结构化数
 doc:174	triage-monitor.js	812-816	manual	yes	grep -nF "catch (error) {" triage-monitor.js	catch (error) {
-doc:178	syslog-input.js	59-59	ok	yes	grep -nF "" syslog-input.js	
+doc:178	syslog-input.js	59	ok	yes	grep -nF "" syslog-input.js	
 doc:178	syslog-input.js	9-16	ok	yes	grep -nF "const header = /^<(\\d+)>(\\d+)\\s+(\\S+)\\s+" syslog-input.js	const header = /^<(\d+)>(\d+)\s+(\S+)\s+
-doc:192	syslog-input.js	59-59	ok	yes	grep -nF "" syslog-input.js	
+doc:192	syslog-input.js	59	ok	yes	grep -nF "" syslog-input.js	
 doc:192	triage-monitor.js	266-267	ok	yes	grep -nF "this.writtenGen = Math.max(this.writtenG" triage-monitor.js	this.writtenGen = Math.max(this.writtenG
-doc:194	syslog-case.js	32-32	ok	yes	grep -nF "const event = await toolbox.callTool(`ge" syslog-case.js	const event = await toolbox.callTool(`ge
-doc:194	syslog-case.js	97-97	ok	yes	grep -nF "const caseDir = path.join(directory, par" syslog-case.js	const caseDir = path.join(directory, par
+doc:194	syslog-case.js	32	ok	yes	grep -nF "const event = await toolbox.callTool(`ge" syslog-case.js	const event = await toolbox.callTool(`ge
+doc:194	syslog-case.js	97	ok	yes	grep -nF "const caseDir = path.join(directory, par" syslog-case.js	const caseDir = path.join(directory, par
 doc:194	syslog-case.js	86-90	ok	yes	grep -nF "const title = {" syslog-case.js	const title = {
 doc:198	syslog-input.js	61-72	ok	yes	grep -nF "" syslog-input.js	
-doc:202	syslog-input.js	62-62	ok	yes	grep -nF "export function eventSeconds(parsed, tim" syslog-input.js	export function eventSeconds(parsed, tim
-doc:203	syslog-input.js	63-63	ok	yes	grep -nF "const value = parsed.payload?.event_crea" syslog-input.js	const value = parsed.payload?.event_crea
-doc:204	syslog-input.js	65-65	ok	yes	grep -nF "const text = String(value || '').trim();" syslog-input.js	const text = String(value || '').trim();
+doc:202	syslog-input.js	62	ok	yes	grep -nF "export function eventSeconds(parsed, tim" syslog-input.js	export function eventSeconds(parsed, tim
+doc:203	syslog-input.js	63	ok	yes	grep -nF "const value = parsed.payload?.event_crea" syslog-input.js	const value = parsed.payload?.event_crea
+doc:204	syslog-input.js	65	ok	yes	grep -nF "const text = String(value || '').trim();" syslog-input.js	const text = String(value || '').trim();
 doc:205	syslog-input.js	68-70	ok	yes	grep -nF "// 部署端显式指定牧云事件的 UTC 偏移，避免受接收服务器本地时区影响。" syslog-input.js	// 部署端显式指定牧云事件的 UTC 偏移，避免受接收服务器本地时区影响。
-doc:206	syslog-input.js	69-69	ok	yes	grep -nF "const naive = /^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\" syslog-input.js	const naive = /^\d{4}-\d\d-\d\d \d\d:\d\
-doc:207	syslog-input.js	71-71	ok	yes	grep -nF "const date = naive ? new Date(Date.parse" syslog-input.js	const date = naive ? new Date(Date.parse
+doc:206	syslog-input.js	69	ok	yes	grep -nF "const naive = /^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\" syslog-input.js	const naive = /^\d{4}-\d\d-\d\d \d\d:\d\
+doc:207	syslog-input.js	71	ok	yes	grep -nF "const date = naive ? new Date(Date.parse" syslog-input.js	const date = naive ? new Date(Date.parse
 doc:209	syslog-input.js	62	manual	yes	grep -nF "export function eventSeconds(parsed, tim" syslog-input.js	export function eventSeconds(parsed, tim
 doc:209	syslog-input.js	67-68	manual	yes	grep -nF "// 牧云的事件字段是没有时区的本地时间；RFC5424 消息头则带 UTC 时" syslog-input.js	// 牧云的事件字段是没有时区的本地时间；RFC5424 消息头则带 UTC 时
 doc:229	syslog-input.js	83-90	ok	yes	grep -nF "" syslog-input.js	
-doc:233	syslog-input.js	86-86	ok	yes	grep -nF "const env = envFields(p.env);" syslog-input.js	const env = envFields(p.env);
+doc:233	syslog-input.js	86	ok	yes	grep -nF "const env = envFields(p.env);" syslog-input.js	const env = envFields(p.env);
 doc:234	syslog-input.js	88	manual	yes	grep -nF "if (p.session_id) return `${p.host_ip ||" syslog-input.js	if (p.session_id) return `${p.host_ip ||
 doc:235	syslog-input.js	88-89	ok	yes	grep -nF "if (p.session_id) return `${p.host_ip ||" syslog-input.js	if (p.session_id) return `${p.host_ip ||
-doc:237	syslog-input.js	88-88	ok	yes	grep -nF "if (p.session_id) return `${p.host_ip ||" syslog-input.js	if (p.session_id) return `${p.host_ip ||
+doc:237	syslog-input.js	88	ok	yes	grep -nF "if (p.session_id) return `${p.host_ip ||" syslog-input.js	if (p.session_id) return `${p.host_ip ||
 doc:237	syslog-input.js	74-81	ok	yes	grep -nF "" syslog-input.js	
 doc:239	triage-monitor.js	316-319	ok	yes	grep -nF "" triage-monitor.js	
 doc:239	triage-monitor.js	323-328	ok	yes	grep -nF "this.archiveTimer.unref?.();" triage-monitor.js	this.archiveTimer.unref?.();
 doc:245	syslog-input.js	92-101	ok	yes	grep -nF "" syslog-input.js	
 doc:245	syslog-input.js	99-100	ok	yes	grep -nF ": [p.process_command_line, p.file_path, " syslog-input.js	: [p.process_command_line, p.file_path, 
 doc:245	syslog-input.js	95-98	ok	yes	grep -nF "const type = eventTypeFor(parsed.msgid);" syslog-input.js	const type = eventTypeFor(parsed.msgid);
-doc:253	syslog-input.js	100-100	ok	yes	grep -nF "return createHash('sha256').update(JSON." syslog-input.js	return createHash('sha256').update(JSON.
+doc:253	syslog-input.js	100	ok	yes	grep -nF "return createHash('sha256').update(JSON." syslog-input.js	return createHash('sha256').update(JSON.
 doc:253	syslog-input.js	99-100	ok	yes	grep -nF ": [p.process_command_line, p.file_path, " syslog-input.js	: [p.process_command_line, p.file_path, 
 doc:255	syslog-input.js	95-100	ok	yes	grep -nF "const type = eventTypeFor(parsed.msgid);" syslog-input.js	const type = eventTypeFor(parsed.msgid);
 doc:279	triage-monitor.js	124	manual	yes	grep -nF "this.dedupe = new Map();" triage-monitor.js	this.dedupe = new Map();
@@ -93,31 +93,31 @@ doc:291	triage-monitor.js	835-836	manual	yes	grep -nF "record.repeat_count = pre
 doc:292	triage-monitor.js	279-283	ok	yes	grep -nF "" triage-monitor.js	
 doc:293	triage-monitor.js	871	manual	yes	grep -nF "await updateSyslogDeliveryCount(conclude" triage-monitor.js	await updateSyslogDeliveryCount(conclude
 doc:293	syslog-case.js	149-167	ok	yes	grep -nF "export async function updateSyslogDelive" syslog-case.js	export async function updateSyslogDelive
-doc:295	triage-monitor.js	287-287	ok	yes	grep -nF "await mkdir(path.dirname(this.file), { r" triage-monitor.js	await mkdir(path.dirname(this.file), { r
-doc:297	triage-monitor.js	293-293	ok	yes	grep -nF "// A4：重复投递的计数不再每条重存一遍研判记录，攒到合并写里一次落盘（最多 " triage-monitor.js	// A4：重复投递的计数不再每条重存一遍研判记录，攒到合并写里一次落盘（最多 
+doc:295	triage-monitor.js	287	ok	yes	grep -nF "await mkdir(path.dirname(this.file), { r" triage-monitor.js	await mkdir(path.dirname(this.file), { r
+doc:297	triage-monitor.js	293	ok	yes	grep -nF "// A4：重复投递的计数不再每条重存一遍研判记录，攒到合并写里一次落盘（最多 " triage-monitor.js	// A4：重复投递的计数不再每条重存一遍研判记录，攒到合并写里一次落盘（最多 
 doc:339	triage-monitor.js	94-105	ok	yes	grep -nF "inputMode = 'poll', eventToolbox = null," triage-monitor.js	inputMode = 'poll', eventToolbox = null,
 doc:344	triage-monitor.js	92-173	manual	yes	grep -nF "constructor({ service, investigator, his" triage-monitor.js	constructor({ service, investigator, his
 doc:350	triage-monitor.js	92-170	ok	yes	grep -nF "constructor({ service, investigator, his" triage-monitor.js	constructor({ service, investigator, his
-doc:352	triage-monitor.js	231-231	ok	yes	grep -nF "markDirty() {" triage-monitor.js	markDirty() {
-doc:352	triage-monitor.js	259-259	ok	yes	grep -nF "flush() {" triage-monitor.js	flush() {
-doc:358	triage-monitor.js	246-246	ok	yes	grep -nF "get writeChain() { return this.persist()" triage-monitor.js	get writeChain() { return this.persist()
+doc:352	triage-monitor.js	231	ok	yes	grep -nF "markDirty() {" triage-monitor.js	markDirty() {
+doc:352	triage-monitor.js	259	ok	yes	grep -nF "flush() {" triage-monitor.js	flush() {
+doc:358	triage-monitor.js	246	ok	yes	grep -nF "get writeChain() { return this.persist()" triage-monitor.js	get writeChain() { return this.persist()
 doc:359	triage-monitor.js	259-274	ok	yes	grep -nF "flush() {" triage-monitor.js	flush() {
-doc:361	triage-monitor.js	280-280	ok	yes	grep -nF "async writeSnapshot() {" triage-monitor.js	async writeSnapshot() {
+doc:361	triage-monitor.js	280	ok	yes	grep -nF "async writeSnapshot() {" triage-monitor.js	async writeSnapshot() {
 doc:366	triage-monitor.js	199-219	ok	yes	grep -nF "for (const record of this.records.values" triage-monitor.js	for (const record of this.records.values
 doc:367	triage-monitor.js	220-225	ok	yes	grep -nF "catch (error) {" triage-monitor.js	catch (error) {
 doc:368	triage-monitor.js	226-228	ok	yes	grep -nF "return null;" triage-monitor.js	return null;
 doc:369	triage-monitor.js	288-290	manual	yes	grep -nF "const temporary = `${this.file}.${random" triage-monitor.js	const temporary = `${this.file}.${random
 doc:370	triage-monitor.js	930-936	drift	yes	grep -nF "const session = record.session_key;" triage-monitor.js	const session = record.session_key;
-doc:372	triage-monitor.js	115-115	ok	yes	grep -nF "// 下一轮轮询的延迟：有新增就是 intervalMs，连续空轮翻倍到 max" triage-monitor.js	// 下一轮轮询的延迟：有新增就是 intervalMs，连续空轮翻倍到 max
+doc:372	triage-monitor.js	115	ok	yes	grep -nF "// 下一轮轮询的延迟：有新增就是 intervalMs，连续空轮翻倍到 max" triage-monitor.js	// 下一轮轮询的延迟：有新增就是 intervalMs，连续空轮翻倍到 max
 doc:377	triage-monitor.js	194-198	manual	yes	grep -nF "// A1 旧队列里的失败记录也归队：attempts 到上限的判死信，其余留给" triage-monitor.js	// A1 旧队列里的失败记录也归队：attempts 到上限的判死信，其余留给
 doc:378	triage-monitor.js	201-208	manual	yes	grep -nF "const needsCounts = !Number.isInteger(re" triage-monitor.js	const needsCounts = !Number.isInteger(re
-doc:382	triage-monitor.js	708-708	drift	yes	grep -nF "if (this.inputMode === 'syslog') return " triage-monitor.js	if (this.inputMode === 'syslog') return 
-doc:382	triage-monitor.js	108-108	ok	yes	grep -nF "this.intervalMs = intervalMs;" triage-monitor.js	this.intervalMs = intervalMs;
+doc:382	triage-monitor.js	708	drift	yes	grep -nF "if (this.inputMode === 'syslog') return " triage-monitor.js	if (this.inputMode === 'syslog') return 
+doc:382	triage-monitor.js	108	ok	yes	grep -nF "this.intervalMs = intervalMs;" triage-monitor.js	this.intervalMs = intervalMs;
 doc:382	triage-monitor.js	331-336	ok	yes	grep -nF "#schedule() {" triage-monitor.js	#schedule() {
 doc:386	triage-monitor.js	343-420	ok	yes	grep -nF "this.timerActive = false;" triage-monitor.js	this.timerActive = false;
 doc:390	triage-monitor.js	709-710	manual	yes	grep -nF "if (this.polling || !this.enabled) retur" triage-monitor.js	if (this.polling || !this.enabled) retur
 doc:391	cloudwalker.js	41-43	ok	yes	grep -nF "if (!Number.isSafeInteger(id) || id <= 0" cloudwalker.js	if (!Number.isSafeInteger(id) || id <= 0
-doc:391	triage-monitor.js	353-353	ok	yes	grep -nF "}" triage-monitor.js	}
+doc:391	triage-monitor.js	353	ok	yes	grep -nF "}" triage-monitor.js	}
 doc:392	triage-monitor.js	715	manual	yes	grep -nF "const query = this.initialized && this.w" triage-monitor.js	const query = this.initialized && this.w
 doc:393	triage-monitor.js	13-14	ok	yes	grep -nF "const POLL_PAGE_SIZE = 50;" triage-monitor.js	const POLL_PAGE_SIZE = 50;
 doc:393	triage-monitor.js	377-380	ok	yes	grep -nF "record.status = 'queued'; record.stage =" triage-monitor.js	record.status = 'queued'; record.stage =
@@ -126,13 +126,13 @@ doc:395	triage-monitor.js	364-369	ok	yes	grep -nF "reason: record.failure?.reaso
 doc:396	triage-monitor.js	736	manual	yes	grep -nF "if (!row.createdAt || (this.watermark &&" triage-monitor.js	if (!row.createdAt || (this.watermark &&
 doc:397	triage-monitor.js	737	manual	yes	grep -nF "if (row.createdAt === this.watermark && " triage-monitor.js	if (row.createdAt === this.watermark && 
 doc:398	triage-monitor.js	738-739	manual	yes	grep -nF "if (!newest || row.createdAt > newest) {" triage-monitor.js	if (!newest || row.createdAt > newest) {
-doc:399	triage-monitor.js	381-381	ok	yes	grep -nF "}, delay);" triage-monitor.js	}, delay);
+doc:399	triage-monitor.js	381	ok	yes	grep -nF "}, delay);" triage-monitor.js	}, delay);
 doc:400	triage-monitor.js	747	manual	yes	grep -nF "if (!this.enabled || pollEpoch !== this." triage-monitor.js	if (!this.enabled || pollEpoch !== this.
 doc:401	triage-monitor.js	765-770	manual	yes	grep -nF "} catch (error) {" triage-monitor.js	} catch (error) {
 doc:403	triage-monitor.js	749-760	drift	yes	grep -nF "this.watermark = newest;" triage-monitor.js	this.watermark = newest;
-doc:405	triage-monitor.js	773-773	drift	yes	grep -nF "// 空轮（含失败轮）指数退避；见到新告警立刻回常态（A1）。" triage-monitor.js	// 空轮（含失败轮）指数退避；见到新告警立刻回常态（A1）。
+doc:405	triage-monitor.js	773	drift	yes	grep -nF "// 空轮（含失败轮）指数退避；见到新告警立刻回常态（A1）。" triage-monitor.js	// 空轮（含失败轮）指数退避；见到新告警立刻回常态（A1）。
 doc:405	triage-monitor.js	769-773	drift	yes	grep -nF "log('triage.poll_failed', { error: error" triage-monitor.js	log('triage.poll_failed', { error: error
-doc:405	triage-monitor.js	112-112	ok	yes	grep -nF "this.maxBackoffMs = positiveInteger(maxB" triage-monitor.js	this.maxBackoffMs = positiveInteger(maxB
+doc:405	triage-monitor.js	112	ok	yes	grep -nF "this.maxBackoffMs = positiveInteger(maxB" triage-monitor.js	this.maxBackoffMs = positiveInteger(maxB
 doc:405	triage-monitor.js	331-336	ok	yes	grep -nF "#schedule() {" triage-monitor.js	#schedule() {
 doc:456	triage-monitor.js	349-361	ok	yes	grep -nF "if (this.flushTimer) clearTimeout(this.f" triage-monitor.js	if (this.flushTimer) clearTimeout(this.f
 doc:460	triage-monitor.js	26-36	ok	yes	grep -nF "const positiveInteger = (value, fallback" triage-monitor.js	const positiveInteger = (value, fallback
@@ -143,7 +143,7 @@ doc:461	triage-monitor.js	42-48	ok	yes	grep -nF "return at > 0 ? text.slice(0, a
 doc:462	triage-monitor.js	950-953	manual	yes	grep -nF "next.status = 'running';" triage-monitor.js	next.status = 'running';
 doc:463	triage-monitor.js	628-631	drift	yes	grep -nF "if (typeof enabled !== 'boolean') { cons" triage-monitor.js	if (typeof enabled !== 'boolean') { cons
 doc:465	triage-monitor.js	363-432	ok	yes	grep -nF "log('triage.dead_letter', { alert_id: re" triage-monitor.js	log('triage.dead_letter', { alert_id: re
-doc:469	triage-monitor.js	365-365	ok	yes	grep -nF "return;" triage-monitor.js	return;
+doc:469	triage-monitor.js	365	ok	yes	grep -nF "return;" triage-monitor.js	return;
 doc:470	triage-monitor.js	370-371	ok	yes	grep -nF "// load() 之后由 start() 的 resumeRetries() " triage-monitor.js	// load() 之后由 start() 的 resumeRetries() 
 doc:470	triage-monitor.js	313-332	ok	yes	grep -nF "log('triage.delivery_count_failed', { al" triage-monitor.js	log('triage.delivery_count_failed', { al
 doc:471	triage-monitor.js	372-374	ok	yes	grep -nF "const timer = setTimeout(() => {" triage-monitor.js	const timer = setTimeout(() => {
@@ -151,10 +151,10 @@ doc:472	triage-monitor.js	376-386	ok	yes	grep -nF "if (!this.enabled || record.s
 doc:473	triage-monitor.js	387-391	ok	yes	grep -nF "const timer = this.retryTimers.get(alert" triage-monitor.js	const timer = this.retryTimers.get(alert
 doc:474	triage-monitor.js	1038-1042	manual	yes	grep -nF "const result = match?.matched === false" triage-monitor.js	const result = match?.matched === false
 doc:475	triage-monitor.js	405-411	ok	yes	grep -nF "} else this.scheduleRetry(record, due - " triage-monitor.js	} else this.scheduleRetry(record, due - 
-doc:476	triage-monitor.js	413-413	ok	yes	grep -nF "this.clearRetry(alertId);" triage-monitor.js	this.clearRetry(alertId);
+doc:476	triage-monitor.js	413	ok	yes	grep -nF "this.clearRetry(alertId);" triage-monitor.js	this.clearRetry(alertId);
 doc:477	triage-monitor.js	416-428	ok	yes	grep -nF "" triage-monitor.js	
 doc:481	triage-monitor.js	398-399	ok	yes	grep -nF "if ((record.attempts || 0) >= this.retry" triage-monitor.js	if ((record.attempts || 0) >= this.retry
-doc:481	triage-monitor.js	404-404	ok	yes	grep -nF "record.updated_at = new Date().toISOStri" triage-monitor.js	record.updated_at = new Date().toISOStri
+doc:481	triage-monitor.js	404	ok	yes	grep -nF "record.updated_at = new Date().toISOStri" triage-monitor.js	record.updated_at = new Date().toISOStri
 doc:482	triage-monitor.js	1013	manual	yes	grep -nF "if (match.matched) { targetId = match.al" triage-monitor.js	if (match.matched) { targetId = match.al
 doc:482	triage-monitor.js	1040	manual	yes	grep -nF ": await this.investigator.run(targetId, " triage-monitor.js	: await this.investigator.run(targetId, 
 doc:484	triage-monitor.js	1031-1035	manual	yes	grep -nF "const onProgress = (stage, detail) => {" triage-monitor.js	const onProgress = (stage, detail) => {
@@ -169,13 +169,13 @@ doc:502	triage-monitor.js	671-675	drift	yes	grep -nF "const existing = this.reco
 doc:503	triage-monitor.js	685-698	drift	yes	grep -nF "const now = new Date().toISOString();" triage-monitor.js	const now = new Date().toISOString();
 doc:504	triage-monitor.js	686-695	drift	yes	grep -nF "// 人工登记的误报结论（verdict / verdict_label / s" triage-monitor.js	// 人工登记的误报结论（verdict / verdict_label / s
 doc:505	triage-monitor.js	696-701	drift	yes	grep -nF "status: 'queued', stage: '等待研判', detail:" triage-monitor.js	status: 'queued', stage: '等待研判', detail:
-doc:506	triage-monitor.js	628-628	drift	yes	grep -nF "if (typeof enabled !== 'boolean') { cons" triage-monitor.js	if (typeof enabled !== 'boolean') { cons
+doc:506	triage-monitor.js	628	drift	yes	grep -nF "if (typeof enabled !== 'boolean') { cons" triage-monitor.js	if (typeof enabled !== 'boolean') { cons
 doc:507	triage-monitor.js	629	manual	yes	grep -nF "if (enabled !== this.enabled) this.pollE" triage-monitor.js	if (enabled !== this.enabled) this.pollE
 doc:507	triage-monitor.js	747	manual	yes	grep -nF "if (!this.enabled || pollEpoch !== this." triage-monitor.js	if (!this.enabled || pollEpoch !== this.
 doc:508	triage-monitor.js	630-639	manual	yes	grep -nF "if (!enabled) {" triage-monitor.js	if (!enabled) {
 doc:508	triage-monitor.js	793-808	manual	yes	grep -nF "if (!this.enabled) {" triage-monitor.js	if (!this.enabled) {
 doc:509	triage-monitor.js	640-654	drift	yes	grep -nF "if (this.enabled) { if (this.inputMode =" triage-monitor.js	if (this.enabled) { if (this.inputMode =
-doc:510	triage-monitor.js	652-652	drift	yes	grep -nF "if (this.inputMode === 'poll') await thi" triage-monitor.js	if (this.inputMode === 'poll') await thi
+doc:510	triage-monitor.js	652	drift	yes	grep -nF "if (this.inputMode === 'poll') await thi" triage-monitor.js	if (this.inputMode === 'poll') await thi
 doc:511	triage-monitor.js	500-512	drift	yes	grep -nF "async cancel(alertId) {" triage-monitor.js	async cancel(alertId) {
 doc:512	triage-monitor.js	411-417	ok	yes	grep -nF "dropRecord(alertId) {" triage-monitor.js	dropRecord(alertId) {
 doc:513	triage-monitor.js	514-522	drift	yes	grep -nF "status(alertId) {" triage-monitor.js	status(alertId) {
@@ -198,14 +198,14 @@ doc:527	triage-monitor.js	609-615	drift	yes	grep -nF "since: sinceMs == null ? n
 doc:528	triage-monitor.js	215-229	ok	yes	grep -nF "async latestInvestigation(record) {" triage-monitor.js	async latestInvestigation(record) {
 doc:528	triage-monitor.js	200-209	ok	yes	grep -nF "if (record.status !== 'done') continue;" triage-monitor.js	if (record.status !== 'done') continue;
 doc:569	triage-monitor.js	331-336	verified	yes	grep -nF "#schedule() {" triage-monitor.js	#schedule() {
-doc:569	triage-monitor.js	112-112	ok	yes	grep -nF "this.maxBackoffMs = positiveInteger(maxB" triage-monitor.js	this.maxBackoffMs = positiveInteger(maxB
+doc:569	triage-monitor.js	112	ok	yes	grep -nF "this.maxBackoffMs = positiveInteger(maxB" triage-monitor.js	this.maxBackoffMs = positiveInteger(maxB
 doc:569	triage-monitor.js	607-608	drift	yes	grep -nF "}" triage-monitor.js	}
 doc:571	triage-monitor.js	1007-1008	drift	yes	grep -nF "const detailCache = new Map();" triage-monitor.js	const detailCache = new Map();
 doc:571	triage-monitor.js	51-56	ok	yes	grep -nF "return String(left.created_at || '').loc" triage-monitor.js	return String(left.created_at || '').loc
 doc:571	triage-monitor.js	976-994	drift	yes	grep -nF "observedToolbox(detailCache = new Map())" triage-monitor.js	observedToolbox(detailCache = new Map())
-doc:575	syslog-case.js	32-32	verified	yes	grep -nF "const event = await toolbox.callTool(`ge" syslog-case.js	const event = await toolbox.callTool(`ge
+doc:575	syslog-case.js	32	verified	yes	grep -nF "const event = await toolbox.callTool(`ge" syslog-case.js	const event = await toolbox.callTool(`ge
 doc:575	triage-monitor.js	1010-1012	drift	yes	grep -nF "record.input.context = await this.contex" triage-monitor.js	record.input.context = await this.contex
-doc:576	triage-rules.js	279-279	ok	yes	grep -nF "const reused = match?.matched === true &" triage-rules.js	const reused = match?.matched === true &
+doc:576	triage-rules.js	279	ok	yes	grep -nF "const reused = match?.matched === true &" triage-rules.js	const reused = match?.matched === true &
 doc:577	investigation-agent.js	439-455	ok	yes	grep -nF "if (!['deep', 'triage'].includes(mode)) " investigation-agent.js	if (!['deep', 'triage'].includes(mode)) 
 doc:579	triage-monitor.js	1007-1008	manual	yes	grep -nF "const detailCache = new Map();" triage-monitor.js	const detailCache = new Map();
 doc:579	trace-board.js	372-382	manual	yes	grep -nF "if (this.analysis) {" trace-board.js	if (this.analysis) {
@@ -214,88 +214,88 @@ doc:581	triage-monitor.js	854-855	manual	yes	grep -nF "const concluded = previou
 doc:583	triage-monitor.js	19-23	ok	yes	grep -nF "export const typeRisk = Object.freeze({" triage-monitor.js	export const typeRisk = Object.freeze({
 doc:583	triage-monitor.js	942-958	drift	yes	grep -nF "drain() {" triage-monitor.js	drain() {
 doc:583	triage-monitor.js	38-40	ok	yes	grep -nF "function recordType(record) {" triage-monitor.js	function recordType(record) {
-doc:589	triage-monitor.js	30-30	verified	yes	grep -nF "const envConcurrency = () => positiveInt" triage-monitor.js	const envConcurrency = () => positiveInt
+doc:589	triage-monitor.js	30	verified	yes	grep -nF "const envConcurrency = () => positiveInt" triage-monitor.js	const envConcurrency = () => positiveInt
 doc:589	triage-monitor.js	108-109	verified	yes	grep -nF "this.intervalMs = intervalMs;" triage-monitor.js	this.intervalMs = intervalMs;
-doc:590	triage-monitor.js	31-31	verified	yes	grep -nF "const envQueueLimit = () => positiveInte" triage-monitor.js	const envQueueLimit = () => positiveInte
-doc:590	triage-monitor.js	111-111	verified	yes	grep -nF "this.queueLimit = positiveInteger(queueL" triage-monitor.js	this.queueLimit = positiveInteger(queueL
+doc:590	triage-monitor.js	31	verified	yes	grep -nF "const envQueueLimit = () => positiveInte" triage-monitor.js	const envQueueLimit = () => positiveInte
+doc:590	triage-monitor.js	111	verified	yes	grep -nF "this.queueLimit = positiveInteger(queueL" triage-monitor.js	this.queueLimit = positiveInteger(queueL
 doc:592	triage-monitor.js	26-36	verified	yes	grep -nF "const positiveInteger = (value, fallback" triage-monitor.js	const positiveInteger = (value, fallback
 doc:592	server.js	55-57	manual	yes	grep -nF "const triageMonitor = gateway && agent ?" server.js	const triageMonitor = gateway && agent ?
 doc:592	triage-monitor.js	615-620	verified	yes	grep -nF "retry: { base_ms: this.retryBaseMs, max_" triage-monitor.js	retry: { base_ms: this.retryBaseMs, max_
 doc:592	triage-monitor.js	758-762	drift	yes	grep -nF "detail: '牧云新增告警已进入队列', created_at: this." triage-monitor.js	detail: '牧云新增告警已进入队列', created_at: this.
 doc:592	triage-monitor.js	871-878	drift	yes	grep -nF "await updateSyslogDeliveryCount(conclude" triage-monitor.js	await updateSyslogDeliveryCount(conclude
 doc:592	triage-monitor.js	665-668	drift	yes	grep -nF "#countDropped(count, reason) {" triage-monitor.js	#countDropped(count, reason) {
-doc:598	syslog-case.js	97-97	ok	yes	grep -nF "const caseDir = path.join(directory, par" syslog-case.js	const caseDir = path.join(directory, par
-doc:602	syslog-case.js	97-97	ok	yes	grep -nF "const caseDir = path.join(directory, par" syslog-case.js	const caseDir = path.join(directory, par
-doc:603	syslog-case.js	94-94	ok	yes	grep -nF "const stamp = new Date().toISOString().r" syslog-case.js	const stamp = new Date().toISOString().r
+doc:598	syslog-case.js	97	ok	yes	grep -nF "const caseDir = path.join(directory, par" syslog-case.js	const caseDir = path.join(directory, par
+doc:602	syslog-case.js	97	ok	yes	grep -nF "const caseDir = path.join(directory, par" syslog-case.js	const caseDir = path.join(directory, par
+doc:603	syslog-case.js	94	ok	yes	grep -nF "const stamp = new Date().toISOString().r" syslog-case.js	const stamp = new Date().toISOString().r
 doc:604	syslog-case.js	95-96	ok	yes	grep -nF "const digest = createHash('sha1').update" syslog-case.js	const digest = createHash('sha1').update
-doc:605	syslog-case.js	97-97	ok	yes	grep -nF "const caseDir = path.join(directory, par" syslog-case.js	const caseDir = path.join(directory, par
-doc:607	syslog-case.js	98-98	ok	yes	grep -nF "await mkdir(caseDir, { recursive: true, " syslog-case.js	await mkdir(caseDir, { recursive: true, 
+doc:605	syslog-case.js	97	ok	yes	grep -nF "const caseDir = path.join(directory, par" syslog-case.js	const caseDir = path.join(directory, par
+doc:607	syslog-case.js	98	ok	yes	grep -nF "await mkdir(caseDir, { recursive: true, " syslog-case.js	await mkdir(caseDir, { recursive: true, 
 doc:611	syslog-case.js	101-106	ok	yes	grep -nF "const files = {" syslog-case.js	const files = {
 doc:611	syslog-case.js	108-111	ok	yes	grep -nF "if (wiki) {" syslog-case.js	if (wiki) {
-doc:615	syslog-case.js	102-102	ok	yes	grep -nF "'00-这是什么.md': `# ${title[type] || type}告" syslog-case.js	'00-这是什么.md': `# ${title[type] || type}告
-doc:616	syslog-case.js	103-103	ok	yes	grep -nF "'01-原始告警.txt': raw," syslog-case.js	'01-原始告警.txt': raw,
-doc:617	syslog-case.js	104-104	ok	yes	grep -nF "'02-告警字段.md': `# 告警字段\\n\\n消息时间：${parsed.t" syslog-case.js	'02-告警字段.md': `# 告警字段\n\n消息时间：${parsed.t
-doc:618	syslog-case.js	105-105	ok	yes	grep -nF "'03-研判事实.md': `# 研判事实\\n\\n- syslog 消息类型：$" syslog-case.js	'03-研判事实.md': `# 研判事实\n\n- syslog 消息类型：$
-doc:619	syslog-case.js	106-106	ok	yes	grep -nF "'04-上下文.md': `# 上下文\\n\\n会话：${sessionKey(p" syslog-case.js	'04-上下文.md': `# 上下文\n\n会话：${sessionKey(p
+doc:615	syslog-case.js	102	ok	yes	grep -nF "'00-这是什么.md': `# ${title[type] || type}告" syslog-case.js	'00-这是什么.md': `# ${title[type] || type}告
+doc:616	syslog-case.js	103	ok	yes	grep -nF "'01-原始告警.txt': raw," syslog-case.js	'01-原始告警.txt': raw,
+doc:617	syslog-case.js	104	ok	yes	grep -nF "'02-告警字段.md': `# 告警字段\\n\\n消息时间：${parsed.t" syslog-case.js	'02-告警字段.md': `# 告警字段\n\n消息时间：${parsed.t
+doc:618	syslog-case.js	105	ok	yes	grep -nF "'03-研判事实.md': `# 研判事实\\n\\n- syslog 消息类型：$" syslog-case.js	'03-研判事实.md': `# 研判事实\n\n- syslog 消息类型：$
+doc:619	syslog-case.js	106	ok	yes	grep -nF "'04-上下文.md': `# 上下文\\n\\n会话：${sessionKey(p" syslog-case.js	'04-上下文.md': `# 上下文\n\n会话：${sessionKey(p
 doc:620	syslog-case.js	108-111	ok	yes	grep -nF "if (wiki) {" syslog-case.js	if (wiki) {
 doc:621	syslog-case.js	179-207	ok	yes	grep -nF "export const requiredEvidenceFile = '06-" syslog-case.js	export const requiredEvidenceFile = '06-
 doc:621	investigation-agent.js	513-519	manual	yes	grep -nF "const requiredChecks = await collectRequ" investigation-agent.js	const requiredChecks = await collectRequ
 doc:623	syslog-case.js	99-100	ok	yes	grep -nF "const fields = Object.entries(parsed.pay" syslog-case.js	const fields = Object.entries(parsed.pay
 doc:623	syslog-case.js	112-113	ok	yes	grep -nF "await Promise.all(Object.entries(files)." syslog-case.js	await Promise.all(Object.entries(files).
-doc:623	syslog-case.js	114-114	ok	yes	grep -nF "return { case_dir: caseDir, files: Objec" syslog-case.js	return { case_dir: caseDir, files: Objec
+doc:623	syslog-case.js	114	ok	yes	grep -nF "return { case_dir: caseDir, files: Objec" syslog-case.js	return { case_dir: caseDir, files: Objec
 doc:626	syslog-case.js	187-207	ok	yes	grep -nF "export async function writeRequiredEvide" syslog-case.js	export async function writeRequiredEvide
-doc:626	syslog-case.js	204-204	ok	yes	grep -nF "if (!caseInfo.files.includes(requiredEvi" syslog-case.js	if (!caseInfo.files.includes(requiredEvi
+doc:626	syslog-case.js	204	ok	yes	grep -nF "if (!caseInfo.files.includes(requiredEvi" syslog-case.js	if (!caseInfo.files.includes(requiredEvi
 doc:627	investigation-agent.js	592-595	ok	yes	grep -nF "verdict.report = appendEvidenceReport(ve" investigation-agent.js	verdict.report = appendEvidenceReport(ve
-doc:628	syslog-case.js	180-180	verified	yes	grep -nF "export const requiredEvidenceMaxChars = " syslog-case.js	export const requiredEvidenceMaxChars = 
+doc:628	syslog-case.js	180	verified	yes	grep -nF "export const requiredEvidenceMaxChars = " syslog-case.js	export const requiredEvidenceMaxChars = 
 doc:629	syslog-case.js	191-197	ok	yes	grep -nF "// 量的是真正要写出去的那串（pretty JSON），不是半成品。" syslog-case.js	// 量的是真正要写出去的那串（pretty JSON），不是半成品。
 doc:630	syslog-case.js	209-212	ok	yes	grep -nF "export async function readRequiredEviden" syslog-case.js	export async function readRequiredEviden
-doc:632	syslog-case.js	172-172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
+doc:632	syslog-case.js	172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
 doc:657	syslog-case.js	95-96	verified	yes	grep -nF "const digest = createHash('sha1').update" syslog-case.js	const digest = createHash('sha1').update
 doc:661	syslog-case.js	23-84	ok	yes	grep -nF "export async function matchSyslogEvent(t" syslog-case.js	export async function matchSyslogEvent(t
 doc:663	syslog-case.js	29-56	verified	yes	grep -nF "const eventId = Number(parsed.payload.ev" syslog-case.js	const eventId = Number(parsed.payload.ev
-doc:663	syslog-case.js	30-30	verified	yes	grep -nF "if (Number.isSafeInteger(eventId) && eve" syslog-case.js	if (Number.isSafeInteger(eventId) && eve
-doc:663	syslog-case.js	32-32	verified	yes	grep -nF "const event = await toolbox.callTool(`ge" syslog-case.js	const event = await toolbox.callTool(`ge
+doc:663	syslog-case.js	30	verified	yes	grep -nF "if (Number.isSafeInteger(eventId) && eve" syslog-case.js	if (Number.isSafeInteger(eventId) && eve
+doc:663	syslog-case.js	32	verified	yes	grep -nF "const event = await toolbox.callTool(`ge" syslog-case.js	const event = await toolbox.callTool(`ge
 doc:663	syslog-case.js	37-45	verified	yes	grep -nF "const mismatch = {};" syslog-case.js	const mismatch = {};
 doc:663	syslog-case.js	46-48	verified	yes	grep -nF "if (Object.keys(mismatch).length)" syslog-case.js	if (Object.keys(mismatch).length)
 doc:663	syslog-case.js	52-55	verified	yes	grep -nF "} catch (error) {" syslog-case.js	} catch (error) {
-doc:663	syslog-case.js	51-51	verified	yes	grep -nF "candidates: 1, coverage: { returned: 1, " syslog-case.js	candidates: 1, coverage: { returned: 1, 
+doc:663	syslog-case.js	51	verified	yes	grep -nF "candidates: 1, coverage: { returned: 1, " syslog-case.js	candidates: 1, coverage: { returned: 1, 
 doc:665	syslog-case.js	57-83	verified	yes	grep -nF "if (!hostIp || wanted == null) return un" syslog-case.js	if (!hostIp || wanted == null) return un
-doc:665	syslog-case.js	61-61	verified	yes	grep -nF "const list = await toolbox.listEvents(ty" syslog-case.js	const list = await toolbox.listEvents(ty
+doc:665	syslog-case.js	61	verified	yes	grep -nF "const list = await toolbox.listEvents(ty" syslog-case.js	const list = await toolbox.listEvents(ty
 doc:665	syslog-case.js	63-70	verified	yes	grep -nF "for (const event of list.events || []) {" syslog-case.js	for (const event of list.events || []) {
 doc:665	syslog-case.js	71-74	verified	yes	grep -nF "if (!best) return unmatched({ rule: 'tim" syslog-case.js	if (!best) return unmatched({ rule: 'tim
 doc:665	syslog-case.js	75-78	verified	yes	grep -nF "const id = Number(best.id ?? best.event_" syslog-case.js	const id = Number(best.id ?? best.event_
 doc:665	syslog-case.js	82-83	verified	yes	grep -nF "} catch (error) { return unmatched({ rul" syslog-case.js	} catch (error) { return unmatched({ rul
-doc:665	syslog-case.js	81-81	verified	yes	grep -nF "coverage: { returned: list.events.length" syslog-case.js	coverage: { returned: list.events.length
+doc:665	syslog-case.js	81	verified	yes	grep -nF "coverage: { returned: list.events.length" syslog-case.js	coverage: { returned: list.events.length
 doc:667	syslog-case.js	57-59	verified	yes	grep -nF "if (!hostIp || wanted == null) return un" syslog-case.js	if (!hostIp || wanted == null) return un
 doc:667	triage-monitor.js	1038-1039	manual	yes	grep -nF "const result = match?.matched === false" triage-monitor.js	const result = match?.matched === false
 doc:671	syslog-case.js	169-174	ok	yes	grep -nF "export async function readCaseFile(caseI" syslog-case.js	export async function readCaseFile(caseI
-doc:673	syslog-case.js	170-170	ok	yes	grep -nF "if (!caseInfo?.files?.includes(name)) th" syslog-case.js	if (!caseInfo?.files?.includes(name)) th
-doc:674	syslog-case.js	172-172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
+doc:673	syslog-case.js	170	ok	yes	grep -nF "if (!caseInfo?.files?.includes(name)) th" syslog-case.js	if (!caseInfo?.files?.includes(name)) th
+doc:674	syslog-case.js	172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
 doc:680	syslog-case.js	117-147	ok	yes	grep -nF "export async function writeSyslogResult(" syslog-case.js	export async function writeSyslogResult(
 doc:682	syslog-case.js	120-139	ok	yes	grep -nF "'# 研判结果'," syslog-case.js	'# 研判结果',
-doc:683	syslog-case.js	140-140	ok	yes	grep -nF "const output = { '05-研判结果.md': `${lines." syslog-case.js	const output = { '05-研判结果.md': `${lines.
-doc:689	syslog-case.js	122-122	ok	yes	grep -nF "`结论：${verdict.verdict_label || '存疑'}`," syslog-case.js	`结论：${verdict.verdict_label || '存疑'}`,
-doc:690	syslog-case.js	123-123	ok	yes	grep -nF "`置信度：${verdict.confidence || '低'}`," syslog-case.js	`置信度：${verdict.confidence || '低'}`,
-doc:691	syslog-case.js	124-124	verified	yes	grep -nF "`事件关联：${result.syslog?.event_id_match ? " syslog-case.js	`事件关联：${result.syslog?.event_id_match ? 
-doc:692	syslog-case.js	125-125	ok	yes	grep -nF "`重复投递：${result.repeat_count || 1} 次`," syslog-case.js	`重复投递：${result.repeat_count || 1} 次`,
-doc:693	syslog-case.js	129-129	ok	yes	grep -nF "verdict.report || verdict.analysis || ve" syslog-case.js	verdict.report || verdict.analysis || ve
-doc:694	syslog-case.js	133-133	ok	yes	grep -nF "`可核验事实：${(verdict.claims || []).length} " syslog-case.js	`可核验事实：${(verdict.claims || []).length} 
-doc:695	syslog-case.js	133-133	verified	yes	grep -nF "`可核验事实：${(verdict.claims || []).length} " syslog-case.js	`可核验事实：${(verdict.claims || []).length} 
-doc:696	syslog-case.js	134-134	ok	yes	grep -nF "`数据缺口：${(verdict.missing_evidence || [])" syslog-case.js	`数据缺口：${(verdict.missing_evidence || [])
-doc:697	syslog-case.js	135-135	ok	yes	grep -nF "`建议行动：${(verdict.next_actions || []).joi" syslog-case.js	`建议行动：${(verdict.next_actions || []).joi
-doc:699	syslog-case.js	137-137	verified	yes	grep -nF "'结构化证据、引用与独立复核见同目录 result.json。'," syslog-case.js	'结构化证据、引用与独立复核见同目录 result.json。',
+doc:683	syslog-case.js	140	ok	yes	grep -nF "const output = { '05-研判结果.md': `${lines." syslog-case.js	const output = { '05-研判结果.md': `${lines.
+doc:689	syslog-case.js	122	ok	yes	grep -nF "`结论：${verdict.verdict_label || '存疑'}`," syslog-case.js	`结论：${verdict.verdict_label || '存疑'}`,
+doc:690	syslog-case.js	123	ok	yes	grep -nF "`置信度：${verdict.confidence || '低'}`," syslog-case.js	`置信度：${verdict.confidence || '低'}`,
+doc:691	syslog-case.js	124	verified	yes	grep -nF "`事件关联：${result.syslog?.event_id_match ? " syslog-case.js	`事件关联：${result.syslog?.event_id_match ? 
+doc:692	syslog-case.js	125	ok	yes	grep -nF "`重复投递：${result.repeat_count || 1} 次`," syslog-case.js	`重复投递：${result.repeat_count || 1} 次`,
+doc:693	syslog-case.js	129	ok	yes	grep -nF "verdict.report || verdict.analysis || ve" syslog-case.js	verdict.report || verdict.analysis || ve
+doc:694	syslog-case.js	133	ok	yes	grep -nF "`可核验事实：${(verdict.claims || []).length} " syslog-case.js	`可核验事实：${(verdict.claims || []).length} 
+doc:695	syslog-case.js	133	verified	yes	grep -nF "`可核验事实：${(verdict.claims || []).length} " syslog-case.js	`可核验事实：${(verdict.claims || []).length} 
+doc:696	syslog-case.js	134	ok	yes	grep -nF "`数据缺口：${(verdict.missing_evidence || [])" syslog-case.js	`数据缺口：${(verdict.missing_evidence || [])
+doc:697	syslog-case.js	135	ok	yes	grep -nF "`建议行动：${(verdict.next_actions || []).joi" syslog-case.js	`建议行动：${(verdict.next_actions || []).joi
+doc:699	syslog-case.js	137	verified	yes	grep -nF "'结构化证据、引用与独立复核见同目录 result.json。'," syslog-case.js	'结构化证据、引用与独立复核见同目录 result.json。',
 doc:699	syslog-case.js	141-146	verified	yes	grep -nF "for (const [name, body] of Object.entrie" syslog-case.js	for (const [name, body] of Object.entrie
 doc:703	triage-monitor.js	1045-1050	manual	yes	grep -nF "if (record.input) {" triage-monitor.js	if (record.input) {
 doc:703	triage-monitor.js	1051	manual	yes	grep -nF "await writeSyslogResult(caseInfo, result" triage-monitor.js	await writeSyslogResult(caseInfo, result
 doc:703	triage-monitor.js	1053	manual	yes	grep -nF "const saved = await this.history.save(re" triage-monitor.js	const saved = await this.history.save(re
 doc:705	triage-monitor.js	387-391	ok	yes	grep -nF "const timer = this.retryTimers.get(alert" triage-monitor.js	const timer = this.retryTimers.get(alert
-doc:705	triage-monitor.js	398-398	ok	yes	grep -nF "if ((record.attempts || 0) >= this.retry" triage-monitor.js	if ((record.attempts || 0) >= this.retry
+doc:705	triage-monitor.js	398	ok	yes	grep -nF "if ((record.attempts || 0) >= this.retry" triage-monitor.js	if ((record.attempts || 0) >= this.retry
 doc:709	syslog-case.js	149-167	ok	yes	grep -nF "export async function updateSyslogDelive" syslog-case.js	export async function updateSyslogDelive
-doc:713	syslog-case.js	155-155	ok	yes	grep -nF "result.repeat_count = count;" syslog-case.js	result.repeat_count = count;
-doc:714	syslog-case.js	156-156	ok	yes	grep -nF "if (result.syslog) result.syslog.repeat_" syslog-case.js	if (result.syslog) result.syslog.repeat_
-doc:715	syslog-case.js	161-161	ok	yes	grep -nF "[markdownFile, markdown.replace(/^重复投递：." syslog-case.js	[markdownFile, markdown.replace(/^重复投递：.
-doc:717	syslog-case.js	150-150	ok	yes	grep -nF "if (!caseDir) return;" syslog-case.js	if (!caseDir) return;
-doc:717	syslog-case.js	154-154	ok	yes	grep -nF "catch (error) { if (error.code === 'ENOE" syslog-case.js	catch (error) { if (error.code === 'ENOE
+doc:713	syslog-case.js	155	ok	yes	grep -nF "result.repeat_count = count;" syslog-case.js	result.repeat_count = count;
+doc:714	syslog-case.js	156	ok	yes	grep -nF "if (result.syslog) result.syslog.repeat_" syslog-case.js	if (result.syslog) result.syslog.repeat_
+doc:715	syslog-case.js	161	ok	yes	grep -nF "[markdownFile, markdown.replace(/^重复投递：." syslog-case.js	[markdownFile, markdown.replace(/^重复投递：.
+doc:717	syslog-case.js	150	ok	yes	grep -nF "if (!caseDir) return;" syslog-case.js	if (!caseDir) return;
+doc:717	syslog-case.js	154	ok	yes	grep -nF "catch (error) { if (error.code === 'ENOE" syslog-case.js	catch (error) { if (error.code === 'ENOE
 doc:717	syslog-case.js	163-165	ok	yes	grep -nF "const temporary = `${filename}.${randomU" syslog-case.js	const temporary = `${filename}.${randomU
 doc:719	triage-monitor.js	840-843	manual	yes	grep -nF "if (record.status === 'done' && record.r" triage-monitor.js	if (record.status === 'done' && record.r
 doc:760	triage-monitor.js	279-283	ok	yes	grep -nF "" triage-monitor.js	
@@ -305,13 +305,13 @@ doc:766	triage-monitor.js	83-88	manual	yes	grep -nF "function evidenceSummary(re
 doc:770	triage-monitor.js	16-32	ok	yes	grep -nF "// A4：告警类型风险档位。数值越大越先研判；表外/未知类型按 0 排最后。" triage-monitor.js	// A4：告警类型风险档位。数值越大越先研判；表外/未知类型按 0 排最后。
 doc:774	triage-monitor.js	63	manual	yes	grep -nF "const humanFalsePositive = record => rec" triage-monitor.js	const humanFalsePositive = record => rec
 doc:774	triage-monitor.js	1059-1065	manual	yes	grep -nF "if (!humanFalsePositive(record)) {" triage-monitor.js	if (!humanFalsePositive(record)) {
-doc:775	triage-monitor.js	13-13	ok	yes	grep -nF "const POLL_PAGE_SIZE = 50;" triage-monitor.js	const POLL_PAGE_SIZE = 50;
+doc:775	triage-monitor.js	13	ok	yes	grep -nF "const POLL_PAGE_SIZE = 50;" triage-monitor.js	const POLL_PAGE_SIZE = 50;
 doc:775	triage-monitor.js	529-537	drift	yes	grep -nF "if (from != null || to != null) records " triage-monitor.js	if (from != null || to != null) records 
 doc:801	triage-monitor.js	175-210	ok	yes	grep -nF "async load() {" triage-monitor.js	async load() {
 doc:802	triage-monitor.js	231-238	ok	yes	grep -nF "markDirty() {" triage-monitor.js	markDirty() {
 doc:803	triage-monitor.js	240-242	ok	yes	grep -nF "persist() {" triage-monitor.js	persist() {
 doc:804	triage-monitor.js	259-274	ok	yes	grep -nF "flush() {" triage-monitor.js	flush() {
-doc:805	triage-monitor.js	246-246	ok	yes	grep -nF "get writeChain() { return this.persist()" triage-monitor.js	get writeChain() { return this.persist()
+doc:805	triage-monitor.js	246	ok	yes	grep -nF "get writeChain() { return this.persist()" triage-monitor.js	get writeChain() { return this.persist()
 doc:806	triage-monitor.js	317-325	ok	yes	grep -nF "async start() {" triage-monitor.js	async start() {
 doc:806	triage-monitor.js	331-336	ok	yes	grep -nF "#schedule() {" triage-monitor.js	#schedule() {
 doc:807	triage-monitor.js	342-349	ok	yes	grep -nF "stop() {" triage-monitor.js	stop() {
@@ -331,7 +331,7 @@ doc:819	triage-monitor.js	780-789	manual	yes	grep -nF "acceptSyslog(line) {" tri
 doc:820	triage-monitor.js	942-958	drift	yes	grep -nF "drain() {" triage-monitor.js	drain() {
 doc:821	triage-monitor.js	996-1092	drift	yes	grep -nF "async run(record) {" triage-monitor.js	async run(record) {
 doc:823	triage-monitor.js	4-5	ok	yes	grep -nF "import { eventSeconds, eventTypeFor, fin" triage-monitor.js	import { eventSeconds, eventTypeFor, fin
-doc:823	syslog-case.js	4-4	ok	yes	grep -nF "import { eventSeconds, eventTypeFor, ses" syslog-case.js	import { eventSeconds, eventTypeFor, ses
+doc:823	syslog-case.js	4	ok	yes	grep -nF "import { eventSeconds, eventTypeFor, ses" syslog-case.js	import { eventSeconds, eventTypeFor, ses
 doc:823	syslog-input.js	1-2	ok	yes	grep -nF "import dgram from 'node:dgram';" syslog-input.js	import dgram from 'node:dgram';
 doc:827	triage-monitor.js	524-554	manual	yes	grep -nF "cases({ count = 20, offset = 0, verdicts" triage-monitor.js	cases({ count = 20, offset = 0, verdicts
 doc:827	triage-monitor.js	533	manual	yes	grep -nF "records.reverse();" triage-monitor.js	records.reverse();
@@ -379,34 +379,34 @@ doc:890	triage-monitor.js	282	manual	yes	grep -nF "watermark_ids: [...this.water
 doc:891	syslog-input.js	63-71	ok	yes	grep -nF "const value = parsed.payload?.event_crea" syslog-input.js	const value = parsed.payload?.event_crea
 doc:892	syslog-input.js	62	manual	yes	grep -nF "export function eventSeconds(parsed, tim" syslog-input.js	export function eventSeconds(parsed, tim
 doc:892	syslog-input.js	70	manual	yes	grep -nF "const offset = Number.isFinite(timeOffse" syslog-input.js	const offset = Number.isFinite(timeOffse
-doc:893	syslog-case.js	50-50	ok	yes	grep -nF "gap_seconds: wanted == null || apiSecond" syslog-case.js	gap_seconds: wanted == null || apiSecond
-doc:893	syslog-case.js	80-80	ok	yes	grep -nF "gap_seconds: Math.floor(gap), candidates" syslog-case.js	gap_seconds: Math.floor(gap), candidates
-doc:894	syslog-case.js	51-51	verified	yes	grep -nF "candidates: 1, coverage: { returned: 1, " syslog-case.js	candidates: 1, coverage: { returned: 1, 
-doc:894	syslog-case.js	81-81	verified	yes	grep -nF "coverage: { returned: list.events.length" syslog-case.js	coverage: { returned: list.events.length
+doc:893	syslog-case.js	50	ok	yes	grep -nF "gap_seconds: wanted == null || apiSecond" syslog-case.js	gap_seconds: wanted == null || apiSecond
+doc:893	syslog-case.js	80	ok	yes	grep -nF "gap_seconds: Math.floor(gap), candidates" syslog-case.js	gap_seconds: Math.floor(gap), candidates
+doc:894	syslog-case.js	51	verified	yes	grep -nF "candidates: 1, coverage: { returned: 1, " syslog-case.js	candidates: 1, coverage: { returned: 1, 
+doc:894	syslog-case.js	81	verified	yes	grep -nF "coverage: { returned: list.events.length" syslog-case.js	coverage: { returned: list.events.length
 doc:895	triage-monitor.js	937	manual	yes	grep -nF "this.windows.set(session, window.slice(-" triage-monitor.js	this.windows.set(session, window.slice(-
 doc:895	triage-monitor.js	911	manual	yes	grep -nF "const window = (this.windows.get(session" triage-monitor.js	const window = (this.windows.get(session
 doc:896	triage-monitor.js	922	manual	yes	grep -nF "return { session_key: session, window, w" triage-monitor.js	return { session_key: session, window, w
 doc:897	triage-monitor.js	916-920	manual	yes	grep -nF "const history = [...this.records.values(" triage-monitor.js	const history = [...this.records.values(
-doc:898	syslog-case.js	172-172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
-doc:899	triage-monitor.js	30-30	ok	yes	grep -nF "const envConcurrency = () => positiveInt" triage-monitor.js	const envConcurrency = () => positiveInt
-doc:899	triage-monitor.js	35-35	ok	yes	grep -nF "const concurrencyLimit = value => (value" triage-monitor.js	const concurrencyLimit = value => (value
+doc:898	syslog-case.js	172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
+doc:899	triage-monitor.js	30	ok	yes	grep -nF "const envConcurrency = () => positiveInt" triage-monitor.js	const envConcurrency = () => positiveInt
+doc:899	triage-monitor.js	35	ok	yes	grep -nF "const concurrencyLimit = value => (value" triage-monitor.js	const concurrencyLimit = value => (value
 doc:900	triage-monitor.js	92	manual	yes	grep -nF "constructor({ service, investigator, his" triage-monitor.js	constructor({ service, investigator, his
 doc:901	server.js	1046-1049	manual	yes	grep -nF "const count = Number(url.searchParams.ge" server.js	const count = Number(url.searchParams.ge
 doc:902	server.js	1047-1049	manual	yes	grep -nF "const offset = Number(url.searchParams.g" server.js	const offset = Number(url.searchParams.g
-doc:903	triage-monitor.js	8-8	ok	yes	grep -nF "" triage-monitor.js	
-doc:903	triage-monitor.js	140-140	ok	yes	grep -nF "// A1（T037）：轮询改成 setTimeout 链后，靠这个开关停链；T" triage-monitor.js	// A1（T037）：轮询改成 setTimeout 链后，靠这个开关停链；T
+doc:903	triage-monitor.js	8	ok	yes	grep -nF "" triage-monitor.js	
+doc:903	triage-monitor.js	140	ok	yes	grep -nF "// A1（T037）：轮询改成 setTimeout 链后，靠这个开关停链；T" triage-monitor.js	// A1（T037）：轮询改成 setTimeout 链后，靠这个开关停链；T
 doc:904	server.js	541-553	manual	yes	grep -nF "const from = params.get('from')?.trim();" server.js	const from = params.get('from')?.trim();
 doc:904	triage-monitor.js	529-532	manual	yes	grep -nF "if (from != null || to != null) records " triage-monitor.js	if (from != null || to != null) records 
-doc:905	triage-monitor.js	214-214	ok	yes	grep -nF "// 不是一回事。回补依次试 result_alert_id → matched" triage-monitor.js	// 不是一回事。回补依次试 result_alert_id → matched
-doc:906	triage-monitor.js	213-213	ok	yes	grep -nF "// A7：队列键（syslog 记录是 syslog:<类型>:<指纹>:<秒" triage-monitor.js	// A7：队列键（syslog 记录是 syslog:<类型>:<指纹>:<秒
-doc:907	triage-monitor.js	395-395	ok	yes	grep -nF "if (!this.enabled) return;" triage-monitor.js	if (!this.enabled) return;
+doc:905	triage-monitor.js	214	ok	yes	grep -nF "// 不是一回事。回补依次试 result_alert_id → matched" triage-monitor.js	// 不是一回事。回补依次试 result_alert_id → matched
+doc:906	triage-monitor.js	213	ok	yes	grep -nF "// A7：队列键（syslog 记录是 syslog:<类型>:<指纹>:<秒" triage-monitor.js	// A7：队列键（syslog 记录是 syslog:<类型>:<指纹>:<秒
+doc:907	triage-monitor.js	395	ok	yes	grep -nF "if (!this.enabled) return;" triage-monitor.js	if (!this.enabled) return;
 doc:908	syslog-case.js	101-106	ok	yes	grep -nF "const files = {" syslog-case.js	const files = {
 doc:908	syslog-case.js	80-83	ok	yes	grep -nF "gap_seconds: Math.floor(gap), candidates" syslog-case.js	gap_seconds: Math.floor(gap), candidates
-doc:909	syslog-input.js	100-100	ok	yes	grep -nF "return createHash('sha256').update(JSON." syslog-input.js	return createHash('sha256').update(JSON.
-doc:910	syslog-case.js	96-96	ok	yes	grep -nF ".digest('hex').slice(0, 8);" syslog-case.js	.digest('hex').slice(0, 8);
-doc:911	triage-monitor.js	271-271	ok	yes	grep -nF "// 写盘失败只记日志、不打断服务（与改前一致）；等的人不能永远挂着。" triage-monitor.js	// 写盘失败只记日志、不打断服务（与改前一致）；等的人不能永远挂着。
-doc:912	triage-monitor.js	289-289	ok	yes	grep -nF "await writeFile(temporary, snapshot, { e" triage-monitor.js	await writeFile(temporary, snapshot, { e
-doc:913	syslog-case.js	69-69	ok	yes	grep -nF "if (current <= 300 && current < gap) { b" syslog-case.js	if (current <= 300 && current < gap) { b
+doc:909	syslog-input.js	100	ok	yes	grep -nF "return createHash('sha256').update(JSON." syslog-input.js	return createHash('sha256').update(JSON.
+doc:910	syslog-case.js	96	ok	yes	grep -nF ".digest('hex').slice(0, 8);" syslog-case.js	.digest('hex').slice(0, 8);
+doc:911	triage-monitor.js	271	ok	yes	grep -nF "// 写盘失败只记日志、不打断服务（与改前一致）；等的人不能永远挂着。" triage-monitor.js	// 写盘失败只记日志、不打断服务（与改前一致）；等的人不能永远挂着。
+doc:912	triage-monitor.js	289	ok	yes	grep -nF "await writeFile(temporary, snapshot, { e" triage-monitor.js	await writeFile(temporary, snapshot, { e
+doc:913	syslog-case.js	69	ok	yes	grep -nF "if (current <= 300 && current < gap) { b" syslog-case.js	if (current <= 300 && current < gap) { b
 doc:921	triage-monitor.js	271-287	ok	yes	grep -nF "// 写盘失败只记日志、不打断服务（与改前一致）；等的人不能永远挂着。" triage-monitor.js	// 写盘失败只记日志、不打断服务（与改前一致）；等的人不能永远挂着。
 doc:922	triage-monitor.js	191	manual	yes	grep -nF "record.status === 'running' ? { ...recor" triage-monitor.js	record.status === 'running' ? { ...recor
 doc:922	triage-monitor.js	377	manual	yes	grep -nF "record.status = 'queued'; record.stage =" triage-monitor.js	record.status = 'queued'; record.stage =
@@ -414,21 +414,21 @@ doc:922	triage-monitor.js	403	manual	yes	grep -nF "record.status = 'queued'; rec
 doc:922	triage-monitor.js	1056	manual	yes	grep -nF "record.status = 'done'; record.stage = '" triage-monitor.js	record.status = 'done'; record.stage = '
 doc:922	triage-monitor.js	1078	manual	yes	grep -nF "record.status = 'failed'; record.stage =" triage-monitor.js	record.status = 'failed'; record.stage =
 doc:923	triage-monitor.js	387-391	ok	yes	grep -nF "const timer = this.retryTimers.get(alert" triage-monitor.js	const timer = this.retryTimers.get(alert
-doc:923	triage-monitor.js	398-398	ok	yes	grep -nF "if ((record.attempts || 0) >= this.retry" triage-monitor.js	if ((record.attempts || 0) >= this.retry
+doc:923	triage-monitor.js	398	ok	yes	grep -nF "if ((record.attempts || 0) >= this.retry" triage-monitor.js	if ((record.attempts || 0) >= this.retry
 doc:924	triage-monitor.js	100-102	ok	yes	grep -nF "// A5 done 记录 TTL：过期归档出内存 Map，扫描周期 archi" triage-monitor.js	// A5 done 记录 TTL：过期归档出内存 Map，扫描周期 archi
 doc:924	syslog-case.js	141-146	ok	yes	grep -nF "for (const [name, body] of Object.entrie" syslog-case.js	for (const [name, body] of Object.entrie
 doc:924	syslog-case.js	163-165	ok	yes	grep -nF "const temporary = `${filename}.${randomU" syslog-case.js	const temporary = `${filename}.${randomU
 doc:925	triage-monitor.js	793-809	drift	yes	grep -nF "if (!this.enabled) {" triage-monitor.js	if (!this.enabled) {
 doc:925	triage-monitor.js	640-654	drift	yes	grep -nF "if (this.enabled) { if (this.inputMode =" triage-monitor.js	if (this.enabled) { if (this.inputMode =
 doc:926	triage-monitor.js	640-654	drift	yes	grep -nF "if (this.enabled) { if (this.inputMode =" triage-monitor.js	if (this.enabled) { if (this.inputMode =
-doc:927	triage-monitor.js	726-726	drift	yes	grep -nF "if (response.partial) throw new Error('部" triage-monitor.js	if (response.partial) throw new Error('部
-doc:927	triage-monitor.js	761-761	drift	yes	grep -nF "}" triage-monitor.js	}
+doc:927	triage-monitor.js	726	drift	yes	grep -nF "if (response.partial) throw new Error('部" triage-monitor.js	if (response.partial) throw new Error('部
+doc:927	triage-monitor.js	761	drift	yes	grep -nF "}" triage-monitor.js	}
 doc:928	triage-monitor.js	1038-1041	drift	yes	grep -nF "const result = match?.matched === false" triage-monitor.js	const result = match?.matched === false
-doc:928	triage-monitor.js	1044-1044	drift	yes	grep -nF "if (match?.matched === false) result.ale" triage-monitor.js	if (match?.matched === false) result.ale
+doc:928	triage-monitor.js	1044	drift	yes	grep -nF "if (match?.matched === false) result.ale" triage-monitor.js	if (match?.matched === false) result.ale
 doc:929	triage-monitor.js	707-774	drift	yes	grep -nF "async poll() {" triage-monitor.js	async poll() {
 doc:930	triage-monitor.js	1006-1012	manual	yes	grep -nF "// 一次研判一份详情缓存：同一条事件详情不会拉第二次，跨告警不共享。" triage-monitor.js	// 一次研判一份详情缓存：同一条事件详情不会拉第二次，跨告警不共享。
 doc:930	triage-monitor.js	1038-1042	manual	yes	grep -nF "const result = match?.matched === false" triage-monitor.js	const result = match?.matched === false
-doc:930	triage-rules.js	279-279	verified	yes	grep -nF "const reused = match?.matched === true &" triage-rules.js	const reused = match?.matched === true &
+doc:930	triage-rules.js	279	verified	yes	grep -nF "const reused = match?.matched === true &" triage-rules.js	const reused = match?.matched === true &
 doc:930	investigation-agent.js	458-462	manual	yes	grep -nF "// A2（P003-T037）：syslog 匹配已经取回了这条事件的详情（s" investigation-agent.js	// A2（P003-T037）：syslog 匹配已经取回了这条事件的详情（s
 doc:931	triage-monitor.js	357-380	ok	yes	grep -nF "scheduleRetry(record, delayMs = null) {" triage-monitor.js	scheduleRetry(record, delayMs = null) {
 doc:932	triage-monitor.js	231-274	verified	yes	grep -nF "markDirty() {" triage-monitor.js	markDirty() {
@@ -442,17 +442,17 @@ doc:935	triage-monitor.js	679-683	manual	yes	grep -nF "if (this.#queueFull()) {"
 doc:935	triage-monitor.js	876-879	manual	yes	grep -nF "if (this.#queueFull()) {" triage-monitor.js	if (this.#queueFull()) {
 doc:943	syslog-case.js	27-83	ok	yes	grep -nF "if (!type) return unmatched({ rule: 'msg" syslog-case.js	if (!type) return unmatched({ rule: 'msg
 doc:944	triage-monitor.js	529-554	drift	yes	grep -nF "if (from != null || to != null) records " triage-monitor.js	if (from != null || to != null) records 
-doc:945	triage-monitor.js	130-130	ok	yes	grep -nF "this.initialized = false;" triage-monitor.js	this.initialized = false;
+doc:945	triage-monitor.js	130	ok	yes	grep -nF "this.initialized = false;" triage-monitor.js	this.initialized = false;
 doc:946	triage-monitor.js	1038-1042	manual	yes	grep -nF "const result = match?.matched === false" triage-monitor.js	const result = match?.matched === false
-doc:947	syslog-input.js	61-61	ok	yes	grep -nF "" syslog-input.js	
-doc:947	syslog-input.js	69-69	ok	yes	grep -nF "const naive = /^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\" syslog-input.js	const naive = /^\d{4}-\d\d-\d\d \d\d:\d\
+doc:947	syslog-input.js	61	ok	yes	grep -nF "" syslog-input.js	
+doc:947	syslog-input.js	69	ok	yes	grep -nF "const naive = /^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\" syslog-input.js	const naive = /^\d{4}-\d\d-\d\d \d\d:\d\
 doc:948	triage-monitor.js	1078-1082	drift	yes	grep -nF "record.status = 'failed'; record.stage =" triage-monitor.js	record.status = 'failed'; record.stage =
 doc:954	triage-monitor.js	812-816	manual	yes	grep -nF "catch (error) {" triage-monitor.js	catch (error) {
-doc:955	syslog-input.js	55-55	ok	yes	grep -nF "} else { payload = pairs(body); payloadF" syslog-input.js	} else { payload = pairs(body); payloadF
-doc:956	syslog-input.js	50-50	ok	yes	grep -nF "else if (body.startsWith('{')) {" syslog-input.js	else if (body.startsWith('{')) {
+doc:955	syslog-input.js	55	ok	yes	grep -nF "} else { payload = pairs(body); payloadF" syslog-input.js	} else { payload = pairs(body); payloadF
+doc:956	syslog-input.js	50	ok	yes	grep -nF "else if (body.startsWith('{')) {" syslog-input.js	else if (body.startsWith('{')) {
 doc:957	triage-monitor.js	820-822	manual	yes	grep -nF "this.syslogStats.rejected += 1;" triage-monitor.js	this.syslogStats.rejected += 1;
-doc:958	triage-monitor.js	210-210	ok	yes	grep -nF "} catch (error) { if (error.code !== 'EN" triage-monitor.js	} catch (error) { if (error.code !== 'EN
-doc:959	triage-monitor.js	177-177	ok	yes	grep -nF "const data = JSON.parse(await readFile(t" triage-monitor.js	const data = JSON.parse(await readFile(t
+doc:958	triage-monitor.js	210	ok	yes	grep -nF "} catch (error) { if (error.code !== 'EN" triage-monitor.js	} catch (error) { if (error.code !== 'EN
+doc:959	triage-monitor.js	177	ok	yes	grep -nF "const data = JSON.parse(await readFile(t" triage-monitor.js	const data = JSON.parse(await readFile(t
 doc:960	triage-monitor.js	726	manual	yes	grep -nF "if (response.partial) throw new Error('部" triage-monitor.js	if (response.partial) throw new Error('部
 doc:960	triage-monitor.js	768	manual	yes	grep -nF "this.lastError = error.message;" triage-monitor.js	this.lastError = error.message;
 doc:961	triage-monitor.js	745	manual	yes	grep -nF "if (page === MAX_POLL_PAGES - 1) throw n" triage-monitor.js	if (page === MAX_POLL_PAGES - 1) throw n
@@ -467,48 +467,48 @@ doc:968	triage-monitor.js	1031-1037	drift	yes	grep -nF "const onProgress = (stag
 doc:968	triage-monitor.js	954-956	drift	yes	grep -nF "void this.run(next).catch(error => {" triage-monitor.js	void this.run(next).catch(error => {
 doc:969	triage-monitor.js	1027	manual	yes	grep -nF "caseInfo = await writeSyslogCase({ direc" triage-monitor.js	caseInfo = await writeSyslogCase({ direc
 doc:969	triage-monitor.js	1077-1082	manual	yes	grep -nF "} catch (error) {" triage-monitor.js	} catch (error) {
-doc:970	syslog-case.js	154-154	ok	yes	grep -nF "catch (error) { if (error.code === 'ENOE" syslog-case.js	catch (error) { if (error.code === 'ENOE
-doc:971	syslog-case.js	172-172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
-doc:972	syslog-case.js	170-170	ok	yes	grep -nF "if (!caseInfo?.files?.includes(name)) th" syslog-case.js	if (!caseInfo?.files?.includes(name)) th
-doc:978	triage-monitor.js	30-30	verified	yes	grep -nF "const envConcurrency = () => positiveInt" triage-monitor.js	const envConcurrency = () => positiveInt
-doc:978	triage-monitor.js	35-35	verified	yes	grep -nF "const concurrencyLimit = value => (value" triage-monitor.js	const concurrencyLimit = value => (value
+doc:970	syslog-case.js	154	ok	yes	grep -nF "catch (error) { if (error.code === 'ENOE" syslog-case.js	catch (error) { if (error.code === 'ENOE
+doc:971	syslog-case.js	172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
+doc:972	syslog-case.js	170	ok	yes	grep -nF "if (!caseInfo?.files?.includes(name)) th" syslog-case.js	if (!caseInfo?.files?.includes(name)) th
+doc:978	triage-monitor.js	30	verified	yes	grep -nF "const envConcurrency = () => positiveInt" triage-monitor.js	const envConcurrency = () => positiveInt
+doc:978	triage-monitor.js	35	verified	yes	grep -nF "const concurrencyLimit = value => (value" triage-monitor.js	const concurrencyLimit = value => (value
 doc:978	triage-monitor.js	108-109	verified	yes	grep -nF "this.intervalMs = intervalMs;" triage-monitor.js	this.intervalMs = intervalMs;
-doc:979	triage-monitor.js	13-13	ok	yes	grep -nF "const POLL_PAGE_SIZE = 50;" triage-monitor.js	const POLL_PAGE_SIZE = 50;
-doc:980	triage-monitor.js	14-14	ok	yes	grep -nF "const MAX_POLL_PAGES = 20;" triage-monitor.js	const MAX_POLL_PAGES = 20;
-doc:981	triage-monitor.js	112-112	verified	yes	grep -nF "this.maxBackoffMs = positiveInteger(maxB" triage-monitor.js	this.maxBackoffMs = positiveInteger(maxB
+doc:979	triage-monitor.js	13	ok	yes	grep -nF "const POLL_PAGE_SIZE = 50;" triage-monitor.js	const POLL_PAGE_SIZE = 50;
+doc:980	triage-monitor.js	14	ok	yes	grep -nF "const MAX_POLL_PAGES = 20;" triage-monitor.js	const MAX_POLL_PAGES = 20;
+doc:981	triage-monitor.js	112	verified	yes	grep -nF "this.maxBackoffMs = positiveInteger(maxB" triage-monitor.js	this.maxBackoffMs = positiveInteger(maxB
 doc:981	triage-monitor.js	775-776	manual	yes	grep -nF "this.backoffMs = this.emptyPolls === 0 ?" triage-monitor.js	this.backoffMs = this.emptyPolls === 0 ?
-doc:982	triage-monitor.js	31-31	ok	yes	grep -nF "const envQueueLimit = () => positiveInte" triage-monitor.js	const envQueueLimit = () => positiveInte
-doc:982	triage-monitor.js	111-111	ok	yes	grep -nF "this.queueLimit = positiveInteger(queueL" triage-monitor.js	this.queueLimit = positiveInteger(queueL
+doc:982	triage-monitor.js	31	ok	yes	grep -nF "const envQueueLimit = () => positiveInte" triage-monitor.js	const envQueueLimit = () => positiveInte
+doc:982	triage-monitor.js	111	ok	yes	grep -nF "this.queueLimit = positiveInteger(queueL" triage-monitor.js	this.queueLimit = positiveInteger(queueL
 doc:982	triage-monitor.js	658-663	drift	yes	grep -nF "#queueFull() {" triage-monitor.js	#queueFull() {
 doc:983	triage-monitor.js	419-434	ok	yes	grep -nF "async archiveDone({ now = Date.now() } =" triage-monitor.js	async archiveDone({ now = Date.now() } =
 doc:983	triage-monitor.js	411-417	ok	yes	grep -nF "dropRecord(alertId) {" triage-monitor.js	dropRecord(alertId) {
 doc:984	triage-monitor.js	793-808	manual	yes	grep -nF "if (!this.enabled) {" triage-monitor.js	if (!this.enabled) {
 doc:985	triage-monitor.js	411-417	verified	yes	grep -nF "dropRecord(alertId) {" triage-monitor.js	dropRecord(alertId) {
 doc:985	triage-monitor.js	419-434	manual	yes	grep -nF "async archiveDone({ now = Date.now() } =" triage-monitor.js	async archiveDone({ now = Date.now() } =
-doc:986	triage-monitor.js	912-912	drift	yes	grep -nF "item.at == null || Math.abs(seconds - it" triage-monitor.js	item.at == null || Math.abs(seconds - it
-doc:986	triage-monitor.js	937-937	drift	yes	grep -nF "this.windows.set(session, window.slice(-" triage-monitor.js	this.windows.set(session, window.slice(-
+doc:986	triage-monitor.js	912	drift	yes	grep -nF "item.at == null || Math.abs(seconds - it" triage-monitor.js	item.at == null || Math.abs(seconds - it
+doc:986	triage-monitor.js	937	drift	yes	grep -nF "this.windows.set(session, window.slice(-" triage-monitor.js	this.windows.set(session, window.slice(-
 doc:987	triage-monitor.js	938-940	drift	yes	grep -nF "if (seconds != null) for (const [key, ev" triage-monitor.js	if (seconds != null) for (const [key, ev
-doc:988	triage-monitor.js	920-920	drift	yes	grep -nF ".slice(-50).map(item => ({ at: item.upda" triage-monitor.js	.slice(-50).map(item => ({ at: item.upda
-doc:989	triage-monitor.js	1034-1034	drift	yes	grep -nF "if (record.steps.length > 80) record.ste" triage-monitor.js	if (record.steps.length > 80) record.ste
-doc:990	syslog-case.js	172-172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
-doc:991	syslog-input.js	100-100	ok	yes	grep -nF "return createHash('sha256').update(JSON." syslog-input.js	return createHash('sha256').update(JSON.
+doc:988	triage-monitor.js	920	drift	yes	grep -nF ".slice(-50).map(item => ({ at: item.upda" triage-monitor.js	.slice(-50).map(item => ({ at: item.upda
+doc:989	triage-monitor.js	1034	drift	yes	grep -nF "if (record.steps.length > 80) record.ste" triage-monitor.js	if (record.steps.length > 80) record.ste
+doc:990	syslog-case.js	172	ok	yes	grep -nF "if (content.length > 25000) return { nam" syslog-case.js	if (content.length > 25000) return { nam
+doc:991	syslog-input.js	100	ok	yes	grep -nF "return createHash('sha256').update(JSON." syslog-input.js	return createHash('sha256').update(JSON.
 doc:992	triage-monitor.js	231-274	verified	yes	grep -nF "markDirty() {" triage-monitor.js	markDirty() {
 doc:992	triage-monitor.js	1087-1090	manual	yes	grep -nF "// 队列里还有活（排队中的、等重试的）就让合并写窗口带走（峰值 ≤1 次/秒）" triage-monitor.js	// 队列里还有活（排队中的、等重试的）就让合并写窗口带走（峰值 ≤1 次/秒）
-doc:1002	syslog-input.js	8-8	ok	yes	grep -nF "const sdStart = /\\[([A-Za-z0-9_.:-]{1,32" syslog-input.js	const sdStart = /\[([A-Za-z0-9_.:-]{1,32
+doc:1002	syslog-input.js	8	ok	yes	grep -nF "const sdStart = /\\[([A-Za-z0-9_.:-]{1,32" syslog-input.js	const sdStart = /\[([A-Za-z0-9_.:-]{1,32
 doc:1003	syslog-input.js	66-67	ok	yes	grep -nF "if (/^\\d{10,13}$/.test(text)) return Num" syslog-input.js	if (/^\d{10,13}$/.test(text)) return Num
-doc:1004	syslog-input.js	61-61	ok	yes	grep -nF "" syslog-input.js	
-doc:1008	syslog-case.js	61-61	ok	yes	grep -nF "const list = await toolbox.listEvents(ty" syslog-case.js	const list = await toolbox.listEvents(ty
-doc:1008	syslog-case.js	81-81	ok	yes	grep -nF "coverage: { returned: list.events.length" syslog-case.js	coverage: { returned: list.events.length
+doc:1004	syslog-input.js	61	ok	yes	grep -nF "" syslog-input.js	
+doc:1008	syslog-case.js	61	ok	yes	grep -nF "const list = await toolbox.listEvents(ty" syslog-case.js	const list = await toolbox.listEvents(ty
+doc:1008	syslog-case.js	81	ok	yes	grep -nF "coverage: { returned: list.events.length" syslog-case.js	coverage: { returned: list.events.length
 doc:1009	triage-monitor.js	911-913	drift	yes	grep -nF "const window = (this.windows.get(session" triage-monitor.js	const window = (this.windows.get(session
 doc:1010	triage-monitor.js	1026-1030	drift	yes	grep -nF "if (record.input) {" triage-monitor.js	if (record.input) {
 doc:1011	triage-monitor.js	793-809	drift	yes	grep -nF "if (!this.enabled) {" triage-monitor.js	if (!this.enabled) {
 doc:1017	syslog-input.js	24-27	ok	yes	grep -nF "let remainder = text;" syslog-input.js	let remainder = text;
 doc:1017	syslog-input.js	22-23	ok	yes	grep -nF "// 牧云键值对载荷混用带引号的文本和不带引号的数字字段，例如 event_id" syslog-input.js	// 牧云键值对载荷混用带引号的文本和不带引号的数字字段，例如 event_id
 doc:1018	syslog-input.js	66-67	ok	yes	grep -nF "if (/^\\d{10,13}$/.test(text)) return Num" syslog-input.js	if (/^\d{10,13}$/.test(text)) return Num
-doc:1019	syslog-case.js	22-22	ok	yes	grep -nF "// 优先按 syslog event_id 精确读取；旧载荷没有 ID 时沿用" syslog-case.js	// 优先按 syslog event_id 精确读取；旧载荷没有 ID 时沿用
+doc:1019	syslog-case.js	22	ok	yes	grep -nF "// 优先按 syslog event_id 精确读取；旧载荷没有 ID 时沿用" syslog-case.js	// 优先按 syslog event_id 精确读取；旧载荷没有 ID 时沿用
 doc:1020	syslog-input.js	95-98	ok	yes	grep -nF "const type = eventTypeFor(parsed.msgid);" syslog-input.js	const type = eventTypeFor(parsed.msgid);
-doc:1020	triage-monitor.js	827-827	drift	yes	grep -nF "const sameSecond = seconds != null && pr" triage-monitor.js	const sameSecond = seconds != null && pr
+doc:1020	triage-monitor.js	827	drift	yes	grep -nF "const sameSecond = seconds != null && pr" triage-monitor.js	const sameSecond = seconds != null && pr
 doc:1021	triage-monitor.js	640-654	drift	yes	grep -nF "if (this.enabled) { if (this.inputMode =" triage-monitor.js	if (this.enabled) { if (this.inputMode =
-doc:1026	triage-monitor.js	243-243	ok	yes	grep -nF "}" triage-monitor.js	}
+doc:1026	triage-monitor.js	243	ok	yes	grep -nF "}" triage-monitor.js	}
 doc:1027	syslog-case.js	94-97	ok	yes	grep -nF "const stamp = new Date().toISOString().r" syslog-case.js	const stamp = new Date().toISOString().r
 doc:1036	syslog-input.js	61-72	ok	yes	grep -nF "" syslog-input.js	

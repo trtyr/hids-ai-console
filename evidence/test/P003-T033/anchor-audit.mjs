@@ -11,6 +11,9 @@
 //      核目标代码块。表里的 manual / verified 是人工逐条读过的，符号层对它们只作提示；
 //      自动平移的（drift）没人读过，符号层对它们是硬门。
 //
+// 附：--tsv=<路径> 写逐条对照件（513 条，含 grep 取证）；--drift-tsv=<路径> 写漂移清单
+//（表里 old≠new 的条目，第一列是它在表里的序号）。
+//
 // 退出码：0 全部对得上；1 有对不上的。
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -243,7 +246,8 @@ if (buildMap) {
     const key = `doc:${a.docLine}#${a.ordinal}`;
     if (entry.file !== a.file) { bad.push({ key, why: `文件名不一致：文档 ${a.file}，表 ${entry.file}` }); return; }
     if (norm(`${a.start}-${a.end}`) !== norm(entry.new)) { bad.push({ key, why: `行号不一致：文档 ${a.start}-${a.end}，表 ${entry.new}` }); return; }
-    const [s, e] = entry.new.split('-').map(Number);
+    const [s, e0] = entry.new.split('-').map(Number);
+    const e = Number.isFinite(e0) ? e0 : s; // 单行锚点（`708`）与退化区间写法（`708-708`）等价
     const body = headLines[a.file];
     if (!body || e > body.length) { bad.push({ key, why: `行号越界：${a.file}:${entry.new}（文件 ${body ? body.length : 0} 行）` }); return; }
     const tokens = tokensNear(docLines[a.docLine - 1], a.col);
@@ -270,6 +274,16 @@ if (buildMap) {
     });
     writeFileSync(tsvPath, `${rows.join('\n')}\n`);
     console.log(`逐条对照写到 ${tsvPath}（${rows.length - 1} 条）。`);
+  }
+  const driftTsvPath = argOf('drift-tsv');
+  if (driftTsvPath) {
+    const rows = ['#\tfile\told(文档原行号)\tnew(当前真实行号)\tstatus'];
+    map.forEach((entry, index) => {
+      if (norm(entry.old) === norm(entry.new)) return;
+      rows.push([index, entry.file, entry.old, entry.new, entry.status].join('\t'));
+    });
+    writeFileSync(driftTsvPath, `${rows.join('\n')}\n`);
+    console.log(`漂移清单写到 ${driftTsvPath}（${rows.length - 1} 条）。`);
   }
   const tally = map.reduce((acc, r) => ((acc[r.status] = (acc[r.status] || 0) + 1), acc), {});
   console.log(`锚点 ${anchors.length} 条，表 ${map.length} 条（${Object.entries(tally).map(([k, v]) => `${k}=${v}`).join(' ')}）；对不上 ${bad.length} 条，符号层提示 ${soft.length} 条。`);
