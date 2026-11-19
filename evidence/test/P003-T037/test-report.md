@@ -2,12 +2,38 @@
 
 - 任务卡：P003-T037（验收 A1–A12）
 - 测试席：gc-backend-tester（何东阳），只写集成/探针，不改产品代码
-- 工作树：`/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T037`（HEAD `4061f12`，分支 `task/hids-ai-console-P003-T037`）
+- 工作树：`/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T037`（复验 HEAD `5fdbbd2`；首轮报告基于 `4061f12`，分支 `task/hids-ai-console-P003-T037`）
 - 判据来源：`docs/modules/triage-pipeline.md`、`docs/modules/event-gateway.md`、`docs/modules/investigation-agent.md`、`docs/modules/knowledge-base.md`、`docs/modules/triage-rules.md`、`docs/modules/http-api.md`、`docs/architecture.md`、`openapi.yaml`
 - 复跑入口：`bash evidence/test/P003-T037/tester-run-all.sh`（每支单独 `timeout`，进程自回收）；`timeout 300 npm test` 单独跑
 - 运行根全部在 `/tmp`（探针自己 `mkdtemp` 并清理；真进程 e2e 复制一棵临时树，运行态目录不落工作树）
 
-## 一、结论
+## 〇、复验结论（第二轮，HEAD `5fdbbd2`）
+
+**通过。** 首轮打回的三条逐条闭合，全部由本席终端亲手跑出：
+
+| 打回项 | 复验结果 | 本席亲跑证据（exit 码） |
+| --- | --- | --- |
+| F1 / A5：真进程 `HIDS_TRIAGE_CONCURRENCY` 不生效 | **已修实**。回显面：env=1/3/5 → `summary().concurrency`=1/3/5，`0`/`abc` → 2，`syslog` 模式 env=3 → 3，同行 `queue_limit=7` 同步生效（6 行矩阵）。行为面：env=1 连发 3 条 → `counts={running:1,queued:2}`；env=3/5 → `{running:3,queued:0}`——并发数真的限制了同时在跑条数 | `cmd:node evidence/test/P003-T037/probe-concurrency.mjs` → 6/6 EXIT 0；`cmd:node evidence/test/P003-T037/tester-http-concurrency.mjs` → 3/3 EXIT 0（连跑 3 次一致） |
+| F2 / dispatch-doc-1：openapi 没声明 429 | **已补**。`openapi.yaml:516` 该路由 `responses` 有 `'429': TooManyRequests`；`:2198-2201` 描述扩成两来源（登录失败 / 研判队列满，正文文案逐字）。行为面对账：实测 429 正文 `{"error":"研判队列已满（上限 1），稍后再试","code":"caller_error"}`，与 `Error` schema 的 `required:[error,code]` + `code` enum 一致；`http-api.md:103` 同口径 | `cmd:python3 -c "import yaml; ..."` → 该 operation 响应键 `['202','400','404','429']`；`cmd:node evidence/test/P003-T037/tester-http-e2e.mjs` → 429 状态码 + 文案 + `code` 三断言绿、`dropped=1`（92/92 EXIT 0） |
+| F3 / dispatch-doc-2：§5.2 冷启动空轮口径 | **已补且与实码一致**。`triage-pipeline.md:384` 写明冷启动轮计入空轮、重启后首轮真实轮询间隔 `2×intervalMs`。类级对账：冷启动页里有数据仍 `[backoffMs, emptyPolls]=[2000,1]`；真进程对账：刚起来 `empty_polls=1`、`backoff_ms=60000`（interval=30000） | `cmd:node evidence/test/P003-T037/tester-queue.mjs` → 116/116（新增断言行）；`cmd:node evidence/test/P003-T037/tester-http-e2e.mjs` → §5.2 三条断言绿 |
+
+A12 负载探针：`cmd:timeout 300 bash evidence/test/P003-T037/probe-load.sh` → EXIT 0，`✔ 工作树未被写入（before=after=f9bb2046…）`。
+
+**复跑入口**：`bash evidence/test/P003-T037/tester-run-all.sh` → EXIT 0（queue 116 + gateway 23 + stores 18 + agent 16 + http-e2e 92 + http-concurrency 3 + 写者探针 6 + 负载探针）。`timeout 600 npm test` → tests 216 / pass 216 / fail 0，EXIT 0。
+
+### 复验中本席改动（只动自家测试文件，产品代码零改动）
+
+1. `tester-http-e2e.mjs` 的 429 用例原本有竞态（三看判 **A 类：测试自身错**）。首轮能过是运气：假牧云秒回，上游身份校验在第一条记录进入 `running` 后约 10ms 就判 `triage.failed`（server 日志 `MCP 服务不是牧云`），记录立刻退出配额；`POST#2` 落在「配额为空」的毫秒窗口里就变成 `202`。复验时实测 **4 次红 1 次**（`tester-run-all.sh` 第一次跑就红：`队列满时 POST 第二条 -> 429 actual=202`）。改法：429 段加 `holdRpc` 挂住上游响应，让第一条稳定占住在跑名额，并在 `POST#2` 前先断言 `counts.running=1`（把前置条件写进断言，竞态变成硬判据）。改后连跑 3 次全绿。
+2. `tester-http-concurrency.mjs` 重写：除 env 回显外，加「连发 3 条 → running/queued 分布」的行为面，并用同一套 `holdRpc` 消除窗口；顺带修掉旧版进程不退出（跑完会被外层 timeout 124 掐掉）的问题。
+3. `tester-queue.mjs` 把冷启动那句 `info()` 升成 `eq()` 断言（文档已写死口径，就不该只打印）；`tester-run-all.sh` 头注的「已知红」过期，改成实况，并把写者探针、负载探针并入复跑入口。
+
+### 遗留 nit（不阻塞）
+
+`docs/modules/record-store.md:147`、`docs/architecture.md:449` 仍把 `this.concurrency = positiveInteger(concurrency, envConcurrency())` 锚到 `triage-monitor.js:76`，实际在 `:83`（本席结构查询 `grep -n "this.concurrency = \|envConcurrency" triage-monitor.js` 确认 `:83`）。审查席已并入「文档锚点重校准」未决卡，本席不另开。
+
+## 一、结论（首轮，HEAD `4061f12`，已被上节复验取代）
+
+> 首轮判「不通过」：1 条 major（F1 真进程 concurrency 不生效）+ 2 条 doc-side minor（F2 openapi 缺 429、F3 冷启动空轮口径）。整改提交 `5fdbbd2` 后三条全部闭合，最终判定见上节「〇、复验结论：通过」。以下为当轮原文，保留作对账。
 
 **不通过（1 条 major + 2 条 doc-side minor）。**
 

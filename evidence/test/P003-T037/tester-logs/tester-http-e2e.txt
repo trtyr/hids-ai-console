@@ -20,7 +20,7 @@
   ✔ P003-T037 键 last_error 在
   ✔ P003-T037 键 interval_ms 在
   ✔ input_mode=poll
-  ✖ concurrency 读 HIDS_TRIAGE_CONCURRENCY=3（文档：architecture.md:449 / triage-pipeline.md:542） actual=2 expected=3
+  ✔ concurrency 读 HIDS_TRIAGE_CONCURRENCY=3（文档：architecture.md:449 / triage-pipeline.md:542）
   ✔ queue_limit 读 HIDS_TRIAGE_QUEUE_MAX=1
   ✔ dropped 初始 0
   ✔ empty_polls 是非负整数
@@ -36,6 +36,10 @@
   ✔ verdict_counts 四键恒在
   ✔ type_counts 是对象
   ✔ poll 模式没有 syslog 键
+== §5.2 冷启动空轮口径（真进程重启后首轮间隔 2×interval）==
+  ✔ 冷启动轮计入空轮 empty_polls=1（docs/modules/triage-pipeline.md:384）
+  ✔ 重启后首轮真实轮询间隔 = 2×intervalMs（同上）
+  ✔ interval_ms=30000 -> backoff_ms=60000
 == since 参数：合法归一、空值不筛、解析不了 400 ==
   ✔ since=RFC3339 -> 200
   ✔ since 归一成 RFC3339
@@ -60,8 +64,11 @@
   ✔ 第一条 202
   ✔ 202 正文是 TriageCase
   ✔ 第一条进入 running（模型慢）
+  ✔ POST#2 前「在跑」= 1（配额 1 已满）
   ✔ 队列满时 POST 第二条 -> 429
   ✔ 429 正文带 {error, code}
+  ✔ 429 code=caller_error（openapi Error enum）
+  ✔ 429 文案（triage-pipeline.md:472 / openapi.yaml:2198 口径）
    · 429 body {"error":"研判队列已满（上限 1），稍后再试","code":"caller_error"}
   ✔ summary().dropped 记 1
 == A8 /api/status 探活缓存（HIDS_STATUS_TTL_MS=400）==
@@ -97,5 +104,4 @@
   ✔ 未配牧云：configured=false
   ✔ 未配牧云：connected=false
 
-== 汇总：pass 85 / fail 1 ==
-FAIL: concurrency 读 HIDS_TRIAGE_CONCURRENCY=3（文档：architecture.md:449 / triage-pipeline.md:542） | actual=2 expected=3
+== 汇总：pass 92 / fail 0 ==

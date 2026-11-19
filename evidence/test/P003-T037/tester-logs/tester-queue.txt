@@ -22,32 +22,32 @@
   ✔ env 生效
   ✔ 显式参数优先于 env
 == A5 行为面：concurrency=0 不得把队列卡死 ==
-{"time":"2026-11-19T15:42:54.265Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:1","source":"manual"}
-{"time":"2026-11-19T15:42:54.268Z","level":"info","event":"triage.done","alert_id":"honeypot:1","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:13:24.467Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:1","source":"manual"}
+{"time":"2026-11-19T16:13:24.470Z","level":"info","event":"triage.done","alert_id":"honeypot:1","verdict":"uncertain","attempts":1,"duration_ms":1}
   ✔ concurrency=0：入队后跑成 done（未卡死）
   ✔ concurrency=0 回落 2 后 summary 可读
   ✔ concurrency=0：研判执行 1 次
 == A5 队列上限：手动 enqueue 429 + dropped 计数 ==
-{"time":"2026-11-19T15:42:54.277Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:1","source":"manual"}
+{"time":"2026-11-19T16:13:24.479Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:1","source":"manual"}
   ✔ 第一条进入 running
-{"time":"2026-11-19T15:42:54.278Z","level":"warn","event":"triage.dropped","reason":"manual","count":1,"dropped":1,"queue_limit":1}
+{"time":"2026-11-19T16:13:24.480Z","level":"warn","event":"triage.dropped","reason":"manual","count":1,"dropped":1,"queue_limit":1}
   ✔ 队列满时 enqueue 抛错
   ✔ 错误状态 429
   ✔ 429 文案与文档一致
   ✔ summary().dropped 记 1
-{"time":"2026-11-19T15:42:54.278Z","level":"warn","event":"triage.dropped","reason":"manual","count":1,"dropped":2,"queue_limit":1}
+{"time":"2026-11-19T16:13:24.480Z","level":"warn","event":"triage.dropped","reason":"manual","count":1,"dropped":2,"queue_limit":1}
   ✔ dropped 只增
   ✔ 第二次越限同样 429
 == A5 行为面：并发上限真的限住同时 running 数 ==
-{"time":"2026-11-19T15:42:54.278Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:1","source":"manual"}
-{"time":"2026-11-19T15:42:54.278Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"manual"}
-{"time":"2026-11-19T15:42:54.279Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:3","source":"manual"}
-{"time":"2026-11-19T15:42:54.279Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:4","source":"manual"}
+{"time":"2026-11-19T16:13:24.480Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:1","source":"manual"}
+{"time":"2026-11-19T16:13:24.480Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"manual"}
+{"time":"2026-11-19T16:13:24.481Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:3","source":"manual"}
+{"time":"2026-11-19T16:13:24.481Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:4","source":"manual"}
   ✔ concurrency=2：同时 running 恰 2 条
   ✔ 其余 2 条排队
 == A5 轮询批量入队：只丢弃不抛，计入 dropped ==
-{"time":"2026-11-19T15:42:54.280Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:15","source":"poll"}
-{"time":"2026-11-19T15:42:54.280Z","level":"warn","event":"triage.dropped","reason":"poll","count":4,"dropped":4,"queue_limit":1}
+{"time":"2026-11-19T16:13:24.483Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:15","source":"poll"}
+{"time":"2026-11-19T16:13:24.483Z","level":"warn","event":"triage.dropped","reason":"poll","count":4,"dropped":4,"queue_limit":1}
   ✔ 轮询批量入队越限不抛错
   ✔ 5 条新告警、上限 1 -> 丢 4
   ✔ 队列里只留 1 条记录
@@ -84,47 +84,47 @@
   ✔ 冷启动把游标钉在最新时间
   ✔ 首轮不入队
    · cold {"found":0,"empty":true,"failed":false}
-{"time":"2026-11-19T15:42:54.281Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"poll"}
+{"time":"2026-11-19T16:13:24.484Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"poll"}
   ✔ 第二轮带 from=watermark
   ✔ 第二轮找到 1 条新告警
   ✔ 游标推进到新时间
   ✔ 没有为找边界而翻页（2 轮共 2 次查询）
 == A1 平台忽略 from：同秒行按 watermark_ids 去重 ==
-{"time":"2026-11-19T15:42:54.282Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":null,"attempts":1,"duration_ms":1}
   ✔ 首轮钉游标、不入队
+{"time":"2026-11-19T16:13:24.484Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":null,"attempts":1,"duration_ms":0}
   ✔ 同秒重复在第二轮不再算新增
   ✔ 同秒重复不再入队
   ✔ watermark_ids 记下同一秒的 ID
 == A1 partial 失败：游标不推进 ==
-{"time":"2026-11-19T15:42:54.282Z","level":"warn","event":"triage.poll_failed","error":"部分牧云事件类型读取失败，暂缓推进自动研判游标"}
+{"time":"2026-11-19T16:13:24.485Z","level":"warn","event":"triage.poll_failed","error":"部分牧云事件类型读取失败，暂缓推进自动研判游标"}
   ✔ partial 错误文案
   ✔ partial 时游标不动
 == A1 20 页上限 ==
-{"time":"2026-11-19T15:42:54.283Z","level":"warn","event":"triage.poll_failed","error":"新增告警超过本轮扫描上限，请检查自动研判积压"}
+{"time":"2026-11-19T16:13:24.486Z","level":"warn","event":"triage.poll_failed","error":"新增告警超过本轮扫描上限，请检查自动研判积压"}
   ✔ 20 页取满报错文案
 == A1 指数退避与回常态 ==
-   · 冷启动后 [2000,1]
-{"time":"2026-11-19T15:42:54.284Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"poll"}
+  ✔ 冷启动轮计入空轮：backoff=2×interval、empty_polls=1（docs/modules/triage-pipeline.md:384）
+{"time":"2026-11-19T16:13:24.486Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"poll"}
   ✔ 见到新告警：backoff=interval、empty=0
-{"time":"2026-11-19T15:42:54.284Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":null,"attempts":1,"duration_ms":0}
+{"time":"2026-11-19T16:13:24.486Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":null,"attempts":1,"duration_ms":0}
   ✔ 空轮 1 -> 2000
   ✔ 空轮 2 -> min(4000,3000)=3000
   ✔ 空轮 3 -> 保持上限 3000
   ✔ summary().backoff_ms 同步
   ✔ summary().empty_polls 同步
-{"time":"2026-11-19T15:42:54.285Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:9","source":"poll"}
+{"time":"2026-11-19T16:13:24.487Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:9","source":"poll"}
   ✔ 见到新告警立刻回常态
   ✔ summary().backoff_ms 回到 interval
 == A1 stop() 之后不得复活 ==
-{"time":"2026-11-19T15:42:54.285Z","level":"info","event":"triage.done","alert_id":"honeypot:9","verdict":null,"attempts":1,"duration_ms":0}
+{"time":"2026-11-19T16:13:24.488Z","level":"info","event":"triage.done","alert_id":"honeypot:9","verdict":null,"attempts":1,"duration_ms":1}
   ✔ start() 后至少轮询 2 轮
   ✔ stop() 后 150ms 内不再轮询
 == A3 结论复用：同指纹不同秒 + 上一条已完结 ==
-{"time":"2026-11-19T15:42:54.480Z","level":"info","event":"syslog.received","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909600:f5b66f02-237b-409d-9c90-889372c97237","msgid":"cloudwalker-webshell","event_type":"webshell","occurrence":1}
-{"time":"2026-11-19T15:42:54.482Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"webshell","msgid":"cloudwalker-webshell","host_ip":"10.0.0.5","reason":"牧云事件查询失败：Cannot read properties of null (reading 'listEvents')"}
-{"time":"2026-11-19T15:42:54.484Z","level":"info","event":"triage.done","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909600:f5b66f02-237b-409d-9c90-889372c97237","verdict":"uncertain","attempts":1,"duration_ms":4}
+{"time":"2026-11-19T16:13:24.682Z","level":"info","event":"syslog.received","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909600:dae4f7cb-f316-4099-a4eb-47950c1abc91","msgid":"cloudwalker-webshell","event_type":"webshell","occurrence":1}
+{"time":"2026-11-19T16:13:24.683Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"webshell","msgid":"cloudwalker-webshell","host_ip":"10.0.0.5","reason":"牧云事件查询失败：Cannot read properties of null (reading 'listEvents')"}
+{"time":"2026-11-19T16:13:24.686Z","level":"info","event":"triage.done","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909600:dae4f7cb-f316-4099-a4eb-47950c1abc91","verdict":"uncertain","attempts":1,"duration_ms":4}
   ✔ 第一条跑成 done
-{"time":"2026-11-19T15:42:54.492Z","level":"info","event":"syslog.reused_conclusion","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909600:f5b66f02-237b-409d-9c90-889372c97237","repeat_count":2,"occurrence":2}
+{"time":"2026-11-19T16:13:24.694Z","level":"info","event":"syslog.reused_conclusion","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909600:dae4f7cb-f316-4099-a4eb-47950c1abc91","repeat_count":2,"occurrence":2}
   ✔ 第二条命中结论复用
   ✔ 复用不新建记录
   ✔ repeat_count 累加到 2
@@ -133,9 +133,9 @@
   ✔ 记录上的 repeat_count 同步
   ✔ 结论原样保留
 == A3 上一条未完结：不复用 ==
-{"time":"2026-11-19T15:42:54.493Z","level":"info","event":"syslog.received","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909600:8f62e321-f0b7-4208-a64a-e14cd90ab0e4","msgid":"cloudwalker-webshell","event_type":"webshell","occurrence":1}
-{"time":"2026-11-19T15:42:54.493Z","level":"info","event":"syslog.received","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909720:06547d27-84b8-40c6-a6b0-589fff4a8e19","msgid":"cloudwalker-webshell","event_type":"webshell","occurrence":2}
-{"time":"2026-11-19T15:42:54.494Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"webshell","msgid":"cloudwalker-webshell","host_ip":"10.0.0.5","reason":"牧云事件查询失败：Cannot read properties of null (reading 'listEvents')"}
+{"time":"2026-11-19T16:13:24.695Z","level":"info","event":"syslog.received","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909600:781b3355-0695-4f9f-8a65-ead1d5612682","msgid":"cloudwalker-webshell","event_type":"webshell","occurrence":1}
+{"time":"2026-11-19T16:13:24.695Z","level":"info","event":"syslog.received","alert_id":"syslog:webshell:1a6bcb1dceac0b7a:1794909720:e7575c5f-c495-44cf-bbff-830c72bf6ea5","msgid":"cloudwalker-webshell","event_type":"webshell","occurrence":2}
+{"time":"2026-11-19T16:13:24.695Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"webshell","msgid":"cloudwalker-webshell","host_ip":"10.0.0.5","reason":"牧云事件查询失败：Cannot read properties of null (reading 'listEvents')"}
   ✔ 上一条未完结不复用
   ✔ 未完结时新建记录
   ✔ records 两条
@@ -156,12 +156,12 @@
   ✔ 同风险同次数按 created_at asc
   ✔ 表外类型按风险 0 排在最低档之后
 == A4 执行顺序：排队中被高优先级插队 ==
-{"time":"2026-11-19T15:42:54.503Z","level":"info","event":"triage.enqueued","alert_id":"network_audit:1","source":"manual"}
-{"time":"2026-11-19T15:42:54.503Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"manual"}
-{"time":"2026-11-19T15:42:54.504Z","level":"info","event":"triage.enqueued","alert_id":"memory_webshell:3","source":"manual"}
-{"time":"2026-11-19T15:42:54.504Z","level":"info","event":"triage.done","alert_id":"network_audit:1","verdict":null,"attempts":1,"duration_ms":1}
-{"time":"2026-11-19T15:42:54.505Z","level":"info","event":"triage.done","alert_id":"memory_webshell:3","verdict":null,"attempts":1,"duration_ms":1}
-{"time":"2026-11-19T15:42:54.505Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":null,"attempts":1,"duration_ms":0}
+{"time":"2026-11-19T16:13:24.703Z","level":"info","event":"triage.enqueued","alert_id":"network_audit:1","source":"manual"}
+{"time":"2026-11-19T16:13:24.703Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"manual"}
+{"time":"2026-11-19T16:13:24.704Z","level":"info","event":"triage.enqueued","alert_id":"memory_webshell:3","source":"manual"}
+{"time":"2026-11-19T16:13:24.704Z","level":"info","event":"triage.done","alert_id":"network_audit:1","verdict":null,"attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:13:24.704Z","level":"info","event":"triage.done","alert_id":"memory_webshell:3","verdict":null,"attempts":1,"duration_ms":0}
+{"time":"2026-11-19T16:13:24.705Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":null,"attempts":1,"duration_ms":0}
   ✔ drain 按风险取队首（后入队的高风险先跑）
 
-== 汇总：pass 115 / fail 0 ==
+== 汇总：pass 116 / fail 0 ==

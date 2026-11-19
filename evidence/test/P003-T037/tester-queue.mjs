@@ -207,7 +207,7 @@ console.log('== A1 指数退避与回常态 ==');
     investigator: { async run(id) { return { alert_id: id, verdict: {} }; } } });
   await m.load();
   await m.poll();
-  info('冷启动后', [m.backoffMs, m.emptyPolls]);
+  eq([m.backoffMs, m.emptyPolls], [2000, 1], '冷启动轮计入空轮：backoff=2×interval、empty_polls=1（docs/modules/triage-pipeline.md:384）');
   await m.poll();
   eq([m.backoffMs, m.emptyPolls], [1000, 0], '见到新告警：backoff=interval、empty=0');
   await m.poll();

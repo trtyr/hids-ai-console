@@ -23,21 +23,28 @@ const freePort = async () => { const s = http.createServer(); const p = await li
 
 // --- 假牧云 RPC：只回答本卡需要的三类请求，并计数 ---
 const rpcCalls = [];
+// holdRpc=true 时把响应挂住（不答），用来稳定占住「在跑」名额测 429；
+// 秒回时上游身份校验会判「MCP 服务不是牧云」，记录 10ms 内就 failed 退出配额，POST#2 就落进空窗 → 断言变竞态。
+let holdRpc = false; const held = [];
 const rpc = http.createServer((req, res) => {
   let body = '';
   req.on('data', c => { body += c; });
   req.on('end', () => {
     const method = new URL(req.url, 'http://x').searchParams.get('method') || '';
     rpcCalls.push(method);
-    let result;
-    if (method.endsWith('.GetEvent')) {
-      const id = JSON.parse(body || '{}').params?.id ?? 1;
-      result = { event: { id, event_id: id, host_id: 1, host_view: { host_id: 1, host_ip: '10.0.0.5' }, cmdline: 'id', uname: 'root' } };
-    } else {
-      result = { events: [], total: 0 };
-    }
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, result }));
+    const send = () => {
+      let result;
+      if (method.endsWith('.GetEvent')) {
+        const id = JSON.parse(body || '{}').params?.id ?? 1;
+        result = { event: { id, event_id: id, host_id: 1, host_view: { host_id: 1, host_ip: '10.0.0.5' }, cmdline: 'id', uname: 'root' } };
+      } else {
+        result = { events: [], total: 0 };
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, result }));
+    };
+    if (holdRpc) { held.push(send); return; }
+    send();
   });
 });
 const rpcPort = await listen(rpc);
@@ -131,6 +138,19 @@ try {
     ok(!('syslog' in b), 'poll 模式没有 syslog 键');
   }
 
+  console.log('== §5.2 冷启动空轮口径（真进程重启后首轮间隔 2×interval）==');
+  {
+    let s = null;
+    for (let i = 0; i < 100; i += 1) {
+      s = (await req('GET', '/api/agent/triage/status')).json;
+      if (s?.last_poll_at && s.empty_polls >= 1) break;
+      await sleep(30);
+    }
+    eq(s?.empty_polls, 1, '冷启动轮计入空轮 empty_polls=1（docs/modules/triage-pipeline.md:384）');
+    eq(s?.backoff_ms, 2 * s?.interval_ms, '重启后首轮真实轮询间隔 = 2×intervalMs（同上）');
+    eq(s?.backoff_ms, 60000, 'interval_ms=30000 -> backoff_ms=60000');
+  }
+
   console.log('== since 参数：合法归一、空值不筛、解析不了 400 ==');
   {
     const okSince = await req('GET', '/api/agent/triage/status?since=' + encodeURIComponent('2026-11-04T00:00:00Z'));
@@ -172,6 +192,8 @@ try {
 
   console.log('== 队列上限 429（现网可观测的最大边界）==');
   {
+    // 挂住上游响应：第一条研判一直占着在跑名额，POST#2 的判据才是确定的（不依赖毫秒级窗口）。
+    holdRpc = true;
     const first = await req('POST', '/api/agent/triage/honeypot:1');
     eq(first.status, 202, '第一条 202');
     ok(first.json?.alert_id === 'honeypot:1' && ['queued', 'running'].includes(first.json?.status), '202 正文是 TriageCase', JSON.stringify(first.json));
@@ -182,12 +204,17 @@ try {
       await sleep(30);
     }
     ok(running, '第一条进入 running（模型慢）');
+    const before = await req('GET', '/api/agent/triage/status');
+    eq(before.json?.counts?.running, 1, 'POST#2 前「在跑」= 1（配额 1 已满）');
     const second = await req('POST', '/api/agent/triage/honeypot:2');
     eq(second.status, 429, '队列满时 POST 第二条 -> 429');
     ok(second.json?.error && typeof second.json?.code === 'string', '429 正文带 {error, code}', JSON.stringify(second.json));
+    eq(second.json?.code, 'caller_error', '429 code=caller_error（openapi Error enum）');
+    eq(second.json?.error, '研判队列已满（上限 1），稍后再试', '429 文案（triage-pipeline.md:472 / openapi.yaml:2198 口径）');
     info('429 body', second.json);
     const status = await req('GET', '/api/agent/triage/status');
     eq(status.json?.dropped, 1, 'summary().dropped 记 1');
+    holdRpc = false; held.splice(0).forEach(fn => fn());
   }
 
   console.log('== A8 /api/status 探活缓存（HIDS_STATUS_TTL_MS=400）==');
