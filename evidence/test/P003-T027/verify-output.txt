@@ -1,0 +1,32 @@
+== 0. 探针不含固定 sleep ==
+sleep( 计数 = 0
+== 1. 仓内运行态基线 ==
+存在=yes 文件树指纹=8e674a0c2b14964cf31736742efe7d81cc6a78d2d7d4ebe275e8e284b98d7049 目录数=9
+== 2. 连跑 6 遍 ==
+run1 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-f5Xdsf
+run2 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-nvxYbr
+run3 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-Skd6J1
+run4 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-5LRDXR
+run5 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-HLomPs
+run6 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-E0k8dy
+== 3. sleep 2 前后对照 ==
+gap0-A EXIT=0 ==== 17/17 PASS ====
+gap0-B EXIT=0 ==== 17/17 PASS ====
+gap2-C EXIT=0 ==== 17/17 PASS ====
+gap2-D EXIT=0 ==== 17/17 PASS ====
+== 4. 写者门禁 ==
+gate EXIT=0
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+== 5. nonce 结论脚本 ==
+  nonce=run1-1 -> a5c222bee141bc9a
+  nonce=run2-2 -> a5c222bee141bc9a
+  换 nonce 后指纹是否相同 -> true
+  对照：只改 source_ip 后指纹是否改变 -> true
+nonce EXIT=0
+== 6. 隔离校验 ==
+存在=yes 文件树指纹=8e674a0c2b14964cf31736742efe7d81cc6a78d2d7d4ebe275e8e284b98d7049 目录数=9
+运行根残留=0
+== 汇总 ==
+ALL GREEN（日志在 /tmp/p27-verify-7uYEKd）

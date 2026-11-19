@@ -5,6 +5,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PromptStore } from './prompt-store.js';
 import { UpdateStore, PACKAGE_LIMIT } from './update-store.js';
+import { log } from './log.js';
 
 const json = (res,status,data) => { res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data)); };
 const equal = (actual,expected) => actual.length===expected.length && timingSafeEqual(actual,expected);
@@ -161,9 +162,16 @@ export async function maintenanceFromEnv(env=process.env,{preview=false}={}) {
   return createMaintenanceServer(store,{preview,access:{user:env.HIDS_MAINTENANCE_USER,password:env.HIDS_MAINTENANCE_PASSWORD,role}});
 }
 
+// 启动行：一行 JSON 落 stdout（旧的中文文案留在 message 里，部署端照旧 grep 得到）。
+// 维护端自己的账号口令与升级包密钥从不进这条日志。
+export function logListening({ port, preview, host = '127.0.0.1' }) {
+  log('maintenance.listening', { host, port, preview,
+    message: `HIDS maintenance${preview ? '（只读预览）' : ''}: http://127.0.0.1:${port}` });
+}
+
 if(process.argv[1]&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url)) {
   const preview=process.argv.includes('--preview');
   const server=await maintenanceFromEnv(process.env,{preview});
   const port=Number(process.env.HIDS_MAINTENANCE_PORT||18081);
-  server.listen(port,'127.0.0.1',()=>console.log('HIDS maintenance'+(preview?'（只读预览）':'')+': http://127.0.0.1:'+port));
+  server.listen(port,'127.0.0.1',()=>logListening({port,preview}));
 }

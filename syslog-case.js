@@ -2,6 +2,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eventSeconds, eventTypeFor, sessionKey } from './syslog-input.js';
+import { log } from './log.js';
+
+// 匹配不上的每条分支都从这里出：日志留「哪条规则、差在哪」，返回体保持原样（只增键）。
+// rule 取值见 docs/architecture.md「日志」一节的 syslog.match_failed 行。
+function unmatched(fields) {
+  log('syslog.match_failed', fields, 'warn');
+  return { matched: false, ...fields };
+}
 
 function apiSeconds(event) {
   for (const key of ['started_at', 'created_at', 'updated_at']) {
@@ -16,43 +24,63 @@ export async function matchSyslogEvent(toolbox, parsed) {
   const type = eventTypeFor(parsed.msgid);
   const hostIp = parsed.payload.host_ip;
   const wanted = eventSeconds(parsed);
-  if (!type) return { matched: false, reason: '该 MsgId 尚无牧云事件类型映射' };
+  if (!type) return unmatched({ rule: 'msgid_map', msgid: parsed.msgid,
+    reason: '该 MsgId 尚无牧云事件类型映射' });
   const eventId = Number(parsed.payload.event_id);
   if (Number.isSafeInteger(eventId) && eventId > 0 && toolbox?.callTool) {
     try {
       const event = await toolbox.callTool(`get_${type}_event`, { id: eventId });
       const returnedHost = event.host_view?.host_ip || event.host_ip;
       const returnedHostId = Number(event.host_id ?? event.host_view?.host_id);
-      if (Number(event.id ?? event.event_id) !== eventId || !hostIp ||
-        String(returnedHost || '').replace(/\/32$/, '') !== String(hostIp).replace(/\/32$/, '') ||
-        !Number.isSafeInteger(returnedHostId) || returnedHostId !== Number(parsed.payload.host_id))
-        return { matched: false, type, reason: '牧云事件 ID 对应的主机与 syslog 不一致' };
+      const returnedId = Number(event.id ?? event.event_id);
+      // 差在哪：只把真对不上的那几项收进来，日志里一眼能看出是 ID 还是主机身份不一致。
+      const mismatch = {};
+      if (returnedId !== eventId) mismatch.event_id = { wanted: eventId,
+        returned: Number.isFinite(returnedId) ? returnedId : null };
+      if (!hostIp) mismatch.host_ip = { wanted: null, returned: String(returnedHost || '') || null };
+      else if (String(returnedHost || '').replace(/\/32$/, '') !== String(hostIp).replace(/\/32$/, ''))
+        mismatch.host_ip = { wanted: String(hostIp), returned: String(returnedHost || '') || null };
+      if (!Number.isSafeInteger(returnedHostId) || returnedHostId !== Number(parsed.payload.host_id))
+        mismatch.host_id = { wanted: Number.isFinite(Number(parsed.payload.host_id)) ? Number(parsed.payload.host_id) : null,
+          returned: Number.isSafeInteger(returnedHostId) ? returnedHostId : null };
+      if (Object.keys(mismatch).length)
+        return unmatched({ rule: 'event_id', type, msgid: parsed.msgid, event_id: eventId, mismatch,
+          reason: '牧云事件 ID 对应的主机与 syslog 不一致' });
       return { matched: true, type, alert_id: `${type}:${eventId}`, event_id: eventId, event,
         gap_seconds: wanted == null || apiSeconds(event) == null ? null : Math.floor(Math.abs(apiSeconds(event) - wanted)),
         candidates: 1, coverage: { returned: 1, total: 1, exact_event_id: true } };
     } catch (error) {
-      return { matched: false, type, reason: `牧云事件 ID 详情读取失败：${String(error.message).slice(0, 180)}` };
+      return unmatched({ rule: 'event_id', type, msgid: parsed.msgid, event_id: eventId,
+        reason: `牧云事件 ID 详情读取失败：${String(error.message).slice(0, 180)}` });
     }
   }
-  if (!hostIp || wanted == null) return { matched: false, reason: 'syslog 缺少主机 IP 或有效事件时间' };
+  if (!hostIp || wanted == null) return unmatched({ rule: 'payload', msgid: parsed.msgid,
+    missing: [...(hostIp ? [] : ['host_ip']), ...(wanted == null ? ['event_time'] : [])],
+    reason: 'syslog 缺少主机 IP 或有效事件时间' });
   try {
     const list = await toolbox.listEvents(type, { host_ip: hostIp, count: 50, offset: 0 });
-    let best = null, gap = Infinity;
+    let best = null, gap = Infinity, nearest = null;
     for (const event of list.events || []) {
       const seconds = apiSeconds(event);
       if (seconds == null) continue;
       const current = Math.abs(seconds - wanted);
+      // nearest 只为「差在哪」留证：窗内没有候选时，报最近的一条差多远。
+      if (nearest == null || current < nearest) nearest = current;
       if (current <= 300 && current < gap) { best = event; gap = current; }
     }
-    if (!best) return { matched: false, type, candidates: list.events?.length || 0,
-      reason: '同主机首批事件中没有落在事件时间前后 5 分钟的同类记录' };
+    if (!best) return unmatched({ rule: 'time_window', type, msgid: parsed.msgid, host_ip: hostIp,
+      window_seconds: 300, candidates: list.events?.length || 0,
+      nearest_gap_seconds: nearest == null ? null : Math.floor(nearest),
+      reason: '同主机首批事件中没有落在事件时间前后 5 分钟的同类记录' });
     const id = Number(best.id ?? best.event_id);
-    if (!Number.isSafeInteger(id) || id <= 0) return { matched: false, type,
-      reason: '时间最接近的牧云事件没有有效 ID' };
+    if (!Number.isSafeInteger(id) || id <= 0) return unmatched({ rule: 'time_window', type, msgid: parsed.msgid,
+      host_ip: hostIp, candidates: list.events?.length || 0, nearest_gap_seconds: Math.floor(gap),
+      reason: '时间最接近的牧云事件没有有效 ID' });
     return { matched: true, type, alert_id: `${type}:${id}`, event_id: id, event: best,
       gap_seconds: Math.floor(gap), candidates: list.events.length,
       coverage: { returned: list.events.length, total: list.total, first_page_only: true } };
-  } catch (error) { return { matched: false, type, reason: `牧云事件查询失败：${String(error.message).slice(0, 180)}` }; }
+  } catch (error) { return unmatched({ rule: 'time_window', type, msgid: parsed.msgid, host_ip: hostIp,
+    reason: `牧云事件查询失败：${String(error.message).slice(0, 180)}` }); }
 }
 
 const title = {
