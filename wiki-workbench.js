@@ -129,6 +129,8 @@ export class WikiWorkbench {
         throw Object.assign(new Error('案件缺少原始告警或研判事实，无法建立反馈'), { status: 400 });
       feedback = { id: randomUUID(), case_id: feedback.case_id, event_type: feedback.event_type,
         reason: feedback.reason.trim(), who: feedback.who.trim().replace(/\s+/g, ' '), expected_verdict: feedback.expected_verdict,
+        // 误报统一维护 Agent（P003-T047）开的会话带这一格：`reply()` 的 `ai.model_call` 按它落「误报维护」域。
+        domain: feedback.domain === 'false_positive' ? 'false_positive' : null,
         recorded_at: new Date().toISOString(), case_snapshot: snapshot, case_file_sha256: fileHashes,
         original_verdict: originalResult?.verdict?.verdict || null,
         cited_wiki_ids: [...new Set((originalResult?.trace || []).filter(item => item.kind === 'wiki' && item.id)
@@ -202,8 +204,9 @@ export class WikiWorkbench {
         ];
         // P003-T046：wiki 维护是单发调用，落 ai.model_call；turn 是这次会话里的第几条用户消息，
         // session_id 就是维护会话 id（`GET /api/wiki/sessions` 里能按它找到同一次维护）。
+        // 误报统一维护 Agent 开的会话（`feedback.domain`）记「误报维护」域，人工开的会话仍是 wiki 域。
         const output = (await traceModelCall({
-          domain: 'wiki', role: 'wiki_maintainer', turn: record.messages.filter(message => message.role === 'user').length,
+          domain: record.feedback?.domain === 'false_positive' ? 'false_positive' : 'wiki', role: 'wiki_maintainer', turn: record.messages.filter(message => message.role === 'user').length,
           phase: 'maintain', sessionId: record.id, model: this.model?.model || null, messages, tools: []
         }, () => this.model.complete(messages, [], 'none'), { decode: value => parse(value.content) })).decoded;
         const primary = typeof output.proposed_content === 'string' && output.proposed_content.length > 100
@@ -351,5 +354,33 @@ export class WikiWorkbench {
     record.messages.push({ role: 'assistant', content: `已人工审核并更新判据 ${updated.id}。新启动的研判将读取此版本。`, at: record.updated_at });
     await this.save(record);
     return { session: record, page: updated };
+  }
+
+  /**
+   * 误报统一维护 Agent（P003-T047 A3）的外部发布收尾：判据页已经由 `WikiStore.publishBundle()`（发布闸）写进去，
+   * 这里把这份会话置为终态 `published`，并记下发布页与审计格。
+   *
+   * 只改同一份记录、不新增文件；**已发布的会话再来一次一律 409**——这就是「发布后置终态、无重复发布口子」。
+   */
+  async recordPublished(id, publication = {}) {
+    const record = await this.get(id);
+    if (!record) throw Object.assign(new Error('知识维护会话不存在'), { status: 404 });
+    if (record.status === 'published') throw Object.assign(new Error('知识维护会话已发布，不能重复发布'), { status: 409 });
+    if (!record.proposal) throw Object.assign(new Error('当前没有可发布的修订草案'), { status: 409 });
+    const pages = Array.isArray(publication.pages) ? publication.pages.filter(item => item && typeof item.path === 'string') : [];
+    if (!pages.length) throw Object.assign(new Error('发布结果缺少已写入的判据页'), { status: 400 });
+    const written = pages.find(item => item.path === record.page) || pages[0];
+    const at = new Date().toISOString();
+    record.status = 'published';
+    record.proposal = null;
+    record.page_revision = written.revision ?? record.page_revision;
+    record.published_pages = pages.map(item => ({ path: item.path, revision: item.revision }));
+    record.audit = { reviewer: safeLine(publication.reviewer).slice(0, 100), note: safeLine(publication.note).slice(0, 500),
+      at, case_id: publication.case_id || record.feedback?.case_id || null,
+      evidence_path: publication.evidence_path || null, via: String(publication.via || 'fp_maintainer') };
+    record.updated_at = at;
+    record.messages.push({ role: 'assistant', content: `误报维护 Agent 已写入判据 ${written.path}（发布前检查通过），会话置终态。`, at });
+    await this.save(record);
+    return record;
   }
 }

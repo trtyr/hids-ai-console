@@ -778,6 +778,25 @@ md 行 -> 重复投递：2 次
 **人工登记过误报的记录是例外**（`verdict='false_positive'` 且 `decision_source='human'`，`triage-monitor.js:63`）：`verdict` / `verdict_label` / `summary` / `decision_source` 保留原值，`detail` 跟着保留的那份 `summary` 走（`triage-monitor.js:1059-1065`）；`report` / `missing_evidence` / `next_actions` / `evidence_refs` / `evidence` / `saved_at` / `verified_facts` / `evidence_sources` 照常按这次研判刷新。AI 自己判出的 `false_positive` 不走这条例外。
 **人工登记过误报的记录是例外**（`verdict='false_positive'` 且 `decision_source='human'`，`triage-monitor.js:13`）：`verdict` / `verdict_label` / `summary` / `decision_source` 保留原值，`detail` 跟着保留的那份 `summary` 走（`triage-monitor.js:529-537`）；`report` / `missing_evidence` / `next_actions` / `evidence_refs` / `evidence` / `saved_at` / `verified_facts` / `evidence_sources` 照常按这次研判刷新。AI 自己判出的 `false_positive` 不走这条例外。
 
+**误报维护的回填（P003-T047）**：人工登记误报后，记录上的 `maintenance` 由统一维护 Agent 写回（`server.js:325-356`），
+一个案件一份多轮会话（`<数据根>/fp-sessions/<uuid>.json`，可由 `GET /api/false-positive/sessions/{id}` 读）。字段口径：
+
+| 字段 | 形状与含义 |
+| --- | --- |
+| `status` | `updating` / `updated` / `failed`。还有一侧在跑是 `updating`；都收尾后任一侧 `failed` 就是 `failed`，否则 `updated` |
+| `rule` / `wiki` | 单边：`status`（同上一行的三个值）+ `state`（`updated` 真写了库 / `no_change` 这侧不需要改 / `skipped` 幂等跳过或本次没请求 / `failed`）+ `why`、`error`（截 300 字）、`idempotency_key`、`revision` |
+| `rule.file` / `rule.action` | 写进 `rules/` 的那份文件名与 `add` / `update` / `unchanged`——一次只碰一个文件 |
+| `wiki.page` / `wiki.pages` / `wiki.revision` / `wiki.session_id` | 判据页路径、本次写入的全部页、写入后的页面版本、那份知识维护会话的 id |
+| `sides` | 这一轮**真的写了库**的边（`rule` / `wiki`）：动哪边、为什么一眼能看出来（`decision.why` 是决策理由） |
+| `decision` | `source`（`model` 决策模型给的 / `fallback` 没配模型按请求的库逐个尝试）、`libraries`、`why` |
+| `session_id` | 这份误报维护会话的 id（`fp-sessions/<id>.json`） |
+| `auto_verdict` | 恒为 `{enabled: false, pending: "A/B 口径待拍板", note}`：自动判定没生效，维护产出照写 |
+
+**补跑与幂等**：同一案件再登记一次就是补跑入口，正文 `libraries` 只跑需要的那一侧。已成功的一侧（上一轮 `state: updated` 且
+它记下的 `revision` 等于这一轮算出来的库版本）记 `state: skipped`，**不调模型、不写盘**；幂等键是 `case_id:库:版本`
+（规则侧的版本是规则库摘要，知识库侧是判据页 revision）。失败的一侧照常重跑，单腿补跑时没请求的那一侧记
+`status: updated` + `state: skipped`，总态不会因此被钉在 `updating`。
+
 ## 8 对外契约
 
 三个文件的导出（实测）：

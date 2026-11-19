@@ -23,6 +23,8 @@ import { TraceBoardService } from './trace-board.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
 import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
+import { FalsePositiveMaintainer, FP_LIBRARIES, FpSessionStore, fpSessionDirectory,
+  maintenanceSide, maintenanceSides, wikiFeedbackTarget } from './fp-maintainer.js';
 import { createConfigStore, dataRoot } from './config-store.js';
 
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
@@ -52,6 +54,10 @@ const wikiStore = new WikiStore();
 // 研判 Agent 与维护者**共用这一个实例**：维护者改了规则，下一次研判读到的就是改过的那份。
 const regoRuleStore = new RuleStore();
 const defaultRuleSessions = new RuleSessionStore();
+// 误报统一维护 Agent（P003-T047）：一份多轮会话操控两本库，会话落数据根下的 `fp-sessions/`。
+// 决策模型复用规则维护者那一格（不新增配置键）；没配就退化为「按请求的库逐个尝试」，决策来源记在会话里。
+const defaultFpSessions = new FpSessionStore(runtime.fpSessions);
+const fpDecisionModel = models?.rule_maintainer ?? null;
 const agent = triageToolbox && models
   ? new InvestigationAgent(triageToolbox, models.triage, promptStore, wikiStore, regoRuleStore, models.review) : null;
 const deepInvestigator = agentToolbox && models
@@ -237,7 +243,7 @@ export class RegoRuleMaintainer {
     this.model = model; this.ruleStore = ruleStore; this.prompts = prompts; this.sessions = sessions;
   }
 
-  async maintain({ caseId, caseDir = null, eventType, reason, who, alert, ruleIds = [] }) {
+  async maintain({ caseId, caseDir = null, eventType, reason, who, alert, ruleIds = [], domain = null, sessionId = null }) {
     const now = new Date().toISOString();
     const session = this.sessions ? await this.sessions.save({ id: randomUUID(),
       case_id: caseId, case_dir: caseDir, event_type: eventType, reason, who, status: 'collecting',
@@ -266,8 +272,10 @@ export class RegoRuleMaintainer {
       ];
       // P003-T046 A4：规则维护是单发调用，同样落 ai.model_call；session_id 与 T041 的维护会话互引
       //（事件说「这次调用属于哪次维护」，会话文件说「这次维护提了什么、验过没过、落在哪」）。
-      const maintainMeta = { domain: 'rule', role: 'rule_maintainer', turn: 1, phase: 'maintain',
-        sessionId: record?.id ?? null, model: this.model?.model || null, messages, tools: [] };
+      // 域缺省是「规则维护」；误报统一维护 Agent（P003-T047 A5）跑这一轮时传 `false_positive`，
+      // 这样同一个案件的三次调用（决策 / 规则维护 / 知识维护）在 T046 事件里是同一域。
+      const maintainMeta = { domain: domain === 'false_positive' ? 'false_positive' : 'rule', role: 'rule_maintainer', turn: 1, phase: 'maintain',
+        sessionId: sessionId ?? record?.id ?? null, model: this.model?.model || null, messages, tools: [] };
       const replied = await traceModelCall(maintainMeta, () => this.model.complete(messages, [], 'none'),
         { decode: value => ruleProposal(value.content) });
       const output = replied.decoded;
@@ -306,79 +314,49 @@ export class RegoRuleMaintainer {
 
 const regoMaintainer = models ? new RegoRuleMaintainer(models.rule_maintainer, regoRuleStore, promptStore, defaultRuleSessions) : null;
 
-// 案件里命中的 Rego 规则 id：结果落盘的 result.json 里就有，没有就当没命中（旧案件可能没有这条轨迹）。
-async function caseRegoRuleIds(record) {
-  if (!record?.case_dir) return [];
-  try {
-    const saved = JSON.parse(await readFile(path.join(record.case_dir, 'result.json'), 'utf8'));
-    const ids = saved?.verdict?.rego?.rule_ids;
-    return Array.isArray(ids) ? ids.filter(id => isRuleId(id)) : [];
-  } catch { return []; }
-}
+// `caseRegoRuleIds()` 与 `wikiFeedbackTarget()` 搬到 `fp-maintainer.js` 了（P003-T047）：
+// 误报统一维护 Agent 与 `POST /api/wiki/sessions` 共用同一份选页口径，`server.js` 不再留第二份。
 
-// 误报案件的 wiki 维护目标：优先分析时引用过的判据页，其次本场景第一页。
-// POST /api/wiki/sessions 与误报入口共用这一处口径，两条入口选出来的页一致。
-async function wikiFeedbackTarget(wiki, record, page = null) {
-  const eventType = eventTypeFor(record.input.parsed.msgid);
-  const index = await wiki.agentIndex(eventType);
-  const eligible = index.pages.filter(item => item.path.startsWith(`${index.category}/`));
-  let cited = [];
-  try {
-    const saved = JSON.parse(await readFile(path.join(record.case_dir, 'result.json'), 'utf8'));
-    cited = (saved.trace || []).filter(item => item.kind === 'wiki' && item.id).map(item => item.id);
-  } catch { /* 旧案件可能没有完整的引用轨迹 */ }
-  const target = page ? eligible.find(item => item.path === page)
-    : eligible.find(item => cited.includes(item.id)) || eligible[0];
-  return target ? { page: target, eventType } : null;
-}
 
-// 两个维护者并行跑，各自收尾就把自己的状态写进 maintenance；总态等两边都有结果才定。
-// 单边失败只改它自己那一格：verdict 与 feedback 一律不动（A4）。
-async function maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMaintainer }) {
+// 误报统一维护 Agent（P003-T047）：一个案件跑一份多轮会话（读案卷 → 读两库 → 提修订 → 自校验），
+// 由它决定这一次只动规则、只动知识库、还是两边都动；`libraries` 是补跑单腿的入口（A4）。
+// 映射回 `record.maintenance` 时**状态词表不变**（`updating|updated|failed`，T013 与 openapi 按它写）：
+// 新增的 `no_change` / `skipped` 落在单边的 `state` 上，老客户端不会读错。
+async function maintainFalsePositive({ monitor, record, maintainer, libraries = FP_LIBRARIES, previous = null }) {
   const state = record.maintenance;
-  const settle = async (key, job) => {
-    try { state[key] = { status: 'updated', at: new Date().toISOString(), ...await job() }; }
-    catch (cause) {
-      // 维护失败原因会随记录回给调用方（falsePositiveView），同样过一道凭据擦除（A4）。
-      state[key] = { status: 'failed', at: new Date().toISOString(), error: scrubCredentials(cause?.message || cause).slice(0, 300) };
-    }
-    state.status = maintenanceState([state.rule, state.wiki]);
-    state.updated_at = new Date().toISOString();
-    await monitor.persist?.();
-  };
-  const ruleJob = async () => {
-    if (!ruleMaintainer) throw new Error('规则维护者未配置');
-    const parsed = record.input?.parsed;
-    return ruleMaintainer.maintain({ caseId: record.alert_id, caseDir: record.case_dir || null,
+  const parsed = record.input?.parsed;
+  const startedAt = new Date().toISOString();
+  // 没请求的一侧（单腿补跑）如实标 skipped：既不谎报成「改完了」，也不把总态永久钉在 updating。
+  const untouched = library => ({ status: 'updated', state: 'skipped', at: startedAt,
+    why: `本次只补跑 ${libraries.join('、')}：${library} 侧未执行` });
+  try {
+    if (!maintainer) throw new Error('误报维护 Agent 未配置');
+    const session = await maintainer.maintain({ caseId: record.alert_id, caseDir: record.case_dir || null,
       eventType: eventTypeFor(parsed?.msgid), reason: record.feedback.reason, who: record.feedback.who,
-      alert: parsed ? { msgid: parsed.msgid, payload: parsed.payload } : null,
-      ruleIds: await caseRegoRuleIds(record) });
-  };
-  const wikiJob = async () => {
-    if (!wiki || !wikiAgent) throw new Error('知识维护端未配置');
-    const target = await wikiFeedbackTarget(wiki, record);
-    if (!target) throw new Error('当前场景缺少可维护的判据页');
-    const session = await wikiAgent.create(target.page.path, { case_id: record.alert_id, case_dir: record.case_dir,
-      event_type: target.eventType, reason: record.feedback.reason, expected_verdict: 'false_positive',
-      who: record.feedback.who });
-    const advanced = await wikiAgent.reply(session.id,
-      `人工登记误报：${record.feedback.reason}。请按 _schema.md 核对判据是否需要修订，需要就给出完整修订草案。`);
-    const proposal = advanced?.proposal;
-    if (!proposal) throw new Error(`维护者没有产出方法论修订（会话 ${session.id} 状态 ${advanced?.status || '未知'}）`);
-    const changes = Array.isArray(proposal.changes) && proposal.changes.length ? proposal.changes
-      : [{ path: target.page.path, content: proposal.content, page_revision: proposal.page_revision }];
-    if (!changes.some(change => change.path === target.page.path)) throw new Error('方法论修订草案没有覆盖当前判据页');
-    // 发布前的结构、断链、证据引用检查在 publishBundle 里；reviewer 记登记人，note 记他给的理由。
-    const pages = await wiki.publishBundle(changes, proposal.evidence_preview || null,
-      { reviewer: record.feedback.who, note: record.feedback.reason.slice(0, 500), case_id: record.alert_id });
-    const written = pages.find(item => item.path === target.page.path) || pages[0];
-    return { session_id: session.id, page: written.path, revision: written.revision,
-      pages: pages.map(item => item.path) };
-  };
-  await Promise.all([settle('rule', ruleJob), settle('wiki', wikiJob)]);
+      alert: parsed ? { msgid: parsed.msgid, payload: parsed.payload } : null, libraries, previous });
+    state.rule = maintenanceSide(session.outcomes?.rule, untouched('rule'));
+    state.wiki = maintenanceSide(session.outcomes?.wiki, untouched('wiki'));
+    state.session_id = session.id;
+    state.sides = maintenanceSides(session);
+    state.decision = session.decision ? { source: session.decision.source, libraries: session.decision.libraries || [],
+      why: session.decision.why || null } : null;
+    state.auto_verdict = session.auto_verdict;
+    state.status = maintenanceState([state.rule, state.wiki]);
+  } catch (cause) {
+    // 维护失败原因会随记录回给调用方（falsePositiveView），同样过一道凭据擦除（A4）。
+    const error = scrubCredentials(cause?.message || cause).slice(0, 300);
+    for (const library of FP_LIBRARIES) {
+      if (libraries.includes(library)) state[library] = { status: 'failed', state: 'failed', at: startedAt, error };
+      else state[library] = state[library] || untouched(library);
+    }
+    state.status = 'failed';
+    state.error = error;
+  }
+  state.updated_at = new Date().toISOString();
+  await monitor.persist?.();
 }
 
-// 误报入口的响应：结论 + 理由 + 两个维护者的进度（GET 同一条案件也能读到同样的三个字段）。
+// 误报入口的响应：结论 + 理由 + 维护进度（GET 同一条案件也能读到同样的三个字段）。
 function falsePositiveView(record) {
   return { alert_id: record.alert_id,
     verdict: { verdict: record.verdict, verdict_label: record.verdict_label, source: record.decision_source },
@@ -870,7 +848,8 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   maintenanceEntry = process.env.HIDS_MAINTENANCE_ENTRY_URL,
   ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore,
   ruleMaintainer = regoMaintainer, config = configStore, ruleSessions = defaultRuleSessions,
-  logFile = logOptions ? logOptions.file : null) {
+  logFile = logOptions ? logOptions.file : null, fpSessions = defaultFpSessions, fpDecision = fpDecisionModel,
+  fpMaintainer = null) {
   // 注入的 TraceBoardService 没有取数器时，用本次的 monitor / history 现接一条：
   // 测试与部署走同一套接线，不再靠测试里手塞假 analysis。
   if (boardService instanceof TraceBoardService && !boardService.analysis)
@@ -891,6 +870,11 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   // 本进程里正在跑维护的告警：重复登记靠它挡，不靠记录上的 maintenance.status——进程重启后记录会停在 updating，
   // 拿那个当日志会把这个案件永久锁死在 updating。
   const runningMaintenance = new Set();
+  // 误报统一维护 Agent（P003-T047）：注入了就用注入的（单测/探针换替身），否则用本次注入的两条腿装一个。
+  // 两条腿都没有（规则维护者与 wiki 维护端都未配置）时保持 null：那一轮维护两侧都记 failed + 原因，不去猜。
+  const fpAgent = fpMaintainer || (ruleMaintainer || wikiAgent
+    ? new FalsePositiveMaintainer({ model: fpDecision, ruleMaintainer, ruleStore, wiki, wikiAgent, sessions: fpSessions })
+    : null);
   // 数据管理（P003-T044）的路径来源：全部是本次注入的构件，换替身就是换盘点对象。
   const dataDeps = { history, monitor, boardService, wikiAgent, config };
   return http.createServer(async (req, res) => {
@@ -1051,6 +1035,23 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         try { return json(res, 200, { sessions: await ruleSessions.list() }); }
         catch (cause) { return upstreamError(res, `规则维护会话读取失败：${cause.message}`); }
       }
+      // 误报维护会话（P003-T047 A1）：一个案件一份多轮会话，落数据根下的 `fp-sessions/`。
+      // 读开放（与 `/api/rules/sessions` 同口径）；写只有误报入口一条路，这里只提供查询。
+      if (url.pathname === '/api/false-positive/sessions' && req.method === 'GET') {
+        try { return json(res, 200, { sessions: await fpSessions.list() }); }
+        catch (cause) { return upstreamError(res, `误报维护会话读取失败：${cause.message}`); }
+      }
+      if (url.pathname.startsWith('/api/false-positive/sessions/') && req.method === 'GET') {
+        let id;
+        try { id = decodeURIComponent(url.pathname.slice('/api/false-positive/sessions/'.length)); }
+        catch { return callerError(res, '维护会话 ID 编码无效'); }
+        if (!/^[0-9a-f-]{36}$/i.test(id)) return callerError(res, '维护会话 ID 无效');
+        let record;
+        try { record = await fpSessions.get(id); }
+        catch (cause) { return upstreamError(res, `误报维护会话读取失败：${cause.message}`); }
+        if (!record) return callerError(res, '维护会话不存在', 404);
+        return json(res, 200, record);
+      }
       if (url.pathname === '/api/rules/evaluate' && req.method === 'POST') {
         let fact;
         try { fact = await readJSON(req); } catch (cause) { return callerError(res, cause.message); }
@@ -1143,30 +1144,47 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         if (reason.length < 10 || reason.length > 4000) return callerError(res, '误报理由必须为 10 到 4000 字');
         const who = String(body.who ?? access?.user ?? 'operator').trim().replace(/\s+/g, ' ').slice(0, 100);
         if (who.length < 2) return callerError(res, '误报登记人至少 2 个字');
+        // A4：可选 `libraries`——单腿补跑（只重跑失败的那一侧）。不传就是两侧都试。
+        let libraries = FP_LIBRARIES;
+        if (body.libraries !== undefined) {
+          if (!Array.isArray(body.libraries) || !body.libraries.length ||
+              body.libraries.some(value => !FP_LIBRARIES.includes(value)))
+            return callerError(res, '维护库必须是 rule 或 wiki 组成的一到两项');
+          libraries = FP_LIBRARIES.filter(value => body.libraries.includes(value));
+        }
         const record = monitor.records.get(alertId);
         if (!record) return callerError(res, '找不到这条研判案件', 404);
         if (record.status !== 'done') return callerError(res, '研判还没结束，不能登记误报', 409);
         // 同一轮维护还在本进程里跑：不再起第二轮，直接把当前进度回给调用方（重复点击不该让维护者跑两遍）。
         // 记录上的 maintenance.status 可能是重启前的残留，所以这重只看在跑的集合。
         if (runningMaintenance.has(alertId)) return json(res, 202, falsePositiveView(record));
+        // A4 的补跑判据读的是**上一轮**的 maintenance：重置之前先留一份，
+        // 这样「已成功的一侧」是这一条案件自己的历史（落盘在 triage-monitor.json 里，进程重启后还在）。
+        const previousMaintenance = record.maintenance || null;
         // A1：先把结论与理由写死并落盘，再回 202——两个维护者还在排队时，这一条已经是误报。
         const at = new Date().toISOString();
         record.verdict = 'false_positive'; record.verdict_label = '误报'; record.decision_source = 'human';
         record.feedback = { reason, who, recorded_at: at };
         record.detail = `人工登记误报（${who}）：${reason}`.slice(0, 250);
         record.maintenance = { status: 'updating', updated_at: at,
-          rule: { status: 'updating', at }, wiki: { status: 'updating', at } };
+          rule: libraries.includes('rule') ? { status: 'updating', at } : { status: 'updated', state: 'skipped', at },
+          wiki: libraries.includes('wiki') ? { status: 'updating', at } : { status: 'updated', state: 'skipped', at },
+          libraries };
         record.updated_at = at;
         await monitor.persist?.();
         // 后台跑两个维护者：失败只写 maintenance，不回滚 verdict；响应不等它们。
         runningMaintenance.add(alertId);
-        void maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMaintainer }).catch(cause => {
+        void maintainFalsePositive({ monitor, record, maintainer: fpAgent, libraries,
+          previous: previousMaintenance }).catch(cause => {
           record.maintenance.status = 'failed';
           record.maintenance.error = scrubCredentials(cause?.message || cause).slice(0, 300);
         }).finally(() => { runningMaintenance.delete(alertId);
           // 误报维护的结局只从这里出来：两侧各自的状态与原因都带上，别让人去翻数据根下的 triage-monitor.json。
           log('maintenance.result', { alert_id: alertId, status: record.maintenance.status,
+            session_id: record.maintenance.session_id ?? null,
+            sides: record.maintenance.sides ?? [],
             rule: record.maintenance.rule?.status ?? null, wiki: record.maintenance.wiki?.status ?? null,
+            rule_state: record.maintenance.rule?.state ?? null, wiki_state: record.maintenance.wiki?.state ?? null,
             rule_error: record.maintenance.rule?.error ?? null, wiki_error: record.maintenance.wiki?.error ?? null });
         });
         return json(res, 202, falsePositiveView(record));
@@ -1233,7 +1251,8 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
               const record = monitor?.records.get(body.case_id);
               if (!record?.input || record.status !== 'done' || !record.case_dir)
                 return callerError(res, '找不到已完成的 Syslog 案件', 404);
-              const target = await wikiFeedbackTarget(wiki, record, body.page || null);
+              const target = await wikiFeedbackTarget(wiki, { eventType: eventTypeFor(record.input.parsed.msgid),
+                caseDir: record.case_dir, page: body.page || null });
               if (!target) return callerError(res, '当前场景缺少可维护的判据页', 409);
               return json(res, 201, await wikiAgent.create(target.page.path, {
                 case_id: body.case_id, case_dir: record.case_dir, event_type: target.eventType,
@@ -1385,6 +1404,7 @@ export function runtimePaths(root = dataRoot()) {
     triageMonitor: path.join(data, 'triage-monitor.json'),
     cases: path.join(data, 'cases'),
     wikiSessions: path.join(data, 'wiki-sessions'),
+    fpSessions: fpSessionDirectory(data),
     traceBoards: path.join(data, 'trace-boards')
   };
 }

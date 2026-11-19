@@ -856,9 +856,17 @@ paths:
                   type: string
                   maxLength: 100
                   description: 登记人，至少 2 字；省略时取业务账号名，未启用 Basic 认证时是 `operator`
+                libraries:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items: { type: string, enum: [rule, wiki] }
+                  description: |
+                    补跑选择器：只重跑指定的库。省略＝两侧都试（仍受幂等约束：已成功而且在同一库版本上的那一侧会跳过）。
+                    不是数组、空数组、含 `rule`/`wiki` 之外的值一律 400。
       responses:
         '202':
-          description: 结论已落盘为误报，两个维护者已开始（或已在跑）
+          description: 结论已落盘为误报，统一维护 Agent 已开始（或已在跑）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FalsePositiveRecord' }
@@ -1172,6 +1180,51 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/RegoSessionSummary' }
                 additionalProperties: false
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/false-positive/sessions:
+    get:
+      tags: [误报维护]
+      summary: 列出误报维护会话（摘要）
+      operationId: listFpMaintenanceSessions
+      description: |
+        一个案件一份多轮会话（读案卷 → 读两库 → 提修订 → 自校验），落 `<数据根>/fp-sessions/<uuid>.json`，形制对齐 `wiki-sessions`。
+        这里只回摘要，按 `updated_at` 倒序，不含案卷快照与模型正文。读开放（与 `/api/rules/sessions` 同口径）；
+        写只有误报入口一条路（`POST /api/agent/triage/{alertId}/false-positive`）。
+      responses:
+        '200':
+          description: 会话摘要列表，按 `updated_at` 倒序；没有会话时是空数组
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/FpMaintenanceSessionSummary' }
+                additionalProperties: false
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/false-positive/sessions/{id}:
+    get:
+      tags: [误报维护]
+      summary: 读一份误报维护会话的全文
+      operationId: getFpMaintenanceSession
+      description: |
+        整份会话：`turns[]`（四轮推进）、`messages[]`（人读得懂的上下文与决策）、`decision`（动哪几边、为什么）、
+        `outcomes{rule, wiki}`（每侧实际动没动、幂等键、错误）、`validation`（自校验项）、`auto_verdict`（待启用的自动判定）。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9a-fA-F-]{36}$' }
+      responses:
+        '200':
+          description: 会话全文
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FpMaintenanceSession' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '502': { $ref: '#/components/responses/RuleLibraryError' }
   /api/rules/{id}/history:
     get:
@@ -2498,11 +2551,21 @@ components:
     MaintenanceSide:
       type: object
       description: |
-        单边维护状态。`updated` 的含义按边不同：规则那边表示那一份 Rego 已经写进 `rules/` 并通过解析；
-        wiki 那边表示方法论页已经写进去（响应里给 `page` 与 `revision`）。
+        单边维护状态。`status` 仍是三个值（`updating` / `updated` / `failed`），表示「这一边收尾了没有、失败了没有」；
+        **到底动没动这个库**看 `state`（P003-T047）：`updated` 真写了库、`no_change` 判断不需要改、
+        `skipped` 幂等跳过或本次没请求、`failed` 失败。`updated` 的语义按边不同：规则那边表示那一份 Rego 已经写进
+        `<数据根>/rules/` 并通过解析；wiki 那边表示判据页已经过发布闸写进去（`page` / `revision`）。
       required: [status]
       properties:
         status: { type: string, enum: [updating, updated, failed] }
+        state: { type: string, enum: [updated, no_change, skipped, failed], description: 这一侧实际动没动库（见本 schema 说明） }
+        why: { type: string, description: 这一侧这样收尾的理由（`no_change`/`skipped` 时是决策理由或「本次只补跑…」） }
+        idempotency_key: { type: string, description: '幂等键 `case_id:库:版本`；补跑时按它判「已成功过」' }
+        checks:
+          type: array
+          description: 自校验项（读回版本、旧版是否进历史、知识库会话是否终态）；注入的替身缺读接口时该项带 skipped=true
+          items: { type: object, additionalProperties: true }
+        wiki_session_status: { type: string, description: 知识库侧那份维护会话在收尾时的状态（`published` 为终态） }
         at: { type: string, format: date-time }
         error: { type: string, description: failed 时的原因（截 300 字） }
         id: { type: string, description: 规则维护者改的 Rego 规则 id }
@@ -2511,21 +2574,124 @@ components:
         rationale: { type: string, description: 维护者给的修改理由（截 500 字） }
         session_id: { type: string, description: wiki 维护会话 id }
         page: { type: string, description: wiki 维护者写的方法论页路径 }
-        revision: { type: string, description: 写入后页面的新 revision }
+        revision: { type: string, description: 写入后这一侧的库版本：知识库侧是页面新 revision，规则侧是规则库摘要（幂等键的第三段） }
         pages: { type: array, items: { type: string }, description: 本次发布涉及的页面路径 }
       additionalProperties: true
     CaseMaintenance:
       type: object
       description: |
-        误报登记后的两个维护者进度。状态只有三种：`updating`（还在跑）、`updated`（这一边改完了）、`failed`（这一边失败）。
+        误报登记后的维护进度（P003-T047 收成一个统一维护 Agent，`rule` / `wiki` 两格照旧）。
         总态：还有一边在跑就是 `updating`；都收尾后任一边失败即 `failed`，否则 `updated`。
         维护失败**不改变**案件结论——`verdict` 仍是 `false_positive`。
+        一个案件一份多轮会话，全文用 `GET /api/false-positive/sessions/{id}` 读（`session_id` 就是那个 id）。
       required: [status, rule, wiki]
       properties:
         status: { type: string, enum: [updating, updated, failed] }
         updated_at: { type: string, format: date-time }
+        session_id: { type: string, description: 这份误报维护会话的 id（`<数据根>/fp-sessions/<id>.json`） }
+        sides:
+          type: array
+          items: { type: string, enum: [rule, wiki] }
+          description: 这一轮真的写了库的边；只动规则就是 [rule]，都没动是空数组
+        decision:
+          type: object
+          description: 这一次动哪几边、为什么（决策轮的产出）
+          properties:
+            source: { type: string, enum: [model, fallback], description: 'model=决策模型给的；fallback=没配模型或回包解不出来，按请求的库逐个尝试' }
+            libraries: { type: array, items: { type: string, enum: [rule, wiki] } }
+            why: { type: [string, 'null'] }
+          additionalProperties: true
+        auto_verdict: { $ref: '#/components/schemas/FpAutoVerdict' }
+        libraries:
+          type: array
+          items: { type: string, enum: [rule, wiki] }
+          description: 这一次请求跑哪几边（单腿补跑时只有一项）
         rule: { $ref: '#/components/schemas/MaintenanceSide' }
         wiki: { $ref: '#/components/schemas/MaintenanceSide' }
+      additionalProperties: true
+    FpAutoVerdict:
+      type: object
+      description: |
+        自动判定闭环的开关状态（P003-T047 A7）。A/B 口径没拍板之前恒为 `enabled: false`：
+        维护产出照写（规则与判据页该改就改），但「AI 结论直接生效」这条路没开，也不改案件结论。
+      required: [enabled, pending]
+      properties:
+        enabled: { type: boolean, enum: [false] }
+        pending: { type: string, description: 待拍板的口径名，当前是「A/B 口径待拍板」 }
+        note: { type: string }
+      additionalProperties: false
+    FpMaintenanceSessionSummary:
+      type: object
+      description: "GET /api/false-positive/sessions 的列表项：误报维护会话摘要，按 updated_at 倒序。"
+      required: [id, case_id, status, terminal]
+      properties:
+        id: { type: string }
+        case_id: { type: string, description: 案件 ID（就是误报入口路径里的 alertId） }
+        event_type: { type: [string, 'null'] }
+        who: { type: string }
+        status: { type: string, enum: [collecting, done, partial, failed], description: 'done|partial|failed 是终态' }
+        terminal: { type: boolean, description: 终态会话不会再自动写入（补跑会开一份新会话） }
+        libraries: { type: array, items: { type: string, enum: [rule, wiki] }, description: 这一轮请求的库 }
+        sides: { type: array, items: { type: string, enum: [rule, wiki] }, description: 真写了库的边 }
+        decision_source: { type: [string, 'null'], enum: [model, fallback, idempotent, null] }
+        updated_at: { type: string, format: date-time }
+      additionalProperties: false
+    FpMaintenanceSession:
+      type: object
+      description: |
+        一份误报维护会话的全文（`GET /api/false-positive/sessions/{id}`）。多轮：`case`（读案卷）→ `libraries`（读两库）→
+        `propose`（提修订，一次模型调用）→ `verify`（写入 + 自校验）。`messages[]` 形制对齐 wiki-sessions。
+      required: [id, case_id, status, turns, messages, outcomes]
+      properties:
+        id: { type: string }
+        case_id: { type: string }
+        case_dir: { type: [string, 'null'], description: 案卷目录（旧案件可能没有） }
+        event_type: { type: [string, 'null'] }
+        who: { type: string }
+        reason: { type: string }
+        libraries_requested: { type: array, items: { type: string, enum: [rule, wiki] } }
+        status: { type: string, enum: [collecting, done, partial, failed] }
+        terminal: { type: boolean }
+        turns:
+          type: array
+          items:
+            type: object
+            required: [n, phase, at, summary]
+            properties:
+              n: { type: integer }
+              phase: { type: string, enum: [case, libraries, propose, verify, skip] }
+              at: { type: string, format: date-time }
+              summary: { type: string }
+            additionalProperties: false
+        messages:
+          type: array
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role: { type: string, enum: [user, assistant] }
+              kind: { type: string, description: 'case / libraries / decision / verify（人工可读的那几句话没有 kind）' }
+              content: { type: string }
+              at: { type: string, format: date-time }
+            additionalProperties: true
+        decision: { $ref: '#/components/schemas/CaseMaintenance/properties/decision' }
+        outcomes:
+          type: object
+          description: 单边 outcome：`state` / `why` / `error` / `idempotency_key` / `revision`，规则侧另有 `id`/`file`/`action`，知识库侧另有 `page`/`pages`/`session_id`。
+          properties:
+            rule: { $ref: '#/components/schemas/MaintenanceSide' }
+            wiki: { $ref: '#/components/schemas/MaintenanceSide' }
+          additionalProperties: false
+        validation:
+          type: object
+          properties:
+            ok: { type: boolean }
+            checks: { type: array, items: { type: object, additionalProperties: true } }
+          additionalProperties: false
+        auto_verdict: { $ref: '#/components/schemas/FpAutoVerdict' }
+        error: { type: string, description: 会话级失败原因（单边失败落在 `outcomes.<边>.error` 上） }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
       additionalProperties: true
     FalsePositiveRecord:
       type: object
