@@ -55,3 +55,27 @@ M6 变异：把 `command_whitelist` 场景提示塞回「规则层（硬判定�
 ✖ failing tests:
 ✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 (1.098462ms)
 （M6 复原：注意 wiki/common/GEN-13.md 是本卡新文件，git checkout 会回到上一提交的版本）
+M6 变异：command_whitelist 塞回「规则层（硬判定）」行（期望 A4 分层自洽红）
+✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 (1.055998ms)
+ℹ tests 12
+ℹ pass 11
+ℹ fail 1
+✖ failing tests:
+✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 (1.055998ms)
+
+M7 变异：GEN-13 一条引用换回 deprecated 的 WS-11（期望「只引 active 页」红）
+✖ A4 判据页只引用当前 active 页，不引 deprecated 页 (0.960945ms)
+ℹ tests 12
+ℹ pass 11
+ℹ fail 1
+✖ failing tests:
+✖ A4 判据页只引用当前 active 页，不引 deprecated 页 (0.960945ms)
+
+M8 变异：验证块改回「两处命中」旧口径（期望 A5 文档一致性红）
+✖ A5 对外文档里不再有九条路径与 04-上下文.md 带基线/情报的旧口径 (1.172773ms)
+ℹ tests 12
+ℹ pass 11
+ℹ fail 1
+✖ failing tests:
+✖ A5 对外文档里不再有九条路径与 04-上下文.md 带基线/情报的旧口径 (1.172773ms)
+
