@@ -124,3 +124,67 @@ M1 证明 A5 的主判据（anchor-retake 内容映射 + HAND 表）会红；M2 
 
 1. **doc-side（nit）**：`coding-reports/P003-T034.md:219` 与 `evidence/recon/P003-T034.md:264` 写「非本卡 scope 的 **8 份**模块页共 31 处」，实际枚举 7 份（2+7+1+13+1+3+4=31），总数与 MOVED 32 对得上，是「8 份」这个措辞写错（前几轮遗留）。不影响验收。
 2. **残余**：A5 的 audit 那一半对非 `wiki-workbench.js` 锚点是弱证据（见 M2 与 §6.1），本轮 `knowledge-base.md` 里 wiki-store/wiki-replay/其他文件的锚点没有逐条语义复核，我只抽了 18 处 wiki-store/wiki-replay 侧锚点全部吻合。缝与审查席 issue 1 同源，不阻塞。
+
+---
+
+## 七、集成后全量重走 · 测试验收（测试席 · 何东阳，HEAD `54d9b99`，2026-11-20 05:0x）
+
+- 起活 `59be2cd`；被验交付 `7d5b850`（docs/evidence 改）+ `54d9b99`（报告），审查判词
+  `verdicts/P003-T034-gc-backend-code-review-mwo1bopj.json`（pass，2 minor）。
+- 我这轮**零实现面判定**：`git diff --numstat 59be2cd..HEAD` 全为 1/1、24/24、12/12、143/0、74/0 ——
+  `server.js` 1/1、`docs/modules/http-api.md` 24/24、`openapi.yaml` 12/12、`.env.example` 1/1、探针 1/1，**零行数漂移**。
+  判据：`anchor-audit --pre 38732a0` 3976/0/0 EXIT=0（一行漂移就会红，见 §7.3 M3）。
+- 本轮重点按派活：A5 的文档落点表述 + 探针断言口径（`probe-corrupt-and-auth.sh:45` 前缀匹配 ↔ 响应里 `model.roles` 新形状）。
+
+### 7.1 A1–A6 逐条（全部我自己终端跑）
+
+| 验收 | 我的命令 / 证据 | 实测 |
+| --- | --- | --- |
+| A1 真进程不设 `HIDS_DATA_DIR` 落 fake HOME 全局根，27/27 | `evidence/test/P003-T034/acceptance.tester.test.js`（14/14 EXIT=0，含 A1 两条：真进程 + 九条具名路径）；另手工真进程 `env -i HOME=$(mktemp -d) HIDS_PORT=<free> … node server.js` → `POST /api/config {"LLM_MODEL":"a1-manual-model"}` | POST 200；文件落 `$HOME/.local/share/hids-ai-console/config-overrides.json`（0600，内容恰 `{"LLM_MODEL":"a1-manual-model"}`）；响应 `model.name=a1-manual-model`、`roles` 五角色齐；`test ! -e .data` 成立 |
+| A2 注入根 + 真实全局根本轮零写入 | 我的基线取 `2026-11-20 05:01:34`（起跑时刻）；跑完根套件/evidence 套件/两探针/我的两份探针/三次变异后：`find ~/.local/share/hids-ai-console -newermt '2026-11-20 05:01:34' \| wc -l` | **0**；全局根 mtime 恒为 `04:57:40`（早于我的基线）；注入根的探针/套件全部 `mktemp` + `HIDS_DATA_DIR`，`$HOME/.local/share/hids-ai-console` 不被创建（acceptance 套件与我的 `data-admin-live-probe.sh` 都断言） |
+| A3 仓内零 `.data` | `find . -maxdepth 2 -name .data -not -path './node_modules/*'`；`test ! -e .data`；`test ! -e backend/.data` | 三次全空，两个 `test ! -e` PASS；`git status --porcelain` 只有 ` M .pi-child-claim.json`（编排面）+ 我新增的两份未跟踪探针 |
+| A4 旧位不迁移 | `ls -d /home/trtyr/code/backend/.data`（268K，mtime `2026-11-19 12:15`）；`ls -d .../hids-ai-console/backend/.data`（205M）；`git diff --stat 38732a0..59be2cd -- server.js` 空；acceptance「A4 旧位里躺着数据时…」14/14 套件内 | 旧位仍在、mtime 未动；`repo/backend/.data` 在本树不存在；合并对 main 侧父提交 `server.js` 零 diff（无迁移代码进入） |
+| A5 数据管理落点表述全改数据根（残余 3 处否定句 + `server.js:1100` 一处 minor） | 我的守卫 `node evidence/test/P003-T034/doc-landing-guard.mjs` → **27 PASS / 0 FAIL，EXIT=0**；全文 `.data/` 清单 `grep -rn '\.data/' docs README.md openapi.yaml .env.example`（15 行）逐条判 | `openapi.yaml` **零** `.data/`；`http-api.md` §3.6/§3.7 零 `.data/`，七类落点 + 归档 + 测试口径全写数据根（13 条原文逐条对上）；15 处 `.data/` 全是①旧位历史（gaps/architecture A4 段）②注入目录的历史路径（`同级 .data/wiki-history/`、`<库目录上一级>/.data/rules-history/`，与行为一致）；`server.js:1100` 一处旧裸路径指称仍在（卡面已申报 minor） |
+| A6 门禁全绿 | `npm test`；`node --test --test-concurrency=1 --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js`；两探针串行 | `228/228/0 EXIT=0`；`292 tests / 291 pass / 0 fail / 1 todo EXIT=0`（todo = `evidence/test/P003-T013/acceptance.test.js:648` 的 who 101 字待定口径，非红）；`probe-config-write.sh` **19 PASS/0 FAIL EXIT=0**、`probe-corrupt-and-auth.sh` **12 PASS/0 FAIL EXIT=0**（串行，套件之后跑）；`node --check server.js` 见交付日志 |
+
+### 7.2 验收三样（这轮打在数据管理面上，活口 = 我的 `data-admin-live-probe.sh`，19 PASS / EXIT=0）
+
+- **schema 符合性**：`GET /api/data/inventory` 200 + `Cache-Control: no-store`；`data_dir` = 注入根；`stores[].kind` 顺序恰
+  `cases/investigations/boards/wiki_sessions/queue/logs/config_overrides`；每条 `path` 全在注入根下；`total.count/bytes` = 各类之和；
+  `POST /api/data/cleanup` dry-run 200 形状恰 `{dry_run,kind,action,threshold,candidates,applied,inventory}`，
+  `applied` 恒 `{count:0,bytes:0}`、`threshold` 回显 `{older_than:null,keep:0}`（对 `http-api.md:91/462-479`）。
+- **边界**：缺 `kind`；无阈值（`cases` 与 `queue` 各一次）；非法 `kind=pirate`；`keep=-1`；`keep=1.5`（非整数）；
+  `action=burn`；多带键 `bogus`；`older_than` 非时间串 —— 8 条全 400 `caller_error` 且话术点组内键名。
+- **错误码**：400 ×8（上面，断言 `{error,code}` 形状）；**401 ×2**（启 Basic 后无凭据 `inventory` / `cleanup`）；
+  **409 ×2 / 503 ×1** 由我门禁里的 `evidence/test/P003-T044/data-admin.test.js` 亲跑覆盖（`t034-evidence.log:958/962/971` 三条 ✔，
+  含「候选里有 queued/running/failed 一律 409，内存与盘上都不动」）；**500** 由 acceptance「数据根不可写 → internal_error 两键」覆盖。
+
+### 7.3 变异验红（三条，亲手复现，逐条还原）
+
+```
+M1 A5 文档落点守卫不是永真：把 §3.7 cases 缺省落点改回「仓内 `.data/cases`」
+   → node evidence/test/P003-T034/doc-landing-guard.mjs
+     FAIL §3.7 无「仓内/缺省 .data」落点 + FAIL §3.7 落点原文：cases 缺省落点 = <数据根>/cases，FAILURES 2，EXIT=1
+   → 还原（/tmp 备份逐字节 cmp 一致）→ ALL PASS，EXIT=0
+M2 探针断言改宽不是放水：把 probe-corrupt-and-auth.sh:45 的前缀断言还原成旧整串（带收尾 }）
+   → cp 到同目录 .mut-old-assert.sh 跑：11 PASS / 1 FAIL / EXIT=1，恰红「覆盖层坏了：进程照常起…」
+     （响应是 `"model":{"configured":true,"name":"env-model","roles":{…}}`，旧整串不可能命中）
+   → 删掉变异副本，committed 版重跑：12 PASS / 0 FAIL / EXIT=0
+M3 锚点守卫抓行漂移：`sed -i '1i // 变异' server.js`（一行插入，行为不变）
+   → node evidence/test/P003-T034/anchor-audit.mjs --pre 38732a0
+     锚点 3976 处：PASS=3928 MOVED=9 UNVERIFIED=39，EXIT=1
+   → cmp 还原 server.js（逐字节一致）→ 3976 处 / PASS=3976 / MOVED=0 / UNVERIFIED=0，EXIT=0
+```
+
+### 7.4 未决 / 残余风险
+
+1. **minor（重复验证审查席 issue 1）**：`evidence/test/P003-T034/rerun-verify.txt:108` 的 A5 取证命令原样复跑
+   **0 行 / EXIT=1**，日志却贴了 3 行——模式里「仓内」后是空格，三处原文是「仓内 \`.data/\`」（隔着反引号）。A5 实质成立，
+   坏的是那行命令不可复跑。建议改模式（如 `仓内.*\.data`）或改口径为「全量清单逐条判」并附清单。
+2. **minor（卡面已申报）**：`server.js:1100` 注释仍指 `.data/triage-monitor.json` 旧裸路径；顺带说明「只剩 3 处否定句」是
+   grep 口径：`docs/architecture.md:391-392` 的「P003-T019 时仓内 \n.data/」跨行，同一模式扫不到（历史比较句，不是落点承诺）。
+3. **anchor-audit 的弱证据面（旧账，非本轮新错）**：把文档锚点改到同一文件里的**另一个**真行号（如 `server.js:864-870 → :874-880`）
+   它仍报 3976/0/0 EXIT=0；只有**代码行漂移**（M3）才会红。与审查席上轮 issue 1、侦查 §6.1 M2 同一事实，不重复记。
+4. **环境观察（不归因）**：真实全局根在 `04:57:35–04:57:40` 有一次**外部**写入（`migration-backup-20261120/repo-dot-data` 与
+   `cases/ investigations/ trace-boards/ wiki-sessions/ triage-monitor.json` 新目录），早于我的基线 `05:01:34`；本轮所有套件与探针
+   在此之后零写入（`find -newermt` = 0）。看形态像是「群主手工搬旧仓 `.data`」这类活数据步骤，不是本卡门禁产物。
