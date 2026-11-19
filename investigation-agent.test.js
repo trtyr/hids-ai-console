@@ -4,10 +4,12 @@ import { AgentToolbox } from './agent-tools.js';
 import { InvestigationAgent, boundedToolArgs } from './investigation-agent.js';
 import { KnowledgeStore } from './knowledge-store.js';
 import { KnowledgeWorkbench, knowledgeFields } from './knowledge-workbench.js';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RuleStore } from './rule-store.js';
+import { InvestigationStore } from './investigation-store.js';
+import { ChatModelClient } from './model-client.js';
 
 test('常规研判将必查空页与不可用来源写入结果，深度模式保持原有取证路径', async () => {
   const calls = [];
@@ -576,4 +578,115 @@ test('deep 模式下结论工具忽略 wiki 字段，不因未查知识库被拒
   assert.equal(result.validation.ok, true);
   assert.equal(result.verdict.verdict, 'uncertain');
   assert.equal(result.verdict.wiki, undefined);
+});
+
+// --- P003-T022：模型没交卷时留下它回了什么 ------------------------------------------------
+
+// 队列侧只留 250 字进 record.detail（triage-monitor.js:471）；失败消息必须整条落得进去。
+const detailBudget = 250;
+
+const validConclusion = () => ({ content: JSON.stringify({ verdict: '存疑', confidence: '低', summary: '证据不足，需人工核查',
+  claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }], missing_data: ['授权记录'] }) });
+
+test('A1 六轮都没给出 JSON 时，失败消息带末次回包字数、开头与退回原因', async () => {
+  const prose = '我先梳理一下这条告警：主机 10.0.0.5 上以 root 执行了 id，需要核对授权与前后会话。';
+  const model = { model: 'fake', complete: async () => ({ content: prose }) };
+  await assert.rejects(new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7', { mode: 'triage' }),
+    error => {
+      assert.match(error.message, /模型未在调查轮数内给出有效 JSON 结论/);
+      assert.match(error.message, /调查 6 轮、已查询 0 项证据后仍没有可用结论/);
+      assert.match(error.message, new RegExp(`末次回包 ${prose.length} 字：「我先梳理一下这条告警`));
+      assert.match(error.message, /退回 6 次：输出解析失败：/);
+      assert.equal([...error.message].length <= detailBudget, true);
+      return true;
+    });
+});
+
+test('A1 模型没有返回可用消息时，失败消息带 model-client 挂上的回包摘要', async () => {
+  const model = { model: 'fake', complete: async () => {
+    throw Object.assign(new Error('模型没有返回可用消息'),
+      { reply_excerpt: '回包 message 正文 0 字、工具调用 0 次（finish_reason=length）' });
+  } };
+  await assert.rejects(new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7', { mode: 'triage' }), error => {
+    assert.match(error.message, /模型调用失败（第 1 轮、已查询 0 项证据）：回包 message 正文 0 字、工具调用 0 次（finish_reason=length）/);
+    assert.match(error.message, /调用报错：模型没有返回可用消息/);
+    assert.equal(error.cause.message, '模型没有返回可用消息');
+    assert.equal([...error.message].length <= detailBudget, true);
+    return true;
+  });
+});
+
+test('A1 结论连续被退回时，失败消息写退回次数与原因', async t => {
+  // 有知识库但一直没查：前五轮 submit_conclusion 都被退回，末轮没工具只能交文本又解析不了。
+  let turns = 0;
+  const model = { model: 'fake', complete: async (_messages, tools) => {
+    turns++;
+    return tools.length
+      ? { tool_calls: [{ id: `call-${turns}`, type: 'function',
+        function: { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '直接交结论' }) } }] }
+      : { content: '结论：存疑。' };
+  } };
+  await assert.rejects(new InvestigationAgent(suspiciousToolbox(), model, undefined, wikiStore(), await tempRuleStore(t))
+    .run('suspicious_operation:7', { mode: 'triage' }), error => {
+    assert.match(error.message, /退回 6 次：结论被退回：.*没有调用知识库工具.*→ 输出解析失败：/);
+    assert.match(error.message, /末次回包 6 字：「结论：存疑。」/);
+    assert.equal([...error.message].length <= detailBudget, true);
+    return true;
+  });
+});
+
+test('A2 同一个研判实例失败后能再跑，两次失败的摘要各是各的', async () => {
+  const replies = Array.from({ length: 12 }, (_, index) => `第${index < 6 ? '一' : '二'}次瞎聊，第 ${index + 1} 条回包`);
+  let modelCalls = 0;
+  const model = { model: 'fake', complete: async () => {
+    modelCalls++;
+    return modelCalls > replies.length ? validConclusion() : { content: replies[modelCalls - 1] };
+  } };
+  const agent = new InvestigationAgent(suspiciousToolbox(), model);
+  await assert.rejects(agent.run('suspicious_operation:7', { mode: 'triage' }),
+    error => { assert.match(error.message, /末次回包 \d+ 字：「第一次瞎聊，第 6 条回包」/); return true; });
+  await assert.rejects(agent.run('suspicious_operation:7', { mode: 'triage' }),
+    error => {
+      assert.match(error.message, /末次回包 \d+ 字：「第二次瞎聊，第 12 条回包」/);
+      assert.equal(/第一次瞎聊/.test(error.message), false);
+      return true;
+    });
+  const third = await agent.run('suspicious_operation:7', { mode: 'triage' });
+  // 13 次是第三次研判的第一轮拿到结论，14 次是随后的独立复核。
+  assert.equal(modelCalls, 14);
+  assert.equal(third.verdict.verdict, 'uncertain');
+});
+
+test('A3 模型没交卷的这次失败不覆盖已经写成的结论', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-unsubmitted-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const history = new InvestigationStore(directory);
+  const written = await history.save({ alert_id: 'suspicious_operation:7', mode: 'triage',
+    verdict: { verdict: 'threat', verdict_label: '真实威胁', summary: '已写成的结论' }, evidence: [] });
+  const model = { model: 'fake', complete: async () => ({ content: '好的，我来分析这条告警。' }) };
+  await assert.rejects(new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7', { mode: 'triage' }),
+    /模型未在调查轮数内给出有效 JSON 结论/);
+  // 失败走的是抛错，不是写一条降级结论：盘上仍只有那一条，内容一字不差。
+  assert.deepEqual(await readdir(directory), [path.basename(history.file('suspicious_operation:7', 'triage'))]);
+  assert.deepEqual(await history.latest('suspicious_operation:7', 'triage'), written);
+});
+
+test('model-client 抛「没有返回可用消息」时把不可用回包的摘要挂到 error 上', async () => {
+  const client = body => new ChatModelClient({ baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'sk-不能出现在摘要里', model: 'fake',
+    timeoutMs: 1000, fetcher: async () => new Response(JSON.stringify(body), { status: 200,
+      headers: { 'Content-Type': 'application/json' } }) });
+  await assert.rejects(client({ choices: [{ finish_reason: 'length', message: { role: 'assistant', content: '' } }] })
+    .complete([{ role: 'user', content: '调查告警' }]), error => {
+    assert.equal(error.message, '模型没有返回可用消息');
+    assert.match(error.reply_excerpt, /回包 message 正文 0 字、工具调用 0 次（finish_reason=length）/);
+    assert.equal(error.reply_excerpt.includes('sk-不能出现在摘要里'), false);
+    return true;
+  });
+  await assert.rejects(client({ choices: [{ finish_reason: 'stop' }] }).complete([{ role: 'user', content: '调查告警' }]),
+    error => { assert.match(error.reply_excerpt, /回包没有 choices\[0\]\.message（finish_reason=stop，keys=choices）/); return true; });
+  // 正文非空就是可用消息：不抛错，回包内容交给研判循环自己判断（解析失败由 A1 的摘要负责）。
+  const long = '我先梳理告警背景。'.repeat(30);
+  const message = await client({ choices: [{ finish_reason: 'length', message: { role: 'assistant', content: long } }] })
+    .complete([{ role: 'user', content: '调查告警' }]);
+  assert.equal(message.content, long);
 });

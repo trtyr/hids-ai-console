@@ -29,6 +29,40 @@ function parseJSON(text) {
   return data;
 }
 
+// P003-T022：模型没交卷时，失败记录里要能看见它最后回了什么。
+// 队列侧只留 250 字进 record.detail（triage-monitor.js:471），所以整条失败消息按 240 字预算拼。
+const failureTextLimit = 240;
+
+function flatten(text, limit) {
+  const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
+  return flat.length > limit ? `${flat.slice(0, limit)}…` : flat;
+}
+
+// 末次回包的形状：正文多少字、开头一段、这一轮点了哪些工具。
+function replyShape(reply) {
+  const content = typeof reply?.content === 'string' ? reply.content : '';
+  const names = [...new Set((reply?.tool_calls || []).map(call => call.function?.name).filter(Boolean))];
+  const parts = [content.trim() ? `末次回包 ${content.trim().length} 字：「${flatten(content, 50)}」` : '末次回包没有正文'];
+  if (names.length) parts.push(`末次工具调用：${flatten(names.join('、'), 30)}`);
+  return parts.join('；');
+}
+
+// 调查轮数用尽仍没结论：轮数、已查证据、末次回包、最近两次不同的退回原因（解析失败 / 结论被退 / 没查知识库）。
+function noConclusionError({ reply, problems = [], turns, calls }) {
+  const parts = [`调查 ${turns} 轮、已查询 ${calls} 项证据后仍没有可用结论`, replyShape(reply)];
+  let reasons = [...new Set(problems)].slice(-2).map(item => flatten(item, 40));
+  if (reasons.length) parts.push(`退回 ${problems.length} 次：${reasons.join(' → ')}`);
+  return new Error(flatten(`模型未在调查轮数内给出有效 JSON 结论（${parts.join('；')}）`, failureTextLimit));
+}
+
+// 模型调用失败时同样要留下回包摘要：model-client 抛「没有返回可用消息」时带 reply_excerpt（model-client.js:43）。
+function modelCallError(error, { turn, calls }) {
+  const reason = error?.reply_excerpt
+    ? `${flatten(error.reply_excerpt, 130)}（调用报错：${flatten(error?.message || error, 60)}）`
+    : flatten(error?.message || error, 150);
+  return new Error(flatten(`模型调用失败（第 ${turn + 1} 轮、已查询 ${calls} 项证据）：${reason}`, failureTextLimit), { cause: error });
+}
+
 function selectedCards(cards, type, detail) {
   const text = JSON.stringify(detail).slice(0, 10000).toLowerCase();
   const selected = cards.filter(card => card.id === type);
@@ -478,6 +512,10 @@ export class InvestigationAgent {
         wiki_pages: [...wikiPages.values()].slice(0, 4) })}` }];
     let draft = null;
     let calls = 0;
+    // P003-T022：失败时要留下模型最后回了什么，以及这一次为什么被退回。
+    let lastReply = null;
+    let problems = [];
+    let turns = 0;
     const queriedTools = new Map();
     for (let turn = 0; turn < 6; turn++) {
       const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';
@@ -487,12 +525,14 @@ export class InvestigationAgent {
       const requestTools = choice === 'none' ? [] : tools;
       try { reply = await this.model.complete(requestMessages, requestTools, choice); }
       catch (error) {
-        if (!/timeout|超时/i.test(String(error.message || error))) throw error;
+        if (!/timeout|超时/i.test(String(error.message || error))) throw modelCallError(error, { turn, calls });
         onProgress('模型超时重试', '保留本轮全部已查询证据，重试相同的模型请求');
-        reply = await this.model.complete(requestMessages, requestTools, choice);
+        try { reply = await this.model.complete(requestMessages, requestTools, choice); }
+        catch (retried) { throw modelCallError(retried, { turn, calls }); }
       }
+      lastReply = reply; turns = turn + 1;
       if (reply.tool_calls?.length) {
-        if (choice === 'none') throw new Error('模型超出调查轮数仍请求工具');
+        if (choice === 'none') throw new Error(flatten(`模型超出调查轮数仍请求工具；${replyShape(reply)}`, failureTextLimit));
         messages.push({ role: 'assistant', content: reply.content || null, tool_calls: reply.tool_calls });
         for (const call of reply.tool_calls) {
           const name = call.function?.name;
@@ -504,6 +544,7 @@ export class InvestigationAgent {
               if (problem) {
                 content = JSON.stringify({ error: problem });
                 trace.push({ kind: 'conclusion_rejected', error: problem });
+                problems.push(`结论被退回：${problem}`);
               } else {
                 draft = normalizeVerdict(submitted);
                 wikiChoice = { adopted: Array.isArray(submitted.wiki_adopted) ? submitted.wiki_adopted.map(String) : [],
@@ -568,6 +609,7 @@ export class InvestigationAgent {
       }
       try { draft = normalizeVerdict(parseJSON(reply.content)); }
       catch (error) {
+        problems.push(`输出解析失败：${String(error.message).slice(0, 120)}`);
         messages.push({ role: 'assistant', content: reply.content || '' });
         messages.push({ role: 'user', content: `输出解析失败：${String(error.message).slice(0, 120)}。请严格输出一个 JSON 对象，包含三种中文 verdict 之一、summary、confidence、claims、missing_data。` });
         continue;
@@ -576,6 +618,7 @@ export class InvestigationAgent {
       if (mode === 'triage' && wikiIndex && !wikiConsulted.size && !wikiNudged && turn < 5) {
         wikiNudged = true;
         draft = null;
+        problems.push('结论没查知识库被退回');
         messages.push({ role: 'assistant', content: reply.content || '' });
         messages.push({ role: 'user', content: '本次分析还没有调用知识库工具。先调用 wiki_page 或 wiki_search 核对判据；判据不适用时在结论里写明原因。' });
         trace.push({ kind: 'wiki', action: 'required' });
@@ -583,7 +626,7 @@ export class InvestigationAgent {
       }
       break;
     }
-    if (!draft) throw new Error('模型未在调查轮数内给出有效 JSON 结论');
+    if (!draft) throw noConclusionError({ reply: lastReply, problems, turns, calls });
     onProgress('独立复核', '正在核对结论、反证与数据缺口');
     const reviewPrompt = `你是独立质疑者。只审查下面的告警证据精简视图、调查工具结果和已提交结论，不继承调查员私有推理。检查引用是否支持事实、是否误把空查询当良性、声称合法运维或授权扫描时是否有相应依据、是否忽略反证。检查给客户看的 report 是否与 verdict、已核实事实和证据缺口一致；recommended_actions 是否具体、可采纳、符合结论且未暗示系统已执行处置。不要把平台只读取证工具的调用授权误当作告警行为的授权证据要求。特别核查：同主机不同时刻的两条告警不能凭共现推断同一攻击链；127.0.0.1 是本机回环，不能当作外部或另一台内网攻击源；蜜罐 timeline 是否已经提供请求载荷。若这些因素影响结论，assessment 必须为 needs_revision。输出 JSON：{"concerns":[字符串],"missing_evidence":[字符串],"assessment":"supported|needs_revision"}。不要调用工具。\n\n${mode === 'triage' ? prompts.sop?.[match[1]] || '' : ''}`;
     const reviewInput = JSON.stringify({ alert_id: alertId, draft, rule_candidate: ruleContext, required_evidence: requiredChecks, wiki_pages: [...wikiPages.values()],
