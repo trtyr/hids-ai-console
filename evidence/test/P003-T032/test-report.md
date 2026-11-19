@@ -128,6 +128,8 @@ T032_DEBUG=1 node evidence/test/P003-T032/probe-a2-pause.mjs   # 失败时加它
 
 ## §A5 · 隧道恢复后：两项都受阻（**本卡没做**）
 
+**群主已裁（2026-11-19 22:34）**：A5 拆 **T048 挂起**（等 T035 合并 + 隧道恢复），本卡按现状收口，A5 记 `not-satisfied`。下面两处「对不上」也已对齐：卡面「两条失败」是上午现场报告当时的口径（后来三条都 failed，后续重跑以盘上三条为准）；`/tmp/hids-live-test.jsp` 是现场测试人工写上 24.21 的，与 `/dev/shm/detector_tmp/jspxwebshell/...` 那批牧云自检样本不是同一个东西。
+
 ### 一、`/tmp/hids-live-test.jsp` 清理：主机不可达
 
 在本树实测（19:1x 与 22:1x 各一次，结果一致）：
