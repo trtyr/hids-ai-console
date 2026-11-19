@@ -151,8 +151,9 @@ test('A1 读原文：内容与文件逐字相同，元数据与列表一致', { 
     const res = await getJSON(main.port, `/api/rules/${item.id}`);
     assert.equal(res.status, 200, `${item.id}: 正文 ${res.text.slice(0, 200)}`);
     const rule = res.json;
-    assert.deepEqual(Object.keys(rule).sort(), ['description', 'file', 'id', 'name', 'rego'],
-      'RegoRule additionalProperties:false');
+    assert.deepEqual(Object.keys(rule).sort(), ['description', 'file', 'id', 'name', 'rego', 'revision'],
+      'RegoRule additionalProperties:false（T041 起 revision 必填：正文 sha256 前 16 位）');
+    assert.match(rule.revision, /^[0-9a-f]{16}$/, `${item.id}: revision 是 16 位十六进制`);
     assert.equal(rule.id, item.id);
     assert.equal(rule.name, item.name);
     assert.equal(rule.description, item.description);
@@ -450,7 +451,10 @@ test('边界 方法不匹配落 404（不是 405、不是接口跑到写操作�
   assertErrorShape(await request(main.port, '/api/rules', { method: 'DELETE' }), { status: 404, label: 'DELETE /api/rules' });
   assertErrorShape(await getJSON(main.port, '/api/rules/evaluate'), { status: 404, label: 'GET /api/rules/evaluate' });
   assertErrorShape(await request(main.port, '/api/rules/ssh_bruteforce', { method: 'DELETE' }), { status: 404, label: 'DELETE 读接口' });
-  assertErrorShape(await request(main.port, '/api/rules/ssh_bruteforce', { method: 'PUT', body: '{}' }), { status: 404, label: 'PUT 读接口' });
+  // T041 起 PUT /api/rules/{id} 是真路由（规则维护接口）：未配管理员令牌回 503 not_configured，不再是方法不匹配；
+  // 方法不匹配的边界改用 PATCH 探（仍无此方法，落 404）。
+  assertErrorShape(await request(main.port, '/api/rules/ssh_bruteforce', { method: 'PUT', body: '{}' }), { status: 503, label: 'PUT 维护路由（无令牌 503）' });
+  assertErrorShape(await request(main.port, '/api/rules/ssh_bruteforce', { method: 'PATCH', body: '{}' }), { status: 404, label: 'PATCH 方法不匹配' });
 });
 
 // ---- 502：规则库坏了必须整次失败并带定位，不静默跳过 ----
