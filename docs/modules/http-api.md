@@ -540,7 +540,7 @@ bash evidence/test/P003-T044/mutation-round2.sh   # 20 条实现变异逐条打�
 - 结果按 `time` **倒序**（新的在前）。
 - `total` 是**筛选后、切页前**的条数；`echo` 回显本次的 `count` / `offset`。
 - `files` 是这次读了几个文件——测试拿它证明「读的是盘，不是内存」。
-- **上限**：命中超过 20000 条时只收前 20000 条并回 `truncated: true`（`log.js:176` 的 `QUERY_SCAN_LIMIT`）：调窄时间范围再查。
+- **上限**：命中超过 20000 条时只收前 20000 条并回 `truncated: true`（`log.js:77` 的 `QUERY_SCAN_LIMIT`）：调窄时间范围再查。
 - 不是 JSON 对象、没有字符串 `time` / `event` 的行（截断的半行、人手写的空行）直接跳过，不报错（`parseLogLine()`，`log.js:164-175`）。
 - **脱敏第三道闸**：落盘那行已经过脱敏，读的时候按同一套规则**再擦一遍**——盘上的文件可能是人手改过或老版本写的。
 
@@ -599,16 +599,16 @@ bash evidence/test/P003-T044/mutation-round2.sh   # 20 条实现变异逐条打�
 **不做什么**（测试别按这些写期望）：
 
 - 不动 `web/**`、不装日志依赖（`package.json` 不变）。
-- 不按天/按行分割、不压缩、不做跨进程文件锁：单进程一套实例（`log.js:67` 的模块级 `log`）。
+- 不按天/按行分割、不压缩、不做跨进程文件锁：单进程一套实例（`log.js:66` 的模块级 `log`）。
 - 不改 stdout 行形状与 `createJournal` 签名（既有四套日志测试靠这条缝）。
 - 清理不删当前活动文件，也不按行裁剪（要缩当前文件请先轮转：调小 `HIDS_LOG_MAX_BYTES` 后重启，下一次写就会轮转）。
 - 查询不做全文检索/正则，`event` 只做精确匹配。
 
-**可重放证据**（`evidence/test/P003-T045/log-file.test.js`，15 条，约 280ms）：
+**可重放证据**（`evidence/test/P003-T045/log-file.test.js`，16 条，约 280ms）：
 
 ```bash
 cd /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T045
-node --test evidence/test/P003-T045/log-file.test.js          # 15 条全绿
+node --test evidence/test/P003-T045/log-file.test.js          # 16 条全绿
 node --test evidence/test/P003-T025/config-check.test.js      # A4 键集双向一致（新键已进 .env.example）
 grep -cE '^[A-Z0-9_]+=' .env.example                          # 41（头部注释写的也是 41）
 ```
