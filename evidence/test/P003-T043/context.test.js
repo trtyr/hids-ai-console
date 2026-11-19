@@ -125,7 +125,9 @@ test('A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参�
 
   const promptLayer = tableRow(source, '场景提示（不是判定层）');
   assert.ok(promptLayer.includes('command_whitelist'), '场景提示行没点名 command_whitelist');
-  assert.ok(promptLayer.includes('没有程序消费者'), '场景提示行没说清它没有程序消费者');
+  assert.ok(promptLayer.includes('没有判定消费者'), '场景提示行没说清它没有判定消费者（提示词会被装配读入，只是不产出判定）');
+  assert.equal(promptLayer.includes('没有程序消费者'), false,
+    '「没有程序消费者」字面不成立——prompts/scenarios.json 会被 prompt-store.js / investigation-agent.js 读入装配');
 
   assert.ok(tableRow(source, '研判参考').includes('GEN-13.md'), '研判参考行没指向本页');
   assert.match(source, /不能代替规则层/, '没有「本页不能代替规则层结论」的禁令');
@@ -147,6 +149,23 @@ test('A4 入口页与日志登记了 GEN-13', async () => {
   assert.match(await doc('wiki/index.md'), /GEN-13/, 'wiki/index.md 没有 GEN-13 入口');
   const log = await doc('wiki/log.md');
   assert.match(log, /## \[2026-11-20\][\s\S]*GEN-13/, 'wiki/log.md 顶部没有 GEN-13 的登记');
+});
+
+// 日志与判据页必须是同一口径：维护者按 `grep "^## \[" log.md | head -5` 读到的就是这条，
+// 上轮只改了 GEN-13、这句副本留在 log 里，等于同一份库两种说法。
+test('A4 wiki/log.md 的本次登记与 GEN-13 的分层口径一致', async () => {
+  const log = await doc('wiki/log.md');
+  const start = log.indexOf('## [2026-11-20]');
+  const entry = log.slice(start, log.indexOf('\n## [', start + 1) === -1 ? undefined : log.indexOf('\n## [', start + 1));
+  const ruleLine = entry.split('\n').find(line => line.includes('规则层（硬判定）'));
+  assert.ok(ruleLine, 'log 的本次登记里没有「规则层（硬判定）」这句');
+  assert.ok(ruleLine.includes('rules/*.rego') && ruleLine.includes('triage-rules.json'), 'log 的规则层没点名两个程序载体');
+  assert.equal(ruleLine.includes('command_whitelist'), false,
+    'log 把 command_whitelist 场景提示算进「规则层（硬判定）」了');
+  const promptLine = entry.split('\n').find(line => line.includes('场景提示（不是判定层）'));
+  assert.ok(promptLine, 'log 没有把 command_whitelist 场景提示单列成「不是判定层」');
+  assert.ok(promptLine.includes('command_whitelist'), 'log 的场景提示行没点名 command_whitelist');
+  assert.ok(promptLine.includes('没有判定消费者'), 'log 没说清场景提示没有判定消费者');
 });
 
 // ── A5：既有文档与证据件跟上新语义 ──────────────────────────────────────────
