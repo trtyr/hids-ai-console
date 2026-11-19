@@ -291,6 +291,36 @@ test('A4 写盘窗口可查：缺省 1 次/秒（峰值 ≤1 次/秒量级）', 
   assert.equal(monitor.summary().persist.unflushed, false);
 });
 
+// 复审补的 liveness 用例：写在飞期间标脏，markDirty 会早退（不排 timer），写完后必须有人补排，
+// 否则这份脏状态永远不落盘——「崩溃最多丢一个合并写窗口」就不成立了。
+test('A4 在飞写期间标脏不丢：写完补排下一次合并写，脏状态最终落盘', async t => {
+  const directory = await tempDir(t);
+  const file = path.join(directory, 'queue.json');
+  const monitor = new TriageMonitor({ inputMode: 'syslog', concurrency: 0, service: {},
+    history: { async latest() { return null; }, async save() { return {}; } },
+    file, casesDirectory: path.join(directory, 'cases'), investigator: {}, persistIntervalMs: 40 });
+  // 第一次写挂在在飞状态，测试放行后才真的写——真实 fs 的延迟用 gate 确定性地模拟
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const write = monitor.writeSnapshot.bind(monitor);
+  let inFlight = 0;
+  monitor.writeSnapshot = async () => { inFlight += 1; await gate; return write(); };
+  monitor.markDirty();
+  await until(() => inFlight === 1, { label: '第一次合并写进入在飞' });
+  monitor.records.set('inflight-proof', { alert_id: 'inflight-proof', status: 'queued' });
+  monitor.markDirty();   // 在飞期间：这一次没有任何人排 timer
+  release();
+  // 不调 persist()：补排的那次合并写必须自己把这份脏状态带到盘上
+  await until(async () => {
+    try {
+      const snapshot = JSON.parse(await readFile(file, 'utf8'));
+      return snapshot.records.some(record => record.alert_id === 'inflight-proof');
+    } catch { return false; }
+  }, { label: '在飞期间标的脏最终落盘' });
+  await until(() => monitor.summary().persist.unflushed === false, { label: '脏代数归零' });
+  monitor.stop();
+});
+
 // ── A5 done 记录 TTL 归档 ────────────────────────────────────────────────────
 test('A5 过期 done 记录归档出内存 Map：写进 .archive.jsonl、失效 dedupe、全表不再背着它', async t => {
   const directory = await tempDir(t);

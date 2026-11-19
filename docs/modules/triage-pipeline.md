@@ -350,7 +350,7 @@ EOF
 | `markDirty()` | 热路径：每条 syslog 报文、每个研判步骤、`run()` 收尾 | 标脏；写盘由一个合并写窗口决定，**峰值最多 1 次 / `persist_interval_ms`（缺省 1000ms）** |
 | `persist()` | 管理面：`enqueue` / `poll` / `setEnabled` / `archiveDone` / `cancel` | 标脏并等到自己这一代真的落盘（单飞：已有一次写在飞就复用它） |
 | `writeChain`（getter） | 测试与调用方当「等落盘」的同步点 | 等价于 `persist()` |
-| `flush()` | 内部 / 收尾 | 没有新脏状态时不写空快照；一次写在飞时复用那一次（`triage-monitor.js:185-205`） |
+| `flush()` | 内部 / 收尾 | 没有新脏状态时不写空快照；一次写在飞时复用那一次；在飞期间标的脏由写完后的 `finally` 补排下一次合并写（不补排的话这份脏状态永远不落盘，`triage-monitor.js:185-205`） |
 
 快照内容（`writeSnapshot()` `triage-monitor.js:206`）＝ `initialized`、`enabled`、`watermark`、`watermark_ids`、`last_received_at`、
 `archived_count`、`paused{since,received,dropped,replayed,buffer}`、`records`、`dedupe`、`windows`。
@@ -480,7 +480,7 @@ EOF
 
 | 行为 | 说明 | 依据 |
 | --- | --- | --- |
-| 退避重排 | 失败记录在 `retryTimers` 里排一个定时器（`unref()`，不挡进程退出）；到点回 `queued`、阶段「等待重试」，`drain()` 接着跑。暂停期间定时器到点只清 `next_attempt_at`，不跑；恢复时 `resumeRetries()` 把逾期的一次性补上 | `triage-monitor.js:270-305`、`triage-monitor.js:307-322` |
+| 退避重排 | 失败记录在 `retryTimers` 里排一个定时器（`unref()`，不挡进程退出）；到点回 `queued`、阶段「等待重试」，`drain()` 接着跑。暂停期间定时器到点直接不跑、`next_attempt_at` 原样留着（所以暂停时在单条状态里能看到一个已逾期的待重试时刻）；恢复时 `resumeRetries()` 把逾期的一次性补上 | `triage-monitor.js:270-305`、`triage-monitor.js:307-322` |
 | 死信 | `attempts >= retry_max_attempts` → `dead_letter: true`（**status 仍是 `failed`**，不新增状态值，前端与筛选表都不用改）；原因留在 `failure`，`summary().retry.dead_letters` 报条数 | `triage-monitor.js:270-283` |
 | 跨重启 | `load()` 把 `attempts` 到上限的失败记录判死信；`start()` 调 `resumeRetries()` 把其余的排上（逾期的立刻回队） | `triage-monitor.js:118-124`、`triage-monitor.js:243-255`、`triage-monitor.js:307-322` |
 | TTL 归档 | `archiveDone()` 把过期的 done 记录追加进 `<队列文件>.archive.jsonl`（一行一条，带 `archived_at`）后移出 `records`，同时失效指向它的 dedupe 条目；`start()` 起扫描定时器（缺省 10 分钟一次，`done_ttl_ms` 缺省 24h，都 `unref()`） | `triage-monitor.js:243-255`、`triage-monitor.js:332-347` |
@@ -857,7 +857,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | 牧云事件详情读取失败 | 匹配返回未匹配，原因写明「牧云事件 ID 详情读取失败：…」（`syslog-case.js:33-35`） | 走未匹配分支 | — | 结论按未匹配口径给 |
 | 牧云事件列表查询失败 | 匹配返回未匹配，原因写明「牧云事件查询失败：…」（`syslog-case.js:55`） | 同上 | — | 同上 |
 | 牧云事件与 syslog 主机对不上 | 匹配返回未匹配，原因写明「牧云事件 ID 对应的主机与 syslog 不一致」（`syslog-case.js:26-29`） | 同上 | — | 同上 |
-| 研判抛错 | 记录置 `failed`，`detail` 截断到 250 字符，原因进 `failure{reason,code,at}` 并自动退避重排（`triage-monitor.js:841-849`） | 队列记录保留；到上限进死信 | 自动重排；死信后仍可 `enqueue(..., { retry: true })` 人工重跑 | 最多重跑 `retry_max_attempts` 次，之后停在死信等人工 |
+| 研判抛错 | 记录置 `failed`，`detail` 截断到 250 字符，原因进 `failure{reason,code,at}` 并自动退避重排（`triage-monitor.js:841-849`） | 队列记录保留；到上限进死信 | 自动重排；死信后仍可 `enqueue(..., { retry: true })` 人工重跑 | 总共最多跑 `retry_max_attempts` 次（即自动重跑 `retry_max_attempts-1` 次），之后停在死信等人工 |
 | 队列快照写盘失败 | 只记 `triage.persist_failed` 日志（不打断服务、等的人也不挂：`writtenGen` 推到目标代）（`triage-monitor.js:196-201`） | 研判继续 | — | 崩溃时最多丢一段状态，重启后 `running` 记录重跑 |
 | 案件目录写不出来 | `run()` 抛错，记录转 `failed`（`triage-monitor.js:374-378`、`390-391`） | 记录保留 | 能 | 无 |
 | 回写重复次数时 `result.json` 不存在 | 直接返回，两个文件都不动（`syslog-case.js:126`） | 重复次数没更新 | — | 无 |

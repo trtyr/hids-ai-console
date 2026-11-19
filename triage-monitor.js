@@ -181,7 +181,7 @@ export class TriageMonitor {
   }
 
   // 单飞：已有一次写在飞就复用它，不并发写同一个文件。
-  // 没有新脏东西时不写空快照——合并写窗口到点时状态常常已经被上一次写带走了。
+  // 没有新脏东西时不写空快照；在飞期间标的脏由 finally 补排下一次写，不然没人落盘。
   flush() {
     if (!this.flushing && this.writtenGen >= this.dirtyGen) return Promise.resolve();
     if (!this.flushing) {
@@ -198,7 +198,7 @@ export class TriageMonitor {
           log('triage.persist_failed', { file: this.file, error: String(error?.message || error) }, 'error');
           this.writtenGen = Math.max(this.writtenGen, target);
         })
-        .finally(() => { this.flushing = false; this.flushDone = null; });
+        .finally(() => { this.flushing = false; this.flushDone = null; if (this.writtenGen < this.dirtyGen) this.markDirty(); });
     }
     return this.flushDone;
   }

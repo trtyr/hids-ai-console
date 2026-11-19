@@ -34,6 +34,9 @@ MUTATIONS = [
     ('A6 summary 不报队列深度与失败原因',
      "        queue.depth += 1;",
      "        queue.depth += 0;"),
+    ('A4 合并写 liveness 洞（在飞期间标脏后不补排）',
+     "        .finally(() => { this.flushing = false; this.flushDone = null; if (this.writtenGen < this.dirtyGen) this.markDirty(); });",
+     "        .finally(() => { this.flushing = false; this.flushDone = null; });"),
 ]
 
 original = open(PATH).read()

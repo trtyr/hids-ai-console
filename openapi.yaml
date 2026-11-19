@@ -1650,7 +1650,7 @@ components:
       additionalProperties: true
     TriageSummary:
       type: object
-      required: [initialized, enabled, input_mode, since, counts, verdict_counts, type_counts]
+      required: [initialized, enabled, input_mode, since, counts, verdict_counts, type_counts, queue, failure_reasons, retry, paused, archived, persist]
       properties:
         initialized: { type: boolean }
         enabled: { type: boolean }
