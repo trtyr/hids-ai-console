@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { TriageMonitor } from './triage-monitor.js';
@@ -43,7 +43,9 @@ test('new alerts enter triage once and the cursor survives restart', async t => 
   assert.equal(calls.length, 1);
 });
 
-test('resume after restart skips paused backlog and only investigates later alerts', async t => {
+// A2（P003-T036）改写了这条契约：暂停不再「跳过积压 + 清空队列 + 把游标推到点击时刻」，
+// 而是保留游标与队列，恢复后暂停期间进来的告警照常补跑（原来那套会让暂停期间的告警永久漏掉）。
+test('resume after restart keeps the cursor and the paused backlog instead of skipping it', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-control-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   let rows = [{ id: 'honeypot:1', createdAt: '2026-11-03T08:00:00.000Z' }];
@@ -55,28 +57,35 @@ test('resume after restart skips paused backlog and only investigates later aler
       verdict: { verdict: 'undetermined', summary: '待复核', claims: [] }, validation: { ok: true } }; } } };
   const monitor = new TriageMonitor(options);
   await monitor.load(); await monitor.poll();
+  const cursor = monitor.watermark;
+  assert.equal(cursor, '2026-11-03T08:00:00.000Z');
   assert.equal((await monitor.setEnabled(false)).enabled, false);
+  // 暂停期间到达两条：轮询不跑，队列也不动
   rows = [{ id: 'honeypot:2', createdAt: new Date(Date.now() - 1000).toISOString() }, ...rows];
   await monitor.poll();
   assert.equal(monitor.status('honeypot:2'), null);
   await monitor.enqueue('honeypot:manual');
   assert.equal(monitor.status('honeypot:manual').status, 'queued');
+  // 重启还是暂停：队列、游标都从盘上原样回来
   const resumed = new TriageMonitor(options);
   await resumed.load();
   assert.equal(resumed.summary().enabled, false);
+  assert.equal(resumed.watermark, cursor);
+  assert.equal(resumed.status('honeypot:manual').status, 'queued');
+  // 恢复：不删 queued、不把游标推到点击时刻；排队中的照常跑，暂停期间新增的告警下一轮轮询补上
   await resumed.setEnabled(true);
-  assert.equal(resumed.status('honeypot:2'), null);
-  assert.equal(resumed.status('honeypot:manual'), null);
-  assert.deepEqual(calls, []);
-  rows = [{ id: 'honeypot:3', createdAt: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString() }, ...rows];
+  for (let n = 0; n < 50 && resumed.status('honeypot:manual')?.status !== 'done'; n++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(resumed.status('honeypot:manual').status, 'done');
   await resumed.poll();
-  for (let n = 0; n < 50 && resumed.status('honeypot:3')?.status !== 'done'; n++) await new Promise(resolve => setTimeout(resolve, 5));
-  assert.equal(resumed.status('honeypot:3').status, 'done');
-  assert.deepEqual(calls, ['honeypot:3']);
+  for (let n = 0; n < 50 && resumed.status('honeypot:2')?.status !== 'done'; n++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(resumed.status('honeypot:2').status, 'done');
+  assert.deepEqual(calls.sort(), ['honeypot:2', 'honeypot:manual']);
   await assert.rejects(() => resumed.setEnabled('false'), /布尔值/);
 });
 
-test('研判完成后 TriageCase 带 evidence 条目，只外露四个字段', async t => {
+test('研判完成后 TriageCase 带 evidence 条目：RPC 形态的 args 保留，sha256 只增不减', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-evidence-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const fetchedAt = '2026-11-03T08:00:01.000Z';
@@ -93,16 +102,16 @@ test('研判完成后 TriageCase 带 evidence 条目，只外露四个字段', a
   await monitor.enqueue('honeypot:7');
   for (let n = 0; n < 50 && monitor.status('honeypot:7')?.status !== 'done'; n++) await new Promise(resolve => setTimeout(resolve, 5));
   await monitor.writeChain;
-  // 四个字段原样，args 不外露
+  // P003-T040 A6：{id} 这种 RPC 入参要留着，否则看不出这条证据查的是哪个范围；sha256 照旧。
   assert.deepEqual(monitor.status('honeypot:7').evidence,
-    [{ evidence_id: 'cw:1', tool: 'get_honeypot_event', fetched_at: fetchedAt, sha256: digest }]);
+    [{ evidence_id: 'cw:1', tool: 'get_honeypot_event', fetched_at: fetchedAt, sha256: digest, args: { id: 1 } }]);
   // cases() 只列 syslog 入口的记录（record.input）；补上入口字段，走同一条输出白名单。
   monitor.records.get('honeypot:7').input = { parsed: { msgid: 'cloudwalker-webshell', payload: {}, ts: '2026-11-03T08:00:00Z' } };
   assert.deepEqual(monitor.cases().cases[0].evidence, monitor.status('honeypot:7').evidence);
   const resumed = new TriageMonitor(options);
   await resumed.load();
   assert.deepEqual(resumed.status('honeypot:7').evidence,
-    [{ evidence_id: 'cw:1', tool: 'get_honeypot_event', fetched_at: fetchedAt, sha256: digest }]);
+    [{ evidence_id: 'cw:1', tool: 'get_honeypot_event', fetched_at: fetchedAt, sha256: digest, args: { id: 1 } }]);
 });
 
 test('旧队列记录缺 evidence 时从研判记录就地补齐', async t => {
@@ -119,7 +128,8 @@ test('旧队列记录缺 evidence 时从研判记录就地补齐', async t => {
     service: { alerts: async () => ({ alerts: [], partial: false }) }, investigator: { run: async () => ({}) } });
   await monitor.load();
   assert.deepEqual(monitor.status('honeypot:9').evidence,
-    [{ evidence_id: 'syslog:1', tool: 'received_syslog', fetched_at: '2026-11-03T08:00:00.000Z', sha256: 'b'.repeat(64) }]);
+    [{ evidence_id: 'syslog:1', tool: 'received_syslog', fetched_at: '2026-11-03T08:00:00.000Z', sha256: 'b'.repeat(64),
+      args: {} }]);
 });
 
 test('排队中与研判失败的 TriageCase 也带空的 evidence[]', async t => {
@@ -294,7 +304,8 @@ test('summary() 出结论分布、类型分布，since 只算该时刻起进入�
 
 test('syslog 模式的 summary 给出最后一条到达时刻，重启后不丢，失败投递不算', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-received-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  // 后台合并写与 teardown 抢跑：rm 撞上并发写入会 ENOTEMPTY，交给 Node 自带重试（与 integration.test.js 同一处理）
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 20 }));
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-03T08:00:00.000Z') });
   const options = { service: {}, inputMode: 'syslog', concurrency: 1,
     history: new InvestigationStore(path.join(directory, 'results')), file: path.join(directory, 'queue.json'),
@@ -335,7 +346,9 @@ test('syslog 模式的 summary 给出最后一条到达时刻，重启后不丢�
   assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
   await monitor.setEnabled(false);
   t.mock.timers.tick(5000);
-  assert.deepEqual(await monitor.acceptSyslog(line), { skipped: 'paused' });
+  // A2（P003-T036）：暂停期间不丢，报文进缓冲区等恢复回灌
+  assert.deepEqual(await monitor.acceptSyslog(line), { buffered: true, buffered_count: 1 });
+  assert.equal(monitor.summary().paused.received, 1);
   assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
 
   // 持久化：重启后仍是同一个最后到达时刻，而不是退回 null
@@ -506,4 +519,285 @@ test('A2 没标误报的记录重跑仍按现在的方式写回', async t => {
   assert.equal(after.detail, '重跑认定为威胁');
   assert.equal(after.report, '重跑认定为威胁的报告');
   assert.equal(after.evidence[0].evidence_id, 'cw:7');
+});
+
+// ---- P003-T037：增量轮询 / 去重复用 / 优先级 / 队列上限 / 详情一次一拉 ----
+
+const syslogLine = ({ msgid = 'cloudwalker-honeypot', seconds = '2026-11-03T08:00:00Z', eventTime = '2026-11-03 08:00:00',
+  eventId = null, hostId = null, sourceIp = '192.0.2.5' } = {}) => `<134>1 ${seconds} host app 1 ${msgid} host_ip="10.0.0.5"`
+  + ` event_create_time="${eventTime}" source_ip="${sourceIp}" target_ip="10.0.0.5" target_port="80"`
+  + `${eventId == null ? '' : ` event_id="${eventId}"`}${hostId == null ? '' : ` host_id="${hostId}"`}`;
+
+const awaitRecord = async (monitor, predicate, limit = 200) => {
+  for (let n = 0; n < limit && !predicate(); n++) await new Promise(resolve => setTimeout(resolve, 5));
+  await monitor.writeChain;
+};
+
+test('A1 轮询按 from 增量取数：游标由 from 决定，排序键固定，一页取完不翻页', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-incremental-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const queries = [];
+  let rows = [{ id: 'honeypot:1', createdAt: '2026-11-03T08:00:00.000Z' },
+    { id: 'honeypot:2', createdAt: '2026-11-03T08:00:05.000Z' }];
+  // 替身按接口契约排序（created_at desc, id asc），别把输入顺序当约定。
+  const service = { alerts: async query => { queries.push({ ...query });
+    const page = rows.filter(row => !query.from || row.createdAt >= query.from)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
+    return { alerts: page, partial: false }; } };
+  const monitor = new TriageMonitor({ service, file: path.join(directory, 'queue.json'), concurrency: 1, intervalMs: 1000,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    investigator: { run: async (id, { mode }) => ({ alert_id: id, mode,
+      verdict: { verdict: 'uncertain', summary: '待复核', claims: [] }, validation: { ok: true } }) } });
+  await monitor.load();
+
+  // 冷启动只定游标，不排告警；查询不带 from。
+  await monitor.poll();
+  assert.deepEqual(queries, [{ count: 50, offset: 0, sort: 'time' }]);
+  assert.equal(monitor.watermark, '2026-11-03T08:00:05.000Z');
+  assert.equal(monitor.summary().counts.queued, 0);
+
+  // 增量轮：from 就是上一轮游标，第二次是新增，单页取完不再翻页。
+  rows = [...rows, { id: 'honeypot:3', createdAt: '2026-11-03T08:00:10.000Z' }];
+  const incremental = await monitor.poll();
+  assert.deepEqual(queries[1], { count: 50, offset: 0, sort: 'time', from: '2026-11-03T08:00:05.000Z' });
+  assert.equal(queries.length, 2, '一页就取完了，没有翻页找边界');
+  assert.equal(incremental.found, 1);
+  assert.equal(monitor.watermark, '2026-11-03T08:00:10.000Z');
+  await awaitRecord(monitor, () => monitor.status('honeypot:3')?.status === 'done');
+  assert.equal(monitor.status('honeypot:3').status, 'done');
+
+  // 下一轮从新游标取：同秒内已处理过的 id 不会再排一遍。
+  await monitor.poll();
+  assert.equal(queries[2].from, '2026-11-03T08:00:10.000Z');
+  assert.equal(monitor.summary().counts.done, 1);
+});
+
+test('A1 连续空轮指数退避，见到新告警立刻回常态', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-backoff-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  let rows = [{ id: 'honeypot:1', createdAt: new Date(Date.now() - 60_000).toISOString() }];
+  const service = { alerts: async () => ({ alerts: rows, partial: false }) };
+  const monitor = new TriageMonitor({ service, file: path.join(directory, 'queue.json'), concurrency: 1,
+    intervalMs: 1_000, maxBackoffMs: 8_000,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    investigator: { run: async (id, { mode }) => ({ alert_id: id, mode,
+      verdict: { verdict: 'uncertain', summary: '待复核', claims: [] }, validation: { ok: true } }) } });
+  await monitor.load();
+  await monitor.poll(); // 冷启动：空轮
+  assert.deepEqual([monitor.backoffMs, monitor.summary().empty_polls, monitor.summary().backoff_ms], [2_000, 1, 2_000]);
+  await monitor.poll();
+  assert.equal(monitor.backoffMs, 4_000);
+  await monitor.poll();
+  assert.equal(monitor.backoffMs, 8_000);
+  await monitor.poll();
+  assert.equal(monitor.backoffMs, 8_000, '退避到上界就不再涨');
+
+  // 新告警：立刻回常态（= 配置的 intervalMs），空轮计数清零。
+  rows = [{ id: 'honeypot:2', createdAt: new Date(Date.now() + 60_000).toISOString() }, ...rows];
+  const fresh = await monitor.poll();
+  assert.equal(fresh.found, 1);
+  assert.equal(monitor.backoffMs, 1_000);
+  assert.equal(monitor.summary().empty_polls, 0);
+  await awaitRecord(monitor, () => monitor.status('honeypot:2')?.status === 'done');
+});
+
+test('A3 同指纹同主机且上一条已完结：复用结论只累加 repeat_count，不再跑完整研判', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-reuse-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const runs = [];
+  const history = new InvestigationStore(path.join(directory, 'results'));
+  const monitor = new TriageMonitor({ service: {}, inputMode: 'syslog', concurrency: 1, history,
+    file: path.join(directory, 'state.json'), casesDirectory: path.join(directory, 'cases'),
+    eventToolbox: { listEvents: async () => ({ total: 0, events: [] }) },
+    investigator: { runUnmatchedSyslog: async () => { runs.push('run'); return { mode: 'triage', verdict: {
+      verdict: 'uncertain', verdict_label: '存疑', summary: '缺少事件详情', report: '未匹配到事件，需核查。', claims: [] },
+      validation: { ok: true } }; } } });
+  await monitor.start();
+
+  const first = await monitor.acceptSyslog(syslogLine({ eventTime: '2026-11-03 08:00:00' }));
+  await awaitRecord(monitor, () => monitor.status(first.alert_id)?.status === 'done');
+  assert.equal(runs.length, 1);
+  const caseDir = monitor.status(first.alert_id).case_dir;
+
+  // 同指纹（同主机、同来源、同端口）、不同秒：上一条已完结 → 只累加 repeat_count。
+  const second = await monitor.acceptSyslog(syslogLine({ seconds: '2026-11-03T08:00:10Z', eventTime: '2026-11-03 08:00:10' }));
+  assert.equal(second.reused, true);
+  assert.equal(second.alert_id, first.alert_id);
+  assert.equal(second.repeat_count, 2);
+  assert.equal(runs.length, 1, '没有第二次完整研判');
+  assert.equal((await history.latest(first.alert_id, 'triage')).repeat_count, 2, '研判记录同步 repeat_count');
+  assert.match(await readFile(path.join(caseDir, '05-研判结果.md'), 'utf8'), /重复投递：2 次/);
+  assert.equal(JSON.parse(await readFile(path.join(caseDir, 'result.json'), 'utf8')).repeat_count, 2);
+
+  // 再来一条：计数继续涨，研判次数不变。
+  const third = await monitor.acceptSyslog(syslogLine({ seconds: '2026-11-03T08:00:20Z', eventTime: '2026-11-03 08:00:20' }));
+  assert.equal(third.repeat_count, 3);
+  assert.equal(runs.length, 1);
+
+  // 指纹不同（换来源 IP）：照常新排一条完整研判。
+  const other = await monitor.acceptSyslog(`<134>1 2026-11-03T08:00:30Z host app 1 cloudwalker-honeypot host_ip="10.0.0.5"`
+    + ' event_create_time="2026-11-03 08:00:30" source_ip="198.51.100.9" target_ip="10.0.0.5" target_port="443"');
+  assert.equal(other.reused, undefined);
+  await awaitRecord(monitor, () => monitor.status(other.alert_id)?.status === 'done');
+  assert.equal(runs.length, 2);
+});
+
+test('A3 上一条未完结（排队/失败）不复用结论', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-reuse-pending-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  let attempts = 0;
+  const monitor = new TriageMonitor({ service: {}, inputMode: 'syslog', concurrency: 1,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    file: path.join(directory, 'state.json'), casesDirectory: path.join(directory, 'cases'),
+    eventToolbox: { listEvents: async () => ({ total: 0, events: [] }) },
+    investigator: { runUnmatchedSyslog: async () => {
+      if (++attempts === 1) throw new Error('model timeout');
+      return { mode: 'triage', verdict: { verdict: 'uncertain', verdict_label: '存疑', summary: '重试完成', claims: [] },
+        validation: { ok: true } };
+    } } });
+  await monitor.start();
+  const first = await monitor.acceptSyslog(syslogLine({ eventTime: '2026-11-03 08:00:00' }));
+  await awaitRecord(monitor, () => monitor.status(first.alert_id)?.status === 'failed');
+  // 上一条失败：不沿用结论，新排一条（investigator 第二次成功）。
+  const second = await monitor.acceptSyslog(syslogLine({ seconds: '2026-11-03T08:00:10Z', eventTime: '2026-11-03 08:00:10' }));
+  assert.equal(second.reused, undefined);
+  assert.notEqual(second.alert_id, first.alert_id);
+  await awaitRecord(monitor, () => monitor.status(second.alert_id)?.status === 'done');
+  assert.equal(attempts, 2);
+});
+
+test('A4 drain 按（类型风险，occurrence_count，created_at）取最高优先级', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-priority-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const runs = [];
+  const monitor = new TriageMonitor({ service: { alerts: async () => ({ alerts: [], partial: false }) },
+    file: path.join(directory, 'queue.json'), concurrency: 1,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    investigator: { run: async id => { runs.push(id); return { alert_id: id,
+      verdict: { verdict: 'uncertain', summary: '待复核', claims: [] }, validation: { ok: true } }; } } });
+  await monitor.load();
+  const queue = (alertId, occurrenceCount, createdAt) => monitor.records.set(alertId,
+    { alert_id: alertId, occurrence_count: occurrenceCount, created_at: createdAt, updated_at: createdAt,
+      status: 'queued', stage: '等待研判', steps: [], attempts: 0 });
+  queue('network_audit:1', 5, '2026-11-03T08:00:00.000Z');
+  queue('webshell:1', 1, '2026-11-03T08:00:05.000Z');
+  queue('honeypot:1', 9, '2026-11-03T08:00:01.000Z');
+  queue('webshell:2', 3, '2026-11-03T08:00:09.000Z');
+  queue('webshell:3', 3, '2026-11-03T08:00:02.000Z');
+  monitor.drain();
+  await awaitRecord(monitor, () => runs.length === 5);
+  // webshell（风险 10）先于蜜罐（8）先于网络审计（4）；同风险同次数按 created_at 早的先行。
+  assert.deepEqual(runs, ['webshell:3', 'webshell:2', 'webshell:1', 'honeypot:1', 'network_audit:1']);
+});
+
+test('A5 并发与队列上限可由配置查，队列到上限拒收并计丢弃数', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-queue-limit-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const saved = { concurrency: process.env.HIDS_TRIAGE_CONCURRENCY, queue: process.env.HIDS_TRIAGE_QUEUE_MAX };
+  t.after(() => {
+    if (saved.concurrency === undefined) delete process.env.HIDS_TRIAGE_CONCURRENCY;
+    else process.env.HIDS_TRIAGE_CONCURRENCY = saved.concurrency;
+    if (saved.queue === undefined) delete process.env.HIDS_TRIAGE_QUEUE_MAX;
+    else process.env.HIDS_TRIAGE_QUEUE_MAX = saved.queue;
+  });
+  process.env.HIDS_TRIAGE_CONCURRENCY = '3';
+  process.env.HIDS_TRIAGE_QUEUE_MAX = '5';
+  const byEnv = new TriageMonitor({ file: path.join(directory, 'env.json'), service: {}, investigator: {}, history: {} });
+  assert.equal(byEnv.concurrency, 3);
+  assert.equal(byEnv.queueLimit, 5);
+  assert.deepEqual([byEnv.summary().concurrency, byEnv.summary().queue_limit, byEnv.summary().dropped], [3, 5, 0]);
+
+  // 显式构造参数：合法值原样保留，非法值回落默认（负数 / 小数 / 非数 / 空串 / 字符串 '0'）。
+  // 回归（复审 blocker）：构造尾部曾有一行 `this.concurrency = concurrency` 把规范化结果覆盖回原值，
+  // 显式传非法值时 drain 条件 active < 非法值 恒假，队列永不执行——下面这两段断言就是防它再回来。
+  // 先清掉 env，回落目标才是硬默认 2 / 1000（否则测的是 env）。
+  delete process.env.HIDS_TRIAGE_CONCURRENCY;
+  delete process.env.HIDS_TRIAGE_QUEUE_MAX;
+  assert.equal(new TriageMonitor({ file: path.join(directory, 'explicit.json'), concurrency: 4,
+    service: {}, investigator: {}, history: {} }).summary().concurrency, 4, '显式合法值原样生效');
+  for (const bad of [-5, 'abc', null, 1.5, '', '0']) {
+    const explicit = new TriageMonitor({ file: path.join(directory, 'explicit-bad.json'), concurrency: bad,
+      queueLimit: bad, service: {}, investigator: {}, history: {} });
+    assert.deepEqual([explicit.concurrency, explicit.summary().concurrency, explicit.queueLimit], [2, 2, 1000],
+      `显式非法参数 ${JSON.stringify(bad)}`);
+  }
+
+  // 行为面一：显式数字 0 是合法值——不起 worker、只排队（P003-T036 的测试与停机维护需要「入队但不跑」）。
+  const idle = [];
+  const paused = new TriageMonitor({ service: {}, file: path.join(directory, 'idle.json'), concurrency: 0,
+    history: new InvestigationStore(path.join(directory, 'idle-results')),
+    investigator: { run: async id => { idle.push(id); return { alert_id: id, mode: 'triage',
+      verdict: { verdict: 'uncertain', summary: '待复核', claims: [] }, validation: { ok: true } }; } } });
+  await paused.load();
+  await paused.enqueue('honeypot:2');
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(idle, [], 'concurrency:0 不跑研判');
+  assert.equal(paused.status('honeypot:2').status, 'queued', '记录稳定停在 queued');
+
+  // 行为面二：非法值回落默认后队列照常执行，不被 `active < 非法值` 卡死（复审用 node -e 复现的那条路径）。
+  const stuck = [];
+  const rescued = new TriageMonitor({ service: {}, file: path.join(directory, 'stuck.json'), concurrency: -1,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    investigator: { run: async id => { stuck.push(id); return { alert_id: id, mode: 'triage',
+      verdict: { verdict: 'uncertain', summary: '待复核', claims: [] }, validation: { ok: true } }; } } });
+  await rescued.load();
+  await rescued.enqueue('honeypot:1');
+  await awaitRecord(rescued, () => stuck.length === 1);
+  assert.deepEqual(stuck, ['honeypot:1'], '非法 concurrency 回落默认后队列照常执行');
+  assert.equal(rescued.status('honeypot:1').status, 'done');
+
+  // env 路径：非法值同样回落默认，不把队列卡死（0 / 负数 / 非数 / 空串）。
+  for (const bad of ['0', '-1', '半', '']) {
+    process.env.HIDS_TRIAGE_CONCURRENCY = bad;
+    process.env.HIDS_TRIAGE_QUEUE_MAX = bad;
+    const fallback = new TriageMonitor({ file: path.join(directory, 'bad.json'), service: {}, investigator: {}, history: {} });
+    assert.deepEqual([fallback.concurrency, fallback.queueLimit], [2, 1000], `非法配置 ${JSON.stringify(bad)}`);
+  }
+
+  // 上限命中：concurrency=1 且研判不结束 → 队列深度 1 = 上限，再入队 429 并计数。
+  const never = new Promise(() => {});
+  const monitor = new TriageMonitor({ service: {}, file: path.join(directory, 'queue.json'), concurrency: 1, queueLimit: 1,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    investigator: { run: () => never } });
+  await monitor.load();
+  await monitor.enqueue('honeypot:1');
+  await assert.rejects(() => monitor.enqueue('honeypot:2'), error => error.status === 429);
+  assert.equal(monitor.summary().dropped, 1);
+  assert.equal(monitor.status('honeypot:2'), null, '被丢掉的告警不进队列');
+});
+
+test('A2 一次研判内同一条事件详情只拉一次：syslog 匹配与规则评估共用缓存，agent 拿 match.event', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-detail-cache-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const detail = { id: 7, host_id: 12, host_view: { host_ip: '10.0.0.5' }, level: 3, state: 1 };
+  const calls = [];
+  const eventToolbox = { callTool: async (name, args) => { calls.push([name, args.id]); return detail; },
+    listEvents: async () => ({ total: 0, events: [] }) };
+  let ruleSawDetail = null;
+  const ruleEngine = { evaluate: async ({ toolbox, match }) => {
+    ruleSawDetail = await toolbox.callTool('get_honeypot_event', { id: match.event_id });
+    return { status: 'observed', revision: 'r', rule: { id: 'rule-1' }, facts: [] };
+  } };
+  let streamContext = null;
+  const monitor = new TriageMonitor({ service: {}, inputMode: 'syslog', concurrency: 1, eventToolbox,
+    file: path.join(directory, 'state.json'), casesDirectory: path.join(directory, 'cases'),
+    history: new InvestigationStore(path.join(directory, 'results')), ruleEngine,
+    wiki: { agentIndex: async () => ({ pages: [] }) },
+    investigator: { run: async (id, { mode, streamContext: context }) => { streamContext = context;
+      return { alert_id: id, mode, verdict: { verdict: 'uncertain', summary: '待复核', claims: [] }, validation: { ok: true } }; } } });
+  await monitor.start();
+  const accepted = await monitor.acceptSyslog(syslogLine({ eventId: 7, hostId: 12, eventTime: '2026-11-03 08:00:00' }));
+  await awaitRecord(monitor, () => monitor.status(accepted.alert_id)?.status === 'done');
+
+  // syslog 匹配拉一次，规则评估走同一份缓存，agent 用 match.event——全链只一次。
+  assert.deepEqual(calls, [['get_honeypot_event', 7]]);
+  assert.equal(ruleSawDetail, detail, '规则评估读的是缓存里的同一份详情');
+  assert.equal(streamContext.match.event, detail, 'agent 拿到 match.event 复用');
+  assert.equal(monitor.status(accepted.alert_id).status, 'done');
+
+  // 缓存不跨告警：第二条告警照常自己拉一次。
+  const second = await monitor.acceptSyslog(syslogLine({ eventId: 8, hostId: 12, seconds: '2026-11-03T08:00:30Z',
+    eventTime: '2026-11-03 08:00:30', sourceIp: '198.51.100.7' }));
+  await awaitRecord(monitor, () => monitor.status(second.alert_id)?.status === 'done' || monitor.status(second.alert_id)?.status === 'failed');
+  assert.deepEqual(calls.map(call => call[1]), [7, 8]);
 });

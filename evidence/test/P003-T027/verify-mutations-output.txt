@@ -1,0 +1,26 @@
+== 变异 A：假上游去掉 created_at ==
+A EXIT=1 ==== 16/17 PASS ==== 运行根带.data=false 条数=1 失败项：A2-3 time_window 分支（窗外有候选，且本轮恰 1 条）
+== 变异 B：不发第一条报文 ==
+B EXIT=1 ==== 14/17 PASS ==== 运行根带.data=false 条数=1 失败项：A2-1 payload 分支（缺 host_ip） | A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行） | A3-1 真管道日志不出现凭据（正控：三类 match_failed + [redacted] 到齐）
+== 变异 C：文档事件表 type -> event_type ==
+C EXIT=1 ==== 16/17 PASS ==== 运行根带.data=false 条数=1 失败项：A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行）
+== 变异 D：删掉文档事件表整行 ==
+D EXIT=1 ==== 16/17 PASS ==== 运行根带.data=false 条数=1 失败项：A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行）
+== 变异 E：隔离失效（运行根也带 .data）——前置态本脚本自己种 ==
+  种子轮：在副本树里真跑一遍取运行态（P27_BASE_SECOND=1795092164，保留运行根）
+  种子态：/tmp/p27-root-vDCKrP/.data/triage-monitor.json（==== 17/17 PASS ====）
+  种下 running 记录：syslog:honeypot:63b1e344fffb1c61:1795092284:8843e3d4-083c-4f2a-a349-467e88183596（事件时间 2026-11-19 12:44:44）
+E-对照（未变异，种了 .data 也不该进运行根） EXIT=0 ==== 17/17 PASS ==== 运行根带.data=false
+E EXIT=1 ==== 16/17 PASS ==== 运行根带.data=true 条数=1 失败项：A2-3 time_window 分支（窗外有候选，且本轮恰 1 条）
+== 变异 F：断言活性——重复一条同指纹 honeypot 报文，条数断言必须红 ==
+F EXIT=1 ==== 16/17 PASS ==== 运行根带.data=false 条数=2 失败项：A2-3 time_window 分支（窗外有候选，且本轮恰 1 条）
+== 还原校验 ==
+a0fea342511fde5e50c616ee8b67dc77d5253cd4b4bc5b7c044824ccec9aa585  evidence/test/P003-T027/acceptance-e2e.mjs
+87119c19dc8590744325fa3b0820591431d6a985e2240c4c9c28f40c770440db  docs/architecture.md
+探针与备份一致
+文档与备份一致
+副本树探针与备份一致
+还原后绿跑 EXIT=0 ==== 17/17 PASS ====
+运行根残留=0
+== 汇总 ==
+MUTATIONS OK（A/B/C/D/E/F 全部恰红到期望项，E 的前置态自种，还原后复绿；日志在 /tmp/p27-mut-1n6iXm）

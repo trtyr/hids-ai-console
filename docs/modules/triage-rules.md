@@ -79,7 +79,9 @@ updated: 2026-11-17
    没有候选 → `status: 'no_candidate'`（triage-rules.js:270-273）。
 5. 核对身份：事件号必须是正整数；调用方若传了 `parsed`，还要求 syslog 事件号、
    `match.matched`、`match.event_id` 三者对上，否则 `status: 'identity_unverified'`（triage-rules.js:274-276）。
-6. 取事件详情：没有工具箱 → `status: 'error'`；读取抛错 → `status: 'error'`（triage-rules.js:277-280）。
+6. 取事件详情：**P003-T037 起先看 `match.event`**——身份一致（`match.matched === true` 且 `match.event_id` 等于事件号）时直接复用
+   syslog 匹配已经取回的详情，不再发一次 `callTool`；没有 `match.event`（轮询入口 / 未匹配）才走工具箱。
+   这种情况下没有工具箱 → `status: 'error'`；读取抛错 → `status: 'error'`（`triage-rules.js:277-285`）。
 7. 边界检查：详情里的事件号要对上、要有主机 ID 与主机 IP、风险级别 ∈ {1,2,3,4}、
    `state` 必须是 1、syslog 与详情的字段要一致；任一不满足 → `status: 'identity_unverified'`（triage-rules.js:281-287）。
 8. 逐条规则匹配：先比 `host_id`，不同就跳过这条规则（triage-rules.js:290）；
@@ -222,7 +224,7 @@ updated: 2026-11-17
 `match.event_id` 等于这个数字。任一不成立 → `identity_unverified`。
 没传 `parsed` 时这一步只查事件号本身（triage-rules.js:275）。
 
-**事件边界**（triage-rules.js:281-287）：详情取回来后要同时满足——
+**事件边界**（`triage-rules.js:286-292`）：详情取回来后（来自 `match.event` 或工具箱，两者形状相同）要同时满足——
 详情的 `id`（缺失时取 `event_id`）等于目标事件号、主机 ID 存在、主机 IP 存在、
 风险级别 `level` ∈ {1, 2, 3, 4}、`state` 等于 1、syslog 与详情字段一致。
 任一不满足 → `identity_unverified`，理由是「事件身份、字段或风险状态不满足自动判定边界」。
@@ -305,7 +307,7 @@ updated: 2026-11-17
 | --- | --- | --- |
 | 上游 | 装配层：业务 HTTP 层与自动研判流水线把告警、工具箱传进来。接入点见 [架构篇](../architecture.md) 第 5.2 节「口径不同」里的「规则预筛」条目、第 9.2 节「管理员令牌」、第 12 节模块清单里的 `triage-rules` 行（文档指针，不在本页的证据范围内） | — |
 | 下游 | 本模块不 import 仓内其它实现文件。顶部 5 条 import 都是 Node 标准库：`node:crypto`、`node:fs/promises`、`node:net`、`node:path`、`node:url` | triage-rules.js:1-5 |
-| 外部 | 牧云事件详情——靠调用方给的 `toolbox.callTool` 取，工具名由本模块拼成 `get_<事件类型>_event` | triage-rules.js:277-280 |
+| 外部 | 牧云事件详情——优先用调用方给的 `match.event`（syslog 匹配已取回）；没有时才用 `toolbox.callTool`，工具名由本模块拼成 `get_<事件类型>_event` | `triage-rules.js:277-285` |
 | 外部 | 文件系统——规则集文件，以及同目录下的示例文件 `triage-rules.example.json` | triage-rules.js:7、225、228、248-251 |
 
 ## 7 数据

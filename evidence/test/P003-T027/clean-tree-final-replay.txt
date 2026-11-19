@@ -1,0 +1,70 @@
+# 最终提交的干净树重放：git archive c753943（本报告所在 commit）| tar -x -C /tmp/p27-clean2-JCuvKz
+# 树内无 .git / .data；依次跑 verify.sh、verify-mutations.sh、node --test *.test.js
+# ==== verify.sh（EXIT=0）====
+== 0. 探针不含固定 sleep ==
+sleep( 计数 = 0
+== 1. 仓内运行态基线 ==
+存在=no 文件树指纹=absent 目录数=0
+== 2. 连跑 6 遍 ==
+run1 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-ii0VBA
+run2 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-poV5fK
+run3 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-IzawzN
+run4 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-ubwce7
+run5 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-PMje1e
+run6 EXIT=0 ==== 17/17 PASS ==== 带.data=false [run-root] /tmp/p27-root-LzcCvF
+== 3. sleep 2 前后对照 ==
+gap0-A EXIT=0 ==== 17/17 PASS ====
+gap0-B EXIT=0 ==== 17/17 PASS ====
+gap2-C EXIT=0 ==== 17/17 PASS ====
+gap2-D EXIT=0 ==== 17/17 PASS ====
+== 4. 写者门禁 ==
+gate EXIT=0
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+== 5. nonce 结论脚本 ==
+  nonce=run1-1 -> a5c222bee141bc9a
+  nonce=run2-2 -> a5c222bee141bc9a
+  换 nonce 后指纹是否相同 -> true
+  对照：只改 source_ip 后指纹是否改变 -> true
+nonce EXIT=0
+== 6. 隔离校验 ==
+存在=no 文件树指纹=absent 目录数=0
+  .data 原本不存在，跑完仍不存在（这条以前是空转，现在真判）
+运行根残留=0
+== 汇总 ==
+ALL GREEN（日志在 /tmp/p27-verify-Qx3my2）
+# ==== verify-mutations.sh（EXIT=0）====
+== 变异 A：假上游去掉 created_at ==
+A EXIT=1 ==== 16/17 PASS ==== 运行根带.data=false 条数=1 失败项：A2-3 time_window 分支（窗外有候选，且本轮恰 1 条）
+== 变异 B：不发第一条报文 ==
+B EXIT=1 ==== 14/17 PASS ==== 运行根带.data=false 条数=1 失败项：A2-1 payload 分支（缺 host_ip） | A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行） | A3-1 真管道日志不出现凭据（正控：三类 match_failed + [redacted] 到齐）
+== 变异 C：文档事件表 type -> event_type ==
+C EXIT=1 ==== 16/17 PASS ==== 运行根带.data=false 条数=1 失败项：A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行）
+== 变异 D：删掉文档事件表整行 ==
+D EXIT=1 ==== 16/17 PASS ==== 运行根带.data=false 条数=1 失败项：A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行）
+== 变异 E：隔离失效（运行根也带 .data）——前置态本脚本自己种 ==
+  种子轮：在副本树里真跑一遍取运行态（P27_BASE_SECOND=1795092383，保留运行根）
+  种子态：/tmp/p27-root-e7U8vO/.data/triage-monitor.json（==== 17/17 PASS ====）
+  种下 running 记录：syslog:honeypot:63b1e344fffb1c61:1795092503:87d658ff-5c3b-49ab-a202-42d243bdec10（事件时间 2026-11-19 12:48:23）
+E-对照（未变异，种了 .data 也不该进运行根） EXIT=0 ==== 17/17 PASS ==== 运行根带.data=false
+E EXIT=1 ==== 16/17 PASS ==== 运行根带.data=true 条数=1 失败项：A2-3 time_window 分支（窗外有候选，且本轮恰 1 条）
+== 变异 F：断言活性——重复一条同指纹 honeypot 报文，条数断言必须红 ==
+F EXIT=1 ==== 16/17 PASS ==== 运行根带.data=false 条数=2 失败项：A2-3 time_window 分支（窗外有候选，且本轮恰 1 条）
+== 还原校验 ==
+a0fea342511fde5e50c616ee8b67dc77d5253cd4b4bc5b7c044824ccec9aa585  evidence/test/P003-T027/acceptance-e2e.mjs
+87119c19dc8590744325fa3b0820591431d6a985e2240c4c9c28f40c770440db  docs/architecture.md
+探针与备份一致
+文档与备份一致
+副本树探针与备份一致
+还原后绿跑 EXIT=0 ==== 17/17 PASS ====
+运行根残留=0
+== 汇总 ==
+MUTATIONS OK（A/B/C/D/E/F 全部恰红到期望项，E 的前置态自种，还原后复绿；日志在 /tmp/p27-mut-2KKDXW）
+# ==== node --test *.test.js（EXIT=1，唯一红是既有的 maintenance-startup.test.js）====
+✖ maintenance CLI starts when the deployment current path is a symlink (99.742653ms)
+ℹ tests 198
+ℹ pass 197
+ℹ fail 1
+✖ failing tests:
+✖ maintenance CLI starts when the deployment current path is a symlink (99.742653ms)

@@ -44,9 +44,10 @@ updated: 2026-11-17
 | RPC 服务名表 | `rpcMethods`（`cloudwalker.js:8`） | 11 个类型键 → 牧云服务名，冻结不可改 |
 | 原始行 → 告警 | `normalizeAlert(type, row)`（`cloudwalker.js:31`） | 纯函数，无 IO |
 | 详情 → 证据条目 | `detailEvidence(detail)`（`cloudwalker.js:60`） | 纯函数，无 IO |
-| 连通性探测 | `CloudwalkerGateway.status()`（`cloudwalker.js:79`） | 探一种类型 |
-| 合并列表 | `CloudwalkerGateway.alerts({ count, offset })`（`cloudwalker.js:84`） | 11 类合并分页 |
-| 单条详情 | `CloudwalkerGateway.alert(type, id)`（`cloudwalker.js:148`） | 带事件身份校验 |
+| 连通性探测 | `CloudwalkerGateway.status()`（`cloudwalker.js:120`） | 探一种类型；P003-T037 起 45 秒缓存 |
+| 合并列表 | `CloudwalkerGateway.alerts({ count, offset, type, level, q, from, to, sort })`（`cloudwalker.js:164`） | 11 类合并分页；P003-T037 起首批走 15 秒快照 |
+| 单条详情 | `CloudwalkerGateway.alert(type, id)`（`cloudwalker.js:260`） | 带事件身份校验；失败路径的探活 5 秒复用 |
+| 缓存缺省 | `defaultTtls`（`cloudwalker.js:95`） | `{status: 45000, probe: 5000, snapshot: 15000}`，构造参数或环境变量覆盖 |
 | RPC 传输 | `new RpcClient(baseUrl, token, fetcher?)`（`rpc-client.js:3`） | `fetcher` 默认 `fetch` |
 | 一次调用 | `RpcClient.call(method, params)`（`rpc-client.js:12`） | 白名单拦截 + JSON-RPC |
 
@@ -304,10 +305,31 @@ $ grep -n "^import\|require(" cloudwalker.js rpc-client.js
 
 ### 8.2 `status()`
 
-`CloudwalkerGateway.status()`（`cloudwalker.js:79`）只做一件事：用 `count: 1, offset: 0` 调一次
-`RevshellEventService.GetEventList`（`cloudwalker.js:80`）。成功返回
-`{ connected: true, eventTypes: [...11 个类型键...], transport: '牧云 /rpc' }`（`cloudwalker.js:81`）。
-失败时异常照常往上抛（`cloudwalker.js:80`），不会返回 `connected: false`。
+`CloudwalkerGateway.status()`（`cloudwalker.js:120-133`）只做一件事：用 `count: 1, offset: 0` 调一次
+`RevshellEventService.GetEventList`。成功返回 `{ connected: true, eventTypes: [...11 个类型键...], transport: '牧云 /rpc' }`。
+失败时异常照常往上抛，不会返回 `connected: false`。
+
+**P003-T037 起带缓存**：成功的结果在 `statusTtlMs`（缺省 45 秒，`HIDS_STATUS_TTL_MS` 可覆盖）内直接复用，
+不再发 RPC；缓存里存的是 promise，**并发的状态请求共用同一次探活**。失败不写缓存——牧云恢复后下一次请求立刻能看到 `connected`。
+见 §8.4。
+
+### 8.4 三类取数缓存（P003-T037）
+
+三档 TTL 都是构造参数，缺省值来自 `cloudwalker.js:95`（`defaultTtls`），环境变量可覆盖；`0` 表示不缓存。
+非法值（负数、非数）回落到默认（`cloudwalker.js:96-99`）。
+
+| 缓存 | 管什么 | 缺省 TTL | 环境变量 | 依据 |
+| --- | --- | --- | --- | --- |
+| 探活（status） | `/api/status` 的连通性探活 | 45 秒（30~60 区间内） | `HIDS_STATUS_TTL_MS` | `cloudwalker.js:120-133` |
+| 探活（详情失败路径） | `alert()` 失败后「这条事件读不到还是牧云不可达」的那次同类列表探测，按类型分桶 | 5 秒 | `HIDS_PROBE_TTL_MS` | `cloudwalker.js:135-145`、`cloudwalker.js:266-270` |
+| 列表快照 | `alerts()` 里每个类型首批 `{total, events}`，键是 `类型\|批大小\|起点` | 15 秒 | `HIDS_LIST_SNAPSHOT_TTL_MS` | `cloudwalker.js:147-166`、`cloudwalker.js:188-201` |
+
+列表快照的语义：**同源数据不再各拉各的**——研判侧筛选（`GET /api/alerts?triage_status=…`）与自动研判轮询读的是同一批类型列表，
+同一窗口里只发一次 RPC。存的是 promise（并发调用共享同一次取数），失败不缓存；返回给调用方的是**浅拷贝**，
+调用方排序/切页改不到缓存里的数组。快照表上限 256 条，超了先清过期项（`cloudwalker.js:100-102`、`cloudwalker.js:147-166`）。
+
+**取舍**：快照窗口内的列表有 ≤ TTL 的陈旧度（15 秒）。这是「轮询与筛选共用一份」的代价，不是 bug；
+要拿到刚到的告警，等下一轮或直接按事件 ID 读详情（详情不吃列表快照）。
 
 ### 8.3 `detail` 的字段随事件类型变化
 
@@ -425,7 +447,8 @@ contract 写在哪：`openapi.yaml` 的 `AlertDetail` schema（`additionalProper
 
 | 项 | 数值 | 来源 |
 | --- | --- | --- |
-| 单次 `alerts()` 的 RPC 请求数 | 至少 11 个（每类 1 个）；补拉时每轮对每个已取完的类型再发 1 个 | `cloudwalker.js:100`、`cloudwalker.js:120` |
+| 单次 `alerts()` 的 RPC 请求数 | 至少 11 个（每类 1 个）；补拉时每轮对每个已取完的类型再发 1 个。P003-T037 起首批走 15 秒快照：同一窗口里重复调用不再发 RPC | `cloudwalker.js:188-201`、`cloudwalker.js:147-166` |
+| 快照表条目上限 | 256 | `cloudwalker.js:100-102` |
 | 首轮并发度 | 11 个并发请求 | `cloudwalker.js:100` |
 | 单类单次最多取回的条数 | 20–50（`batchSize`） | `cloudwalker.js:87`、`cloudwalker.js:91` |
 | 单次返回的告警条数 | ≤ 50 | `cloudwalker.js:85` |

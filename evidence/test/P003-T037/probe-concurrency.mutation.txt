@@ -1,0 +1,20 @@
+✖ poll   HIDS_TRIAGE_CONCURRENCY=1   -> summary().concurrency=2 queue_limit=7（期望 concurrency=1、queue_limit=7）
+  --- 进程输出尾部 ---
+{"time":"2026-11-19T15:47:13.613Z","level":"info","event":"server.started","host":"127.0.0.1","port":36813}
+
+✖ poll   HIDS_TRIAGE_CONCURRENCY=3   -> summary().concurrency=2 queue_limit=7（期望 concurrency=3、queue_limit=7）
+  --- 进程输出尾部 ---
+{"time":"2026-11-19T15:47:13.839Z","level":"info","event":"server.started","host":"127.0.0.1","port":40355}
+
+✖ poll   HIDS_TRIAGE_CONCURRENCY=5   -> summary().concurrency=2 queue_limit=7（期望 concurrency=5、queue_limit=7）
+  --- 进程输出尾部 ---
+{"time":"2026-11-19T15:47:14.047Z","level":"info","event":"server.started","host":"127.0.0.1","port":46085}
+
+✔ poll   HIDS_TRIAGE_CONCURRENCY=0   -> summary().concurrency=2 queue_limit=7（期望 concurrency=2、queue_limit=7）
+✔ poll   HIDS_TRIAGE_CONCURRENCY=abc -> summary().concurrency=2 queue_limit=7（期望 concurrency=2、queue_limit=7）
+✖ syslog HIDS_TRIAGE_CONCURRENCY=3   -> summary().concurrency=1 queue_limit=7（期望 concurrency=3、queue_limit=7）
+  --- 进程输出尾部 ---
+{"time":"2026-11-19T15:47:14.681Z","level":"info","event":"server.started","host":"127.0.0.1","port":39817}
+{"time":"2026-11-19T15:47:14.683Z","level":"info","event":"syslog.listening","bind":"udp://127.0.0.1:52612"}
+
+✖ 汇总：4/6 条不成立

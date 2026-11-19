@@ -1,0 +1,26 @@
+== A2 规则引擎：match.event 身份一致即复用 ==
+  ✔ 身份一致 + 带 match.event：不再 callTool
+  ✔ 复用后评估 status=observed
+  ✔ 不带 match.event：照旧 callTool 取详情
+  ✔ 回落路径 status 一致
+  ✔ 身份不一致（event_id 999）：不取详情（先判身份）
+  ✔ 身份不一致的状态取值
+== A2 agent 入口：match.event 身份一致即复用，不重复取数 ==
+  ✔ 匹配到位：入口不再调 get_honeypot_event
+  ✔ 复用分支仍产出 cw:N 证据记录
+  ✔ trace 留痕
+== A2 agent 入口：未匹配时照旧取一次详情 ==
+  ✔ 未匹配：入口调 get_honeypot_event 一次
+== A2/A11 复用分支不豁免记账：次数上限（默认 20）==
+  ✖ 复用分支在次数上限下抛错 
+  ✖ 报错文案与 agent-tools.js:58 同一条 actual=undefined expected="本次调查的取证调用已达到 0 次上限"
+== A2/A11 复用分支不豁免记账：2MB 单次结果上限 ==
+  ✔ 复用分支在 2MB 单次结果上限下抛错
+  ✔ 报错文案与 agent-tools.js:62 同一条
+  ✔ 超限路径没有发工具调用
+== A2 对照：原生工具路径同样的两道闸（文案必须一致）==
+  ✔ 原生路径 2MB 文案一致
+
+== 汇总：pass 14 / fail 2 ==
+FAIL: 复用分支在次数上限下抛错
+FAIL: 报错文案与 agent-tools.js:58 同一条 | actual=undefined expected="本次调查的取证调用已达到 0 次上限"

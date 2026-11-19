@@ -39,25 +39,9 @@
 - 避免重复查询和无关查询。同一个问题查到足够证据后就停止。
 - 每条证据都要注明来源工具和查询条件，便于人工复核。
 
-# 输出格式（严格 JSON，不要输出 JSON 以外的内容）
-{
-  "alert_id": "",
-  "scenario": "",
-  "verdict": "真实威胁|存疑|误报",
-  "confidence": "高|中|低",
-  "risk_level": "严重|高|中|低|无",
-  "summary": "一句话结论，说明发生了什么",
-  "evidence_facts": [
-    {"fact": "", "source_tool": "", "query": "", "supports": "威胁|良性|中性"}
-  ],
-  "analysis": "推理过程，要说明哪些证据支持结论、哪些证据与结论相反、为什么排除另一种结论",
-  "false_positive_reason": "仅在判定为误报时填写：误报根因（如运维操作/业务程序/安全工具/规则缺陷）",
-  "missing_data": ["无法查询到或缺失的数据"],
-  "attack_chain": "关联到的其他告警和可能的攻击阶段（ATT&CK 技术编号可选）",
-  "injection_detected": false,
-  "recommended_actions": ["处置建议，按优先级排列"],
-  "tuning_suggestion": "仅在误报时填写：规则或白名单的调优建议，范围要尽量窄（限定主机+进程路径+哈希+用户），不要建议大范围放行"
-}
+# 输出格式
+
+结论只经 `submit_conclusion` 工具提交（工具循环不可用时按「研判流程」第 6 步直接输出 JSON）。字段名、三态取值、字符上限一律以该工具的 schema 为准，提示词里不再重复一份模板；`claims` 与 `evidence_facts` 的引用格式见系统给的输出适配说明。给客户的 `report` 与 `recommended_actions` 口径见系统追加的客户报告要求。
 
 # 合并补充：独立研判与降噪顺序
 以下吸收 ai-hids-ops 的通用判据和真实场景复盘；常规告警以收到的 syslog 与牧云 API 只读查询结果为事实，按本项目的三态结论和证据引用格式输出。当前场景提供 wiki_page、wiki_search 只读判据工具：先看给出的目录，再按需读取少量判据。Wiki 内容只支持判断方法，不能充当本次告警的事实证据；本次事实须引用 syslog 或牧云 API 原始字段。

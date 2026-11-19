@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFile, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, rename, stat as statFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +27,15 @@ function metadata(filename, source) {
 }
 
 export class WikiStore {
-  constructor(directory = defaultDirectory, { historyDirectory = historyDirectoryFor(directory) } = {}) { this.directory = directory; this.historyDirectory = historyDirectory; this.pending = Promise.resolve(); }
+  constructor(directory = defaultDirectory, { historyDirectory = historyDirectoryFor(directory) } = {}) {
+    this.directory = directory;
+    // 历史版本落点（P003-T034）：内置判据库→数据根，换过的目录→跟目录走，见文件末尾。
+    this.historyDirectory = historyDirectory;
+    this.pending = Promise.resolve();
+    // 目录索引缓存（A7）：按（路径, mtimeMs, size）签名缓存已解析的页面行。
+    // 一次研判里 agentIndex / agentPage / agentContextPages 会反复要目录：签名不变就不再读盘、不再重解析头部。
+    this.listCache = null;
+  }
 
   file(filename) {
     const parts = String(filename || '').split('/');
@@ -57,7 +65,33 @@ export class WikiStore {
     return pages.filter(Boolean).sort((a, b) => rank(a.path) - rank(b.path) || a.path.localeCompare(b.path));
   }
 
+  // 签名只 stat 不 read：文件没动就不必重读正文与头部。
+  async #listSignature() {
+    const groups = await readdir(this.directory, { withFileTypes: true });
+    const parts = [];
+    for (const group of groups.filter(item => item.isDirectory() && !item.name.startsWith('_'))) {
+      const files = await readdir(path.join(this.directory, group.name));
+      for (const file of files) {
+        const filename = `${group.name}/${file}`;
+        if (!pagePattern.test(filename)) continue;
+        let info;
+        try { info = await statFile(this.file(filename)); }
+        catch (cause) {
+          // readdir 与 stat 之间被删掉：当作不存在，不让旧快照借尸还魂。
+          if (cause.code === 'ENOENT') continue;
+          // 文件名过不了 file() 的路径校验：readdir 出的怪文件名跳过，不把整个目录读卡住。
+          if (cause.status === 400) continue;
+          throw cause;
+        }
+        parts.push(`${filename}:${info.mtimeMs}:${info.size}`);
+      }
+    }
+    return parts.sort().join('\n');
+  }
+
   async list() {
+    const signature = await this.#listSignature();
+    if (this.listCache?.signature === signature) return [...this.listCache.rows];
     const groups = await readdir(this.directory, { withFileTypes: true });
     const rows = await Promise.all(groups.filter(item => item.isDirectory() && !item.name.startsWith('_'))
       .map(async group => {
@@ -67,7 +101,9 @@ export class WikiStore {
           return metadata(filename, await readFile(this.file(filename), 'utf8'));
         }));
       }));
-    return rows.flat().filter(item => item.status !== 'deprecated').sort((a, b) => a.path.localeCompare(b.path));
+    const listed = rows.flat().filter(item => item.status !== 'deprecated').sort((a, b) => a.path.localeCompare(b.path));
+    this.listCache = { signature, rows: listed };
+    return [...listed];
   }
 
   // 页面不存在时抛 404，正文只给相对路径：readFile 的 ENOENT message 带服务器绝对路径
@@ -361,3 +397,77 @@ function historyDirectoryFor(directory) {
 }
 
 import { dataRoot } from './config-store.js';
+
+// P003-T039 A4：判据页给模型的常驻形态不是整页正文，而是「编号 + 标题 + 要点摘要」；
+// 正文按需走 wiki_page，返回摘要 + 命中段。以下两个纯函数只做文本切分，碰不到判定逻辑。
+
+export function pageBody(content) {
+  return String(content || '').replace(/^---\n[\s\S]*?\n---\n/, '').trim();
+}
+
+const collapse = text => String(text || '').replace(/\s+/g, ' ').trim();
+const cut = (text, limit) => (text.length > limit ? `${text.slice(0, limit)}…` : text);
+const judgmentTerms = ['判定', '结论', '误报', '威胁', '必查', '要求', '限制', '边界', '适用'];
+
+function paragraphs(body) {
+  return body.split(/\n{2,}/).map(block => block.trim()).filter(Boolean);
+}
+
+// 判据页多数没有二级标题，条目写成编号清单：按编号项切段，命中段才带得上「第 4 步 结论」这种定位。
+function splitNumbered(block) {
+  const pieces = [];
+  let current = [];
+  for (const line of block.split('\n')) {
+    if (/^\d+\.\s/.test(line) && current.length) { pieces.push(current.join('\n')); current = [line]; }
+    else current.push(line);
+  }
+  if (current.length) pieces.push(current.join('\n'));
+  return pieces;
+}
+
+// 段内留标题：标题行单独成段并给后面的正文当标题，命中段里带着标题才看得懂说的是哪一步。
+function sections(body) {
+  const result = [];
+  let title = '';
+  for (const block of paragraphs(body)) {
+    for (const piece of splitNumbered(block)) {
+      const heading = piece.match(/^#{1,6}\s+(.+)$/);
+      if (heading && piece.trim().startsWith('#')) {
+        title = heading[1].trim();
+        const rest = piece.split('\n').filter(line => !/^#{1,6}\s/.test(line)).join('\n').trim();
+        if (rest) result.push({ title, text: collapse(rest) });
+        continue;
+      }
+      const text = collapse(piece);
+      if (text) result.push({ title, text });
+    }
+  }
+  return result;
+}
+
+// 要点摘要：正文里第一段有内容的（跳过标题、表格分隔线、纯清单符号）。
+export function pageSummary(content, limit = 200) {
+  const body = pageBody(content);
+  const first = sections(body).find(section => section.text.length >= 12);
+  if (first) return cut(collapse(first.text.replace(/^>+\s*/, '')), limit);
+  return cut(collapse(body.replace(/^#{1,6}\s+/gm, '')), limit);
+}
+
+// 命中段：给了 keyword 就按关键词取段；没给就按判定用语（判定/结论/误报/威胁/必查…）打分取段。
+export function pageExcerpts(content, { keyword = '', limit = 3, maxChars = 600 } = {}) {
+  const all = sections(pageBody(content));
+  const needle = collapse(keyword).toLowerCase();
+  let picked;
+  if (needle) {
+    picked = all.filter(section => `${section.title} ${section.text}`.toLowerCase().includes(needle));
+    if (!picked.length) picked = all;
+  } else {
+    const scored = all.map((section, index) => ({ section, index,
+      score: judgmentTerms.reduce((sum, term) => sum + (section.text.split(term).length - 1), 0) }))
+      .filter(entry => entry.score > 0)
+      .sort((a, b) => b.score - a.score || a.index - b.index);
+    picked = scored.slice(0, limit).sort((a, b) => a.index - b.index).map(entry => entry.section);
+  }
+  if (!picked.length) picked = all.slice(0, 2);
+  return picked.slice(0, limit).map(section => ({ title: section.title, text: cut(section.text, maxChars) }));
+}

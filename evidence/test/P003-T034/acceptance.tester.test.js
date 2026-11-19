@@ -365,11 +365,23 @@ test('A4 旧位（仓内 .data/ 与 backend/.data/）里躺着数据时，数据
   const { base } = await startServer(t, { cwd: tree, home, env: { HIDS_DATA_DIR: data } });
   assert.equal((await writeConfig(base, { LLM_MODEL: 'a4-written' })).status, 200);
 
-  // 数据根里只有本次真的写过的那一个文件：没有 investigations/、cases/、triage-rules.json 被预建或搬过来
-  assert.deepEqual((await readdir(data)).sort(), ['config-overrides.json'],
-    '数据根被旧位数据填充了（预建目录或迁移）');
+  // 数据根里只能有进程自己写的运行态：本次写配置的 config-overrides.json，以及研判监控的队列快照
+  // （P003-T036/T037：poll 模式冷启动就会落自己的 triage-monitor.json，与旧位毫无关系）。
+  // 旧位的东西一样都不许出现：没有 investigations/、cases/、triage-rules.json 被预建或搬过来，
+  // 也没有任何一份文件与旧位内容逐字相同。
+  const written = await listFiles(data);
+  assert.deepEqual(written.map(file => path.relative(data, file)).filter(rel => !['config-overrides.json', 'triage-monitor.json'].includes(rel)),
+    [], '数据根被旧位数据填充了（预建目录或迁移）');
+  for (const file of written) {
+    const digest = sha256(await readFile(file, 'utf8'));
+    assert.equal(Object.values(sentinels).includes(digest), false,
+      `数据根里的 ${path.relative(data, file)} 与旧位某份数据逐字相同（迁移了）`);
+  }
+  const snapshot = JSON.parse(await readFile(path.join(data, 'triage-monitor.json'), 'utf8'));
+  assert.deepEqual(snapshot.records, [], '冷启动快照里带着记录：旧位数据被搬进来了');
   assert.equal(existsSync(path.join(data, 'investigations', 'old.json')), false);
   assert.equal(existsSync(path.join(data, 'cases')), false);
+  assert.equal(existsSync(path.join(data, 'triage-rules.json')), false, '旧位的 triage-rules.json 被搬进了数据根');
   // 旧位原样未动
   assert.deepEqual((await readdir(oldInRepo)).sort(), ['investigations', 'triage-rules.json']);
   assert.equal(sha256(await readFile(path.join(oldInRepo, 'investigations', 'old.json'), 'utf8')), sentinels.investigations);

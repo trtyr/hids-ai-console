@@ -1,0 +1,4 @@
+✔ poll env=1 -> summary().concurrency=1 queue_limit=10；连发 3 条后 counts={"running":1,"queued":2}（期望 running=1 queued=2）
+✔ poll env=3 -> summary().concurrency=3 queue_limit=10；连发 3 条后 counts={"running":3,"queued":0}（期望 running=3 queued=0）
+✔ poll env=5 -> summary().concurrency=5 queue_limit=10；连发 3 条后 counts={"running":3,"queued":0}（期望 running=3 queued=0）
+✔ 汇总：3/3 条成立

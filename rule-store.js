@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat as statFile } from 'node:fs/promises';
 import path from 'node:path';
 
 // Rego 规则库（P003-T011）。
@@ -147,6 +147,9 @@ export class RuleStore {
   constructor(directory) {
     if (typeof directory !== 'string' || !directory) throw new Error('规则目录必须是路径');
     this.directory = path.resolve(directory);
+    // 已解析规则的缓存（A6）：键是文件名，值是（mtimeMs, size, rule）。
+    // 命中时只 stat 不 read/parse——求值不再每条规则重读重解析；文件改了 mtime 就重来。
+    this.parsed = new Map();
   }
 
   async #load() {
@@ -156,16 +159,31 @@ export class RuleStore {
       if (cause.code === 'ENOENT') throw new Error(`规则目录不存在：${this.directory}`);
       throw cause;
     }
+    const files = names.filter(name => name.endsWith('.rego')).sort();
+    const parsed = new Map();
     const rules = [];
     const byId = new Map();
-    for (const file of names.filter(name => name.endsWith('.rego')).sort()) {
-      const source = await readFile(path.join(this.directory, file), 'utf8');
-      const rule = parseRule(file, source);
+    for (const file of files) {
+      const filename = path.join(this.directory, file);
+      let info;
+      try { info = await statFile(filename); }
+      catch (cause) {
+        // readdir 与 stat 之间被删掉：当它不存在，不把「列目录时的旧快照」当规则用。
+        if (cause.code === 'ENOENT') continue;
+        throw cause;
+      }
+      const cached = this.parsed.get(file);
+      const rule = cached && cached.mtimeMs === info.mtimeMs && cached.size === info.size
+        ? cached.rule
+        : parseRule(file, await readFile(filename, 'utf8'));
+      parsed.set(file, { mtimeMs: info.mtimeMs, size: info.size, rule });
       const previous = byId.get(rule.id);
       if (previous) throw new Error(`规则 id 重复：${rule.id}（${previous.file} 与 ${file}）`);
       byId.set(rule.id, rule);
       rules.push(rule);
     }
+    // 只保留这一轮还在盘上的文件：删掉的规则不会从缓存里借尸还魂。
+    this.parsed = parsed;
     rules.sort((left, right) => (left.id < right.id ? -1 : 1));
     return rules;
   }

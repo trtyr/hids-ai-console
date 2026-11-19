@@ -1,0 +1,107 @@
+  ✔ 真进程起得来（/api/config 200）
+== /api/config 口径 ==
+  ✔ /api/config 200
+  ✔ triage_input_mode 反映 HIDS_TRIAGE_INPUT_MODE
+== TriageSummary schema（openapi required + P003-T037 新键）==
+  ✔ GET /api/agent/triage/status 200
+  ✔ required 键 initialized 在
+  ✔ required 键 enabled 在
+  ✔ required 键 input_mode 在
+  ✔ required 键 since 在
+  ✔ required 键 counts 在
+  ✔ required 键 verdict_counts 在
+  ✔ required 键 type_counts 在
+  ✔ P003-T037 键 backoff_ms 在
+  ✔ P003-T037 键 empty_polls 在
+  ✔ P003-T037 键 concurrency 在
+  ✔ P003-T037 键 queue_limit 在
+  ✔ P003-T037 键 dropped 在
+  ✔ P003-T037 键 last_poll_at 在
+  ✔ P003-T037 键 last_error 在
+  ✔ P003-T037 键 interval_ms 在
+  ✔ input_mode=poll
+  ✔ concurrency 读 HIDS_TRIAGE_CONCURRENCY=3（文档：architecture.md:449 / triage-pipeline.md:542）
+  ✔ queue_limit 读 HIDS_TRIAGE_QUEUE_MAX=1
+  ✔ dropped 初始 0
+  ✔ empty_polls 是非负整数
+  ✔ backoff_ms = min(interval×2^empty_polls, interval×16)
+  ✔ poll 模式带 interval_ms=30000
+  ✔ last_poll_at 是时刻或 null
+  ✔ 不带 since：since null
+  ✔ counts 四键恒在
+  ✔ counts.queued 非负整数
+  ✔ counts.running 非负整数
+  ✔ counts.done 非负整数
+  ✔ counts.failed 非负整数
+  ✔ verdict_counts 四键恒在
+  ✔ type_counts 是对象
+  ✔ poll 模式没有 syslog 键
+== §5.2 冷启动空轮口径（真进程重启后首轮间隔 2×interval）==
+  ✔ 冷启动轮计入空轮 empty_polls=1（docs/modules/triage-pipeline.md:384）
+  ✔ 重启后首轮真实轮询间隔 = 2×intervalMs（同上）
+  ✔ interval_ms=30000 -> backoff_ms=60000
+== since 参数：合法归一、空值不筛、解析不了 400 ==
+  ✔ since=RFC3339 -> 200
+  ✔ since 归一成 RFC3339
+  ✔ since 空值 -> 200
+  ✔ since 空值等于不带筛
+  ✔ since=abc -> 400
+  ✔ 400 正文 error+code 形状
+== 错误码边界：非法告警 ID / 不存在的 syslog 报文 / 分页参数 ==
+  ✔ POST 非法 ID -> 400
+  ✔ 400 正文 {error, code=caller_error}
+  ✔ syslog 前缀但没有原始报文 -> 404
+  ✔ 404 正文 {error, code=caller_error}
+  ✔ cases?count=0 -> 400
+  ✔ 分页参数无效文案
+== control 入参校验 ==
+  ✔ control 缺 enabled -> 400
+  ✔ control enabled 非布尔 -> 400
+  ✔ control enabled=false -> 200
+  ✔ 返回更新后的状态
+  ✔ control enabled=true 恢复
+== 队列上限 429（现网可观测的最大边界）==
+  ✔ 第一条 202
+  ✔ 202 正文是 TriageCase
+  ✔ 第一条进入 running（模型慢）
+  ✔ POST#2 前「在跑」= 1（配额 1 已满）
+  ✔ 队列满时 POST 第二条 -> 429
+  ✔ 429 正文带 {error, code}
+  ✔ 429 code=caller_error（openapi Error enum）
+  ✔ 429 文案（triage-pipeline.md:472 / openapi.yaml:2198 口径）
+   · 429 body {"error":"研判队列已满（上限 1），稍后再试","code":"caller_error"}
+  ✔ summary().dropped 记 1
+== A8 /api/status 探活缓存（HIDS_STATUS_TTL_MS=400）==
+  ✔ /api/status 200
+  ✔ configured=true
+  ✔ connected=true
+  ✔ 首次探活发 1 次 RPC
+  ✔ TTL 窗口内第二次不再发 RPC
+  ✔ TTL 过期后重新探活
+== A10 /api/alerts：同键请求 15 秒窗口内不再拉牧云 ==
+  ✔ /api/alerts?count=50 -> 200
+  ✔ 返回 alerts 数组
+  ✔ 返回整数 total
+  ✔ 首次列表请求：要么命中启动轮询的快照（0 次）要么新拉 11 类
+   · 首次列表请求的 RPC 增量 0
+  ✔ 第二次同键请求 200
+  ✔ 15 秒窗口内同键请求不再发 RPC（快照）
+  ✔ 两次 total 一致
+== syslog 模式的 TriageSummary 形状（openapi syslog 块 / 无 interval_ms）==
+  ✔ syslog 模式真进程起得来
+  ✔ syslog 模式 status 200
+  ✔ input_mode=syslog
+  ✔ syslog 模式 last_poll_at 恒为 null
+  ✔ syslog 模式没有 interval_ms
+  ✔ syslog 块三键
+  ✔ syslog 接收器绑上
+  ✔ syslog.bind 是 udp:// 地址
+  ✔ 绑定成功时 error 为 null
+== 现网缺件：createServer() 直起（不进闸门）==
+  ✔ 无研判队列：/api/agent/triage/status -> 503
+  ✔ 503 正文 code=not_configured
+  ✔ 未配牧云：/api/status 仍 200
+  ✔ 未配牧云：configured=false
+  ✔ 未配牧云：connected=false
+
+== 汇总：pass 92 / fail 0 ==

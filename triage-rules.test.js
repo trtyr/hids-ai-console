@@ -256,3 +256,26 @@ test('其余八类牧云入侵告警按详情字段命中并形成 AI 复核候�
     await writeFile(filename, JSON.stringify(config(rules)));
   }
 });
+
+test('A2 规则评估复用 match.event：身份一致不再拉一次详情，轮询入口照旧取数', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-rule-reuse-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filename = path.join(directory, 'rules.json');
+  await writeFile(filename, JSON.stringify(config([networkRule()])));
+  const engine = new TriageRuleEngine(filename);
+  const parsed = { payload: { event_id: 42, host_id: 171, host_ip: '10.2.28.217', local_addr: '10.2.28.217',
+    process_path: '/usr/bin/curl', process_command_line: 'curl --head https://192.0.2.20/health',
+    abnormal_reference: 'custom-rule-1' } };
+  let fetched = 0;
+  const reused = await engine.evaluate({ alertId: 'network_audit:42', parsed, match: { matched: true, event_id: 42, event: networkEvent() },
+    toolbox: { callTool: async () => { fetched += 1; throw new Error('不应重新取数'); } } });
+  assert.equal(reused.status, 'candidate');
+  assert.equal(reused.rule.id, 'approved-egress-001');
+  assert.equal(fetched, 0, 'match.event 身份一致时不再取详情');
+
+  // 没有 match.event（轮询入口）：照旧走牧云取数。
+  const poll = await engine.evaluate({ alertId: 'network_audit:42',
+    toolbox: { callTool: async () => { fetched += 1; return networkEvent(); } } });
+  assert.equal(poll.status, 'candidate');
+  assert.equal(fetched, 1);
+});

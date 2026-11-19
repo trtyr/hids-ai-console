@@ -50,7 +50,7 @@ const regoRuleStore = new RuleStore(path.join(moduleDirectory, 'rules'));
 const triageInputMode = triageInputModeOf();
 const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, investigator: agent,
   history: investigationStore, file: runtime.triageMonitor,
-  inputMode: triageInputMode, concurrency: triageInputMode === 'syslog' ? 1 : 2,
+  inputMode: triageInputMode,
   eventToolbox: apiToolbox, wiki: wikiStore,
   ruleEngine: triageRuleEngine,
   casesDirectory: process.env.HIDS_CASES_DIR || runtime.cases,
@@ -824,6 +824,11 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         if (!validTriageId(alertId)) return callerError(res, '告警 ID 无效');
         if (req.method === 'GET') return json(res, 200, monitor.status(alertId) || { alert_id: alertId, status: 'not_queued', evidence: [] });
         if (req.method === 'POST') return json(res, 202, await monitor.enqueue(alertId, { retry: true }));
+        // A9（P003-T036）：取消排队中的案件。404 没有记录、409 已在研判中，都走 causeError 的 caller 类。
+        if (req.method === 'DELETE') {
+          try { return json(res, 200, await monitor.cancel(alertId)); }
+          catch (cause) { return causeError(res, cause); }
+        }
       }
       if (url.pathname === '/api/agent/prompts' && req.method === 'GET') {
         return json(res, 200, await prompts.metadata());

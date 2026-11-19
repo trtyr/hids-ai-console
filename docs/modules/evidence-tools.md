@@ -3,14 +3,14 @@ type: module
 id: MOD-EVIDENCE-TOOLS
 covers: [mcp-client.js, agent-tools.js, api-tools.js]
 unit: evidence-tools
-updated: 2026-11-17
+updated: 2026-11-20
 ---
 
 # 取证工具箱（evidence-tools）
 
 模块名 `evidence-tools`。覆盖文件三个：`mcp-client.js`、`agent-tools.js`、`api-tools.js`（模块划分与页面归属见 [docs/modules/_breakdown.json](_breakdown.json) 的 `evidence-tools` 条目）。
 
-这篇讲这模块对外给出什么、拿到什么、失败时是什么样。关键断言标 `文件:行号`，行号对应当前提交 `35530d8`；代码改动后请重新核对。
+这篇讲这模块对外给出什么、拿到什么、失败时是什么样。关键断言标 `文件:行号`，行号对应当前提交 `35530d8`；P003-T039 的 §2 关系句与 §4.4 行号对 P003-T039 复审修复提交 `241c0da`；P003-T040 的 §7 数据归属行与 §8 `R-EVID-06` 行号对提交 `201d278`；代码改动后请重新核对。
 
 取证结果怎么投影成模型看到的上下文、结论怎么被引用校验消费，都不在本篇：前者属 evidence-view 模块，后者属 investigation-agent 模块，页面归属同样见 `_breakdown.json`。
 
@@ -44,7 +44,7 @@ updated: 2026-11-17
 | **取证会话** | `EvidenceSession`：一次调查里的调用计数、证据记录与引用校验 | `agent-tools.js:54` |
 | **工具白名单** | `investigationToolNames`：工具名的冻结数组，外加由它建出的 `allowed` 集合 | `agent-tools.js:8`、`agent-tools.js:18` |
 
-三者的关系一句话：**MCP 客户端**是通道；**MCP 取证工具箱**与 **API 取证工具箱**是两种取数方式；**常规研判工具箱**把两者拼起来；**取证会话**是每次调查的账本；**工具白名单**是深度研判那侧的闸门。
+三者的关系一句话：**MCP 客户端**是通道；**MCP 取证工具箱**与 **API 取证工具箱**是两种取数方式；**常规研判工具箱**把两者拼起来；**取证会话**是每次调查的账本（工具结果原文常驻，模型侧看到的是可裁副本，见 §4.4）；**工具白名单**是深度研判那侧的闸门。
 
 ## 3 对外能力
 
@@ -113,6 +113,24 @@ MCP 客户端自己的公开面是 `request(method, params)`、`initialize()`、
 7. 返回 `{ ok, errors }`，`ok` 为 `true` 当且仅当 `errors` 为空（`agent-tools.js:92`）。
 
 这一层只认「引得到、值对得上」，不认结论说得对不对——代码注释把这点写明了（`agent-tools.js:70`）。
+
+### 4.4 按编号取回已取到的证据（P003-T039）
+
+`EvidenceSession.records` 是本次调查的账本，**工具结果原文一直留在里面**（`agent-tools.js:60-66`），
+模型上下文里的那份是可裁的副本。从 P003-T039 起，编排层（`investigation-agent.js`）把历史里的工具结果只留最近 2 条全文，
+更早的换成计数摘要，模型要引用其中字段时调用 `read_evidence`：
+
+1. **折叠**。每条 tool 消息入历史时按 `evidence_id` 记一份全文（`investigation-agent.js` 的 `evidenceFullText`；
+   同一查询重发回来的 `already_queried` 指针虽然也带 `evidence_id`，但不注册——注册会覆写原文，见 `investigation-agent.js:725-732`），
+   一轮批次结束后，除最近 `historyFullResults = 2` 条外都换成 `{evidence_id, tool, args, folded: true, summary, note}`
+   （`foldedToolMessage()`，`investigation-agent.js:290-304`），trace 记一条 `history_folded`。
+2. **取回**。`read_evidence({evidence_id})` 命中 `evidenceFullText` 就原样返回那条完整视图；
+   不在历史里但在 `session.records` 里（例如平台自己发的必查项、`syslog:1`）就用 `toolMessage(record)` 现拼一份
+   （`investigation-agent.js:615-627`）。
+3. **不计取证预算**。这一步不发牧云查询、不占 `maxToolCalls`，也不产生新证据；取不到时回
+   `{"error":"本次调查没有证据 <编号>；可用编号见之前工具结果的 evidence_id"}`。
+4. **证据编号的来源**。编号由会话分配（`cw:<n>`），平台自己发的必查项也占号——所以模型第一批真实取证从 `cw:3`、`cw:4` 起很常见，
+   不要假设 `cw:1` 一定是自己的第一条查询。
 
 ## 5 值语义
 
@@ -183,7 +201,7 @@ MCP 客户端自己的公开面是 `request(method, params)`、`initialize()`、
 
 | 数据 | 放在哪 | 生命周期 | 依据 |
 | --- | --- | --- | --- |
-| 证据记录 | `EvidenceSession.records`（Map） | 一次调查一份，调查结束即弃；本模块不落盘 | `agent-tools.js:55`、`agent-tools.js:66` |
+| 证据记录 | `EvidenceSession.records`（Map） | 一次调查一份，调查结束即弃；本模块不落盘。落盘副本由调用方写入研判记录的 `evidence[].view`（单条再封 6000 字，P003-T040，见 investigation-agent 模块页 §3.10） | `agent-tools.js:55`、`agent-tools.js:66`、`investigation-agent.js:274-279` |
 | 调用计数 | `EvidenceSession.started` / `maxCalls` | 同上 | `agent-tools.js:55` |
 | 工具目录缓存 | `AgentToolbox.catalog` | 客户端实例级，首次列工具后常驻 | `agent-tools.js:31`、`agent-tools.js:34-37` |
 | MCP 端点与 Token | `CloudwalkerMcpClient.url` / `.token` | 客户端实例级，不外传 | `mcp-client.js:7-8` |
@@ -198,7 +216,7 @@ MCP 客户端自己的公开面是 `request(method, params)`、`initialize()`、
 | `R-EVID-03` | 每次取证分配一个递增的证据编号 `cw:<n>` | 两条记录共用一个编号 | `agent-tools.js:59`、`agent-tools.js:66` | `started` 自增，Map 键不重复 |
 | `R-EVID-04` | 单次调查的取证调用不超过 `maxCalls`（默认 20） | 第 21 次调用 | `agent-tools.js:55`、`agent-tools.js:58` | 抛错；失败的调用也占名额（`agent-tools.js:59-60`） |
 | `R-EVID-05` | 每条记录带 `sha256`，摘要覆盖 `name`/`args`/`result` | 记录缺 `sha256` | `agent-tools.js:61-63` | 证据链里少一个可复算的摘要 |
-| `R-EVID-06` | 记录的 `view` 由 `projectEvidence` + `boundEvidenceView` 生成 | `view` 直接等于 `result` | `agent-tools.js:65` | 投影逻辑在 evidence-view 模块 |
+| `R-EVID-06` | 记录的 `view` 由 `projectEvidence` + `boundEvidenceView` 生成 | `view` 直接等于 `result` | `agent-tools.js:65` | 投影逻辑在 evidence-view 模块；落盘时调用方再按 6000 字封一次（`investigation-agent.js:274-279`，P003-T040） |
 | `R-EVID-07` | 事件详情返回的事件 ID 与请求 ID 相同 | 牧云返回了别的 ID | `api-tools.js:38` | 抛错，不返回数据 |
 | `R-EVID-08` | 列表响应必须含 `events` 数组与整数 `total` | 响应缺 `events` | `api-tools.js:87` | 抛错 |
 | `R-EVID-09` | 主机事件部分类型失败时照常返回并标 `partial` | 部分失败被当成整体失败 | `api-tools.js:50`、`api-tools.js:57`、`api-tools.js:62` | `errors` 非空、`partial` 为 `true` |
