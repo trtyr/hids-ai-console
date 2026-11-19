@@ -258,12 +258,12 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 | 角色 | `model` | 配置组 | 消费者 |
 | --- | --- | --- | --- |
 | `triage` | 研判实际用的模型名 | 主判 `LLM_*` | 两个 `InvestigationAgent` |
-| `review` | 独立复核实际用的模型名 | 复核组 `LLM_REVIEW_*` | 研判里的独立复核那一轮（`investigation-agent.js:854`） |
+| `review` | 独立复核实际用的模型名 | 复核组 `LLM_REVIEW_*` | 研判里的独立复核那一轮（`investigation-agent.js:857`） |
 | `rule_maintainer` | 规则维护者用的模型名 | 轻量组 `LLM_LIGHT_*` | `RegoRuleMaintainer` |
 | `wiki_maintainer` | wiki 维护者用的模型名 | 轻量组 `LLM_LIGHT_*` | `WikiWorkbench` |
 | `trace_board` | 溯源白板用的模型名 | 轻量组 `LLM_LIGHT_*` | `TraceBoardService` |
 
-`source` 三态说明这一组配置的来源：`primary` = 这一组三个键全空、**逐键**回退主判（与分层前的行为完全一致）；`own` = 三个键全有、全用自己的；`mixed` = 部分有，空的那几项逐键回退主判。回退按**字段**比，不按组比：只设了 `LLM_REVIEW_MODEL` → 复核的模型名是自己的、地址与密钥仍是主判的，`source` 报 `mixed`。主判三项不齐时五个角色的 `model` 都是 `null`（`model.configured` 也是 `false`）。**只报模型名与来源，不报地址与密钥**——新两组的 API Key 不进 `secrets`（那里仍是原来五个键），正文里也不出现它们的原文。
+`source` 三态说明这一组配置的来源：`primary` = 这一组三个键全空、**逐键**回退主判（与分层前的行为完全一致）；`own` = 三个键全有、全用自己的；`mixed` = 部分有，空的那几项逐键回退主判。回退按**字段**比，不按组比：只设了 `LLM_REVIEW_MODEL` → 复核的模型名是自己的、地址与密钥仍是主判的，`source` 报 `mixed`。主判三项不齐时五个实例都不装配、`model.configured` 为 `false`；但 `model.roles` 不看装配，仍按 env 逐键解析照报——`model` 恒等于「这一组的模型名 ?? 主判模型名 ?? `null`」，`source` 按组内三键的实际配置报。所以 `model.configured=false` 不等于 `roles[*].model` 全 `null`：只设了 `LLM_REVIEW_MODEL='x'` 而主判三项全空时，`review` 报 `{model:'x', source:'mixed'}`、`triage` 报 `{model:null, source:'primary'}`。**只报模型名与来源，不报地址与密钥**——新两组的 API Key 不进 `secrets`（那里仍是原来五个键），正文里也不出现它们的原文。
 
 **机密口径（A3，可断言）**：响应正文里不出现任何 Token 与密码原文——五个机密键的值都是布尔，`secrets` 之外没有第二个地方出现它们。两个状态都要测：配了 → `true`；没配 → `false`。**别只在「都配了」的状态下测**：那样把实现改成回原文也发现不了（会回一堆字符串，但 `typeof` 断言才抓得住）。
 

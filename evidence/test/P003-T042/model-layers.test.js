@@ -225,11 +225,24 @@ test('A3 GET /api/config 的 model.roles 反映分层，机密仍只回布尔', 
   for (const secret of [PRIMARY.LLM_API_KEY, REVIEW.LLM_REVIEW_API_KEY, LIGHT.LLM_LIGHT_API_KEY, 'gate-pass-abcdef'])
     assert.equal(text.includes(secret), false, `正文里出现了密钥原文 ${secret}`);
 
-  // 主判三项不齐时：roles 全 null、model.configured 为 false（与分层前同一判据）。
+  // 主判三项不齐：五个实例都不装配、model.configured=false，但 roles 仍按 env 逐键解析照报（§3.5 契约句）。
   const missing = configSummary({}).model;
   assert.equal(missing.configured, false);
   assert.equal(missing.name, null);
-  for (const role of MODEL_ROLES) assert.equal(missing.roles[role].model, null, `${role} 未配时应为 null`);
+  for (const role of MODEL_ROLES)
+    assert.deepEqual(missing.roles[role], { model: null, source: 'primary' }, `${role} 未配应为 null`);
+  assert.equal(createModelRolesFromEnv({}), null, '主判三项不齐时五个实例都不装配');
+
+  // 主判不齐 + 角色自带模型名：报自己的名字，不许抹成 null；source 按实情（三键全有 own、只设模型名 mixed）。
+  const reviewOwn = configSummary({ ...REVIEW }).model;
+  assert.equal(reviewOwn.configured, false, 'configured 仍是主判三项的口径');
+  assert.equal(reviewOwn.name, null);
+  assert.deepEqual(reviewOwn.roles.review, { model: 'review-model', source: 'own' });
+  assert.equal(createModelRolesFromEnv({ ...REVIEW }), null, '没有地址/密钥回退时仍不装配实例');
+  const reviewMixed = configSummary({ LLM_REVIEW_MODEL: 'x' }).model;
+  assert.deepEqual(reviewMixed.roles.review, { model: 'x', source: 'mixed' },
+    '主判不齐但复核组自带模型名：报自己的名字');
+  assert.deepEqual(reviewMixed.roles.triage, { model: null, source: 'primary' }, '研判没有可报的名字');
 });
 
 test('A5 POST /api/config 可写新六键：落盘、GET 立刻反映、坏值点组内键名', async t => {

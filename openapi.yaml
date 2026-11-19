@@ -1608,7 +1608,7 @@ components:
         `mixed` = 部分有、逐键回退主判。只报模型名，不报地址与密钥。
       required: [model, source]
       properties:
-        model: { type: [string, 'null'], description: 这个角色实际用的模型名；主判未配为 null }
+        model: { type: [string, 'null'], description: '这个角色实际用的模型名：先取这一组的模型名，没设就逐键回退主判 LLM_MODEL，两者都没设才是 null（不看实例是否装配；主判未配而该组自带模型名时仍是那个名字）' }
         source: { type: string, enum: [primary, own, mixed], description: 这一组配置的来源三态 }
     DataStoreUsage:
       type: object
