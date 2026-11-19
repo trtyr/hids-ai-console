@@ -1381,7 +1381,9 @@ components:
       additionalProperties: false
     TriageEvidence:
       type: object
-      description: 研判记录里的证据条目。只给四个字段，工具入参不外露；未配置研判或记录仍在排队时是空数组。
+      description: |
+        队列记录里的证据条目（P003-T040 A6 起）。工具入参只在「RPC 形态」时保留（{id} / {count,offset} 这类短参数），
+        含原文的（长字符串或大对象）剥掉并置 args_omitted，摘要不动；未配置研判或记录仍在排队时是空数组。
       required: [evidence_id, tool, fetched_at, sha256]
       properties:
         evidence_id: { type: string }
@@ -1391,17 +1393,32 @@ components:
           type: string
           pattern: '^[0-9a-f]{64}$'
           description: 证据原始内容的 SHA-256，64 位小写十六进制
+        args:
+          type: object
+          additionalProperties: true
+          description: 实际传给工具的参数，只在不含原文且序列化后不超过 200 字时出现（含原文的剥掉）
+        args_omitted:
+          type: boolean
+          description: args 因含原文被剥离时为 true；与 args 互斥
       additionalProperties: false
     EvidenceRecord:
       type: object
-      description: 研判记录里保存的取证条目，比 TriageEvidence 多一个 args（实际传的参数）。
-      required: [evidence_id, tool, args, fetched_at, sha256]
+      description: |
+        研判记录里保存的取证条目（P003-T040 A2/A3 起带 view）。sha256 只能证明「是同一条记录」，
+        view 回答「当时取到了什么」——引用里的 pointer/value 能在 view 里复算，不需要重新查询牧云。
+      required: [evidence_id, tool, args, fetched_at, sha256, view]
       properties:
         evidence_id: { type: string, examples: [cw:1] }
         tool: { type: string, description: 取证工具名 }
         args: { type: object, additionalProperties: true, description: 本次实际传给工具的参数（原样回写，模型没有直接持有） }
         fetched_at: { type: string, format: date-time }
         sha256: { type: string, pattern: '^[0-9a-f]{64}$', description: '对 {name,args,result} 序列化后的 SHA-256' }
+        view:
+          type: [object, 'null']
+          additionalProperties: true
+          description: |
+            证据的投影视图原文（projectEvidence + boundEvidenceView 的结果），单条不超过 6000 字；
+            deep 模式的原始事件（cw:1）同样带 view。只读视图，不是原始结果全集：被省略的行/字段以计数与 omitted_fields 记账。
       additionalProperties: false
     Validation:
       type: object
@@ -1844,8 +1861,8 @@ components:
         evidence:
           type: array
           description: |
-            本次研判实际取到的证据条目，按取证顺序；只给四个字段，工具入参（args）不外露。
-            未配置研判或记录仍在排队时是空数组。
+            本次研判实际取到的证据条目，按取证顺序。工具入参只在 RPC 形态时保留，
+            含原文的剥掉并置 args_omitted（见 TriageEvidence）；未配置研判或记录仍在排队时是空数组。
           items: { $ref: '#/components/schemas/TriageEvidence' }
         steps:
           type: array

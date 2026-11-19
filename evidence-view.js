@@ -36,14 +36,16 @@ const fields = [
   ['matched_rule', ['rule_name']],
   ['suspicious_event_count', ['suspicious_event_count']],
   ['request_bytes', ['request_length']], ['response_bytes', ['response_length']],
-  ['comment', ['comment']]
+  ['comment', ['comment']], ['description', ['description']]
 ];
 
 const nestedFields = {
   timeline: ['timestamp', 'src_addr', 'dest_addr', 'request_length', 'response_length'],
   process_tree: ['pid', 'ppid', 'pname', 'exename', 'uname', 'uid', 'euname', 'euid', 'cmdline', 'start_time'],
   state_history: ['state', 'action', 'created_at', 'user_name'],
-  commands: ['seq', 'cwd', 'cmdline', 'started_at', 'finished_at', 'exit_code', 'label']
+  commands: ['seq', 'cwd', 'cmdline', 'started_at', 'finished_at', 'exit_code', 'label'],
+  // A7：会话命令数组（可疑命令研判看不到它，等于看不到整段会话）。元素可能是字符串，也可能是对象。
+  cmdlines: ['seq', 'cmdline', 'command', 'started_at', 'finished_at', 'exit_code', 'label']
 };
 
 // 主机资产视图里裸 id 就是主机 ID；事件视图里裸 id 是事件 ID（见 host_id 字段表与 A4）。
@@ -59,7 +61,11 @@ function select(root, dotted, prefix) {
   }
   if (value == null || value === '' || typeof value === 'object') return null;
   // 长命令或备注也可能含与判断无关的大段文本；原文仍留在本次取证会话中。
-  if (String(value).length > (['cmdline', 'command', 'shell_cmdline', 'process_cmdline'].includes(keys.at(-1)) ? 3000 : 500)) return null;
+  // A7：description 是平台给的描述正文（UI 路径一直在用），给 800 字一档，不按 500 字门槛整段丢弃。
+  const key = keys.at(-1);
+  const limit = ['cmdline', 'command', 'shell_cmdline', 'process_cmdline'].includes(key) ? 3000
+    : key === 'description' ? 800 : 500;
+  if (String(value).length > limit) return null;
   if (typeof value === 'number' && value < -60000000000) return null; // 牧云零时间哨兵
   return { value, pointer: pointer([...prefix, ...keys]) };
 }
@@ -115,7 +121,7 @@ function nested(item, prefix) {
   for (const [name, keys] of Object.entries(nestedFields)) {
     const rows = item[name];
     if (!Array.isArray(rows)) continue;
-    const indexes = name === 'commands' && rows.length > 8
+    const indexes = (name === 'commands' || name === 'cmdlines') && rows.length > 8
       ? [...Array.from({ length: 4 }, (_, i) => i), ...Array.from({ length: 4 }, (_, i) => rows.length - 4 + i)]
       : name === 'timeline' && rows.length > 20
         ? [...rows.map((row, index) => {
@@ -130,7 +136,10 @@ function nested(item, prefix) {
     out[name] = { total_in_record: rows.length, shown_count: indexes.length, shown: indexes.map(index => {
       const row = rows[index];
       const values = {};
+      // A7：cmdlines 的元素可能就是一个命令字符串；当成 cmdline 字段，pointer 指向数组下标，值不截断。
+      if (typeof row === 'string') values.cmdline = { value: row, pointer: pointer([...prefix, name, index]) };
       for (const key of keys) {
+        if (typeof row === 'string') break;
         const fact = select(row, key, [...prefix, name, index]);
         if (fact) values[key] = fact;
       }
@@ -269,7 +278,7 @@ export function boundEvidenceView(view, maxChars = 12000) {
 // P003-T039 A6：给模型看的视图再收一层——嵌套序列 timeline 8 行、commands 4 行，计数一律保留。
 // 只裁展示行，不动 projectEvidence 的投影口径：EvidenceSession 里的 record.view 保持原样，
 // 知识经验复用的「时间线是否完整」判定（investigation-agent.js 的 completeTimeline）不受影响。
-export const agentDisplayLimits = Object.freeze({ timeline: 8, commands: 4 });
+export const agentDisplayLimits = Object.freeze({ timeline: 8, commands: 4, cmdlines: 4 });
 
 // 时间线里值得留的行：有响应 > 带 HTTP 请求行/载荷类型 > 有请求字节 > 其余。排序只为挑行，展示仍按原顺序。
 function timelineRowPriority(row) {
@@ -308,6 +317,7 @@ export function compactEvidenceView(view, limits = agentDisplayLimits) {
     for (const [name, sequence] of Object.entries(sequenceSet)) {
       if (name === 'timeline') trimSequence(sequence, name, limits.timeline);
       else if (name === 'commands') trimSequence(sequence, name, limits.commands);
+      else if (name === 'cmdlines') trimSequence(sequence, name, limits.cmdlines);
     }
   }
   return compacted;
@@ -318,6 +328,16 @@ export function compactEvidenceView(view, limits = agentDisplayLimits) {
 // 短值一律原样保留：模型要拿它填 claims.citations 的 value，截断一个能给的值等于让它引用失败。
 // 复审 BUG1：三段收缩，每段都严格缩短内容（删一个字段 / 把字段换得更短 / 再删一个字段），
 // 所以循环一定收敛。旧实现第二段反复截同一个字段，长度稳定在 ~163 字不再下降，总量仍超限时死循环。
+export const syslogOmittedFieldsLimit = 40;
+const fieldName = name => String(name ?? '').slice(0, 60);
+// 记账数组统一封顶：前 40 个名字照写，超出部分只报总数（omitted_fields_total / truncated_fields_total）。
+function cappedFieldNames(key, names) {
+  const clipped = names.map(fieldName);
+  const listed = clipped.slice(0, syslogOmittedFieldsLimit);
+  const totalKey = `${key}_total`;
+  return { [key]: listed, ...(clipped.length > listed.length ? { [totalKey]: clipped.length } : {}) };
+}
+
 export function boundSyslogView(view, maxChars = 3000) {
   if (!view || typeof view !== 'object') return view;
   if (JSON.stringify(view).length <= maxChars) return view;
@@ -330,9 +350,11 @@ export function boundSyslogView(view, maxChars = 3000) {
   }
   const omittedFields = [];
   const truncatedFields = [];
+  // A5：记账字段本身也有上界。字段名多的时候（4.7KB 载荷可产出 3547 字回包），
+  // 「为了说明省了什么」反而把回包写超——名字封顶 40 个、每个截 60 字，总数另记。
   const bookkeeping = () => ({ truncated_for_context: true,
-    ...(truncatedFields.length ? { truncated_fields: truncatedFields } : {}),
-    ...(omittedFields.length ? { omitted_fields: omittedFields } : {}) });
+    ...(truncatedFields.length ? cappedFieldNames('truncated_fields', truncatedFields) : {}),
+    ...(omittedFields.length ? cappedFieldNames('omitted_fields', omittedFields) : {}) });
   // 量的是最终要发出去的那个对象（含 omitted_fields / truncated_fields 记账字段），不是半成品 payload。
   const oversize = () => JSON.stringify({ ...bounded, ...bookkeeping() }).length > maxChars;
   const longestString = () => Object.entries(payload).filter(([, value]) => typeof value === 'string')
@@ -365,8 +387,9 @@ export function boundSyslogView(view, maxChars = 3000) {
     if (at >= 0) truncatedFields.splice(at, 1);
   }
   if (oversize()) {
+    const names = [...omittedFields, ...Object.keys(payload)];
     return { msgid: bounded.msgid, truncated_for_context: true,
-      omitted_fields: [...omittedFields, ...Object.keys(payload)],
+      ...cappedFieldNames('omitted_fields', names),
       note: 'syslog 载荷字段过多，已整条不在模型上下文展示' };
   }
   return { ...bounded, ...bookkeeping() };

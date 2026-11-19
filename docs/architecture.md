@@ -33,8 +33,8 @@
 
 1. **告警进入**。牧云有 11 类事件，类型表在 `cloudwalker.js:2-6`。进入方式有两种：
    - **syslog 推送**：UDP 监听，默认 `127.0.0.1:15514`（`server.js:367-368`、`syslog-input.js:104`）。报文按 RFC5424 解析，正文支持结构化数据、JSON、键值对三种形态（`syslog-input.js:42-57`）。
-   - **轮询**：`TriageMonitor.poll()` 定期拉事件列表（`triage-monitor.js:163`）。哪种生效由 `HIDS_TRIAGE_INPUT_MODE` 决定，默认 `syslog`（`server.js:40`）。
-2. **去重与排队**。指纹相同、落在同一秒的重复投递合并为一条并累加次数（`triage-monitor.js:231-248`）；队列状态落盘，重启后未完成任务回到 `queued` 继续跑（`triage-monitor.js:56-57`）。
+   - **轮询**：`TriageMonitor.poll()` 定期拉事件列表（`triage-monitor.js:177`）。哪种生效由 `HIDS_TRIAGE_INPUT_MODE` 决定，默认 `syslog`（`server.js:40`）。
+2. **去重与排队**。指纹相同、落在同一秒的重复投递合并为一条并累加次数（`triage-monitor.js:245-262`）；队列状态落盘，重启后未完成任务回到 `queued` 继续跑（`triage-monitor.js:56-57`）。
 3. **关联牧云事件**。优先按 syslog 里的 `event_id` 精确回查并核对主机身份，回查不到才按主机与时间窗口匹配（`syslog-case.js:23-84`）。匹配不上时走「未匹配」分支，结论强制为存疑（`investigation-agent.js:563-598`）。
 4. **规则预筛**（仅常规研判）。规则引擎按主机、字段条件与有效期评估当前事件，命中则作为「误报候选」交给 AI 复核，而不是直接下结论（`triage-rules.js:258-305`、`server.js:117-129`）。
 5. **取证**。研判智能体自主选择工具查询，最多 6 轮对话、8 次工具调用（`investigation-agent.js:383`、`investigation-agent.js:401`）。每次调用产出一条带证据编号的记录（`agent-tools.js:57-68`）。
@@ -354,10 +354,10 @@ P003-T019 之前的版本把这里算成「本文件所在目录的上一级」+
 | --- | --- | --- | --- |
 | `.data/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:41` |
 | `.data/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:42` |
-| `.data/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:47`、`triage-monitor.js:69-71` |
+| `.data/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:47`、`triage-monitor.js:83-85` |
 | `.data/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:51`、`syslog-case.js:92-115` |
-| `.data/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:52`、`triage-monitor.js:281` |
-| `.data/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:53`、`triage-monitor.js:283` |
+| `.data/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:52`、`triage-monitor.js:295` |
+| `.data/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:53`、`triage-monitor.js:297` |
 | `.data/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:54` |
 | `.data/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:96` |
 | `.data/prompt-overrides.json` | 提示词与 SOP 的本地覆盖 | `PromptStore` | `prompt-store.js:17` |
@@ -384,7 +384,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 ### 8.4 写入习惯
 
 - 目录权限 `0o700`、文件权限 `0o600`（如 `investigation-store.js:19-20`）。
-- 落盘走「临时文件 + rename」原子替换，临时名带 UUID 且用 `flag: 'wx'` 防止覆盖（`investigation-store.js:18-21`、`prompt-store.js:80-81`、`triage-monitor.js:75-77`）。
+- 落盘走「临时文件 + rename」原子替换，临时名带 UUID 且用 `flag: 'wx'` 防止覆盖（`investigation-store.js:18-21`、`prompt-store.js:80-81`、`triage-monitor.js:89-91`）。
 - 研判记录的文件名是 `sha256(mode + ':' + alert_id)` 的十六进制，不把外部告警 ID 直接写进文件名（`investigation-store.js:9-12`）。
 
 ## 9. 访问控制边界
@@ -434,7 +434,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 ### 9.6 本系统不下指令
 
-整条链路上没有「隔离」「封禁」「加白」的执行动作。研判记录里的 `auto_action: false`（`investigation-agent.js:560`）就是这个意思；规则命中也只是「交由 AI 复核」的候选（`server.js:122`、`triage-monitor.js:343`）。
+整条链路上没有「隔离」「封禁」「加白」的执行动作。研判记录里的 `auto_action: false`（`investigation-agent.js:560`）就是这个意思；规则命中也只是「交由 AI 复核」的候选（`server.js:122`、`triage-monitor.js:357`）。
 
 ## 10. 配置项速查
 
@@ -457,8 +457,8 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
 | `HIDS_CASES_DIR` | 仓内 `.data/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:51` |
-| `HIDS_TRIAGE_CONCURRENCY` | `2` | 自动研判同时跑几条；env 里的非法值（0 / 负数 / 小数 / 非数 / 空串）回落 2。**装配处不覆盖**：`poll` 与 `syslog` 两种输入模式都按它生效，`summary().concurrency` 报规范化后的生效值。构造参数显式传数字 0 是「只排队不执行」（测试与停机维护用，P003-T036 × P003-T037 合并后的约定）。P003-T037，改完要重启进程 | `triage-monitor.js:30`、`triage-monitor.js:35`、`triage-monitor.js:94-95`、`server.js:51-53` |
-| `HIDS_TRIAGE_QUEUE_MAX` | `1000` | 自动研判队列上限（排队 + 在跑）；满了拒收并计入 `summary().dropped`。P003-T037，改完要重启进程 | `triage-monitor.js:31`、`triage-monitor.js:78` |
+| `HIDS_TRIAGE_CONCURRENCY` | `2` | 自动研判同时跑几条；env 里的非法值（0 / 负数 / 小数 / 非数 / 空串）回落 2。**装配处不覆盖**：`poll` 与 `syslog` 两种输入模式都按它生效，`summary().concurrency` 报规范化后的生效值。构造参数显式传数字 0 是「只排队不执行」（测试与停机维护用，P003-T036 × P003-T037 合并后的约定）。P003-T037，改完要重启进程 | `triage-monitor.js:30`、`triage-monitor.js:35`、`triage-monitor.js:108-109`、`server.js:51-53` |
+| `HIDS_TRIAGE_QUEUE_MAX` | `1000` | 自动研判队列上限（排队 + 在跑）；满了拒收并计入 `summary().dropped`。P003-T037，改完要重启进程 | `triage-monitor.js:31`、`triage-monitor.js:92` |
 | `HIDS_STATUS_TTL_MS` | `45000` | `/api/status` 探活缓存窗口，落 30~60 秒；`0` 关闭缓存。P003-T037 | `cloudwalker.js:110` |
 | `HIDS_PROBE_TTL_MS` | `5000` | 详情失败后同类列表探活的复用窗口。P003-T037 | `cloudwalker.js:111` |
 | `HIDS_LIST_SNAPSHOT_TTL_MS` | `15000` | 事件列表首批快照窗口（轮询与研判筛选共用）。P003-T037 | `cloudwalker.js:112` |

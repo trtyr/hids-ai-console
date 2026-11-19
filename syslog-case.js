@@ -172,3 +172,41 @@ export async function readCaseFile(caseInfo, name) {
   if (content.length > 25000) return { name, error: '材料超过本次读取上限，请使用 03-研判事实.md 的摘要' };
   return { name, content };
 }
+
+// A1/A5：必查项结果落案卷。每项写「前 5 行 + returned_count + total + 证据编号」，
+// 复算（重跑）只读本文件，不再发牧云 RPC。文件有字节上界：超界时先整项降级成「只留计数」，
+// 仍放不下的项不静默丢——omitted_items 计数 + truncated 标记（读的人知道少了几项）。
+export const requiredEvidenceFile = '06-必查项.json';
+export const requiredEvidenceMaxChars = 64000;
+
+function slimCheck(check) {
+  const { first_rows: rows, ...rest } = check;
+  return rows ? rest : check;
+}
+
+export async function writeRequiredEvidence(caseInfo, { alertId, mode, checks }) {
+  const body = { alert_id: alertId, mode, written_at: new Date().toISOString(), checks: [] };
+  let omittedItems = 0, slimmedItems = 0;
+  for (const check of Array.isArray(checks) ? checks : []) {
+    // 量的是真正要写出去的那串（pretty JSON），不是半成品。
+    const measure = candidate => JSON.stringify({ ...body, checks: [...body.checks, candidate] }, null, 2).length;
+    if (measure(check) <= requiredEvidenceMaxChars) body.checks.push(check);
+    else if (measure(slimCheck(check)) <= requiredEvidenceMaxChars) { body.checks.push(slimCheck(check)); slimmedItems++; }
+    else omittedItems++;
+  }
+  if (slimmedItems) { body.slimmed_items = slimmedItems; body.note = '部分项超过落盘上界，已降级为只留计数（前 5 行仍可从 result.json 的证据视图复算）'; }
+  if (omittedItems) { body.truncated = true; body.omitted_items = omittedItems; }
+  const filename = path.join(caseInfo.case_dir, requiredEvidenceFile);
+  const temporary = `${filename}.${randomUUID()}.tmp`;
+  await writeFile(temporary, JSON.stringify(body, null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  await rename(temporary, filename);
+  if (!Array.isArray(caseInfo.files)) caseInfo.files = [];
+  if (!caseInfo.files.includes(requiredEvidenceFile)) caseInfo.files.push(requiredEvidenceFile);
+  return body;
+}
+
+// 复算入口：只读盘，不碰牧云。
+export async function readRequiredEvidence(caseInfo) {
+  if (!caseInfo?.case_dir) throw new Error('当前告警没有案卷目录');
+  return JSON.parse(await readFile(path.join(caseInfo.case_dir, requiredEvidenceFile), 'utf8'));
+}

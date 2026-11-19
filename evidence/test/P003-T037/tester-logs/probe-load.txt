@@ -1,453 +1,453 @@
-{"time":"2026-11-19T16:36:53.486Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:efca160e4ddd04ea:1793692800:a06373a7-49d8-4ce2-81d6-8b3e8c57ec73","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.488Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.0","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.488Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:56ca90323be123fc:1793692800:f5861ebf-6a67-48f1-a15d-7536a8a1c724","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.489Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.1","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.489Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:2c71c6e5eb1a21bb:1793692800:7f2533f8-ac09-4627-9452-83bbe881b1e1","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.489Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.2","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.489Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:85cfdaebeaa88c33:1793692800:0fa535cd-005e-4e4a-8d75-af938bd17723","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.489Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.3","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.489Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:3316f8f4218edd44:1793692800:abd4ddef-966a-497a-9258-46a96d1e7d78","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.489Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:876b917c2c992efc:1793692800:579dc3bc-8d50-43b2-9f14-e3d0d2565db6","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:a27cc969fb64a3b9:1793692800:748f91be-2564-4334-b3ea-d689665b020b","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:32c3b31bd204de25:1793692800:6ab937ee-3cee-4781-b201-ecfe8c2a9c10","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:4a9870cff106570e:1793692800:da709447-5096-4d3d-82c0-3517403a91f7","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:daf730a5497fae69:1793692800:f0290af7-3d73-4f3f-91b0-2755eb346434","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:bb92b3f1a69573d2:1793692800:6b1724a4-fbeb-44db-9696-48e842eb3aba","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:8434274a4ea3378e:1793692800:88f48078-2b8a-43b0-b046-62639746d959","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:126eb44d6663c936:1793692800:8fde6cda-1db7-4ce8-9b2e-118f1f2cd88d","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:27b06a1c9b867aa4:1793692800:d0bd5e02-4bd2-4763-b9ce-2e149e44dc61","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:7489a85393922ed3:1793692800:8fac61ee-ff8f-4b04-80b1-5129ff8c9592","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:ae23c36846ad7390:1793692800:fa754faa-afab-418c-a086-891264aa29f5","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:454a8bce0c6ce2e7:1793692800:61ee4e48-73b9-4775-9bfd-54338be5b051","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:f45d7bf3f08918ac:1793692800:e9401e37-4366-4f4e-bc2c-939027e0b032","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:e13e94adaf40fa32:1793692800:4f381b54-18f1-4e8b-9b7d-82cfc70cc2d5","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:0987882cc29c2791:1793692800:d4489f0c-c0b3-42ee-9a68-4f73fab0319b","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:6581060a061aab79:1793692800:a5c8d439-0451-4853-994c-2de17ffefde7","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.490Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:203286c8a832e243:1793692800:0b089f1f-cf97-466d-9bc2-343bf93c77d0","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:85710f47f6fd1dfc:1793692800:347ad22d-e73b-4885-8344-71d4ac51cfe6","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:2d7589a8892a839e:1793692800:5fa27a0b-1f0e-4213-9544-2bd2903ad93d","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:717935d274cf7a94:1793692800:81c0d4ee-d594-48f2-b826-603828486ee7","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:7476f5a156cec228:1793692800:33bf41d2-4750-47ed-9811-8ab9986c81c0","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:016f673a15b5a4b1:1793692800:466b93eb-3857-4d26-bb15-2ee6e48b29cd","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:731dda834186e6c4:1793692800:ae9a4f99-13a9-4d89-9c5f-ae4a106b4f71","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:91e60af969e0d380:1793692800:d404f201-3d89-4b53-b01f-3e17e8c1e980","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:372eb514b3d76e77:1793692800:6067160e-8d42-4a0d-99da-842e92a55bb6","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:b42ed29544b368a7:1793692800:4b8b5f60-efb2-40c3-8c7c-355e4bc7b2a9","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:1c6247d982d8f3c8:1793692800:882631c5-a0dd-4cf1-a26a-25108bd70f9c","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:1f19df1ddf2bd232:1793692800:38727b4c-b1de-4fcd-98b1-9208d5e27e39","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:ceb722365d743054:1793692800:4718e4ba-6dbe-4808-9733-9c29b247ca44","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:086d2a754f36a43c:1793692800:aefb74be-30f8-44b1-ae81-24cec2df3692","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:2cee870a798dac2b:1793692800:4087a6af-e001-43d8-98b3-1e892e737c6f","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:77e259bf753d4c0a:1793692800:bd51aa74-adb3-45c7-ba9d-aa8401ba9f3e","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:601ede85b6402dff:1793692800:2cd5876a-8ab9-44f8-8139-d87e89a4759b","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:aea73de9d66c4b17:1793692800:21c29e9e-6d92-4955-9fa3-661618b675cf","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:a3b00c06f0160149:1793692800:9e73a2b7-dbf8-44ab-a3ed-ff6f8a92f21e","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:fa6b2cca11368d6b:1793692800:4a7f832a-6b9c-49c5-a818-5ea8b82dd46b","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:4b970d43b27ebdc1:1793692800:6c0ae861-dbca-4708-9c5a-28e9841bb474","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.491Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:637231449f7dede2:1793692800:25737a45-7594-400e-b637-cf6a80b713b7","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:fdec72523c020c31:1793692800:d0653ccb-82e0-4eb2-a53f-10d0a57fb923","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:73844d9c8586fb37:1793692800:e428ade9-6637-4098-ae7f-cb5990296d65","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:c8b9fc76e18b143b:1793692800:7e3a84cc-5b02-4547-8d26-c1e512c6e89f","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:d05dec1061f8dea5:1793692800:4108608e-2fb9-4fce-ae33-3137fe9beb8a","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:b21745e14453dd9f:1793692800:4fd7ae55-9479-44a3-a17b-2f8699261fa7","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:b242826695fbc557:1793692800:a3122186-d62d-4fb2-a956-e68014d44e09","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:4c1482cbf39f1f0e:1793692800:37433e19-f1b1-42f6-bf40-673d9ea92cc5","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:efa5231ee95d637f:1793692800:4fbd0b37-d38c-4e9b-b771-e3b5bebe2833","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:9a155e909c69d815:1793692800:d1e6ca1e-049a-4fe3-ad69-d3f5651fda03","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:3accc7e744899987:1793692800:b2269a5c-cfef-48f1-9b77-10d74bd78f87","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:4de74d1caffd42fc:1793692800:53c6c6ac-e84b-4399-8722-92001c04233f","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:43789e00dab34171:1793692800:c432a4f9-78fb-4d8c-bf60-7f0d29ac4b2d","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:7748a8ab2f494226:1793692800:3bfbb4bf-b2f6-4714-ac71-8fed83a1ca37","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:43ac24d06a7c349f:1793692800:35d5cd1e-0622-4de1-9c89-fe51d186c168","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:2206ff63b58adce6:1793692800:cf386beb-f863-4d9a-b245-abcec102a533","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.492Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:9f5d7c67ea3a2577:1793692800:abc05f59-15ae-40b5-aa99-7425aa618c87","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.493Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:3270408b596363f0:1793692800:ce045bf9-9ac9-4d3b-bb24-3eb5326fc52f","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.493Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:963b8efa588be4e0:1793692800:70a7970a-102a-4a07-8988-b7ea6199cf25","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.493Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:1849d688926c3c9d:1793692800:033ae2d0-241a-4274-975b-99b67d12e638","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.493Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:c89243813ed89886:1793692800:24994de0-46bc-4f2c-86f3-a541255306f3","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.493Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:3cab0cf57ceda087:1793692800:0c5a076c-f1e2-49ab-ba10-1498efee95be","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":1,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":2,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":3,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":4,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":5,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":6,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":7,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":8,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":9,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":10,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":11,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.493Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":12,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":13,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":14,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":15,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":16,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":17,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":18,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":19,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":20,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":21,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":22,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":23,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":24,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":25,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":26,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":27,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":28,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":29,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":30,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":31,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":32,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.494Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":33,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":34,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":35,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":36,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":37,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":38,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":39,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":40,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":41,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":42,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":43,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":44,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":45,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":46,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":47,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":48,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":49,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":50,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":51,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":52,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.495Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":53,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":54,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":55,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":56,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":57,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":58,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":59,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":60,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":61,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":62,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":63,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":64,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.496Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":65,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":66,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":67,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":68,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":69,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":70,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":71,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":72,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":73,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":74,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":75,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":76,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":77,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":78,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":79,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":80,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":81,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":82,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":83,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":84,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.497Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":85,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":86,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":87,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":88,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":89,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":90,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":91,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":92,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":93,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":94,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":95,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":96,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":97,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":98,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":99,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":100,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":101,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":102,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":103,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":104,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":105,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":106,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":107,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":108,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":109,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.498Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":110,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":111,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":112,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":113,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":114,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":115,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":116,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":117,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":118,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":119,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":120,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":121,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":122,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":123,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":124,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":125,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":126,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":127,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":128,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":129,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":130,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":131,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.499Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":132,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":133,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":134,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":135,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":136,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":137,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":138,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":139,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":140,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":141,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":142,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":143,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":144,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":145,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":146,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":147,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":148,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":149,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":150,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":151,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":152,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.500Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":153,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":154,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":155,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":156,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":157,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":158,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":159,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":160,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":161,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":162,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":163,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":164,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":165,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":166,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":167,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":168,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":169,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":170,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":171,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":172,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.501Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":173,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":174,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":175,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":176,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":177,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":178,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":179,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":180,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":181,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":182,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":183,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":184,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":185,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":186,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":187,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":188,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":189,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":190,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":191,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":192,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":193,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.502Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":194,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":195,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":196,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":197,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":198,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":199,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":200,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":201,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":202,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":203,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":204,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":205,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":206,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":207,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":208,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":209,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":210,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":211,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.503Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":212,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":213,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":214,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":215,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":216,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":217,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":218,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":219,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":220,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":221,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":222,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":223,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":224,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":225,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":226,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":227,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":228,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":229,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":230,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":231,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":232,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":233,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":234,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":235,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.504Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":236,"queue_limit":64}
-{"time":"2026-11-19T16:36:53.507Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:56ca90323be123fc:1793692800:f5861ebf-6a67-48f1-a15d-7536a8a1c724","verdict":"uncertain","attempts":1,"duration_ms":19}
-{"time":"2026-11-19T16:36:53.513Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.4","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.513Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:2c71c6e5eb1a21bb:1793692800:7f2533f8-ac09-4627-9452-83bbe881b1e1","verdict":"uncertain","attempts":1,"duration_ms":24}
-{"time":"2026-11-19T16:36:53.513Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.513Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:85cfdaebeaa88c33:1793692800:0fa535cd-005e-4e4a-8d75-af938bd17723","verdict":"uncertain","attempts":1,"duration_ms":24}
-{"time":"2026-11-19T16:36:53.513Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.6","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.513Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:efca160e4ddd04ea:1793692800:a06373a7-49d8-4ce2-81d6-8b3e8c57ec73","verdict":"uncertain","attempts":1,"duration_ms":26}
-{"time":"2026-11-19T16:36:53.514Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.7","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.514Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:3316f8f4218edd44:1793692800:abd4ddef-966a-497a-9258-46a96d1e7d78","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.514Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.8","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.515Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:876b917c2c992efc:1793692800:579dc3bc-8d50-43b2-9f14-e3d0d2565db6","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.515Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.9","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.515Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:a27cc969fb64a3b9:1793692800:748f91be-2564-4334-b3ea-d689665b020b","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.515Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.10","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.515Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:32c3b31bd204de25:1793692800:6ab937ee-3cee-4781-b201-ecfe8c2a9c10","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.515Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.11","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.516Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:4a9870cff106570e:1793692800:da709447-5096-4d3d-82c0-3517403a91f7","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.516Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.12","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.516Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:bb92b3f1a69573d2:1793692800:6b1724a4-fbeb-44db-9696-48e842eb3aba","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.516Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.13","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.516Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:daf730a5497fae69:1793692800:f0290af7-3d73-4f3f-91b0-2755eb346434","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.517Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.14","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.517Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:8434274a4ea3378e:1793692800:88f48078-2b8a-43b0-b046-62639746d959","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.517Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.15","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.518Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:126eb44d6663c936:1793692800:8fde6cda-1db7-4ce8-9b2e-118f1f2cd88d","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.518Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.16","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.518Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:27b06a1c9b867aa4:1793692800:d0bd5e02-4bd2-4763-b9ce-2e149e44dc61","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.518Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.17","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.518Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:ae23c36846ad7390:1793692800:fa754faa-afab-418c-a086-891264aa29f5","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.518Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.18","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.518Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:7489a85393922ed3:1793692800:8fac61ee-ff8f-4b04-80b1-5129ff8c9592","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.518Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.19","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.519Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:454a8bce0c6ce2e7:1793692800:61ee4e48-73b9-4775-9bfd-54338be5b051","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.519Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.20","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.519Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:f45d7bf3f08918ac:1793692800:e9401e37-4366-4f4e-bc2c-939027e0b032","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.519Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.21","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.519Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:e13e94adaf40fa32:1793692800:4f381b54-18f1-4e8b-9b7d-82cfc70cc2d5","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.519Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.22","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.519Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:0987882cc29c2791:1793692800:d4489f0c-c0b3-42ee-9a68-4f73fab0319b","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.519Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.23","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.520Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:6581060a061aab79:1793692800:a5c8d439-0451-4853-994c-2de17ffefde7","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.520Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.24","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.520Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:203286c8a832e243:1793692800:0b089f1f-cf97-466d-9bc2-343bf93c77d0","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.520Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.25","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.520Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:85710f47f6fd1dfc:1793692800:347ad22d-e73b-4885-8344-71d4ac51cfe6","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.520Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.26","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.521Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:2d7589a8892a839e:1793692800:5fa27a0b-1f0e-4213-9544-2bd2903ad93d","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.521Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.27","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.521Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:717935d274cf7a94:1793692800:81c0d4ee-d594-48f2-b826-603828486ee7","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.521Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.28","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.521Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:7476f5a156cec228:1793692800:33bf41d2-4750-47ed-9811-8ab9986c81c0","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.521Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.29","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.521Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:016f673a15b5a4b1:1793692800:466b93eb-3857-4d26-bb15-2ee6e48b29cd","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.522Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.30","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.522Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:731dda834186e6c4:1793692800:ae9a4f99-13a9-4d89-9c5f-ae4a106b4f71","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.522Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.31","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.522Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:91e60af969e0d380:1793692800:d404f201-3d89-4b53-b01f-3e17e8c1e980","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.522Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.32","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.522Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:372eb514b3d76e77:1793692800:6067160e-8d42-4a0d-99da-842e92a55bb6","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.522Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.33","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.523Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:b42ed29544b368a7:1793692800:4b8b5f60-efb2-40c3-8c7c-355e4bc7b2a9","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.523Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.34","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.523Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:1c6247d982d8f3c8:1793692800:882631c5-a0dd-4cf1-a26a-25108bd70f9c","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.523Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.35","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.524Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:1f19df1ddf2bd232:1793692800:38727b4c-b1de-4fcd-98b1-9208d5e27e39","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.524Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.36","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.524Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:086d2a754f36a43c:1793692800:aefb74be-30f8-44b1-ae81-24cec2df3692","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.524Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.37","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.524Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:ceb722365d743054:1793692800:4718e4ba-6dbe-4808-9733-9c29b247ca44","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.524Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.38","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.524Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:2cee870a798dac2b:1793692800:4087a6af-e001-43d8-98b3-1e892e737c6f","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.524Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.39","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.525Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:77e259bf753d4c0a:1793692800:bd51aa74-adb3-45c7-ba9d-aa8401ba9f3e","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.525Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.40","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.525Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:601ede85b6402dff:1793692800:2cd5876a-8ab9-44f8-8139-d87e89a4759b","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.525Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.41","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.525Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:aea73de9d66c4b17:1793692800:21c29e9e-6d92-4955-9fa3-661618b675cf","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.525Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.42","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.525Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:a3b00c06f0160149:1793692800:9e73a2b7-dbf8-44ab-a3ed-ff6f8a92f21e","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.525Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.43","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.526Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:fa6b2cca11368d6b:1793692800:4a7f832a-6b9c-49c5-a818-5ea8b82dd46b","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.526Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.44","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.526Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:637231449f7dede2:1793692800:25737a45-7594-400e-b637-cf6a80b713b7","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.526Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.45","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.526Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:4b970d43b27ebdc1:1793692800:6c0ae861-dbca-4708-9c5a-28e9841bb474","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.526Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.46","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.526Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:fdec72523c020c31:1793692800:d0653ccb-82e0-4eb2-a53f-10d0a57fb923","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.526Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.47","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.526Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:c8b9fc76e18b143b:1793692800:7e3a84cc-5b02-4547-8d26-c1e512c6e89f","verdict":"uncertain","attempts":1,"duration_ms":0}
-{"time":"2026-11-19T16:36:53.526Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.48","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.527Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:73844d9c8586fb37:1793692800:e428ade9-6637-4098-ae7f-cb5990296d65","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.527Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.49","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.527Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:d05dec1061f8dea5:1793692800:4108608e-2fb9-4fce-ae33-3137fe9beb8a","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.527Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.50","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.527Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:b21745e14453dd9f:1793692800:4fd7ae55-9479-44a3-a17b-2f8699261fa7","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.527Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.51","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.528Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:b242826695fbc557:1793692800:a3122186-d62d-4fb2-a956-e68014d44e09","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.528Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.52","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.528Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:4c1482cbf39f1f0e:1793692800:37433e19-f1b1-42f6-bf40-673d9ea92cc5","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.528Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.53","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.528Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:efa5231ee95d637f:1793692800:4fbd0b37-d38c-4e9b-b771-e3b5bebe2833","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.528Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.54","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.529Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:9a155e909c69d815:1793692800:d1e6ca1e-049a-4fe3-ad69-d3f5651fda03","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.529Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.55","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.529Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:3accc7e744899987:1793692800:b2269a5c-cfef-48f1-9b77-10d74bd78f87","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.529Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.56","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.529Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:4de74d1caffd42fc:1793692800:53c6c6ac-e84b-4399-8722-92001c04233f","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.529Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.57","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.529Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:43789e00dab34171:1793692800:c432a4f9-78fb-4d8c-bf60-7f0d29ac4b2d","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.529Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.58","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.530Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:7748a8ab2f494226:1793692800:3bfbb4bf-b2f6-4714-ac71-8fed83a1ca37","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.530Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.59","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.530Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:43ac24d06a7c349f:1793692800:35d5cd1e-0622-4de1-9c89-fe51d186c168","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.530Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.60","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.530Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:2206ff63b58adce6:1793692800:cf386beb-f863-4d9a-b245-abcec102a533","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.530Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.61","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.530Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:9f5d7c67ea3a2577:1793692800:abc05f59-15ae-40b5-aa99-7425aa618c87","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.531Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.62","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.531Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:3270408b596363f0:1793692800:ce045bf9-9ac9-4d3b-bb24-3eb5326fc52f","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.531Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.63","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
-{"time":"2026-11-19T16:36:53.531Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:963b8efa588be4e0:1793692800:70a7970a-102a-4a07-8988-b7ea6199cf25","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.532Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:1849d688926c3c9d:1793692800:033ae2d0-241a-4274-975b-99b67d12e638","verdict":"uncertain","attempts":1,"duration_ms":2}
-{"time":"2026-11-19T16:36:53.532Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:c89243813ed89886:1793692800:24994de0-46bc-4f2c-86f3-a541255306f3","verdict":"uncertain","attempts":1,"duration_ms":1}
-{"time":"2026-11-19T16:36:53.532Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:3cab0cf57ceda087:1793692800:0c5a076c-f1e2-49ab-ba10-1498efee95be","verdict":"uncertain","attempts":1,"duration_ms":1}
-✔ 队列负载（300 条 / 并发 4 / 上限 64）（55ms）：done=64 dropped=236
-✔ /api/status（并发 50 次）（0ms）：rpc=1
+{"time":"2026-11-19T16:39:10.405Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:efca160e4ddd04ea:1793692800:bf155876-c318-45dd-ad96-cba362a78780","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.406Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.0","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.407Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:56ca90323be123fc:1793692800:122243b4-0fd7-4788-867b-ec0c303e8cf8","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.407Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.1","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.407Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:2c71c6e5eb1a21bb:1793692800:d7d20d36-8205-44a2-a1d0-ad1b30d8111e","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.408Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.2","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.408Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:85cfdaebeaa88c33:1793692800:44ecf951-e1be-45a0-b76e-ed5cc68200ee","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.408Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.3","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.408Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:3316f8f4218edd44:1793692800:e3e11987-6361-4d27-ae48-fa9ace2d1107","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.408Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:876b917c2c992efc:1793692800:1e23d5dd-54c7-4e55-ba08-45f6dbda1116","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.408Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:a27cc969fb64a3b9:1793692800:a13c2d6b-3e6f-429f-b789-28cceef20210","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.408Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:32c3b31bd204de25:1793692800:d84ca176-02c1-46a9-ade3-8d7b3ed3c508","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.408Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:4a9870cff106570e:1793692800:8e6049e7-e6c6-4895-bc71-783b0e33b0a5","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:daf730a5497fae69:1793692800:c4a804af-f0b5-4d43-b04b-ae8a327efb00","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:bb92b3f1a69573d2:1793692800:2467504a-22ab-4297-bb02-4093ef80b3e2","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:8434274a4ea3378e:1793692800:2d7529fc-3171-4e9f-aec7-d9599d202c45","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:126eb44d6663c936:1793692800:3c1bfb5a-6549-4912-8117-3b7afa4ceea2","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:27b06a1c9b867aa4:1793692800:ad037dbb-c8e9-4f6e-ac2d-549bcbe31a69","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:7489a85393922ed3:1793692800:27298b93-9762-4ad1-aecf-cedcfbf69903","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:ae23c36846ad7390:1793692800:0ab83b5c-390c-4c49-8954-fd3ed80765ca","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:454a8bce0c6ce2e7:1793692800:a35bc8ae-0fe3-4e6f-8d3d-f4fa308602ba","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:f45d7bf3f08918ac:1793692800:8d9a51a8-8a6e-49cf-a56a-6f4f1214642c","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:e13e94adaf40fa32:1793692800:f283c402-963b-4d71-81da-def8d27fe043","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:0987882cc29c2791:1793692800:92d9e5b5-3122-414e-bc92-a44baa844d43","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:6581060a061aab79:1793692800:a9769ecd-9ba0-40c8-b623-46a322c33257","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:203286c8a832e243:1793692800:1465fa09-4c64-4797-956a-fe191061a713","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:85710f47f6fd1dfc:1793692800:c55829b3-7f4d-4b02-b776-78226a2ec1eb","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:2d7589a8892a839e:1793692800:acdede39-3382-45bf-a81c-353d4b6bfc05","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:717935d274cf7a94:1793692800:daf1a38d-a04f-454b-af76-b72035597971","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:7476f5a156cec228:1793692800:932e6ace-8472-4158-9147-ac819f47c741","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.409Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:016f673a15b5a4b1:1793692800:096b8e3a-7aa5-47bf-82d5-fe11636c5d3e","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:731dda834186e6c4:1793692800:c79729cf-9178-40fc-8d6f-3f77f5493623","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:91e60af969e0d380:1793692800:e71275b4-680b-4505-bb1f-c4dacfc39cec","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:372eb514b3d76e77:1793692800:a6b916d6-3589-4920-b124-efd5eff500f8","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:b42ed29544b368a7:1793692800:9b73e838-ede9-4804-bd9d-b94fe8c3c138","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:1c6247d982d8f3c8:1793692800:7b1de762-d4cf-405b-ac1f-e09885688983","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:1f19df1ddf2bd232:1793692800:30be568e-3f25-4f9f-8e41-e48771b0188c","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:ceb722365d743054:1793692800:f1aa8813-75e7-40ad-950a-033625703a27","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:086d2a754f36a43c:1793692800:af77afac-4144-4d9b-a921-67f4d3cd1073","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:2cee870a798dac2b:1793692800:1f56dcd9-48fa-432b-b02f-2b18d4506c8f","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:77e259bf753d4c0a:1793692800:fbbf1430-33fd-4752-ba90-a809f59e79af","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:601ede85b6402dff:1793692800:3e166b4c-597e-44ed-931f-89a146f79bda","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:aea73de9d66c4b17:1793692800:2b1e5af8-f7df-46b4-8a3a-e25fef427890","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:a3b00c06f0160149:1793692800:49a354da-e2da-44d4-bfb3-961e3f920032","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:fa6b2cca11368d6b:1793692800:435e64cb-0cd1-4fb6-980b-2652e7fa57a5","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:4b970d43b27ebdc1:1793692800:abf57ce2-ab2d-4a63-a0e0-2fbf808757dc","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:637231449f7dede2:1793692800:763ee7db-c384-41ec-8491-3b08e21ad4b4","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:fdec72523c020c31:1793692800:acb586a1-4bab-4a56-8358-d815cb9a7c4d","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:73844d9c8586fb37:1793692800:e001ebeb-be11-449f-9cf0-8428a5e186a1","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:c8b9fc76e18b143b:1793692800:e77000e1-6b2d-4bcb-9973-d9d7f8760c83","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:d05dec1061f8dea5:1793692800:28d3208b-fd25-4538-8979-1ec6c8739888","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.410Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:b21745e14453dd9f:1793692800:63e37d7f-9351-4c34-acd3-d7260e911246","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:b242826695fbc557:1793692800:29d1b33a-6af9-407c-97ab-b58c711f446d","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:4c1482cbf39f1f0e:1793692800:76a5eed8-357a-4792-8181-f6be4229f787","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:efa5231ee95d637f:1793692800:8166664d-6c46-4441-898d-9f310013d5bc","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:9a155e909c69d815:1793692800:75a637f3-b654-4160-994f-a9a1b13de4bd","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:3accc7e744899987:1793692800:e8d20239-b036-4a84-b776-a27b8cb2ae74","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:4de74d1caffd42fc:1793692800:a4e23077-f608-47bc-9ce2-b3b8543cc6e3","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:43789e00dab34171:1793692800:ef810847-9713-4a85-a7ba-b8cc2b8dc9c8","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:7748a8ab2f494226:1793692800:e5876063-32a8-4f5a-a2df-fb49c99d0fc4","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:43ac24d06a7c349f:1793692800:59f0a4d8-cc51-498e-a346-81380137d674","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:2206ff63b58adce6:1793692800:ed561ba4-4679-4108-b0eb-df88a66ad6ed","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:9f5d7c67ea3a2577:1793692800:76e1004d-fc91-422d-83ba-0ff4b70be432","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:3270408b596363f0:1793692800:8fcd33ef-73c3-489a-ba77-15ea9e694dc9","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:963b8efa588be4e0:1793692800:a4397972-49fb-4cb5-8f33-9970663cc038","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:1849d688926c3c9d:1793692800:031c1d68-923c-41dd-a9e8-fa033c9cefab","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:c89243813ed89886:1793692800:0cc40835-f934-4725-9849-9ae1c8946c4d","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.411Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:3cab0cf57ceda087:1793692800:274c1842-8f2f-4f76-99c8-3729c5d5178d","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":1,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":2,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":3,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":4,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":5,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":6,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":7,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":8,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":9,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":10,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":11,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":12,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":13,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":14,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":15,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":16,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":17,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":18,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.412Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":19,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":20,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":21,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":22,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":23,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":24,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":25,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":26,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":27,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":28,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":29,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":30,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":31,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":32,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":33,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":34,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":35,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":36,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":37,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":38,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":39,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.413Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":40,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":41,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":42,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":43,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":44,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":45,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":46,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":47,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":48,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":49,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":50,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":51,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":52,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":53,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":54,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":55,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":56,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":57,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":58,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":59,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":60,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.414Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":61,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":62,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":63,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":64,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":65,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":66,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":67,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":68,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":69,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":70,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":71,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":72,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":73,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":74,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":75,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":76,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.415Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":77,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":78,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":79,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":80,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":81,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":82,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":83,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":84,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":85,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":86,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":87,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":88,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":89,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":90,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":91,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":92,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":93,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":94,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":95,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":96,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":97,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":98,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":99,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":100,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.416Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":101,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":102,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":103,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":104,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":105,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":106,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":107,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":108,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":109,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":110,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":111,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":112,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":113,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":114,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":115,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":116,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":117,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":118,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":119,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":120,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":121,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":122,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":123,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":124,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":125,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.417Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":126,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":127,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":128,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":129,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":130,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":131,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":132,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":133,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":134,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":135,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":136,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":137,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":138,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":139,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":140,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":141,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":142,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":143,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":144,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":145,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.418Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":146,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":147,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":148,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":149,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":150,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":151,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":152,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":153,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":154,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":155,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":156,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":157,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":158,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":159,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":160,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":161,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":162,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":163,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":164,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":165,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.419Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":166,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":167,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":168,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":169,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":170,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":171,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":172,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":173,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":174,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":175,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":176,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":177,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":178,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":179,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.420Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":180,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":181,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":182,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":183,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":184,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":185,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":186,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":187,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":188,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":189,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":190,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":191,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":192,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":193,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":194,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":195,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":196,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":197,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":198,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":199,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.421Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":200,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":201,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":202,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":203,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":204,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":205,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":206,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":207,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":208,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":209,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":210,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":211,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":212,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":213,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":214,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":215,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.422Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":216,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":217,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":218,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":219,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":220,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":221,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":222,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":223,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":224,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":225,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":226,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":227,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":228,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":229,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":230,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":231,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":232,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":233,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":234,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":235,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.423Z","level":"warn","event":"triage.dropped","reason":"syslog","count":1,"dropped":236,"queue_limit":64}
+{"time":"2026-11-19T16:39:10.426Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:efca160e4ddd04ea:1793692800:bf155876-c318-45dd-ad96-cba362a78780","verdict":"uncertain","attempts":1,"duration_ms":20}
+{"time":"2026-11-19T16:39:10.432Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.4","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.432Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:56ca90323be123fc:1793692800:122243b4-0fd7-4788-867b-ec0c303e8cf8","verdict":"uncertain","attempts":1,"duration_ms":25}
+{"time":"2026-11-19T16:39:10.432Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.432Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:85cfdaebeaa88c33:1793692800:44ecf951-e1be-45a0-b76e-ed5cc68200ee","verdict":"uncertain","attempts":1,"duration_ms":24}
+{"time":"2026-11-19T16:39:10.432Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.6","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.432Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:2c71c6e5eb1a21bb:1793692800:d7d20d36-8205-44a2-a1d0-ad1b30d8111e","verdict":"uncertain","attempts":1,"duration_ms":25}
+{"time":"2026-11-19T16:39:10.433Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.7","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.433Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:3316f8f4218edd44:1793692800:e3e11987-6361-4d27-ae48-fa9ace2d1107","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.433Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.8","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.434Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:a27cc969fb64a3b9:1793692800:a13c2d6b-3e6f-429f-b789-28cceef20210","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.434Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.9","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.434Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:876b917c2c992efc:1793692800:1e23d5dd-54c7-4e55-ba08-45f6dbda1116","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.434Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.10","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.434Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:32c3b31bd204de25:1793692800:d84ca176-02c1-46a9-ade3-8d7b3ed3c508","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.434Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.11","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.435Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:4a9870cff106570e:1793692800:8e6049e7-e6c6-4895-bc71-783b0e33b0a5","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.435Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.12","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.435Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:daf730a5497fae69:1793692800:c4a804af-f0b5-4d43-b04b-ae8a327efb00","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.435Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.13","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.436Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:bb92b3f1a69573d2:1793692800:2467504a-22ab-4297-bb02-4093ef80b3e2","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.436Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.14","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.436Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:8434274a4ea3378e:1793692800:2d7529fc-3171-4e9f-aec7-d9599d202c45","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.436Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.15","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.437Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:126eb44d6663c936:1793692800:3c1bfb5a-6549-4912-8117-3b7afa4ceea2","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.437Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.16","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.437Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:27b06a1c9b867aa4:1793692800:ad037dbb-c8e9-4f6e-ac2d-549bcbe31a69","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.437Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.17","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.437Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:7489a85393922ed3:1793692800:27298b93-9762-4ad1-aecf-cedcfbf69903","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.437Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.18","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.437Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:ae23c36846ad7390:1793692800:0ab83b5c-390c-4c49-8954-fd3ed80765ca","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.437Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.19","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.438Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:454a8bce0c6ce2e7:1793692800:a35bc8ae-0fe3-4e6f-8d3d-f4fa308602ba","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.438Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.20","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.438Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:f45d7bf3f08918ac:1793692800:8d9a51a8-8a6e-49cf-a56a-6f4f1214642c","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.438Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.21","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.438Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:e13e94adaf40fa32:1793692800:f283c402-963b-4d71-81da-def8d27fe043","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.438Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.22","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.438Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:0987882cc29c2791:1793692800:92d9e5b5-3122-414e-bc92-a44baa844d43","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.438Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.23","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.439Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:6581060a061aab79:1793692800:a9769ecd-9ba0-40c8-b623-46a322c33257","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.439Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.24","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.439Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:203286c8a832e243:1793692800:1465fa09-4c64-4797-956a-fe191061a713","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.439Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.25","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.439Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:85710f47f6fd1dfc:1793692800:c55829b3-7f4d-4b02-b776-78226a2ec1eb","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.439Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.26","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.439Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:2d7589a8892a839e:1793692800:acdede39-3382-45bf-a81c-353d4b6bfc05","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.439Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.27","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.440Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:717935d274cf7a94:1793692800:daf1a38d-a04f-454b-af76-b72035597971","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.440Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.28","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.440Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:7476f5a156cec228:1793692800:932e6ace-8472-4158-9147-ac819f47c741","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.440Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.29","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.440Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:016f673a15b5a4b1:1793692800:096b8e3a-7aa5-47bf-82d5-fe11636c5d3e","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.440Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.30","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.441Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:731dda834186e6c4:1793692800:c79729cf-9178-40fc-8d6f-3f77f5493623","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.441Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.31","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.441Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:372eb514b3d76e77:1793692800:a6b916d6-3589-4920-b124-efd5eff500f8","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.441Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.32","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.441Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:91e60af969e0d380:1793692800:e71275b4-680b-4505-bb1f-c4dacfc39cec","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.441Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.33","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.441Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:b42ed29544b368a7:1793692800:9b73e838-ede9-4804-bd9d-b94fe8c3c138","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.441Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.34","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.442Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:1c6247d982d8f3c8:1793692800:7b1de762-d4cf-405b-ac1f-e09885688983","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.442Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.35","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.442Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:1f19df1ddf2bd232:1793692800:30be568e-3f25-4f9f-8e41-e48771b0188c","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.442Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.36","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.443Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:086d2a754f36a43c:1793692800:af77afac-4144-4d9b-a921-67f4d3cd1073","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.443Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.37","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.443Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:ceb722365d743054:1793692800:f1aa8813-75e7-40ad-950a-033625703a27","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.443Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.38","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.443Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:2cee870a798dac2b:1793692800:1f56dcd9-48fa-432b-b02f-2b18d4506c8f","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.443Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.39","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.443Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:77e259bf753d4c0a:1793692800:fbbf1430-33fd-4752-ba90-a809f59e79af","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.443Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.40","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.443Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:601ede85b6402dff:1793692800:3e166b4c-597e-44ed-931f-89a146f79bda","verdict":"uncertain","attempts":1,"duration_ms":0}
+{"time":"2026-11-19T16:39:10.444Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.41","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.444Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:aea73de9d66c4b17:1793692800:2b1e5af8-f7df-46b4-8a3a-e25fef427890","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.444Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.42","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.444Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:a3b00c06f0160149:1793692800:49a354da-e2da-44d4-bfb3-961e3f920032","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.444Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.43","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.444Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:fa6b2cca11368d6b:1793692800:435e64cb-0cd1-4fb6-980b-2652e7fa57a5","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.444Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.44","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.444Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:637231449f7dede2:1793692800:763ee7db-c384-41ec-8491-3b08e21ad4b4","verdict":"uncertain","attempts":1,"duration_ms":0}
+{"time":"2026-11-19T16:39:10.444Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.45","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.444Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:4b970d43b27ebdc1:1793692800:abf57ce2-ab2d-4a63-a0e0-2fbf808757dc","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.445Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.46","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.445Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:fdec72523c020c31:1793692800:acb586a1-4bab-4a56-8358-d815cb9a7c4d","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.445Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.47","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.445Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:c8b9fc76e18b143b:1793692800:e77000e1-6b2d-4bcb-9973-d9d7f8760c83","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.445Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.48","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.445Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:73844d9c8586fb37:1793692800:e001ebeb-be11-449f-9cf0-8428a5e186a1","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.445Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.49","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.445Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:d05dec1061f8dea5:1793692800:28d3208b-fd25-4538-8979-1ec6c8739888","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.445Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.50","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.446Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:b21745e14453dd9f:1793692800:63e37d7f-9351-4c34-acd3-d7260e911246","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.446Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.51","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.447Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:b242826695fbc557:1793692800:29d1b33a-6af9-407c-97ab-b58c711f446d","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.447Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.52","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.447Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:efa5231ee95d637f:1793692800:8166664d-6c46-4441-898d-9f310013d5bc","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.447Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.53","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.447Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:4c1482cbf39f1f0e:1793692800:76a5eed8-357a-4792-8181-f6be4229f787","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.447Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.54","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.447Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:9a155e909c69d815:1793692800:75a637f3-b654-4160-994f-a9a1b13de4bd","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.447Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.55","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.448Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:3accc7e744899987:1793692800:e8d20239-b036-4a84-b776-a27b8cb2ae74","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.448Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.56","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.448Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:43789e00dab34171:1793692800:ef810847-9713-4a85-a7ba-b8cc2b8dc9c8","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.448Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.57","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.448Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:4de74d1caffd42fc:1793692800:a4e23077-f608-47bc-9ce2-b3b8543cc6e3","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.448Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.58","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.448Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:7748a8ab2f494226:1793692800:e5876063-32a8-4f5a-a2df-fb49c99d0fc4","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.448Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.59","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.449Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:43ac24d06a7c349f:1793692800:59f0a4d8-cc51-498e-a346-81380137d674","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.449Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.60","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.449Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:2206ff63b58adce6:1793692800:ed561ba4-4679-4108-b0eb-df88a66ad6ed","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.449Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.61","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.449Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:9f5d7c67ea3a2577:1793692800:76e1004d-fc91-422d-83ba-0ff4b70be432","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.449Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.62","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.449Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:3270408b596363f0:1793692800:8fcd33ef-73c3-489a-ba77-15ea9e694dc9","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.449Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.63","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-19T16:39:10.450Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:963b8efa588be4e0:1793692800:a4397972-49fb-4cb5-8f33-9970663cc038","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.450Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:1849d688926c3c9d:1793692800:031c1d68-923c-41dd-a9e8-fa033c9cefab","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T16:39:10.451Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:c89243813ed89886:1793692800:0cc40835-f934-4725-9849-9ae1c8946c4d","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T16:39:10.451Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:3cab0cf57ceda087:1793692800:274c1842-8f2f-4f76-99c8-3729c5d5178d","verdict":"uncertain","attempts":1,"duration_ms":2}
+✔ 队列负载（300 条 / 并发 4 / 上限 64）（51ms）：done=64 dropped=236
+✔ /api/status（并发 50 次）（1ms）：rpc=1
 ✔ 列表快照（并发 50 次 alerts）（82ms）：types=11 rpc=11
-✔ 规则库（40 条 × 100 次并发求值）（81ms）：rules=40 evaluations=100
-✔ Wiki 目录索引（60 页 × 50 次并发）（68ms）：pages=60 calls=50
+✔ 规则库（40 条 × 100 次并发求值）（79ms）：rules=40 evaluations=100
+✔ Wiki 目录索引（60 页 × 50 次并发）（77ms）：pages=60 calls=50
 
 ALL GREEN：5 段负载全绿
 {
-  "run_root": "/tmp/p37-probe-MzMSjg/data",
-  "wiki_root": "/tmp/p37-probe-MzMSjg/wiki",
-  "cases_root": "/tmp/p37-probe-MzMSjg/cases",
+  "run_root": "/tmp/p37-probe-3l1nom/data",
+  "wiki_root": "/tmp/p37-probe-3l1nom/wiki",
+  "cases_root": "/tmp/p37-probe-3l1nom/cases",
   "concurrency": 4,
   "queue_limit": 64,
   "stages": [
     {
       "stage": "队列负载（300 条 / 并发 4 / 上限 64）",
-      "ms": 55,
+      "ms": 51,
       "detail": "done=64 dropped=236"
     },
     {
       "stage": "/api/status（并发 50 次）",
-      "ms": 0,
+      "ms": 1,
       "detail": "rpc=1"
     },
     {
@@ -457,15 +457,15 @@ ALL GREEN：5 段负载全绿
     },
     {
       "stage": "规则库（40 条 × 100 次并发求值）",
-      "ms": 81,
+      "ms": 79,
       "detail": "rules=40 evaluations=100"
     },
     {
       "stage": "Wiki 目录索引（60 页 × 50 次并发）",
-      "ms": 68,
+      "ms": 77,
       "detail": "pages=60 calls=50"
     }
   ]
 }
-✔ 工作树未被写入（before=after=e5e04087d949daf74f5b969c66611a026bcf3b61  -）
-✔ 运行根=/tmp/p37-probe-MzMSjg（已清理）
+✔ 工作树未被写入（before=after=9d1e198e1edc5405642c564f03e882a68f4dc32d  -）
+✔ 运行根=/tmp/p37-probe-3l1nom（已清理）

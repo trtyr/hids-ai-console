@@ -4,7 +4,7 @@
 
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
-- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:608-617`、`triage-monitor.js:981-988`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。
+- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
 ## 1. 模块职责与边界
@@ -162,8 +162,8 @@
 | 研判队列未配置 | 503 | 自动研判尚未配置 |
 
 `409` 的边界只在「已完成」上登记。**重跑不覆盖人工结论**（P003-T018）：`POST /api/agent/triage/{alertId}`（`retry:true`）重排一条已登记误报的记录时，
-`enqueue()` 把 `verdict` / `verdict_label` / `summary` / `decision_source` / `feedback` 带到新记录上（`triage-monitor.js:608-617`）；
-`run()` 收尾看到 `verdict === 'false_positive'` 且 `decision_source === 'human'` 就不写这四件（`triage-monitor.js:981-988`），
+`enqueue()` 把 `verdict` / `verdict_label` / `summary` / `decision_source` / `feedback` 带到新记录上（`triage-monitor.js:622-631`）；
+`run()` 收尾看到 `verdict === 'false_positive'` 且 `decision_source === 'human'` 就不写这四件（`triage-monitor.js:995-1002`），
 报告 / 证据 / 缺证 / 下一步 / `saved_at` 照常按这次研判刷新。**AI 自己判出的 `false_positive` 不算人工登记**，重跑照旧被这次研判覆盖。
 
 **两个维护者都不是跑研判的那个 Agent**（A3）：

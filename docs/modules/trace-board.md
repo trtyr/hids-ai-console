@@ -9,6 +9,8 @@
   清单里没有的引用不出现在本页。行号对应提交 `63f1379`；P003-T006 新增的分页入口（`page`／`summaries`）见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)。
 - P003-T014 之后：列表筛选、`POST` 200/202、`hops`／`links`／`gaps`／`discovery`、以及分析证据复用（`startOrResume`／`createAnalysisProvider`）
   见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)；这几处行号按 P003-T014 复审提交，其余仍按 `63f1379`。
+- P003-T040 之后：`findings` 不再只留 12 行，按页落完整投影，并带 `rows_omitted` 与两层字节上界（`trace-board.js:14-16`、`:221-262`、`:512`）；
+  这几处行号按 P003-T040 提交 `201d278`，其余仍按上面的基准。
 
 ## 1 职责
 
@@ -108,7 +110,7 @@
 | `status` | 初始 `pending`，查完置 `done` | `trace-board.js:158-186`、`trace-board.js:475-476` |
 | `label`／`address` | 显示名与地址 | `trace-board.js:158-186` |
 | `profile` | 资产档案：名称、IP、系统、内核、分组、状态、暴露 IP、标签、最后出现时间、备注 | `trace-board.js:229-244` |
-| `findings`／`finding_count` | 本次调查每条工具结果的摘要与命中条数 | `trace-board.js:477-480`、`trace-board.js:215-227` |
+| `findings`／`finding_count` | 本次调查每条工具结果的摘要与命中条数 | `trace-board.js:512-514`、`trace-board.js:221-233` |
 | `discovered_from` | 这个节点是从哪条证据的哪个指针发现的 | `trace-board.js:169-176`、`trace-board.js:204-213` |
 | `touched_hosts` | 外部 IP 节点在窗口内碰到过的主机 | `trace-board.js:450` |
 | `why`／`investigated_at` | 查它的理由与查完的时间 | `trace-board.js:475-476` |
@@ -233,14 +235,23 @@
 | `status` | enum `pending` / `done` | 恒有 | 建板时是 `pending`，调查收尾置 `done` | `trace-board.js:165`、`trace-board.js:476` |
 | `why` | string | 恒有 | AI 给的理由；建板时是预置句或空串，收尾时改写 | `trace-board.js:166`、`trace-board.js:476` |
 | `profile` | object | 恒有 | 资产档案；外部 IP 节点是 `{name: '外部 IP（未登记资产）', ip}` | `trace-board.js:166`、`trace-board.js:197`、`trace-board.js:429` |
-| `findings` | object[] | 恒有 | 每条工具结果的摘要，收尾时写入 | `trace-board.js:166`、`trace-board.js:477` |
+| `findings` | object[] | 恒有 | 每条工具结果的摘要，收尾时写入 | `trace-board.js:166`、`trace-board.js:512` |
 | `finding_count` | integer | 恒有 | 命中记录数（按工具类名加权，见下文） | `trace-board.js:166`、`trace-board.js:478-480` |
 | `discovered_from` | object[] | 恒有 | 这个节点从哪条证据的哪个字段发现；起点节点是空数组 | `trace-board.js:168`、`trace-board.js:173`、`trace-board.js:198`、`trace-board.js:211` |
 | `investigated_at` | string（date-time） | 调查收尾后 | 收尾时间 | `trace-board.js:476` |
 | `touched_hosts` | string[] | 调查收尾后 | 调查外部 IP 时命中的内网主机地址 | `trace-board.js:475` |
 
-`findings[]` 元素固定带 `evidence_id`、`tool`、`total`、`returned`、`rows`；列表结果另有 `page_returned`，单对象结果另有 `truncated`
-（`trace-board.js:215-227`）。`discovered_from[]` 元素是 `{evidence_id, pointer}`，`pointer` 取不到时为 `null`（`trace-board.js:168`、`trace-board.js:173`、`trace-board.js:443-445`）。
+`findings[]` 元素固定带 `evidence_id`、`tool`、`total`、`returned`、`rows`；列表结果另有 `page_returned` 与 `rows_omitted`，
+单对象结果另有 `truncated`（`trace-board.js:221-233`）。
+
+**`rows` 落多少行（P003-T040 A4/A5）**：列表结果按页落完整投影——一次工具调用最多 `findingsRowLimit`（= `PAGE_SIZE`，50）行，
+不再只留 12 行。两层字节上界：每个工具调用 16000 字（`findingsRowsMaxChars`，`trace-board.js:236-248`）、
+每个节点合计 120000 字（`findingsNodeMaxChars`，`trace-board.js:251-262`）。超界只收缩**行**：先按上界截当前工具的行，
+节点合计超了就从行数最多的那一项开始逐行砍（每次都更短，一定收敛），被砍掉的行数累加进该条的 `rows_omitted`，
+`truncated` 同时置真。`evidence_id`、`total`、`returned` 不因收缩而丢——少的是行，不是「这次查过什么」。
+模型侧不受影响：`investigate()` 回给模型的摘要仍然每个工具最多 3 行（`trace-board.js:517-527`）。
+
+`discovered_from[]` 元素是 `{evidence_id, pointer}`，`pointer` 取不到时为 `null`（`trace-board.js:168`、`trace-board.js:173`、`trace-board.js:443-445`）。
 
 边（`edges[]`）：
 

@@ -3,14 +3,14 @@ type: module
 id: MOD-EVIDENCE-VIEW
 covers: [evidence-view.js]
 unit: evidence-view
-updated: 2026-11-17
+updated: 2026-11-20
 ---
 
 # 证据视图（evidence-view）
 
 模块名 `evidence-view`。覆盖文件一个：`evidence-view.js`（模块划分与页面归属见 [docs/modules/_breakdown.json](_breakdown.json) 的 `evidence-view` 条目）。
 
-这篇讲这个模块把一次工具调用的原始返回压成什么形状、投影出来的事实怎么标出处、上下文超限时怎么裁。关键断言标 `文件:行号`，行号对应当前提交 `35530d8`；P003-T039 新增/改写的段落（页内标「P003-T039」「复审 BUG1」的地方，含 §3 公开面、§4.4 的展示裁剪）行号对 P003-T039 复审修复提交 `241c0da`；代码改动后请重新核对。
+这篇讲这个模块把一次工具调用的原始返回压成什么形状、投影出来的事实怎么标出处、上下文超限时怎么裁。关键断言标 `文件:行号`，行号对应当前提交 `35530d8`；P003-T039 新增/改写的段落（页内标「P003-T039」「复审 BUG1」的地方，含 §3 公开面、§4.4 的展示裁剪）行号对 P003-T039 复审修复提交 `241c0da`；P003-T040 新增/改写的段落（页内标「P003-T040」的地方：§2 字段投影行、§3 公开面表、§4.3、§4.4 的记账封顶、§8 的两条不变量）行号对提交 `201d278`；代码改动后请重新核对。
 
 原始返回怎么取回来、引用怎么被校验，都不在本篇：前者属 evidence-tools 模块，后者属 investigation-agent 模块；页面归属同样见 `_breakdown.json`。
 
@@ -37,7 +37,7 @@ updated: 2026-11-17
 
 | 构件 | 是什么 | 定义处 |
 | --- | --- | --- |
-| **字段投影** | 从原始返回里挑出可研判的字段，把候选原始键映射成友好名 | `evidence-view.js:3-40`（字段表）、`evidence-view.js:63-70`（取事实）、`evidence-view.js:71-89`（按资产种类改名） |
+| **字段投影** | 从原始返回里挑出可研判的字段，把候选原始键映射成友好名。P003-T040 起含 `description`（描述正文）与嵌套序列 `cmdlines`（会话命令数组） | `evidence-view.js:3-40`（字段表，`description` 在 `:39`）、`evidence-view.js:42-49`（嵌套序列表，`cmdlines` 在 `:48`）、`evidence-view.js:63-70`（取事实）、`evidence-view.js:71-89`（按资产种类改名） |
 | **JSON Pointer** | 给投影出来的事实标出它在原始返回里的位置，供引用校验回查 | `evidence-view.js:49`（转义规则）、`evidence-view.js:61`（生成 pointer） |
 | **预聚合计数** | 对列表页当前返回的行按多个维度计数 | `evidence-view.js:94-103`（计数函数）、`evidence-view.js:195-205`（八个维度）、`evidence-view.js:213-214`（口径与落位） |
 | **上下文裁剪** | 视图超过字符预算时删展示行，删不动就返回带错误的视图 | `evidence-view.js:234-257` |
@@ -46,15 +46,16 @@ updated: 2026-11-17
 
 ## 3 公开面
 
-本模块导出五个符号（`grep -n '^export' evidence-view.js` 输出五行，命令见 §10.2）：
+本模块导出六个符号（`grep -n '^export' evidence-view.js` 输出六行，命令见 §10.2）：
 
 | 导出 | 种类 | 用途 | 定义处 |
 | --- | --- | --- | --- |
 | `projectEvidence(tool, result)` | 函数 | 把 `(工具名, 原始返回)` 投成视图 | `evidence-view.js:164` |
 | `boundEvidenceView(view, maxChars)` | 函数 | 把视图裁到字符预算内 | `evidence-view.js:244` |
-| `agentDisplayLimits` | 冻结对象 | 模型侧展示上限：`timeline: 8`、`commands: 4`（P003-T039） | `evidence-view.js:272` |
+| `agentDisplayLimits` | 冻结对象 | 模型侧展示上限：`timeline: 8`、`commands: 4`、`cmdlines: 4`（P003-T039 / P003-T040） | `evidence-view.js:281` |
 | `compactEvidenceView(view, limits)` | 函数 | 只裁嵌套序列展示行，计数一律保留（P003-T039） | `evidence-view.js:302` |
-| `boundSyslogView(view, maxChars=3000)` | 函数 | `syslog:1` 载荷视图的长度上限（P003-T039） | `evidence-view.js:321` |
+| `boundSyslogView(view, maxChars=3000)` | 函数 | `syslog:1` 载荷视图的长度上限（P003-T039） | `evidence-view.js:341` |
+| `syslogOmittedFieldsLimit` | 常量 | 记账数组（`omitted_fields` / `truncated_fields`）最多列几个名字：40（P003-T040） | `evidence-view.js:331` |
 
 业务代码里的调用点（本模块自带测试另有引用，见 `evidence-view.test.js:3`）：
 
@@ -134,10 +135,14 @@ updated: 2026-11-17
 | `commands` | 取前 8 行 | 前 4 行 + 后 4 行 | 8 | `evidence-view.js:109-110`、`evidence-view.js:120` |
 | `process_tree` | 取前 5 行 | 同左，没有专门规则 | 5 | `evidence-view.js:120` |
 | `state_history` | 取前 5 行 | 同左，没有专门规则 | 5 | `evidence-view.js:120` |
+| `cmdlines`（P003-T040） | 取前 8 行 | 前 4 行 + 后 4 行 | 8 | `evidence-view.js:109-110`、`evidence-view.js:120` |
 
 timeline 的优先级：有响应长度的排 0，其次是能解出 HTTP 请求行的排 1，再次是有请求长度的排 2，最后是 3；同优先级按原序号排（`evidence-view.js:116-118`）。挑出的 18 个与首尾两行去重后按序号升序排列（`evidence-view.js:118-119`）。所以 25 行的 timeline 展示 19 行，不是 20 行。
 
 每行给出 `total_in_record`（记录里的总行数）、`shown_count`（本次展示行数）与 `shown`（每项带 `index` 与 `facts`）（`evidence-view.js:121`、`evidence-view.js:142`）。
+
+`cmdlines` 的元素可能直接是命令字符串（P003-T040，`evidence-view.js:140-143`）：这时记成 `cmdline` 字段，
+pointer 指向数组下标（`/event/cmdlines/0`），**值不截断**——截断会让引用的 `value` 与原文对不上。
 
 timeline 另带五个统计（`evidence-view.js:144-150`）：`nonempty_request_count`（请求长度大于 0 的行数）、`nonzero_response_count`（响应长度大于 0 的行数）、`http_request_lines`（展示行里解出的请求行文本）、`response_payload_available`（是否存在响应载荷）、`timestamp_valid_count`（时间戳为正的行数）。
 
@@ -174,6 +179,10 @@ timeline 另带五个统计（`evidence-view.js:144-150`）：`nonempty_request_
   每段每步都真删/真缩短内容，所以循环一定收敛（复审 BUG1：旧写在「总量超限且没有单条长字段」时反复截同一字段、长度不再下降，5 秒挂死）。
   三段走完仍超限（例如字段名比内容还长、或载荷字段极多）就降级成不带 `payload` 的回包：`{msgid, truncated_for_context: true, omitted_fields: <全部字段名>, note}`。
   无论走哪段都置 `truncated_for_context: true`。**短值尽量原样保留**——模型要拿它填 `claims.citations` 的 `value`，截断一个能给的值等于让它引用失败，所以短字段最后才丢、且是整条省略而不是截断。
+- **记账数组本身封顶（P003-T040 A5）**：`omitted_fields` / `truncated_fields` 最多各列 40 个字段名（每个名字截 60 字，
+  `evidence-view.js:331-339`），超出部分只报 `omitted_fields_total` / `truncated_fields_total`。改前这两个数组没有上限：
+  载荷字段一多（实测 4.7KB 输入），「说明省了什么」的记账本身就能把回包写成 3547 字——回包比上限还长。兜底分支
+  （`{msgid, truncated_for_context, omitted_fields, note}`，`evidence-view.js:358-366`）走同一个封顶函数。
 
 ## 5 值语义
 
@@ -271,6 +280,8 @@ timeline 另带五个统计（`evidence-view.js:144-150`）：`nonempty_request_
 | `R-EV-10` | 视图 `kind` 由结果形状决定，不由工具名决定 | 工具名决定 `kind` | `evidence-view.js:190`、`evidence-view.js:223` | 同一工具两种形状产出不同视图 |
 | `R-EV-11` | 平台 total 小于返回行数时 `platform_total_consistent` 为 `false` | 平台 total 是 0、返回 1 行却报一致 | `evidence-view.js:208` | 漏判数据不一致 |
 | `R-EV-12` | 裁剪只删展示行，原始返回不被改动 | 裁剪同时改了原始 `result` | `evidence-view.js:233`、`evidence-view.js:236` | 引用校验对不上 |
+| `R-EV-13` | `boundSyslogView` 的回包（含记账字段）不超过 `maxChars` | 300 个短字段的载荷吐出 3547 字回包 | `evidence-view.js:331-371` | 降级回包比上限还长 |
+| `R-EV-14` | 记账数组最多列 `syslogOmittedFieldsLimit` 个名字，超出只报总数 | `omitted_fields` 列了 98 个名字 | `evidence-view.js:334-339` | 记账把回包撑爆 |
 
 ## 9 失败面
 
@@ -306,12 +317,13 @@ timeline 另带五个统计（`evidence-view.js:144-150`）：`nonempty_request_
 | --- | --- | --- |
 | 友好字段名个数 | 52 | `evidence-view.js:3-40`；实测命令见 §10.2 |
 | 候选原始键个数 | 106（去重后 104） | 同上 |
-| 嵌套序列类别 | 4（`timeline`、`process_tree`、`state_history`、`commands`） | `evidence-view.js:42-47` |
+| 嵌套序列类别 | 5（`timeline`、`process_tree`、`state_history`、`commands`、`cmdlines`） | `evidence-view.js:42-49` |
 | 一般字段长度上限 | 500 字符 | `evidence-view.js:59` |
 | 命令类字段长度上限 | 3000 字符 | `evidence-view.js:59` |
 | 零时间哨兵阈值 | `-60000000000` | `evidence-view.js:60` |
 | timeline 展示上限 | 20（超过时挑 18 行 + 首尾） | `evidence-view.js:111-119`、`evidence-view.js:120` |
 | commands 展示上限 | 8（超过时头 4 + 尾 4） | `evidence-view.js:109-110`、`evidence-view.js:120` |
+| cmdlines 展示上限 | 8（超过时头 4 + 尾 4）；模型侧 4 行 | `evidence-view.js:109-110`、`evidence-view.js:120`、`evidence-view.js:281` |
 | `process_tree` / `state_history` 展示上限 | 5 | `evidence-view.js:120` |
 | 列表 `items` 展示上限 | 5 行 | `evidence-view.js:215` |
 | 主机风险 `nonzero_groups` 展示上限 | 3 | `evidence-view.js:172-173` |

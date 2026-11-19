@@ -7,7 +7,7 @@ import { eventTypeFor } from './syslog-input.js';
 import { PromptStore } from './prompt-store.js';
 import { boundEvidenceView, boundSyslogView, compactEvidenceView, projectEvidence } from './evidence-view.js';
 import { pageExcerpts, pageSummary } from './wiki-store.js';
-import { readCaseFile } from './syslog-case.js';
+import { readCaseFile, writeRequiredEvidence } from './syslog-case.js';
 import { finalizeTriageOutput } from './triage-output.js';
 import { appendEvidenceReport, collectRequiredEvidence, requiredEvidenceGaps, requiredEvidencePlan } from './required-evidence.js';
 
@@ -268,6 +268,25 @@ function relevantTools(catalog, type) {
   return catalog.filter(tool => names.has(tool.name));
 }
 
+// A2/A3：研判记录里的每条证据连同投影 view 一起落盘。sha256 只能证明「是同一条」，
+// view 才回答「当时到底取到了什么」；单条再封一次 6000 字（EvidenceSession 的 12000 是会话内上限，
+// 落盘还要更紧：deep 最多 20 条证据，12000×20 会把研判记录撑到 240KB）。
+export const persistedEvidenceViewMax = 6000;
+function persistedEvidence(records) {
+  return [...records.values()].map(({ evidenceId, tool, args, fetchedAt, sha256, view }) => ({
+    evidence_id: evidenceId, tool, args, fetched_at: fetchedAt, sha256,
+    view: view ? boundEvidenceView(view, persistedEvidenceViewMax) : null }));
+}
+
+// A1：必查项的「前 5 行」直接取投影视图的 items（projectEvidence 本来只留前 5 行），不另造投影、不发新查询。
+const requiredEvidenceRows = 5;
+function checksWithRows(checks, session) {
+  return checks.map(check => {
+    const items = check.evidence_id ? session.records.get(check.evidence_id)?.view?.items : null;
+    return Array.isArray(items) && items.length ? { ...check, first_rows: items.slice(0, requiredEvidenceRows) } : check;
+  });
+}
+
 // P003-T039 A6：模型侧视图再收一层（timeline 8 行 / commands 4 行，计数保留）。record.view 原样不动，
 // 知识经验复用的「时间线是否完整」判定继续用完整投影。
 function toolMessage(record) {
@@ -492,6 +511,16 @@ export class InvestigationAgent {
       }
     }
     const requiredChecks = await collectRequiredEvidence(requiredEvidencePlan(match[1], original, catalog), session, onProgress, trace);
+    // A1：案卷落必查项结果。只读本次会话已取到的记录（不发新 RPC）；写不出来是真异常——案卷是交付物，
+    // 与 writeSyslogResult 同一口径，不降级成只写日志。
+    const persistRequiredEvidence = async () => {
+      // 没有案卷目录（降级测试上下文 / 旧调用方）就没有落点：不是静默失败，是本来没有案卷。
+      if (!streamContext?.caseInfo?.case_dir) return;
+      await writeRequiredEvidence(streamContext.caseInfo, { alertId, mode, checks: checksWithRows(requiredChecks, session) });
+    };
+    // 捷径结果先攒着、出了知识库 try 块再落案卷并返回：写在 try 里会被「经验核对失败」的 catch 吞掉，
+    // 案卷缺失不报错、trace 归因写错、白跑一整轮调查后才在收尾处二次失败（P003-T040 复审 major）。
+    let shortcut = null;
     if (mode === 'triage' && this.knowledgeStore) {
       try {
         const cases = (await this.knowledgeStore.publishedFor(match[1]))
@@ -564,7 +593,7 @@ export class InvestigationAgent {
             // 捷径不走调查循环，但仍属「常规研判且知识库在位」：结果字段与主路径同口径（文档 §4）。
             verdict.rego = { status: rego.status, rule_ids: rego.rules.map(rule => rule.id) };
             verdict.wiki = { consulted: [], adopted: [], reason: '命中已审核经验捷径，未调用知识库工具' };
-            return { alert_id: alertId, mode, model: this.model.model,
+            shortcut = { alert_id: alertId, mode, model: this.model.model,
               prompt_version: `${prompts.version}+${prompts.revision}+${systemDigest}`,
               scenario_ids: [match[1]], knowledge_reuse: { case_id: record.id, title: record.title,
                 reviewed_at: record.review.reviewed_at, expires_at: record.review.expires_at,
@@ -573,14 +602,17 @@ export class InvestigationAgent {
               verdict,
               review: { assessment: 'knowledge_reuse', concerns: [], missing_evidence: [] },
               validation: { ok: true, errors: [] }, trace, required_evidence: requiredChecks,
-              evidence: [...session.records.values()].map(({ evidenceId, tool, args, fetchedAt, sha256 }) => ({
-                evidence_id: evidenceId, tool, args, fetched_at: fetchedAt, sha256
-              })), auto_action: false };
+              evidence: persistedEvidence(session.records), auto_action: false };
           }
         }
       } catch (error) {
         trace.push({ kind: 'knowledge', matched: false, note: `经验核对失败，继续完整研判：${String(error.message).slice(0, 180)}` });
       }
+    }
+    // 捷径命中：落案卷在这之后做（失败即真异常），不走调查循环。
+    if (shortcut) {
+      await persistRequiredEvidence();
+      return shortcut;
     }
     const cards = selectedCards(prompts.scenarios.cards, match[1], original.result);
     const resolved = resolvePromptParts([prompts.prompts.triage, mode === 'deep' ? prompts.prompts.deep : '',
@@ -952,12 +984,11 @@ export class InvestigationAgent {
     verdict.rego = { status: rego.status, rule_ids: rego.rules.map(rule => rule.id) };
     onProgress('完成研判', '正在保存研判记录');
     const systemDigest = createHash('sha256').update(system).digest('hex').slice(0, 12);
+    await persistRequiredEvidence();
     return { alert_id: alertId, mode, model: this.model.model,
       prompt_version: `${prompts.version}+${prompts.revision}+${systemDigest}`, scenario_ids: cards.map(card => card.id),
       verdict, review, validation, trace, required_evidence: requiredChecks,
-      evidence: [...session.records.values()].map(({ evidenceId, tool, args, fetchedAt, sha256 }) => ({
-        evidence_id: evidenceId, tool, args, fetched_at: fetchedAt, sha256
-      })), auto_action: false };
+      evidence: persistedEvidence(session.records), auto_action: false };
   }
 
   async runUnmatchedSyslog(input, matchResult, caseInfo, onProgress = () => {}) {
@@ -1007,7 +1038,8 @@ export class InvestigationAgent {
         ...wikiPages.map(page => ({ kind: 'wiki', action: 'context', id: page.id, title: page.title })),
         { kind: 'tool_error', name: `list_${type}_events`, error: matchResult.reason }],
       evidence: [{ evidence_id: 'syslog:1', tool: 'received_syslog', args: {}, fetched_at: new Date().toISOString(),
-        sha256: createHash('sha256').update(JSON.stringify(input.parsed)).digest('hex') }], auto_action: false };
+        sha256: createHash('sha256').update(JSON.stringify(input.parsed)).digest('hex'),
+        view: boundSyslogView({ msgid: input.parsed.msgid, payload: input.parsed.payload }) }], auto_action: false };
   }
 }
 
