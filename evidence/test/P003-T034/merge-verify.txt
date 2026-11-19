@@ -88,9 +88,9 @@ repo/.data 不存在
 -- git 状态：
 ?? evidence/test/P003-T034/merge-verify.txt
 
-===== 复审第 3 轮：全量锚点核验（复核：提交后重跑）=====
+===== 复审第 3 轮：全量锚点核验（提交 0d3609a 树上重跑）=====
 $ node evidence/test/P003-T034/anchor-audit.mjs
-# 文档锚点全量核验 · 251e7a1 · 扫描 19 份文档
+# 文档锚点全量核验 · 0d3609a · 扫描 19 份文档
 # 锚点 3888 处：PASS=3856  MOVED=32  UNVERIFIED=0  其他=0
 
 ## 按文档（total / PASS / MOVED / UNVERIFIED）
