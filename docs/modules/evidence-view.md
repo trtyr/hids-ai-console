@@ -50,8 +50,8 @@ updated: 2026-11-17
 
 | 导出 | 种类 | 用途 | 定义处 |
 | --- | --- | --- | --- |
-| `projectEvidence(tool, result)` | 函数 | 把 `(工具名, 原始返回)` 投成视图 | `evidence-view.js:155` |
-| `boundEvidenceView(view, maxChars)` | 函数 | 把视图裁到字符预算内 | `evidence-view.js:243` |
+| `projectEvidence(tool, result)` | 函数 | 把 `(工具名, 原始返回)` 投成视图 | `evidence-view.js:164` |
+| `boundEvidenceView(view, maxChars)` | 函数 | 把视图裁到字符预算内 | `evidence-view.js:244` |
 | `agentDisplayLimits` | 冻结对象 | 模型侧展示上限：`timeline: 8`、`commands: 4`（P003-T039） | `evidence-view.js:272` |
 | `compactEvidenceView(view, limits)` | 函数 | 只裁嵌套序列展示行，计数一律保留（P003-T039） | `evidence-view.js:302` |
 | `boundSyslogView(view, maxChars=3000)` | 函数 | `syslog:1` 载荷视图的长度上限（P003-T039） | `evidence-view.js:319` |

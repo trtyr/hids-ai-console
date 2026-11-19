@@ -14,6 +14,7 @@
 关键结论都标了 `文件:行号`，行号对应三份实现文件在提交 `35530d8` 时的内容；本卡只新增这份文档，没动这三份实现文件。
 例外：§3.8 与 §4 里 `InvestigationAgent` 构造签名那两处是 P003-T012 补的，行号对 P003-T012 提交；其余旧行号未重排。
 P003-T035 改写的段落（页内标了「P003-T035」的地方）行号对提交 `0230c28`；旧段落里的行号仍是 `35530d8`，读旧段落按内容对码，别按数字跳。
+P003-T039 新增/改写的段落（页内标「P003-T039」的地方，含 §3.9 整节、§3.2 的两条、§3.3 的复核输入、§3.8 的 D 小节）行号对提交 `10a8942`。
 全文只描述现状，不评价该改成什么。
 
 **术语**（第一次出现先给一句话解释，后面直接用）：
@@ -298,7 +299,11 @@ max_turns, max_tool_calls, conclusion_retries}`（`investigation-agent.js:663-66
 
 - **提示词**写明「你是独立质疑者……不继承调查员私有推理」，并列出要查的四类问题：引用是否支持事实、是否误把空查询当良性、
   声称合法运维或授权扫描时有没有依据、是否忽略反证；另要求核对客户报告与结论是否一致、建议动作是否暗示系统已执行处置（`investigation-agent.js:449`）。
-- **输入**是告警 ID、草稿结论、规则候选、必查项、已加载的判据页，以及每条证据的 `view` 精简视图——不含原始返回（`investigation-agent.js:450-452`）。
+- **输入**是告警 ID、草稿结论、规则候选、必查项、已加载的判据页（只给编号+标题+要点摘要），以及证据视图——
+  不含原始返回（P003-T039：`investigation-agent.js:792-795`）。证据走与结论轮**同一个** `conclusionEvidence()`：
+  原始事件 + 优先级最高的证据给完整视图（每条 `compactEvidenceView` 后 `boundEvidenceView(..., 4000)`），
+  记录超过 5 条时其余只给 `{evidence_id, tool, omitted_for_context: true, summary}`。
+  P003-T039 之前这里是直接发 `record.view`（单条上限 12000）且判据页发整页正文。
 - **不传工具**：这一次调用的工具参数是空数组（`investigation-agent.js:454`）。
 - **期望输出**是 `{"concerns":[…],"missing_evidence":[…],"assessment":"supported|needs_revision"}`（`investigation-agent.js:449`）。
 - 复核调用失败或输出解析不了，`assessment` 记作 `unavailable`，concerns 里写「独立复核未完成：…」，
@@ -598,6 +603,44 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 - 收下的结论进既有流水线（独立复核、引用校验、降级、客户报告整形）；trace 记一条 `{kind:'conclusion', tool:'submit_conclusion', summary_chars, adopted}`（`investigation-agent.js:511-512`）。
 - 500 字是结论工具入口的上限；常规研判的 `summary` 随后被 `finalizeTriageOutput` 收窄到 300 字、客户报告 `report` 也按 300 字口径整形（`triage-output.js:36`），deep 模式不做这步收窄。
 - 兼容路径：模型仍可直接吐 JSON 结论。有知识库时先催一轮知识库；收下时 `verdict.wiki.reason` 记「结论没有经 submit_conclusion 工具说明采纳页」（`investigation-agent.js:689-690`）。
+
+#### D. 证据取回工具 `read_evidence`（P003-T039）
+
+- 工具列表里恒有 `read_evidence({evidence_id})`（`investigation-agent.js:246-252`），与 `submit_conclusion` 并列，deep 模式也有。
+- 它不发牧云查询、不占 `maxToolCalls`、不产生新证据：只把**本次调查已经取到**的那条证据的完整视图还给模型
+  （`investigation-agent.js:613-625`）。命中历史里折叠过的全文就原样返回，否则用 `session.records` 现拼一份（含 `syslog:1`）。
+- 为什么需要它：历史里的 tool 消息只留最近 2 条全文，更早的换成 `{evidence_id, tool, folded: true, summary, note}`
+  （`foldedToolMessage()`，`investigation-agent.js:288-302`）。模型要引用被折叠条目的字段，必须先取回——摘要里没有可引用的值。
+- trace 记 `{kind:'read_evidence', evidence_id, found}`；取不到时回 `{"error":"本次调查没有证据 <编号>；…"}`。
+- 折叠本身另记一条 `{kind:'history_folded', turn, evidence_ids}`（`investigation-agent.js:741`）。
+
+### 3.9 上下文瘦身：同一条告警少发一半以上（P003-T039）
+
+一次常规研判要发 5~6 次模型请求，每次把整段历史再发一遍（`model-client.js` 是无状态 chat/completions）。
+下面八项改动只动**给模型看的那一层**，不动任何判定逻辑；量法与前后对比在 `evidence/test/P003-T039/context-size.mjs`
+（harness）与 `mutations.mjs`（变异验红），记录在同目录 `context-size.txt`。
+
+| 项 | 改了什么 | 代码 |
+| --- | --- | --- |
+| A1 | 首轮与终局轮不再内联 `match.event`（整条牧云事件原文），只留匹配元信息；事件正文走 `read_case_file` 读案卷、精简视图仍在「告警详情证据」里 | `matchMeta()`，`investigation-agent.js:111-116`、`:572-585` |
+| A2 | 复核轮与结论轮同一口径：`conclusionEvidence()`，每条 `compactEvidenceView` + `boundEvidenceView(..., 4000)`，最多 5 条完整视图，其余给编号+计数摘要 | `investigation-agent.js:308-330`、`:792-795` |
+| A3 | 首轮必查项只带 `{id,status,returned_count,total}`（`requiredStatus()`），不再逐项发 3000 字视图；要看记录按同范围重查或 `read_evidence` | `investigation-agent.js:118-124`、`:575` |
+| A4 | Wiki 常驻页只给「编号+标题+要点摘要」，`wiki_page` 返回 `{id,title,summary,hits}`（摘要+命中段） | `wikiDigest`/`wikiPageView`，`investigation-agent.js:280-286`；切分在 `wiki-store.js:347-420` |
+| A5 | 历史工具结果只留最近 2 条全文（`historyFullResults`），更早的折叠成计数摘要；`read_evidence` 按编号取回（不计预算，见 §3.8 D） | `investigation-agent.js:288-302`、`:730-745` |
+| A6 | 模型侧嵌套序列 timeline 8 行 / commands 4 行（计数保留）；`syslog:1` 视图上限 3000 字 | `evidence-view.js:272-347`；`investigation-agent.js:443` |
+| A7 | 工具名清单（`【工具：…】` 展开结果）从系统提示词移到首轮 user 消息：系统段不再每轮带这份清单 | `resolvePromptParts()`，`investigation-agent.js:97-110`、`:572-585` |
+| A8 | `prompts/triage.md` 删掉与 `submit_conclusion` schema 重复的输出 JSON 模板；`prompts/sop/common.md` 改按编号/工具 schema 引用 | `prompts/triage.md`、`prompts/sop/common.md` |
+
+三条要记住的边界：
+
+1. **`record.view` 不裁**。`compactEvidenceView` 只作用在模型侧副本上（工具结果消息、结论轮/复核轮证据）。
+   知识经验复用判定依赖 `record.view.related_sequences.timeline.shown_count === total_in_record` 判断时间线完整性，
+   裁 `record.view` 会让长交互的蜜罐捷径永远走不通。
+2. **折叠不是丢证据**。`session.records` 里的原始结果一直在，引用校验（§3.4）照旧拿原始返回核对；
+   折叠的只是 `messages` 里那份展示副本。
+3. **A7 的边界**。chat/completions 无状态，整段历史每轮都要发；A7 能做的是让**系统段**只留稳定核心，
+   工具名清单随首轮 user 发一次。实测系统段从每请求 10585 字降到 10080 字（每个请求 -505 字），
+   大头收益来自 A1/A2/A5/A6，不是 A7。
 
 ## 4. 公开面
 
