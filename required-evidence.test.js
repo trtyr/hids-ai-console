@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { appendEvidenceReport, collectRequiredEvidence, requiredEvidenceGaps,
   requiredEvidencePlan } from './required-evidence.js';
 import { projectEvidence } from './evidence-view.js';
@@ -175,4 +176,27 @@ test('适配牧云 MCP 数组筛选字段和不支持 types 的主机事件接�
   const honeypot = requiredEvidencePlan('honeypot', original, catalog);
   assert.deepEqual(honeypot.find(item => item.id === 'source_history').args,
     { source_ip: ['192.0.2.7'], count: 20 });
+});
+
+test('HTTP 契约同步：必查项结果写出的每个键都在 openapi RequiredEvidence 里声明（含 catalog_absent）', async () => {
+  const block = readFileSync(new URL('./openapi.yaml', import.meta.url), 'utf8')
+    .split('\n    RequiredEvidence:\n')[1]?.split('\n    TraceBoardNode:')[0];
+  assert.ok(block, 'openapi.yaml 里找不到 RequiredEvidence schema');
+  // 封闭契约：实现多写一个没声明的键，响应按 openapi 校验就违约（复审判词 major）。
+  assert.match(block, /^      additionalProperties: false$/m);
+  const declared = new Set(Array.from(block.matchAll(/^        ([a-z_]+):/gm), match => match[1]));
+  assert.ok(declared.has('catalog_absent'), 'catalog_absent 必须声明（required-evidence.js:128 会写这个键）');
+  const session = { callTool: async () => ({ evidenceId: 'cw:2', view: { kind: 'list', returned_count: 2,
+    total_reported_by_platform: { value: 2 }, platform_total_consistent: true } }) };
+  const original = { view: { facts: { host_id: { value: 41 } } } };
+  // 两条分支各跑一遍：目录里缺工具 → catalog_absent；目录里有工具 → args。
+  const absentCatalog = [{ name: 'list_host_events', ...schema({ host_id: {}, types: {}, count: {} }) }];
+  const presentCatalog = [...absentCatalog, { name: 'authorization_record',
+    inputSchema: { properties: { host_id: { type: 'array' }, count: { type: 'integer' } }, required: ['host_id'] } }];
+  const emitted = new Set([
+    ...(await collectRequiredEvidence(requiredEvidencePlan('suspicious_operation', original, absentCatalog), session)),
+    ...(await collectRequiredEvidence(requiredEvidencePlan('suspicious_operation', original, presentCatalog), session))
+  ].flatMap(item => Object.keys(item)));
+  assert.ok(emitted.has('catalog_absent') && emitted.has('args'), `两条分支没跑全：${[...emitted]}`);
+  assert.deepEqual([...emitted].filter(key => !declared.has(key)), []);
 });

@@ -208,6 +208,14 @@ trace 落一条 `tool_after_limit`（`investigation-agent.js:614-618`），循�
 **重复查询不重复取证**：同一批里同名同参数的调用只有第一个真的发出去，其余等同一个 Promise、复用它的证据编号
 （`investigation-agent.js:578-586`）；跨轮的同名同参调用回一条 `already_queried` 并指出已有证据编号（`investigation-agent.js:572-577`）。
 
+**「采纳即停」的边界**（P003-T035 改，复审补记）：旧实现逐条串行解释工具调用，`submit_conclusion` 被接受（`draft` 赋值，`investigation-agent.js:541`）
+之后同一轮的后续调用不再发出。并发化之后，一整批 `tool_calls` 已经同时发出，所以**采纳后同批剩余调用仍会真实执行并占预算**
+（整批 `Promise.allSettled` 在 `investigation-agent.js:621`，`:630` 的 `if (draft) break` 才进到下一轮），停的是下一轮而不在批内。
+次生两条：① 一轮里除结论工具外至多再多跑 7 次真实牧云查询（`maxToolCalls` 是 8，预算预占发生在并发之前，挡不住同批已经发出的调用），
+多落的 records 与 trace 也留在本次取证会话里；② 同一批出现多个 `submit_conclusion` 且都被接受时，`draft` 取**最后一个**
+（`investigation-agent.js:541`），旧实现按串行顺序取第一个。结论本身不因此改变——不管取哪一个都要过 §3.3 独立复核与 §3.4 引用校验，
+故本卡按文档口径收口（取舍是「一批并发换取证速度」，不恢复批内中断）。
+
 **参数收窄**在 `boundedToolArgs()`（`investigation-agent.js:287-314`）里做：
 
 - `list_` 前缀、且 schema 里有 `count` 的工具，`count` 被夹到上限——`list_process_assets` 上限 50，其余上限 5，缺省也是 5（`investigation-agent.js:290-293`）。
@@ -364,7 +372,7 @@ max_turns, max_tool_calls, conclusion_retries}`（`investigation-agent.js:663-66
 状态机、缺口写法、五态语义完全一致；不同只有下游——常规研判把必查项摘要追加到客户报告，deep 只进 `missing_evidence`
 （`investigation-agent.js:796-801`）。改前 deep 的 `required_evidence` 恒为空数组。
 
-生成在 `requiredEvidencePlan(type, original, catalog)`（`required-evidence.js:36-90`）：
+生成在 `requiredEvidencePlan(type, original, catalog)`（`required-evidence.js:69-119`）：
 
 | 检查项 | 什么时候要 | 查什么 | 证据 |
 | --- | --- | --- | --- |
