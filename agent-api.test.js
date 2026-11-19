@@ -447,7 +447,7 @@ test('POST 白板：服务层未分类异常回 502', async t => {
   const response = await fetch(`${base}/api/trace/boards`, { method: 'POST',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: 'honeypot:7' }) });
   assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), { error: '牧云 MCP 调用失败' });
+  assert.deepEqual(await response.json(), { error: '牧云 MCP 调用失败', code: 'upstream_error' });
 });
 
 test('A4 真 status() 剥掉 input 后仍能从研判记录复用原始报文', async t => {

@@ -7,6 +7,13 @@ info:
     客户前端默认运行于 8081，反向代理 /api/* 到业务后端 8080；维护页面默认运行于 18082，同源转发到仅允许本机访问的维护 API 18081。
     业务 Basic 认证仅在 HIDS_BASIC_AUTH_PASSWORD 已配置时启用。所有业务 API 都沿用该认证；业务认证失败返回纯文本 401。
     Syslog 是 15514/UDP 输入，不属于 HTTP OpenAPI；深度研判与常规研判的 HTTP 接口分别列出。
+
+    错误口径（P003-T024）：业务接口的失败分四类，每类一个稳定 `code`，状态码由类决定，同一类在哪条路由上都是同一对：
+    `caller_error` → 4xx（400 参数/正文、403 权限、404 不存在、405 方法、409 状态冲突、410 已下线、422 无法溯源）；
+    `not_configured` → 503；`upstream_error` → 502；`internal_error` → 500（正文固定「服务器内部错误」，异常原文与堆栈只进服务端日志）。
+    正文一律 `{ error, code }`：`error` 是给人看的原话（上游失败时就是上游那句摘要），`code` 是给程序判的稳定标识。
+    例外只有两处：业务认证失败的 401 是纯文本（见 `BusinessUnauthorized`）；`/api/status` 配了却连不上时 502 仍是业务体
+    `{configured, connected, reason, code}`。任意路由都可能回 500 `internal_error`（本程序意外），响应里不逐条重复列。
 servers:
   - url: http://127.0.0.1:8080
     description: 业务后端直连入口
@@ -70,16 +77,18 @@ paths:
           description: |
             牧云连接失败（配置在、连不上）。状态码 502 在这里是业务体，不是「整个服务不可用」：
             正文仍是 {configured, connected, reason}，configured 恒为 true、connected 恒为 false，
-            reason 是上游错误原文。调用方按正文判断连接状态，不要只看状态码。
+            reason 是上游错误原文（截断与凭据擦除同其它错误体），末位多一个稳定 code=upstream_error。
+            调用方按正文判断连接状态，不要只看状态码。
           content:
             application/json:
               schema:
                 type: object
-                required: [configured, connected, reason]
+                required: [configured, connected, reason, code]
                 properties:
                   configured: { type: boolean, const: true }
                   connected: { type: boolean, const: false }
                   reason: { type: string }
+                  code: { type: string, const: upstream_error }
   /api/updates:
     get:
       tags: [状态]
@@ -832,6 +841,7 @@ paths:
             或者判据缺口但草案没成形，本回合没有改判据。正文 error 是失败原因原文：诊断（如 `data_gap·数据缺口`）、
             `rationale` 摘录与后续责任方，整条不超过 300 字，调用方原封写进 `maintenance.wiki.error`。
             会话记录仍会落盘（诊断、`follow_up`、原始输入、失败消息都在），拿 sessionId 读 `GET /api/wiki/sessions/{sessionId}` 可查。
+            这一类按上游失败归类：`code` 恒为 `upstream_error`（模型这回合没给出可用的维护结论）。
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1924,13 +1934,24 @@ components:
         user: { type: string }
         role: { type: string, enum: [viewer, updater] }
     Error:
+      description: |
+        业务错误体：`error` 是给人看的原话，`code` 是给程序判断的稳定标识。四类各一个 code，取值只有四个：
+        caller_error（调用方传错，对应 4xx）/ not_configured（没配置，503）/ upstream_error（上游失败，502）/
+        internal_error（本程序失败，500）。`internal_error` 的 `error` 恒为「服务器内部错误」，异常原文与堆栈只进服务端日志。
       type: object
-      required: [error]
+      required: [error, code]
       properties:
-        error: { type: string }
+        error:
+          type: string
+          description: 失败原因原话；上游失败时是上游那句摘要（已做凭据擦除），本程序失败时恒为「服务器内部错误」
+        code:
+          type: string
+          enum: [caller_error, not_configured, upstream_error, internal_error]
+          description: 四类失败之一的稳定标识；同一类在任何路由上都是同一个值
   responses:
     BusinessUnauthorized:
-      description: 业务 Basic 认证失败
+      description: |
+        业务 Basic 认证失败。正文是纯文本（不是 Error 形状）：401 是身份闸，不属于四类业务错误。
       headers:
         WWW-Authenticate:
           schema: { type: string }
@@ -1955,42 +1976,52 @@ components:
         application/json:
           schema: { type: object, additionalProperties: true }
     BadRequest:
-      description: 请求参数、内容或版本无效
+      description: 请求参数、内容或版本无效（调用方传错，`code=caller_error`）
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Unauthorized:
-      description: 未通过身份认证
+      description: 未通过身份认证（调用方传错，`code=caller_error`）
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
-      description: 没有该接口的权限
+      description: 没有该接口的权限（调用方传错，`code=caller_error`）
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     NotFound:
-      description: 指定资源不存在
+      description: 指定资源不存在（调用方传错，`code=caller_error`）
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     ServiceUnavailable:
-      description: 依赖的牧云、模型或管理令牌尚未配置
+      description: 依赖的牧云、模型或管理令牌尚未配置（没配置，`code=not_configured`）
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     BackendError:
-      description: 上游查询或研判失败
+      description: 上游查询或研判失败（上游失败，`code=upstream_error`）；正文 `error` 是上游那句摘要，调用方可原样上屏
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     RuleLibraryError:
-      description: 规则文件读取或解析失败；正文 error 里带 `rules/<文件>:<行>` 定位
+      description: |
+        规则文件读取或解析失败（上游失败，`code=upstream_error`）：规则库是随部署的只读数据源，
+        读不出来按上游类处理。正文 `error` 里带 `rules/<文件>:<行>` 定位。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: |
+        本程序失败（`code=internal_error`）：没预料到的异常或本地运行态读写失败。正文固定为
+        `{"error":"服务器内部错误","code":"internal_error"}`，异常原文与堆栈只进服务端日志，不回给调用方。
+        任意业务接口都可能返回它，所以各路径下不逐条重复声明。
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     TooManyRequests:
-      description: 登录失败次数过多
+      description: 登录失败次数过多（调用方传错，`code=caller_error`）
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

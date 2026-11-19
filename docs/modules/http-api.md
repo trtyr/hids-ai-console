@@ -25,9 +25,9 @@
 
 **普通响应有三种形状**，别混着读（SSE 是第四种，见第 6 节）：
 
-- **JSON 对象**：`json()` 写 `Content-Type: application/json; charset=utf-8`，并附 `Cache-Control: no-store` 与 `X-Content-Type-Options: nosniff`（`server.js:53-56`）。
-- **JSON 错误**：`error()` 把消息包成 `{ "error": "..." }` 后走同一个 `json()`（`server.js:57`）。
-- **纯文本 401**：认证失败时的正文是「需要登录后访问」，`Content-Type` 是 `text/plain; charset=utf-8`（**不是** `application/json`），并带 `Cache-Control: no-store` 与 `X-Content-Type-Options: nosniff`（`server.js:66-72`）。
+- **JSON 对象**：`json()` 写 `Content-Type: application/json; charset=utf-8`，并附 `Cache-Control: no-store` 与 `X-Content-Type-Options: nosniff`（`server.js:332-335`）。
+- **JSON 错误**：`callerError` / `configError` / `upstreamError` / `causeError` 把失败包成 `{ "error": "...", "code": "<四类之一>" }` 后走同一个 `json()`（`server.js:339-383`，口径见 §8.3）。
+- **纯文本 401**：认证失败时的正文是「需要登录后访问」，`Content-Type` 是 `text/plain; charset=utf-8`（**不是** `application/json`），并带 `Cache-Control: no-store` 与 `X-Content-Type-Options: nosniff`（`server.js:392-399`）。
 
 **两个没有使用点的参数**：`createServer` 收了 `knowledge`（`server.js:257`）与 `maintenanceEntry`（`server.js:260`），但整个 `server.js` 里再没有第二处提到它们——`grep -n "knowledge\|maintenanceEntry" server.js` 只命中这两行。本页不描述它们的行为，因为没有行为可描述。
 
@@ -286,7 +286,7 @@ A6 空密码放行 | 200 | {"authenticated":true,"user":null,"role":null}
 | --- | --- | --- |
 | `progress` | `{stage, detail}`，由研判过程的 `onProgress` 回调发出 | `server.js:489-490` |
 | `result` | `{result: <history.save() 的返回值>}`——发出去的是落盘之后的对象 | `server.js:491` |
-| `error` | `{error: <异常消息>}` | `server.js:492` |
+| `error` | `{error: <异常消息>}`；原文过一遍凭据擦除（`Basic …`/`Bearer …`/`token=…` → `[redacted]`），帧里没有 `code` | `server.js:888` |
 
 **心跳**：每 15000 毫秒写一行 `: heartbeat\n\n`（`server.js:486`），这是 SSE 的注释行，客户端按协议忽略它。连接关闭时清掉定时器（`server.js:487`），`finally` 里再清一次并结束响应（`server.js:493`）。
 
@@ -353,16 +353,16 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 ## 8. 请求正文与错误翻译
 
-**关键路径**：`server.js:89-96`（`readJSON`）、`server.js:549-551`（未捕获异常的出口）。
+**关键路径**：`server.js:415-423`（`readJSON`）、`server.js:945-951`（未捕获异常的出口）、`server.js:339-387`（四类错误落点）。
 
 ### 8.1 正文长度上限
 
-`readJSON(req, maxLength = 8192)` 把请求体读成字符串再 `JSON.parse`（`server.js:89-96`）。上限量的是拼接后字符串的长度（`body.length`），不是字节数。两条报错：
+`readJSON(req, maxLength = 8192)` 把请求体读成字符串再 `JSON.parse`（`server.js:415-423`）。上限量的是拼接后字符串的长度（`body.length`），不是字节数。两条报错：
 
 | 情况 | 抛出 | 出处 |
 | --- | --- | --- |
-| 长度超过上限 | 请求正文过大 | `server.js:93` |
-| 不是合法 JSON | 请求正文不是 JSON | `server.js:95` |
+| 长度超过上限 | 请求正文过大 | `server.js:420` |
+| 不是合法 JSON | 请求正文不是 JSON | `server.js:422` |
 
 各路由传进去的上限不一样：
 
@@ -377,18 +377,50 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 `readJSON` 只保证「是合法 JSON」，不保证形状。形状由各路由自己判：不传 `expected_revision` 的规则写请求回 400「缺少有效的规则配置版本」（`server.js:351-361`）；正文不是对象或数组的回 400「请求正文无效」（`server.js:371-376`、`server.js:477-501`）。
 
-### 8.3 错误怎么翻译
+### 8.3 错误怎么翻译：四类，一类一个稳定 code（P003-T024）
 
-未捕获的异常从最外层出口走（`server.js:549-551`）：消息里含「请求正文」四个字的回 400，其余回 502；异常没有消息时用「牧云请求失败」兜底。错误体统一是 `{ "error": "<消息>" }`（`server.js:57`）。
+业务错误体只有一个出口（`server.js:339-383`），形状固定 `{ "error": "<原话>", "code": "<稳定标识>" }`
+（契约在 `openapi.yaml` 的 `components/schemas/Error`）。`code` 只有四个值，类 → 状态码是固定对照：
 
-于是「请求正文过大」和「请求正文不是 JSON」都落到 400——探针 F1/F2 实测：
+| 类 | 状态码 | `code` | 谁判的 | 正文 `error` 写什么 |
+| --- | --- | --- | --- | --- |
+| 调用方传错 | 4xx：400 参数/正文、403 权限、404 不存在、405 方法、409 状态冲突、410 已下线、422 无法溯源 | `caller_error` | 路由自己判出来走 `callerError`（`server.js:364`）；异常自带 4xx `status`（各模块判过的档位，如 `wiki-store.js` 的 400/404/409、`trace-board.js` 的 422）也算这一类 | 校验原话，如「分页参数无效」「告警 ID 无效」 |
+| 没配置 | 503 | `not_configured` | 路由开头判依赖在不在，走 `configError`（`server.js:365`） | 点名缺哪个变量/组件，如「未配置 CLOUDWALKER_URL 和 CLOUDWALKER_API_TOKEN」 |
+| 上游失败 | 502 | `upstream_error` | `viaCloudwalker` 在异常上打的 `failure: 'upstream'` 标（`server.js:431-437`）；**随部署的只读规则数据**（`rules/` 的 Rego、`.data/triage-rules.json`）读/解析失败也归这类 | 上游那句摘要原话：牧云 `/rpc <code>: <message>`、`connect ECONNREFUSED <ip>:<port>`、`模型接口 HTTP <status>: <message>`、`规则库读取失败：rules/<文件>:<行> …` |
+| 本程序失败 | 500 | `internal_error` | 其余没被认领的异常：路由里调本地存储/自己代码的 catch 用 `causeError(res, cause, 'internal')`，外层 catch 的缺省类也是它（`server.js:945-951`） | 恒为「服务器内部错误」；异常原文与堆栈只进 `http.failed` 日志 |
 
-```
-F1 POST /api/agent/investigations 正文 8193 字节 | 400 | {"error":"请求正文过大"}
-F2 POST /api/agent/investigations 正文 8192 字节 | 400 | {"error":"请求正文不是 JSON"}
-```
+判定顺序（`failureKindOf`，`server.js:370-374`）：异常上有 `failure` 标记 → 按标记；否则异常带 4xx `status` → `caller`；
+否则落到调用点给的缺省类。**判据不看文案**——旧版靠 `/请求正文/`、`/告警 ID 无效|研判模式无效/` 两条正则从消息里猜分类，
+两条都已删除：`readJSON` 的两条错自己带 `status: 400`（`server.js:415-423`），研判 POST 的 ID/模式在进研判器之前就判完（`server.js:874-877`）。
 
-这两个 400 是靠消息文案里的「请求正文」四个字匹配出来的，不是靠错误类型区分的。
+四条纪律：
+
+1. **5xx 不给调用点覆盖**：`fail()` 的状态码由类决定（`server.js:361-367`），只有 `callerError` 能指定 4xx 里的哪一档。
+   前端按 403/404/409/503 分辨 forbidden / notfound / conflict / unavailable，这些档位一个没动。
+2. **本程序失败不回原文**：`internal_error` 的 `error` 恒为 `INTERNAL_ERROR_MESSAGE`（`server.js:346`、`:355-358`）；
+   异常原文由外层 catch 写进 `http.failed`（`server.js:948-949`），响应里既没有异常消息也没有 `at …` 堆栈行。
+3. **上游失败带上游那句摘要**：`error` 就是上游原话（已过下一道擦除），调用方可原样上屏；没有可用消息时兜底「上游请求失败」。
+4. **凭据不回显**：所有错误原文出口都过 `scrubCredentials`（`server.js:349-353`）——`Basic …` / `Bearer …` 换成 `[redacted]`，
+   `token=` / `api_key=` / `password=` / `secret=` 的值换成 `[redacted]`。SSE 的错误帧（§6）与误报维护落盘的
+   `maintenance.*.error` 过同一道闸；`/api/status` 的 502 业务体同理。
+
+两处不属于四类：业务认证失败的 **401 是纯文本**（`server.js:392-398`，身份闸）；`/api/status` 配了却连不上时 **502 是业务体**
+`{configured, connected, reason, code}`（见 §9.2）。
+
+分类落地前这些地方是混的，改动实测（`evidence/test/P003-T024/error-classes.test.js`）：
+
+| 场景 | 改前 | 改后 |
+| --- | --- | --- |
+| `PUT /api/triage/rules` 保存时本地写盘失败 | 400 + 异常原文 | 500 `{"error":"服务器内部错误","code":"internal_error"}` |
+| `PUT /api/agent/triage/control` 本地写盘失败 | 502 + 异常原文 | 500 + 固定文案 |
+| `GET`/`PUT /api/wiki/pages/…` 读/写失败且异常不带 4xx `status` | 400 + 异常原文 | 500 + 固定文案 |
+| `POST /api/wiki/sessions` 创建时本地意外 | 400 + 异常原文 | 500 + 固定文案 |
+| 外层 catch 里没被认领的异常（如 `GET /api/agent/prompts` 读元数据失败） | 502 + 异常原文 | 500 + 固定文案 |
+| `POST /api/agent/triage/{syslog-id}`（该 syslog 告警没有原始报文） | 502（T18-F1：与 openapi `retryTriage` / triage-pipeline §5.4 承诺的 404 不符） | 404 `{"error":"该 syslog 告警的原始报文不存在，无法重试","code":"caller_error"}` |
+| `POST /api/agent/investigations` 正文不是 JSON | 400（靠 `/请求正文/` 匹配文案） | 400 `{"error":"请求正文不是 JSON","code":"caller_error"}`（靠 `status` 标记，不读文案） |
+
+> 行号口径：P003-T024 在 `server.js` 顶部插了分类块（约 +60 行），本页其它小节里 `server.js:<行>` 的老引用会整体后移；
+> 按符号 `grep -n` 定位即可，语义没变。
 
 ## 9. 边界与未决
 
@@ -396,13 +428,28 @@ F2 POST /api/agent/investigations 正文 8192 字节 | 400 | {"error":"请求正
 
 对外 HTTP 契约在 `openapi.yaml`，声明 39 条路径（`grep -c '^  /' openapi.yaml` → `39`，P003-T013 提交时）。它与 `server.js` 的路由是**分开维护的两份文本**，改路由时两边都要动（这条在 [architecture.md](../architecture.md) 第 11.3 节也记着）。本页只描述 `server.js` 实际跑出来的行为；两边逐条比对不是本卡做的事。
 
-### 9.2 状态码用得不太齐的地方（只陈述现状）
+### 9.2 同一类为什么还有多个 4xx，以及还剩下的不齐之处
 
-- **405 只有一处**（`server.js:319`）。方法对不上的路径，除这一处外都落到 404。
-- **404 有两种文案**：未知 API 与非 API 路径回「接口不存在」（`server.js:793-794`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:721`）。
-- **503 有两类含义**：后端某一类件没配好（牧云整体没配 `server.js:97-101`、研判队列未配置 `server.js:262-263`、工具箱未配置 `server.js:221-229`），与管理员令牌没配（`server.js:281-282`、`server.js:353-354`），文案不一样。
-- **`/api/status` 不走 503**：没配牧云时回 200，用 `configured` / `connected` 两个字段说明状态；配了但连不上时回 **502**，正文仍是同一组字段（`connected:false` + `reason` 是上游错误原文）——502 在这里是业务体，不是“整个服务不可用”，前端按正文处理（`server.js:216-221`）。
-- **SSE 里没有状态码级的失败**：研判抛错也是 200，错误在帧里（`server.js:421`）。
+四类落地后，**类 → 状态码是固定的**，没有再出现「同一类这处 400、那处 502」；但「调用方传错」这一类内部保留了 4xx 的既有档位，
+因为它们表达的是不同的调用方结论，前端（`web/src/*`）按档位分流：
+
+| 档位 | 含义 | 出现处举例 |
+| --- | --- | --- |
+| 400 | 参数/正文/ID 不合法 | 分页参数、正文不是 JSON、`请求正文无效` |
+| 403 | 管理令牌不对 | 规则管理员令牌（`server.js:688`）、知识库管理员凭据（`server.js:824`） |
+| 404 | 目标不存在 | 未知 API（`server.js:943-944`）、知识库页面/会话、研判记录、告警事件 |
+| 405 | 方法不对（只有提示词入口一处，`server.js:790`） | `POST /api/agent/prompts` |
+| 409 | 状态冲突 | 研判未完成不能登记误报（`server.js:752`）、页面版本过期、缺可维护判据页 |
+| 410 | 入口已下线 | `POST /api/agent/prompts/upload`（`server.js:791`） |
+| 422 | 目标无法溯源 | 白板启动时告警没资产（`trace-board.js:344-355`） |
+
+仍然不齐、但**不影响四类口径**的几处：
+
+- **404 有两种文案**：未知 API 与非 API 路径回「接口不存在」，`/api/wiki/` 下的未知路径回「知识库接口不存在」——两条都是 `caller_error`。
+- **`/api/status` 不走 503**：没配牧云时回 200（`configured:false`）；配了但连不上时回 **502**，正文是业务体
+  `{configured:true, connected:false, reason, code:"upstream_error"}`——502 在这里是「上游连不上」的业务体，
+  不是「整个服务不可用」，前端按正文处理。
+- **SSE 里没有状态码级的失败**：研判抛错也是 200，错误在帧里（`data: {"type":"error","error":…}`），帧里的错误原文同样过凭据擦除，但没有 `code`。
 
 ### 9.3 本卡没查到的
 

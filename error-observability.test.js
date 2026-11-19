@@ -32,7 +32,7 @@ test('知识库 404 正文只给相对路径，不带服务器目录', async t =
   const body = await missing.text();
   assert.ok(!body.includes(root), `404 正文泄漏了服务器目录：${body}`);
   assert.ok(!body.includes(tmpdir()), `404 正文泄漏了临时目录：${body}`);
-  assert.deepEqual(JSON.parse(body), { error: '知识库页面不存在：common/GEN-99.md' });
+  assert.deepEqual(JSON.parse(body), { error: '知识库页面不存在：common/GEN-99.md', code: 'caller_error' });
 
   // 写接口走同一条 get()：改不存在的页面也是 404，同样不回绝对路径。
   const signed = await fetch(`${base}/api/wiki/pages/common%2FGEN-99.md`, { method: 'PUT',
@@ -93,7 +93,7 @@ test('/api/status 连不上牧云是 502，正文带 configured/connected/reason
   assert.equal(response.status, 502);
   assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8');
   assert.deepEqual(await response.json(),
-    { configured: true, connected: false, reason: 'connect ECONNREFUSED 10.0.0.1:443' });
+    { configured: true, connected: false, reason: 'connect ECONNREFUSED 10.0.0.1:443', code: 'upstream_error' });
 
   // 没配牧云仍走 200：502 只表示「配了但连不上」。
   const unconfigured = await listen(t, createServer(null, null, null, null, null, null));
