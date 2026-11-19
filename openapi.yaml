@@ -253,13 +253,13 @@ paths:
 
         | kind | 中文 | 什么算「一条」 | 路径来源 |
         | --- | --- | --- | --- |
-        | `cases` | 案卷 | 案件目录下的一级子目录（字节按目录内文件递归累加） | `HIDS_CASES_DIR`，缺省 `.data/cases` |
-        | `investigations` | 研判记录 | 一个 `*.json` 文件 | `.data/investigations` |
-        | `boards` | 溯源白板 | 一个 `*.json` 文件 | `.data/trace-boards` |
-        | `wiki_sessions` | 知识库会话 | 一个 `*.json` 文件 | `.data/wiki-sessions` |
-        | `queue` | 研判队列 | 一条队列记录（有研判队列时按进程内记录数，否则读队列文件 `records`）；字节＝队列文件 + 同名 `.archive.jsonl` | `.data/triage-monitor.json` |
-        | `logs` | 日志 | `.data/` **顶层**的一个 `*.log` 文件 | 后端自身不落日志文件（只上 stdout），正常部署下这里是 0 |
-        | `config_overrides` | 配置覆盖层 | 那一个覆盖层文件（`config-overrides.json`） | `.data/config-overrides.json` |
+        | `cases` | 案卷 | 案件目录下的一级子目录（字节按目录内文件递归累加） | `HIDS_CASES_DIR`，缺省 `<数据根>/cases` |
+        | `investigations` | 研判记录 | 一个 `*.json` 文件 | `<数据根>/investigations` |
+        | `boards` | 溯源白板 | 一个 `*.json` 文件 | `<数据根>/trace-boards` |
+        | `wiki_sessions` | 知识库会话 | 一个 `*.json` 文件 | `<数据根>/wiki-sessions` |
+        | `queue` | 研判队列 | 一条队列记录（有研判队列时按进程内记录数，否则读队列文件 `records`）；字节＝队列文件 + 同名 `.archive.jsonl` | `<数据根>/triage-monitor.json` |
+        | `logs` | 日志 | 数据根目录**顶层**的一个 `*.log` 文件 | 后端自身不落日志文件（只上 stdout），正常部署下这里是 0 |
+        | `config_overrides` | 配置覆盖层 | 那一个覆盖层文件（`config-overrides.json`） | `<数据根>/config-overrides.json` |
 
         `oldest_at` / `newest_at` 是这一类的条目时刻：文件取 mtime，案卷取目录内**文件**的最新 mtime（空目录退回目录 mtime），
         队列取记录上的 `updated_at`（没有则 `saved_at`、`created_at`）。没有条目时为 `null`。
@@ -290,8 +290,8 @@ paths:
         两条同时给时取**并集**（不重复计）。
 
         动作：
-        - `archive`（缺省）：文件/案卷目录 `rename` 进 `.data/archive/<kind>/<执行时刻>-<原名>`；队列记录追加到
-          `.data/triage-monitor.json.archive.jsonl`（带 `archived_at`，与 TTL 归档同格式）再移出队列。
+        - `archive`（缺省）：文件/案卷目录 `rename` 进 `<数据根>/archive/<kind>/<执行时刻>-<原名>`；队列记录追加到
+          `<数据根>/triage-monitor.json.archive.jsonl`（带 `archived_at`，与 TTL 归档同格式）再移出队列。
         - `delete`：直接删文件/目录；队列记录从内存与队列文件里删掉（同时失效对应去重条目）。
 
         **已完结案件才可清**：`queue` 的候选里只要有一条状态不是 `done`（`queued` / `running` / `failed` 都算没完），
@@ -1620,7 +1620,7 @@ components:
           enum: [cases, investigations, boards, wiki_sessions, queue, logs, config_overrides]
           description: 存储类型；`GET /api/data/inventory` 的 `stores` 按这个枚举的顺序返回
         label: { type: string, description: 这一类的中文名（案卷 / 研判记录 / 溯源白板 / 知识库会话 / 研判队列 / 日志 / 配置覆盖层） }
-        path: { type: string, description: 这一类在盘上的绝对路径（队列是队列文件路径，日志是 `.data/` 目录本身） }
+        path: { type: string, description: 这一类在盘上的绝对路径（队列是队列文件路径，日志是数据根目录本身） }
         exists: { type: boolean, description: 那条路径在不在盘上；不在时 count 恒为 0 }
         count: { type: integer, minimum: 0, description: 条数：文件 = 文件个数，案卷 = 一级子目录个数，配置覆盖层 = 0/1，队列 = 记录数 }
         bytes: { type: integer, minimum: 0, description: 字节量：目录/案卷递归累加；队列是队列文件 + `.archive.jsonl` }
@@ -1636,7 +1636,7 @@ components:
       type: object
       required: [data_dir, stores, total]
       properties:
-        data_dir: { type: string, description: 运行态根目录（仓内 `.data/`）的绝对路径 }
+        data_dir: { type: string, description: 运行态根目录（`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`；缺省取配置覆盖层文件所在目录）的绝对路径 }
         stores:
           type: array
           description: 七类存储，顺序固定为 cases → investigations → boards → wiki_sessions → queue → logs → config_overrides
@@ -1664,7 +1664,7 @@ components:
           type: string
           enum: [archive, delete]
           default: archive
-          description: 归档（移进 `.data/archive/<kind>/`，队列追加到 `.archive.jsonl`）或删除
+          description: 归档（移进 `<数据根>/archive/<kind>/`，队列追加到 `.archive.jsonl`）或删除
         execute:
           type: boolean
           default: false

@@ -310,7 +310,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 - **值的形状**用模块级装配处同一套构造器判（`config-store.js:63-76` → `rpc-client.js:4-5`、`model-client.js:14-21`）：`CLOUDWALKER_URL` / 三组 `*_BASE_URL` 必须 `http(s)://` 开头；`CLOUDWALKER_API_TOKEN` 至少 6 位；三组 `*_API_KEY`、`*_MODEL` 非空。校验对象是**合并后的生效值**（只改 `LLM_MODEL` 也要主判三项齐——进程里这三项本来就被启动闸门保证齐全；只改复核组一个键时，另外两项逐键回退主判，所以照样 200）。
 - **坏值报错点组内键名**（P003-T042）：写坏的 `LLM_LIGHT_BASE_URL` 回「LLM_LIGHT_BASE_URL 必须是 HTTP(S) 地址」，不是笼统的 `LLM_BASE_URL`；回退来的字段出问题才点主判键名（那才是要改的键）。
-- **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只能新增/改值、不能删键；要清掉改过的值，用 P003-T044 的数据管理接口删掉覆盖层（`POST /api/data/cleanup`，`kind: config_overrides`，见 §3.7），或手工删 `.data/config-overrides.json`——两种都要**重启进程**才回到「按环境变量生效」，因为覆盖层是启动时同步读进 `env` 的。
+- **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只能新增/改值、不能删键；要清掉改过的值，用 P003-T044 的数据管理接口删掉覆盖层（`POST /api/data/cleanup`，`kind: config_overrides`，见 §3.7），或手工删数据根下的 `config-overrides.json`——两种都要**重启进程**才回到「按环境变量生效」，因为覆盖层是启动时同步读进 `env` 的。
 
 **响应**：`200`，`Cache-Control: no-store`：
 
@@ -380,7 +380,7 @@ node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 
 
 **关键路径**：两个分支在 `server.js:864-870`；实现是 `server.js:601-812` 的一批 helper（`DATA_KINDS` 在 `server.js:611`、`dataStores()` 在 `server.js:623`、`dataInventory()` 在 `server.js:725`、`dataCleanup()` 在 `server.js:789`）；队列侧的候选挑选与清理在 `triage-monitor.js:439-500`（`cleanCandidates()` / `clean()` / `blockedCaseDirs()`）；路径来源在 `server.js:842` 的 `dataDeps`（`{history, monitor, boardService, wikiAgent, config}`）。
 
-**它管什么**：给运维一眼看清仓内 `.data/` 下七类运行态各占多少，再按类型与阈值把老数据**归档或删除**。**不管**页面（`web/**` 不在本卡 scope）、不管各 store 的类（`investigation-store.js` 等仍然没有删除方法——清理是文件系统层的运维动作）、不新增配置键、不引入自动清理定时器。
+**它管什么**：给运维一眼看清数据根（`HIDS_DATA_DIR` / `~/.local/share/hids-ai-console`，见 §2）下七类运行态各占多少，再按类型与阈值把老数据**归档或删除**。**不管**页面（`web/**` 不在本卡 scope）、不管各 store 的类（`investigation-store.js` 等仍然没有删除方法——清理是文件系统层的运维动作）、不新增配置键、不引入自动清理定时器。
 
 #### 3.7.1 七类存储与「一条」的口径
 
@@ -388,16 +388,16 @@ node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 
 
 | `kind` | 中文 | 路径来源（缺省值） | 什么算「一条」 | 条目时刻（`oldest_at` / `newest_at` / 排序） |
 | --- | --- | --- | --- | --- |
-| `cases` | 案卷 | `monitor.casesDirectory` → `HIDS_CASES_DIR` → `.data/cases` | 一级子目录（一个案件目录） | 目录内**文件**的最新 mtime；空目录退回目录自身 mtime |
-| `investigations` | 研判记录 | `history.directory` → `.data/investigations` | 一个 `*.json` | 文件 mtime |
-| `boards` | 溯源白板 | `boardService.directory` → `.data/trace-boards` | 一个 `*.json` | 文件 mtime |
-| `wiki_sessions` | 知识库会话 | `wikiAgent.directory` → `.data/wiki-sessions` | 一个 `*.json` | 文件 mtime |
-| `queue` | 研判队列 | `monitor.file` → `.data/triage-monitor.json` | 一条队列记录 | 记录上 `updated_at` → `saved_at` → `created_at` 第一个能解析的 |
-| `logs` | 日志 | `.data/` 目录本身 | `.data/` **顶层**的一个 `*.log` | 文件 mtime |
-| `config_overrides` | 配置覆盖层 | `config.file` → `.data/config-overrides.json` | 那一个文件（0 或 1） | 文件 mtime |
+| `cases` | 案卷 | `monitor.casesDirectory` → `HIDS_CASES_DIR` → `<数据根>/cases` | 一级子目录（一个案件目录） | 目录内**文件**的最新 mtime；空目录退回目录自身 mtime |
+| `investigations` | 研判记录 | `history.directory` → `<数据根>/investigations` | 一个 `*.json` | 文件 mtime |
+| `boards` | 溯源白板 | `boardService.directory` → `<数据根>/trace-boards` | 一个 `*.json` | 文件 mtime |
+| `wiki_sessions` | 知识库会话 | `wikiAgent.directory` → `<数据根>/wiki-sessions` | 一个 `*.json` | 文件 mtime |
+| `queue` | 研判队列 | `monitor.file` → `<数据根>/triage-monitor.json` | 一条队列记录 | 记录上 `updated_at` → `saved_at` → `created_at` 第一个能解析的 |
+| `logs` | 日志 | 数据根目录本身 | 数据根**顶层**的一个 `*.log` | 文件 mtime |
+| `config_overrides` | 配置覆盖层 | `config.file` → `<数据根>/config-overrides.json` | 那一个文件（0 或 1） | 文件 mtime |
 
-- **路径全部取自注入件**（`createServer` 的 `history` / `monitor` / `boardService` / `wikiAgent` / `config`）：换替身就是换盘点对象，测试不必碰仓内 `.data/`。
-- **`logs` 的真相**：后端日志只上 stdout、不落文件（`docs/architecture.md` §3.6 末句）。这一类只盘点**部署端自己**把 stdout 重定向到 `.data/*.log` 时产生的文件，正常部署下恒为 `count: 0`；子目录里的 `*.log` 不算（只认顶层）。
+- **路径全部取自注入件**（`createServer` 的 `history` / `monitor` / `boardService` / `wikiAgent` / `config`）：换替身就是换盘点对象，测试不必碰真实数据根。响应里的 `data_dir` 取配置覆盖层文件所在目录（`config.file` 的 `dirname`），缺省就是数据根。
+- **`logs` 的真相**：后端日志只上 stdout、不落文件（`docs/architecture.md` §3.6 末句）。这一类只盘点**部署端自己**把 stdout 重定向到数据根里的 `*.log` 时产生的文件，正常部署下恒为 `count: 0`；子目录里的 `*.log` 不算（只认顶层）。
 - **`bytes` 口径**：文件取 `stat.size`；案卷按目录内文件递归累加；`queue` 是队列文件 + 同名 `.archive.jsonl`；读不到的条目按 0 算（一个断掉的符号链接不该让整次盘点 500）。
 - **`exists`**：路径在不在盘上。缺目录不报错，回 `count: 0`、`bytes: 0`、`exists: false`。
 - **每次请求现扫盘**，没有缓存：清完再盘点，数字立刻是清后的（A5）。
@@ -405,21 +405,21 @@ node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 
 **响应**（200，`Cache-Control: no-store`）：
 
 ```json
-{"data_dir":"/…/.data",
- "stores":[{"kind":"cases","label":"案卷","path":"/…/.data/cases","exists":true,
+{"data_dir":"/home/ops/.local/share/hids-ai-console",
+ "stores":[{"kind":"cases","label":"案卷","path":"/home/ops/.local/share/hids-ai-console/cases","exists":true,
             "count":2,"bytes":12,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
-           {"kind":"investigations","label":"研判记录","path":"/…/.data/investigations","exists":true,
+           {"kind":"investigations","label":"研判记录","path":"/home/ops/.local/share/hids-ai-console/investigations","exists":true,
             "count":2,"bytes":9,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
-           {"kind":"boards","label":"溯源白板","path":"/…/.data/trace-boards","exists":true,"count":1,"bytes":11,
+           {"kind":"boards","label":"溯源白板","path":"/home/ops/.local/share/hids-ai-console/trace-boards","exists":true,"count":1,"bytes":11,
             "oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2020-01-01T00:00:00.000Z"},
-           {"kind":"wiki_sessions","label":"知识库会话","path":"/…/.data/wiki-sessions","exists":true,"count":1,"bytes":7,
+           {"kind":"wiki_sessions","label":"知识库会话","path":"/home/ops/.local/share/hids-ai-console/wiki-sessions","exists":true,"count":1,"bytes":7,
             "oldest_at":"2026-11-19T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
-           {"kind":"queue","label":"研判队列","path":"/…/.data/triage-monitor.json","exists":true,"count":2,"bytes":333,
+           {"kind":"queue","label":"研判队列","path":"/home/ops/.local/share/hids-ai-console/triage-monitor.json","exists":true,"count":2,"bytes":333,
             "oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
-           {"kind":"logs","label":"日志","path":"/…/.data","exists":true,"count":1,"bytes":9,
+           {"kind":"logs","label":"日志","path":"/home/ops/.local/share/hids-ai-console","exists":true,"count":1,"bytes":9,
             "oldest_at":"2026-11-19T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
-           {"kind":"config_overrides","label":"配置覆盖层","path":"/…/.data/config-overrides.json","exists":true,
-            "count":1,"bytes":33,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2020-01-01T00:00:00.000Z"}],
+           {"kind":"config_overrides","label":"配置覆盖层","path":"/home/ops/.local/share/hids-ai-console/config-overrides.json","exists":true,
+            "count":1,"bytes":33,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"}],
  "total":{"count":10,"bytes":414}}
 ```
 
@@ -443,7 +443,7 @@ node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 
 
 - **阈值至少给一个**：`older_than` 与 `keep` 都不给回 400——不许无阈值一把抹掉。
 - **两条同给取并集**：早于时间的 ∪ 超出数量的，同一「条」不会重复计。
-- **`archive` 落到哪**：文件/案卷目录 `rename` 进 `.data/archive/<kind>/<执行时刻>-<原名>`（前缀是 ISO 时间去掉了 `:` 与 `.`，同一路径清两次不会覆盖上一份）；队列记录追加到 `.data/triage-monitor.json.archive.jsonl`（带 `archived_at`，与 TTL 归档 `archiveDone()` 同格式）再移出队列。**归档目录不在七类盘点的任何一类里**，所以盘点数字会降。
+- **`archive` 落到哪**：文件/案卷目录 `rename` 进 `<数据根>/archive/<kind>/<执行时刻>-<原名>`（前缀是 ISO 时间去掉了 `:` 与 `.`，同一路径清两次不会覆盖上一份）；队列记录追加到 `<数据根>/triage-monitor.json.archive.jsonl`（带 `archived_at`，与 TTL 归档 `archiveDone()` 同格式）再移出队列。**归档目录不在七类盘点的任何一类里**，所以盘点数字会降。
 - **`delete` 落到哪**：文件/目录 `rm -r`；队列记录从内存与队列文件里删掉，并按 R-TRIAGE-13 同时失效指向它的 `dedupe` 条目（走 `dropRecord()`，`triage-monitor.js:322-330`）。
 - **`config_overrides` 的特殊后果**：删/归档只动盘上的覆盖层文件，**进程内的 `env` 仍是旧值**；要回到「按环境变量生效」必须重启进程（覆盖层是启动时同步读进 `env` 的，见 §3.6）。
 
@@ -510,7 +510,7 @@ node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 
 - 不做页面、不动 `web/**`。
 - 不改各 store 的类：`InvestigationStore` / `TraceBoardService` / `WikiWorkbench` 仍然没有删除方法。
 - 不自动清理：没有定时器，只有这两个接口（队列的 TTL 归档 `archiveDone()` 是既有能力，不受本卡影响）。
-- 不保证「归档后还能从接口读回来」：归档目录只落盘，仓内没有读它的接口；要翻旧案直接看 `.data/archive/**`。
+- 不保证「归档后还能从接口读回来」：归档目录只落盘，没有读它的接口；要翻旧案直接看数据根下的 `archive/**`。
 - 队列候选只挑 `done`：`failed` / `queued` / `running` 一律 409，不静默跳过。
 
 **可重放证据**（`evidence/test/P003-T044/data-admin.test.js`，20 条，约 270ms）：
@@ -522,7 +522,7 @@ node --test --test-timeout=60000 --test-force-exit *.test.js   # 根套件 210 �
 bash evidence/test/P003-T044/mutation-round2.sh   # 20 条实现变异逐条打红新断言（断言自证的复现入口）
 ```
 
-单测全部在 tmp 目录里跑（`mkdtemp`）：替身目录 + 内存队列 + 进程内 HTTP 请求，mtime 用 `utimes` 钉死，不碰真实网络、不碰仓内 `.data/`、不依赖真实时钟。
+单测全部在 tmp 目录里跑（`mkdtemp`）：替身目录 + 内存队列 + 进程内 HTTP 请求，mtime 用 `utimes` 钉死，不碰真实网络、不碰真实数据根、不依赖真实时钟。
 
 ## 4. Basic 认证
 

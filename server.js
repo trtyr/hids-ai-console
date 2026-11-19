@@ -612,7 +612,7 @@ async function triageFilteredAlerts(service, monitor, query, { statuses, verdict
 // ── 数据管理（P003-T044）：盘点 / 归档 / 清理 ───────────────────────────────
 // 七类运行态的真源路径一律取自 createServer 的注入件（history / boardService / wikiAgent / monitor / config），
 // 不另立一套路径表：测试换掉注入件里的替身目录，盘点的就是那份替身目录。
-// dataRoot 取配置覆盖层文件所在目录（缺省就是仓内 .data）：队列的 .archive.jsonl 与清理归档目录都落在这下面。
+// dataRoot 取配置覆盖层文件所在目录（缺省就是数据根，仓库外）：队列的 .archive.jsonl 与清理归档目录都落在这下面。
 export const DATA_KINDS = Object.freeze(['cases', 'investigations', 'boards', 'wiki_sessions', 'queue', 'logs', 'config_overrides']);
 const DATA_KIND_LABELS = Object.freeze({ cases: '案卷', investigations: '研判记录', boards: '溯源白板',
   wiki_sessions: '知识库会话', queue: '研判队列', logs: '日志', config_overrides: '配置覆盖层' });
