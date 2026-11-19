@@ -4,7 +4,7 @@
 
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
-- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。
+- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
 ## 1. 模块职责与边界
@@ -75,7 +75,7 @@
 37 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
 
 > 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）。
-> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 37 行），不是组合数：一行可以给出多条组合（`server.js:704` 的 `/api/agent/triage/{alertId}` 给 GET 与 POST 两条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
+> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 37 行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
 
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
@@ -98,9 +98,10 @@
 | POST | `/api/rules/evaluate` | 200 `{count, matched}` | 正文不是对象回 400；求值失败回 502 | `server.js:563-569` |
 | GET | `/api/rules/{id}` | 200 / 404 | id 不合格式回 400；规则库读取失败回 502 | `server.js:570-578` |
 | GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:292-299` |
-| PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503 | `server.js:300-306` |
-| GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:307-315` |
-| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503 | `server.js:633-641` |
+| PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503。暂停期间报文进缓冲不丢、恢复不动游标（P003-T036，见 openapi 该路径说明） | `server.js:771-777` |
+| GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:823` |
+| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503 | `server.js:824` |
+| DELETE | `/api/agent/triage/{alertId}` | 200 `{alert_id, status:"not_queued", cancelled:true}`（取消排队中的记录） | 无研判队列回 503；没有这条记录回 404；已在研判中或已完成（running / done）回 409 | `server.js:825-828` |
 | POST | `/api/agent/triage/{alertId}/false-positive` | 202（结论已落盘为误报，两个维护者开始） | 无研判队列回 503；理由不符格式回 400；无此案件回 404；研判未完成回 409 | `server.js:597-632` |
 | GET | `/api/agent/prompts` | 200 | — | `server.js:316-318` |
 | GET | `/api/wiki/pages` | 200 `{pages, total}`，接 `count`／`offset` | 分页参数不合法回 400 | `server.js:322-334` |

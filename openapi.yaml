@@ -463,7 +463,10 @@ paths:
     put:
       tags: [自动研判]
       summary: 暂停或恢复自动研判
-      description: 暂停期间收到的 Syslog 不会自动补判；已有运行任务会完成。
+      description: |
+        暂停期间收到的 Syslog **不丢**：报文进暂停缓冲区排队（有上限，超出的丢弃并计数，见 `TriageSummary.paused.dropped`），
+        恢复时先把缓冲区逐条回灌再继续出队。轮询模式下暂停期间不累游标，恢复后从原游标继续扫，暂停期间新增的告警同样会补判。
+        已经在跑的研判会跑完；排队中的记录不会被清空。
       operationId: setTriageEnabled
       requestBody:
         required: true
@@ -513,6 +516,30 @@ paths:
               schema: { $ref: '#/components/schemas/TriageCase' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [自动研判]
+      summary: 取消排队中的研判记录
+      operationId: cancelTriage
+      description: |
+        把一条还没在研判的记录（`queued` 或 `failed`，含死信）从队列里撤掉：记录删除，同时失效指向它的去重条目，
+        之后同一条 syslog 报文再来会作为新记录入队。已完成的（`done`）或正在跑的（`running`）不能取消。
+        取消后 `GET` 这条回 `status=not_queued`。
+      responses:
+        '200':
+          description: 已取消
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alert_id, status, cancelled]
+                properties:
+                  alert_id: { type: string }
+                  status: { type: string, enum: [not_queued] }
+                  cancelled: { type: boolean }
+                additionalProperties: false
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/BadRequest' }
   /api/agent/triage/{alertId}/false-positive:
     parameters:
       - $ref: '#/components/parameters/TriageId'
@@ -1679,6 +1706,80 @@ components:
             只列出现过的类型，没出现过的键不出现（空队列为 `{}`）；没有事件类型的记录（轮询入口入队、没有 input，
             或 MsgId 不在映射表里）计入 `unknown`
           additionalProperties: { type: integer }
+        queue:
+          type: object
+          description: 此刻的队列深度与最老等待。**不跟 since 走**（与上面三个聚合口径不同）
+          required: [depth, running, oldest_wait_ms, oldest_alert_id, retry_waiting]
+          properties:
+            depth: { type: integer, description: 排队中的记录条数（status=queued） }
+            running: { type: integer, description: 正在研判的条数 }
+            oldest_wait_ms:
+              type: [integer, 'null']
+              description: 排队中那条等得最久的已经等了多久（毫秒，从它最近一次回到 queued 的时刻算）；没有排队时为 null
+            oldest_alert_id: { type: [string, 'null'], description: 等得最久的那条；没有排队时为 null }
+            retry_waiting: { type: integer, description: 失败但还没到死信上限、等自动重排的条数 }
+          additionalProperties: false
+        failure_reasons:
+          type: object
+          description: |
+            失败原因分布：键是失败记录上的原因原文（截 120 字，优先 `failure.reason`，其次 `detail`），值是条数。
+            死信也算在里面（它与“还能重试”只差 `retry.dead_letters` 那个计数）。空对象表示没有失败记录。
+            不跟 since 走。
+          additionalProperties: { type: integer }
+        retry:
+          type: object
+          description: 失败重排的上限（可直接告诉运维“还能自动跑几次”）。不跟 since 走
+          required: [base_ms, max_ms, max_attempts, dead_letters]
+          properties:
+            base_ms: { type: integer, description: 第 1 次失败后的等待毫秒数；第 n 次是 base * 2^(n-1) }
+            max_ms: { type: integer, description: 单次退避的上限毫秒数 }
+            max_attempts: { type: integer, description: attempts 到这个数就进死信，不再自动重跑 }
+            dead_letters: { type: integer, description: 死信条数（status 仍是 failed，记录上带 dead_letter=true） }
+          additionalProperties: false
+        paused:
+          type: object
+          description: 暂停窗口的计数：暂停期间收到多少、多少在缓冲里、多少因缓冲上限丢了、恢复后回灌了多少
+          required: [active, since, received, buffered, dropped, replayed]
+          properties:
+            active: { type: boolean, description: 当前是否在暂停（enabled 的反面，给一眼看） }
+            since: { type: [string, 'null'], description: 本轮暂停开始的时刻；从未暂停过为 null }
+            received: { type: integer, description: 本轮暂停期间收到的报文条数（含因上限丢弃的） }
+            buffered: { type: integer, description: 当前缓冲区里还排着多少条（持久化，重启不丢） }
+            dropped: { type: integer, description: 本轮暂停期间因缓冲区满丢弃的条数 }
+            replayed: { type: integer, description: 最近一次恢复时回灌的条数 }
+          additionalProperties: false
+        archived:
+          type: object
+          description: done 记录的 TTL 归档（过期的移出内存队列，追加到 `<队列文件>.archive.jsonl`）
+          required: [count, ttl_ms]
+          properties:
+            count: { type: integer, description: 本进程已归档的条数（持久化） }
+            ttl_ms: { type: integer, description: done 记录在内存里保留多久（毫秒），缺省 24 小时 }
+          additionalProperties: false
+        persist:
+          type: object
+          description: 队列快照的落盘节奏（合并写窗口）
+          required: [interval_ms, unflushed]
+          properties:
+            interval_ms: { type: integer, description: 合并写窗口：热路径标脏，最多 1 次 / 这个毫秒数落盘 }
+            unflushed: { type: boolean, description: 是否还有没落盘的脏状态 }
+          additionalProperties: false
+        syslog_stats:
+          type: object
+          description: |
+            仅 input_mode=syslog 时出现。收包计数（本进程累计）：`inbound` = 进处理器的报文数，其余按结果分开计。
+            内核 socket 缓冲满导致的丢包在进程内拿不到，不在这个计数里（进程里看得见的丢弃是 `dropped`：暂停缓冲区溢出）。
+            与 `syslog` 分开：那个是“能不能收到”（绑定状态），这个是“收了多少 / 丢了多少”。
+          required: [inbound, accepted, collapsed, buffered, dropped, rejected, failed]
+          properties:
+            inbound: { type: integer, description: 进入处理器的报文总数 }
+            accepted: { type: integer, description: 建成新研判记录的条数 }
+            collapsed: { type: integer, description: 同秒重复投递被合并到已有记录的条数 }
+            buffered: { type: integer, description: 暂停期间进缓冲区的条数 }
+            dropped: { type: integer, description: 暂停缓冲区满丢弃的条数 }
+            rejected: { type: integer, description: 解析失败或 MsgId 无对应研判场景的条数 }
+            failed: { type: integer, description: 处理链抛错的条数 }
+          additionalProperties: false
     TriageCase:
       type: object
       required: [alert_id, status]
@@ -1686,6 +1787,21 @@ components:
         alert_id: { type: string }
         matched_alert_id: { type: [string, 'null'] }
         status: { type: string, enum: [not_queued, queued, running, done, failed] }
+        attempts: { type: integer, description: 已经跑了几轮（失败与成功都算）；每次进入 running 加 1 }
+        dead_letter:
+          type: boolean
+          description: |
+            是否已进死信：失败次数到 `TriageSummary.retry.max_attempts` 后置 true，不再自动重排，原因留在 `failure`。
+            status 仍是 failed（不新增状态值），要重跑走 POST /api/agent/triage/{alertId} 人工重试。
+        next_attempt_at: { type: [string, 'null'], description: 下一次自动重排的时刻；死信中或不在等重试时为 null }
+        failure:
+          type: [object, 'null']
+          description: 最近一次失败的原因；status 不是 failed 时为 null / 不带
+          properties:
+            reason: { type: string, description: 失败原因原文（截 250 字，与 detail 同源） }
+            code: { type: string, description: 错误自带的 code 或 name（如 ETIMEDOUT） }
+            at: { type: string, format: date-time }
+          additionalProperties: false
         stage: { type: string }
         detail: { type: string }
         verdict_label: { type: [string, 'null'], enum: [真实威胁, 存疑, 误报, null] }

@@ -1,0 +1,14 @@
+# npm test（后端全套单测）
+{"time":"2026-11-19T14:14:48.682Z","level":"info","event":"http.request","method":"GET","path":"/backend/wiki/honeypot/HP-01.md","status":404,"duration_ms":1}
+{"time":"2026-11-19T14:14:48.683Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+✔ wiki pages are readable but maintenance requires the administrator token and backend files stay private (45.05543ms)
+✔ triage reads a Wiki criterion while current alert facts come from the API toolbox (13.571951ms)
+ℹ tests 198
+ℹ suites 0
+ℹ pass 198
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 690.069974
+EXIT=0
