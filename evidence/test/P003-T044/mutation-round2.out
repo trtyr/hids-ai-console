@@ -1,0 +1,61 @@
+MUTATION 1 ✓ 红：鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错用户名 401，正文与四条头），正确凭据才 200
+    断言： AssertionError [ERR_ASSERTION]: 盘点 无凭据 '请登录' !== '需要登录后访问' 
+    变异：401 正文不是「需要登录后访问」
+MUTATION 2 ✓ 红：鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错用户名 401，正文与四条头），正确凭据才 200
+    断言： AssertionError [ERR_ASSERTION]: 盘点 无凭据 + actual - expected + null 
+    变异：401 少了 Content-Type: text/plain; charset=utf-8
+MUTATION 3 ✓ 红：鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错用户名 401，正文与四条头），正确凭据才 200
+    断言： AssertionError [ERR_ASSERTION]: 盘点 无凭据 200 !== 401 
+    变异：闸门失效（无凭据也放行）
+MUTATION 4 ✓ 红：鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错用户名 401，正文与四条头），正确凭据才 200
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal: + actual - expected + [] 
+    变异：闸门排在清理之后（401 但盘已动）
+MUTATION 5 ✓ 红：A2 清理响应回显：kind/action/threshold 逐键，candidates.items 每条都带条目时刻（老到新）
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: + actual - expected + 'cases' 
+    变异：kind 不回显请求值
+MUTATION 6 ✓ 红：A2 清理响应回显：kind/action/threshold 逐键，candidates.items 每条都带条目时刻（老到新）
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal: + actual - expected { 
+    变异：older_than 被规范化成 UTC 标准形（不是原样回显）
+MUTATION 7 ✓ 红：A2 清理响应回显：kind/action/threshold 逐键，candidates.items 每条都带条目时刻（老到新）
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal: + actual - expected { 
+    变异：keep 不回显请求值
+MUTATION 8 ✓ 红：A2 清理响应回显：kind/action/threshold 逐键，candidates.items 每条都带条目时刻（老到新）
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal: + actual - expected [ 
+    变异：文件类候选条目丢了 at
+MUTATION 9 ✓ 红：A4 队列只清 done：delete 移出内存，落盘后文件里也没了（A5 数字跟着变）
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal: + actual - expected [ 
+    变异：队列候选条目丢了 at
+MUTATION 10 ✓ 红：A1 盘点七类存储：条数与字节逐类对得上，缺目录按 0 报
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: + actual - expected + null 
+    变异：七类 newest_at/oldest_at 恒 null
+MUTATION 11 ✓ 红：A1 盘点七类存储：条数与字节逐类对得上，缺目录按 0 报
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: + actual - expected + '2026-11-19T00:00:00.000Z' 
+    变异：最早/最晚取反
+MUTATION 12 ✓ 红：A1 空运行态：七类全 0，不报错
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal: + actual - expected [ 
+    变异：没有条目时不是 null（字段整个消失）
+MUTATION 13 ✓ 红：A4 队列只清 done：delete 移出内存，落盘后文件里也没了（A5 数字跟着变）
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: 2 !== 1 
+    变异：delete 没把记录移出内存/落盘
+MUTATION 14 ✓ 红：A1 盘点七类存储：条数与字节逐类对得上，缺目录按 0 报
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: + actual - expected + null 
+    变异：除 cases 外的六类时刻恒 null（cases 的老断言仍绿）
+MUTATION 15 ✓ 红：A1 盘点七类存储：条数与字节逐类对得上，缺目录按 0 报
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: + actual - expected + null 
+    变异：queue.newest_at 恒 null（oldest 的老断言仍绿）
+MUTATION 16 ✓ 红：A4 队列只清 done：delete 移出内存，落盘后文件里也没了（A5 数字跟着变）
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal: + actual - expected [ 
+    变异：delete 顺手改了幸存记录的字段（整对象比对才会红）
+MUTATION 17 ✓ 红：鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错用户名 401，正文与四条头），正确凭据才 200
+    断言： AssertionError [ERR_ASSERTION]: 盘点 无凭据 + actual - expected + 'Basic realm="HIDS"' 
+    变异：WWW-Authenticate 少了 realm/charset 原文
+MUTATION 18 ✓ 红：鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错用户名 401，正文与四条头），正确凭据才 200
+    断言： AssertionError [ERR_ASSERTION]: 盘点 无凭据 null !== 'no-store' 
+    变异：401 少了 Cache-Control: no-store
+MUTATION 19 ✓ 红：鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错用户名 401，正文与四条头），正确凭据才 200
+    断言： AssertionError [ERR_ASSERTION]: 盘点 无凭据 null !== 'nosniff' 
+    变异：401 少了 X-Content-Type-Options: nosniff
+MUTATION 20 ✓ 红：鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错用户名 401，正文与四条头），正确凭据才 200
+    断言： AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: 401 !== 200 
+    变异：正确凭据也被拒（比对串改错）
+MUTATION 汇总：20 条按预期红，0 条不符合预期
