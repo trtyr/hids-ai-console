@@ -414,21 +414,27 @@ test('A1 真进程：必填给空串等于缺（.env.example 五项必填就是�
 });
 
 // ================= 路由/方法边界（§3.1 没有这条组合时落到 §3.2 的 404） =================
-test('边界：/api/config 只接 GET——POST 与尾斜杠都落到 404「接口不存在」', async t => {
+test('边界：POST /api/config 自 P003-T029 起是写路由，尾斜杠仍落 404「接口不存在」', async t => {
   const port = await freePort();
   const { base } = await startReal(t, baseEnv(port, { HIDS_TRIAGE_INPUT_MODE: 'poll' }));
-  for (const [label, route, init] of [
-    ['POST /api/config', '/api/config', { method: 'POST' }],
-    ['GET /api/config/', '/api/config/', {}]
-  ]) {
-    const response = await call(base, route, init);
-    assert.equal(response.status, 404, `${label} 的状态码（§3.2：方法对不上的路径落 404）`);
-    assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8', `${label} 是 JSON 错误体`);
-    const body = await response.json();
-    assert.deepEqual(Object.keys(body).sort(), ['code', 'error'], `${label} 正文形状 {error, code}`);
-    assert.equal(body.error, '接口不存在', `${label} 的文案`);
-    assert.equal(body.code, 'caller_error', `${label} 的 code（T024：404 属调用方错误）`);
-  }
+  // 旧断言（P003-T025）：「POST /api/config 也回 404」——已被 P003-T029 的写配置接口取代。
+  // 现在无正文的 POST 走 readJSON：正文不是 JSON 是调用方传错，回 400 caller_error，不再是 404。
+  const written = await call(base, '/api/config', { method: 'POST' });
+  assert.equal(written.status, 400, 'POST /api/config 已是写路由，缺正文属调用方传错');
+  assert.equal(written.headers.get('content-type'), 'application/json; charset=utf-8', 'POST /api/config 是 JSON 错误体');
+  const rejected = await written.json();
+  assert.deepEqual(Object.keys(rejected).sort(), ['code', 'error'], 'POST /api/config 正文形状 {error, code}');
+  assert.equal(rejected.code, 'caller_error', 'POST /api/config 的 code（正文不是 JSON 属调用方错误）');
+
+  // 尾斜杠不匹配任何路由：仍落到 §3.2 的 404「接口不存在」。
+  const trailing = await call(base, '/api/config/', {});
+  assert.equal(trailing.status, 404, 'GET /api/config/ 的状态码（§3.2：路径对不上的落 404）');
+  assert.equal(trailing.headers.get('content-type'), 'application/json; charset=utf-8', 'GET /api/config/ 是 JSON 错误体');
+  const body = await trailing.json();
+  assert.deepEqual(Object.keys(body).sort(), ['code', 'error'], 'GET /api/config/ 正文形状 {error, code}');
+  assert.equal(body.error, '接口不存在', 'GET /api/config/ 的文案');
+  assert.equal(body.code, 'caller_error', 'GET /api/config/ 的 code（T024：404 属调用方错误）');
+
   // 无参数、忽略查询串：仍是同一条路由
   assert.equal((await call(base, '/api/config?debug=1')).status, 200, 'GET /api/config 带查询串照旧 200');
 });
