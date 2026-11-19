@@ -221,11 +221,11 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 ### 3.5 生效配置（`GET /api/config`，P003-T025）
 
-**是什么**：一处能看进程实际生效的配置——不用登机器翻环境变量。实现只有一行路由（`server.js:612`），响应体就是 `configSummary()`（`server.js:987`）的返回值；OpenAPI 契约见 `openapi.yaml` 的 `getConfig`。
+**是什么**：一处能看进程实际生效的配置——不用登机器翻环境变量。实现只有一行路由（`server.js:612`），响应体就是 `configSummary()`（`server.js:1009`）的返回值；OpenAPI 契约见 `openapi.yaml` 的 `getConfig`。
 
 **请求**：`GET /api/config`，无参数、无正文。和其它业务路由一样过 Basic 认证闸门（§4）：启用认证时没凭据回 401 纯文本。
 
-**响应**：`200`，`Cache-Control: no-store`，JSON 正文八键恒在（`server.js:987-998`）：
+**响应**：`200`，`Cache-Control: no-store`，JSON 正文八键恒在（`server.js:1009-1035`）：
 
 | 字段 | 类型 | 取值 | 说明 |
 | --- | --- | --- | --- |
