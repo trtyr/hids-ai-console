@@ -28,11 +28,13 @@ T032_DEBUG=1 node evidence/test/P003-T032/probe-a2-pause.mjs   # 失败时加它
 
 探针自己清理运行态：起真进程会往本树 `.data/` 写 `triage-monitor.json` / `trace-boards/` 等，探针退出时只删「本次新出现的」文件（`harness.mjs` 的 `snapshotData`/`restoreData`），跑完 `git status --short` 只有本卡新增的 `evidence/` 文件。
 
-**2026-11-19 14:22 实测**：`bash evidence/test/P003-T032/run-all.sh` → A1/A2/A3 三条 `ALL GREEN`，退出码 0，总耗时 62s。同树 `npm test` → `tests 198 / pass 198 / fail 0`，退出码 0（`duration_ms 717.7`），产品代码零改动的回归确认。
+**2026-11-19 14:22 实测**：`bash evidence/test/P003-T032/run-all.sh` → A1/A2/A3 三条 `ALL GREEN`，退出码 0，总耗时 62s。
+
+**2026-11-19 23:2x 复跑（按审计意见改证后）**：`timeout 240 bash evidence/test/P003-T032/run-all.sh` → A1/A2/A3 三条 `ALL GREEN`，**64 条 PASS（34 / 19 / 11）、0 FAIL、退出码 0、real 1m1.632s**；同轮变异：`trace-board.js:456` 的 `strength: 0.3` 改 `0.9` → A3 恰红 1 条（新加的 `strength=0.3` 守卫），`git checkout -- trace-board.js` 还原后 `git diff` 无产品文件改动。同轮 `timeout 120 npm test` → `tests 198 / pass 198 / fail 0`，退出码 0（`duration_ms 704.6`）。
 
 ## §A1 · 401 全链（真进程 + 替身牧云）
 
-命令：`node evidence/test/P003-T032/probe-a1-401.mjs` → 退出码 0，33 条 PASS。
+命令：`node evidence/test/P003-T032/probe-a1-401.mjs` → 退出码 0，**34 条 PASS**（2026-11-19 23:2x 本树复跑实测）。
 
 | 断言 | 实测 |
 | --- | --- |
@@ -47,11 +49,11 @@ T032_DEBUG=1 node evidence/test/P003-T032/probe-a2-pause.mjs   # 失败时加它
 | 正确凭据时上游**真被调用** | `/rpc` 11 → 22 |
 | `/api/config` 同闸：无凭据 401 / 有凭据 200 | 401 / 200 |
 
-口径来源：`docs/modules/http-api.md` §4（401 四条头与纯文本正文）；`server.js:58-65`（`hasAccess`）、`server.js:66-72`（`requireAccess`）。
+口径来源：`docs/modules/http-api.md` §4（401 四条头与纯文本正文）；`server.js:413`（`hasAccess`）、`server.js:421`（`requireAccess`）。
 
 ## §A2 · 暂停研判（真进程 poll 模式 + 替身牧云 + 替身模型）
 
-命令：`node evidence/test/P003-T032/probe-a2-pause.mjs` → 退出码 0，18 条 PASS。
+命令：`node evidence/test/P003-T032/probe-a2-pause.mjs` → 退出码 0，**19 条 PASS**（2026-11-19 23:2x 本树复跑实测）。
 
 | 断言 | 实测 |
 | --- | --- |
@@ -75,7 +77,7 @@ T032_DEBUG=1 node evidence/test/P003-T032/probe-a2-pause.mjs   # 失败时加它
 
 ## §A3 · 溯源白板建边（真进程 + 替身牧云真实形状记录）
 
-命令：`node evidence/test/P003-T032/probe-a3-trace.mjs` → 退出码 0，11 条 PASS。
+命令：`node evidence/test/P003-T032/probe-a3-trace.mjs` → 退出码 0，**11 条 PASS**（2026-11-19 23:2x 本树复跑实测；含审计要求补的 `strength=0.3` 守卫）。
 
 替身交出的记录形状照现场那份 jsp 恶意文件事件（`host_view.host_ip`、`file_type=jsp_webshell`、`file_path=/dev/shm/detector_tmp/jspxwebshell/...`、`process_name=cava`、`detect_source=jspxwebshell`），**另加一条对端公网地址 `source_ip=203.0.113.77`**——现场那份事件没有 `source_ip` 字段，这个地址是替身构造的（TEST-NET-3 文档段，形状与公网 IPv4 一致，不是现场观测值）。
 
@@ -90,9 +92,10 @@ T032_DEBUG=1 node evidence/test/P003-T032/probe-a2-pause.mjs   # 失败时加它
 | 边带原始证据引用 | `evidence_id=cw:1` |
 | 落盘 `edge.by=program`（代码按同一条记录的来源/主机字段推出来的，不是模型自报） | `program` |
 | 两端各一条证据引用 | `["cw:1","cw:1"]` |
+| **program 边强度**（`docs/modules/trace-board.md` R-TRACE-05） | `strength=0.3` |
 | 白板结论含对端地址 | 「…同页带出对端 203.0.113.77，已按 program 线索建边…」 |
 
-口径来源：`trace-board.js:453-474`（program 边：同一条记录里 `source_ip` 非私网 + `host_ip` 有效）、`trace-board.js:100-124`（`presentBoard` 的 links 方向：从更晚的一端指向更早的原因，同一时刻按离告警远近）。
+口径来源：`trace-board.js:453-474`（program 边：同一条记录里 `source_ip` 非私网 + `host_ip` 有效；`strength: 0.3`）、`docs/modules/trace-board.md:352`（R-TRACE-05）、`trace-board.js:100-124`（`presentBoard` 的 links 方向：从更晚的一端指向更早的原因，同一时刻按离告警远近）。
 
 ## §变异验红（断言不是摆设）
 
@@ -105,30 +108,35 @@ T032_DEBUG=1 node evidence/test/P003-T032/probe-a2-pause.mjs   # 失败时加它
 | M2' | **只去掉其中一处**守卫（`poll()` 首行 或 取数后的二次判定） | **仍全绿**——两道守卫互为兜底，单独去掉可观测行为不变。记在这里：这是产品本来的双保险，不是探针不灵 |
 | M3 | `triage-monitor.js:200` 恢复时不重置游标 | A2 红 3 条：暂停期积压被补跑（`malware:21` 变 `running`），连带结论走了兜底回包 |
 | M4 | `trace-board.js:453` program 边条件改成 `if (false)` | A3 红 5 条：`links` 空、`rel`/`evidence_id`/`edge.by` 全失配 |
+| M5 | `trace-board.js:456` `strength: 0.3` → `0.9` | A3 红 1 条：`建边：program 边 strength=0.3（R-TRACE-05）` 实测 0.9（23:2x 亲手复现；补这条守卫前此处全绿） |
 
-## §A4 · jsp 检测时效：**待真环境复验，本卡不真连**
+## §A4 · jsp 检测时效：牧云检出过（盘上案卷为证）；端到端四段仍未逐段量到
 
-本卡不做（卡面明确「不在本卡内真连」），只把「已知的、要复验的、怎么复验」三样钉住：
+**结论口径：窗口内未现、后续已检出，具体延迟以盘上时间戳为准。**
+
+上午测试时盯着控制台，观察窗口内没等到这条 jsp 的告警；但**事后盘上案卷证明牧云检出过它**：
+主仓 `.data/cases/cloudwalker-malware/20261119-041308-d13452de-a1fe3670/01-原始告警.txt:1` 是 `host_ip="192.168.24.21"`、`event_id=3`、`file_path="/tmp/hids-live-test.jsp"`、`detect_source="jspxwebshell"`、`file_type="jsp_webshell"`；同案卷 `02-告警字段.md:43` 的 `process_cmdline` 就是写这个文件的命令（`bash -c printf … > /tmp/hids-live-test.jsp`，`root`）。时间戳：`file_create_time=2026-11-19 12:09:06` → `event_create_time=2026-11-19 12:09:09`、`first_found_time=2026-11-19 12:09:09`，差 **3s**。
+所以「牧云没检出 jsp」不成立；能说的只有「观察窗口内未现、后续已检出」。
 
 **现场可推算的量（现场数据，本卡未复测；来源 `主仓 .data/cases/cloudwalker-malware/*/01-原始告警.txt`）**
 
-| 案卷 | `file_create_time` | `event_create_time` | 差 |
-| --- | --- | --- | --- |
-| 20261119-040910-ff70cd3d | 2026-11-19 12:09:08 | 2026-11-19 12:09:09 | 1s |
-| 20261119-041106-46300e25 | 2026-11-19 12:09:08 | 2026-11-19 12:09:09 | 1s |
-| 20261119-041308-d13452de | 2026-11-19 12:09:06 | 2026-11-19 12:09:09 | 3s |
+| 案卷 | 文件 | `file_create_time` | `event_create_time` | 差 |
+| --- | --- | --- | --- | --- |
+| 20261119-040910-ff70cd3d | `/dev/shm/detector_tmp/jspxwebshell/…/bat4iskw….jsp` | 2026-11-19 12:09:08 | 2026-11-19 12:09:09 | 1s |
+| 20261119-041106-46300e25 | `/dev/shm/detector_tmp/jspxwebshell/…/belbr8b9….jsp` | 2026-11-19 12:09:08 | 2026-11-19 12:09:09 | 1s |
+| 20261119-041308-d13452de | `/tmp/hids-live-test.jsp`（人工 live-test 写入，`event_id=3`） | 2026-11-19 12:09:06 | 2026-11-19 12:09:09 | 3s |
 
-三条都是 `detect_source=jspxwebshell`、`file_type=jsp_webshell`、主机 `192.168.24.21`。**这不是「扫描时效」的完整口径**：`file_create_time` 是文件自身的时间戳，`event_create_time` 是牧云事件时间，中间的「引擎扫到 → 落事件 → syslog 投递 → 控制台入队」四段没有一段被单独量到。
+三条都是 `detect_source=jspxwebshell`、`file_type=jsp_webshell`、主机 `192.168.24.21`。**这仍不是「扫描时效」的完整口径**：`file_create_time` 是文件自身的时间戳，`event_create_time` 是牧云事件时间，中间的「引擎扫到 → 落事件 → syslog 投递 → 控制台入队」四段没有一段被单独量到；3s 只覆盖「文件写入 → 事件落库」，**不含** syslog 投递与控制台入队，具体延迟以盘上时间戳为准。
 
 **待真环境复验项（本卡没做，谁也别说验过了）**
 
-1. 端到端时效：在 24.21 写一个测试 jsp → 记录「写入时刻 / 牧云事件 `event_create_time` / 控制台 `triage.enqueued` 时刻」三个时间戳，给出三段差。判据是现场先定口径，不是本卡定的。
+1. 端到端时效：在 24.21 写一个测试 jsp → 记录「写入时刻 / 牧云事件 `event_create_time` / 控制台 `triage.enqueued` 时刻」三个时间戳，给出三段差。**「牧云会不会检出 jsp」这一问已有盘上答案（会，见上），欠的只是中间四段的逐段耗时。** 判据是现场先定口径，不是本卡定的。
 2. `docs/modules/triage-pipeline.md` §12 里「单条告警端到端延迟」本来就标着**未测量**（同文件 `:835`、`:878`）——本卡没有推翻它，也没有补上它。
 3. 需要：能连 24.21（现不可达，见 §A5）+ 真牧云凭据 + 真模型服务。
 
-## §A5 · 隧道恢复后：两项都受阻（**本卡没做**）
+## §A5 · 隧道恢复后：两项都做不了（**本卡没做**）
 
-**群主已裁（2026-11-19 22:34）**：A5 拆 **T048 挂起**（等 T035 合并 + 隧道恢复），本卡按现状收口，A5 记 `not-satisfied`。下面两处「对不上」也已对齐：卡面「两条失败」是上午现场报告当时的口径（后来三条都 failed，后续重跑以盘上三条为准）；`/tmp/hids-live-test.jsp` 是现场测试人工写上 24.21 的，与 `/dev/shm/detector_tmp/jspxwebshell/...` 那批牧云自检样本不是同一个东西。
+**群主已裁（2026-11-19 22:34）**：A5 拆 **T048 挂起**（等 T035 合并 + 隧道恢复；2026-11-19 23:2x 补：T035 已并入 main `2aa89ff`，这条前置解除，T048 只剩主机可达），本卡按现状收口，A5 记 `not-satisfied`。下面两处「对不上」也已对齐：卡面「两条失败」是上午现场报告当时的口径（后来三条都 failed，后续重跑以盘上三条为准）；`/tmp/hids-live-test.jsp` 是现场测试人工写上 24.21 的，与 `/dev/shm/detector_tmp/jspxwebshell/...` 那批牧云自检样本不是同一个东西。
 
 ### 一、`/tmp/hids-live-test.jsp` 清理：主机不可达
 
@@ -148,27 +156,24 @@ $ for p in 22 8080 15514; do timeout 3 bash -c "echo > /dev/tcp/192.168.24.21/$p
 
 旁证：`~/.ssh/known_hosts` 里没有这个地址；`tailscale status` 的对端只有 100.64.0.1/0.3/0.4/0.7/0.8，没有 24.21 段；`ip route get 192.168.24.21` 走 `192.168.3.1 dev wlp4s0`（家宽默认路由，不是隧道）。**隧道现在没恢复，这条路走不通。**
 
-**另外一条得先说清**：卡面说 24.21 上有 `/tmp/hids-live-test.jsp`，但现场案卷里 24.21 上出现的是 `/dev/shm/detector_tmp/jspxwebshell/.../*.jsp`（检测引擎自己的样本临时目录）；
-`/tmp/hids-live-test.jsp` 只出现在**一条人工注入的 syslog**（`host_ip="10.9.9.9"`，`event_id=9001`，见 `.data/cases/cloudwalker-webshell/20261119-040850-b8d13018-73a6ead7/01-原始告警.txt`），那条记录的结论是「人工登记误报（live-test）：现场测试注入的样例」。
-**没查到**：24.21 的 `/tmp/` 下到底有没有这个文件——主机连不上，无法核实，不猜。
+**必须写清楚的一条（2026-11-19 23:2x 更正；早前版本写反了）**：24.21 上的 `/tmp/hids-live-test.jsp` **有盘上案卷，牧云检出过**——`主仓 .data/cases/cloudwalker-malware/20261119-041308-d13452de-a1fe3670/01-原始告警.txt:1` 是 `host_ip="192.168.24.21"`、`event_id=3`、`file_path="/tmp/hids-live-test.jsp"`、`detect_source="jspxwebshell"`；同案卷 `02-告警字段.md:43` 的 `process_cmdline` 就是写这个文件的命令（`bash -c printf … > /tmp/hids-live-test.jsp`，`root`）；时间戳 `file_create_time=12:09:06` → `event_create_time=12:09:09`（3s）。
+另一条 `host_ip="10.9.9.9"`、`event_id=9001` 的人工注入 syslog（`.data/cases/cloudwalker-webshell/20261119-040850-b8d13018-73a6ead7/01-原始告警.txt`，结论「人工登记误报（live-test）：现场测试注入的样例」）是**另一件事**，不能拿它推断 24.21 上没有这个文件。
+**没查到**：24.21 的 `/tmp/` 下这个文件**现在**还在不在——主机连不上，无法核实，不猜。清理范围按「文件确实被写入过、且已被检出」记进 T048。
 
-### 二、上午两条失败研判重跑：依赖未合并，且取数通道同样不可用
+### 二、上午两条失败研判重跑：依赖已解除，只剩取数通道不可用
 
-- 卡面写「依赖 T035 已合并」。实测（`Bash` 于本树）：
+- 卡面写「依赖 T035 已合并」。22:1x 时确实没合并；**23:2x 复核已并入**（`Bash` 于主仓，2026-11-19 23:2x）：
 
 ```
-$ git rev-parse --short main                              → 44eca4b
-$ git rev-parse --short task/hids-ai-console-P003-T035    → 7d44d8e
-$ git log --oneline main..task/hids-ai-console-P003-T035
-7d44d8e docs(report): P003-T035 交卷报告…
-e50460b test+docs(investigation): P003-T035 单测与伴写文档
-0230c28 feat(investigation): P003-T035 降级存疑 / 复核口径 / 必查项不撒谎
-$ git merge-base --is-ancestor task/hids-ai-console-P003-T035 main  → NOT_MERGED
+$ git -C /home/trtyr/code/hids-ai-console rev-parse --short main          → 2aa89ff
+$ git -C /home/trtyr/code/hids-ai-console log --oneline -1 main
+2aa89ff merge: P003-T035 研判结论质量——降级存疑/复核口径/缺口不撒谎（吸收 T031）
+$ git -C /home/trtyr/code/hids-ai-console merge-base --is-ancestor task/hids-ai-console-P003-T035 main  → exit 0（已并入）
 ```
 
-  T035 分支正在被另一席实现（施工中），**main 里没有它的任何提交**。本卡树 `44eca4b` 上不存在「新结论逻辑」。
+  本卡树起活 commit 是 `44eca4b`（早于这次 merge），所以本树里没有「新结论逻辑」；但**依赖面已经解除**——T048 重跑时基于合并后的 main 即可。
 
-- 就算 T035 合并，重跑也要读牧云事件（`/rpc` 在 192.168.24.21:8080）——同样不可达。所以这一项是**双阻塞**：依赖未合并 + 取数通道断。
+- 剩下唯一阻塞是取数通道：重跑要读牧云事件（`/rpc` 在 192.168.24.21:8080）——主机不可达（见上）。这一项现在是**单阻塞：主机可达**。
 
 - 上午的失败记录（**现场数据，只读**，`主仓 .data/triage-monitor.json`）：
 
@@ -184,6 +189,6 @@ $ git merge-base --is-ancestor task/hids-ai-console-P003-T035 main  → NOT_MERG
 
 - 真牧云的任何响应形状、真模型的结论质量（本卡全程替身）。
 - 192.168.24.21 上的任何文件状态（不可达）。
-- 24.21 上的 jsp 检测时效（§A4 待复验）。
-- 上午 3 条失败研判的重跑与案卷补齐（§A5 双阻塞）。
+- 24.21 上 jsp 从写入到控制台入队的逐段耗时（§A4：牧云检出过、盘上 3s 只是 `file_create` → `event_create`，四段没逐段量到）。
+- 上午 3 条失败研判的重跑与案卷补齐（§A5：T035 已并入 main `2aa89ff`，唯一前置是主机可达）。
 - 暂停/恢复在 **syslog 输入模式**下的行为（本卡验的是 poll 模式；syslog 模式的暂停是 `triage-monitor.js:309-311` 的 `skipped:'paused'`，只有单测覆盖）。

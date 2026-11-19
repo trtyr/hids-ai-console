@@ -97,6 +97,7 @@ try {
   const stored = JSON.parse(await readFile(path.join(repoRoot, '.data/trace-boards/malware:1.json'), 'utf8'));
   const rawEdge = (stored.edges || []).find(item => item.from === `ip:${PEER}` && item.to === `asset:${HOST}`);
   check(rawEdge?.by === 'program', '建边：落盘 edge.by=program（记录里的对端 + 主机字段推出来的）', String(rawEdge?.by));
+  check(rawEdge?.strength === 0.3, '建边：program 边 strength=0.3（docs/modules/trace-board.md R-TRACE-05）', String(rawEdge?.strength));
   check(rawEdge?.citations?.length >= 2 && rawEdge.citations.every(citation => citation.evidence_id),
     '建边：edge 的两端各有一条证据引用', JSON.stringify(rawEdge?.citations?.map(citation => citation.evidence_id)));
   check(stored.status === 'done' && stored.summary.includes(PEER), '建边：白板结论里有对端地址', String(stored.summary).slice(0, 120));

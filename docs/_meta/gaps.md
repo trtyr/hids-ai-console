@@ -3,7 +3,7 @@
 这份文件记录写文档时**查不清、查不动、或前后对不上**的地方。每条都带证据。
 只描述现状，不给改法——改法是评审的活。
 
-最后更新：架构篇（P001-T001）；旧运行态目录一条由 P003-T019 改写；第一节末段与第八节由 P003-T028 改写（测试基线）；第九节由 P003-T032 追加（现场验证债的当前状态）。
+最后更新：架构篇（P001-T001）；旧运行态目录一条由 P003-T019 改写；第一节末段与第八节由 P003-T028 改写（测试基线）；第九节由 P003-T032 追加（现场验证债的当前状态）；第九节第 1 条「对不上」于 2026-11-19 23:2x 按盘上案卷更正（jsp 曾被牧云检出，T048 清理前提照实）。
 
 ## 一、旧运行态目录还在盘上，不自动搬
 
@@ -134,12 +134,12 @@ P003-T032 把上一轮现场（192.168.24.21，2026-11-19 上午）留下的四�
 
 | 欠什么 | 为什么现在还不了 | 证据 |
 | --- | --- | --- |
-| jsp 检测时效（写入 → 引擎出事件 → syslog 投递 → 控制台入队的端到端差） | 需要真环境与真牧云凭据。现场案卷只能给出 `file_create_time` → `event_create_time` 的差（1s / 1s / 3s 三条），中间四段一段也没单独量到；`docs/modules/triage-pipeline.md` §12 的「单条告警端到端延迟」仍是**未测量** | `evidence/test/P003-T032/test-report.md` §A4；`docs/modules/triage-pipeline.md:835`、`:878` |
-| 24.21 上 `/tmp/hids-live-test.jsp` 清理 + 上午失败研判用新结论逻辑重跑补案卷 | 主机不可达（ping 100% 丢包、22/8080/15514 全 timeout，`known_hosts` 无此地址，路由走家宽默认网关不走隧道）；且「新结论逻辑」在 P003-T035，该分支 2026-11-19 22:1x 时 `main..task/hids-ai-console-P003-T035` 有 3 个提交、`main` 里一个都没有。已拆 **T048 挂起**，等两个条件都满足再跑 | `evidence/test/P003-T032/test-report.md` §A5 |
+| jsp 检测时效（写入 → 引擎出事件 → syslog 投递 → 控制台入队的端到端差） | **牧云检出过，别读成「没检出」**：案卷 `20261119-041308-d13452de` 的 `file_path` 就是 `/tmp/hids-live-test.jsp`、`process_cmdline` 是写它的命令，`file_create_time` 12:09:06 → `event_create_time` 12:09:09（3s）；三条 jsp 案的 `file_create → event_create` 差 1s / 1s / 3s。口径：**窗口内未现、后续已检出，具体延迟以盘上时间戳为准**。仍欠的是中间四段（引擎扫到 → 落事件 → syslog 投递 → 控制台入队）逐段耗时；`docs/modules/triage-pipeline.md` §12 的「单条告警端到端延迟」仍是**未测量** | `evidence/test/P003-T032/test-report.md` §A4；主仓 `.data/cases/cloudwalker-malware/20261119-041308-d13452de-a1fe3670/01-原始告警.txt:1`；`docs/modules/triage-pipeline.md:835`、`:878` |
+| 24.21 上 `/tmp/hids-live-test.jsp` 清理 + 上午失败研判用新结论逻辑重跑补案卷 | 主机不可达（ping 100% 丢包、22/8080/15514 全 timeout，`known_hosts` 无此地址，路由走家宽默认网关不走隧道）；「新结论逻辑」已在 P003-T035 并 **`main` 于 2026-11-19 23:05 并入（`2aa89ff`，`git merge-base --is-ancestor` exit 0）**，依赖面解除。已拆 **T048 挂起**，**唯一前置＝主机可达** | `evidence/test/P003-T032/test-report.md` §A5 |
 
-**两处前后对不上（只记现状；2026-11-19 22:34 群主已对齐口径，见每条末句）**
+**两处前后对不上（只记现状；2026-11-19 22:34 群主已对齐口径，23:2x 按盘上案卷更正第 1 条）**
 
-1. 卡面说 24.21 上有 `/tmp/hids-live-test.jsp`；现场案卷里 24.21 出现的是 `/dev/shm/detector_tmp/jspxwebshell/.../*.jsp`，而 `/tmp/hids-live-test.jsp` 只出现在一条人工注入的 syslog（`host_ip="10.9.9.9"`、`event_id=9001`），那条的结论是「人工登记误报（live-test）」。24.21 的 `/tmp/` 下到底有没有这个文件，主机连不上，**查不到**。群主口径：那个文件是现场测试人工写上 24.21 的，与 `/dev/shm` 那批牧云自检样本不是同一个东西；清理与核实一并进 T048。
+1. 卡面说 24.21 上有 `/tmp/hids-live-test.jsp`；**盘上确实有，而且牧云检出过**——案卷 `20261119-041308-d13452de`（`host_ip="192.168.24.21"`、`event_id=3`、`file_path="/tmp/hids-live-test.jsp"`、`detect_source="jspxwebshell"`，`02-告警字段.md` 的 `process_cmdline` 是写这个文件的 `bash -c printf … > /tmp/hids-live-test.jsp` 命令），`file_create_time` 12:09:06 → `event_create_time` 12:09:09（3s）；`/dev/shm/detector_tmp/jspxwebshell/.../*.jsp` 是另两条牧云自检样本。另一条 `host_ip="10.9.9.9"`、`event_id=9001` 的人工注入 syslog 是另一件事，别拿它推断 24.21 上没有该文件。那个文件**现在**还在不在：主机连不上，**查不到**。清理与核实一并进 T048（按「确实被写入过、且已被检出」核）。
 2. 卡面说「上午两条失败研判」；`triage-monitor.json` 里是 3 条 failed，其中「模型未在调查轮数内给出有效 JSON 结论」的是 2 条、「模型没有返回可用消息」的是 1 条。群主口径：「两条」是上午现场报告当时的口径（当时 2 failed + 1 还在跑），后来三条都落到 failed；**后续重跑以盘上三条为准**（进 T048）。
 
 **顺带看到的行号漂移（不在 P003-T032 scope，未改）**：`docs/modules/triage-pipeline.md` 里 `setEnabled` 引 `triage-monitor.js:153`，当前 `setEnabled` 在 `triage-monitor.js:197`；同段 `poll()` 引 `:189`，当前在 `:240`。属于 P003-T023 之后新增代码造成的漂移。

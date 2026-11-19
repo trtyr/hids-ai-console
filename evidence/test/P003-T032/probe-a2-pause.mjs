@@ -91,7 +91,9 @@ try {
 
   await sleep(INTERVAL + 1500); // 让至少一个轮询周期过去
   const duringPause = await summary();
-  check(duringPause.last_poll_at === polledAtBefore, '暂停期间：轮询没跑（last_poll_at 未前进）',
+  // polledAtBefore 为空（首轮轮询没成）时这条不能空转：null === null 也 PASS 等于没验。
+  check(Boolean(polledAtBefore) && duringPause.last_poll_at === polledAtBefore,
+    '暂停期间：轮询没跑（last_poll_at 未前进）',
     `${polledAtBefore} → ${duringPause.last_poll_at}`);
   check(duringPause.counts.queued === 0 && duringPause.counts.running === 0 && duringPause.counts.done === 0,
     '暂停期间：队列计数全零（新告警没入队）', JSON.stringify(duringPause.counts));
