@@ -1,0 +1,143 @@
+# P003-T034 集成后全量重走 · 验证日志（59be2cd，2026-11-20 04:52:08 +0800）
+
+## 0 树状态
+$ git log -1 --oneline
+59be2cd merge: P003-T034 集成收口——数据根外置与 T041/T044 活数据两步合一，锚点按合并后树重取
+$ git status --short
+ M .env.example
+ M .pi-child-claim.json
+ M docs/modules/http-api.md
+ M evidence/recon/P003-T034.md
+ M evidence/test/P003-T029/probe-corrupt-and-auth.sh
+ M openapi.yaml
+ M server.js
+?? HANDOFF-continuation.md
+?? evidence/test/P003-T034/rerun-verify.txt
+
+## 1 node --check server.js
+EXIT=0
+
+## 2 根套件 npm test（串行前的第一步；单进程）
+$ npm test
+ℹ tests 228
+ℹ suites 0
+ℹ pass 228
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 762.040791
+EXIT=0
+
+## 3 evidence 套件（串行，--test-concurrency=1；含 T025 套件，跑在探针之前——两不相交）
+$ node --test --test-concurrency=1 --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js
+ℹ tests 292
+ℹ suites 0
+ℹ pass 291
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 1
+ℹ duration_ms 10944.634193
+EXIT=0（1 todo = P003-T013 的 who 101 字待定口径，非红）
+
+## 4 探针一（串行，套件跑完之后）
+$ bash evidence/test/P003-T029/probe-config-write.sh
+PASS 起进程后 GET 报环境变量的值
+PASS 写之前 /api/status 连不上（502）
+PASS POST /api/config → 200
+PASS 响应 updated 逐键（正文顺序）
+PASS 写成功的正文不含 Token 原文
+PASS 不重启进程，GET /api/config 立刻报新值
+PASS 写完之后 /api/status 立刻连上新地址（200）
+PASS 牧云调用用的是写进去的新 Token（stub 收到 Cookie）
+PASS 覆盖层文件已落盘
+PASS 覆盖层权限 0600
+PASS 覆盖层只存改过的三个键
+PASS config.updated 只带键名
+PASS 日志里没有 Token 原文
+PASS 重启后改过的值仍生效
+PASS 没改过的键照旧读环境变量（模型三项仍齐）
+PASS 监听端口仍是环境变量那个
+PASS GET 正文不含 Token 原文
+PASS 重启后牧云仍指向覆盖层里的新地址
+PASS 删掉覆盖层后回到环境变量
+EXIT=0
+
+## 5 探针二（串行）
+$ bash evidence/test/P003-T029/probe-corrupt-and-auth.sh
+PASS 覆盖层坏了：进程照常起、生效值回到环境变量
+PASS 覆盖层坏了：日志有 config.load_failed
+PASS config.load_failed 恰一条
+PASS 坏覆盖层之后仍能写（200）
+PASS 写后 GET 报新值
+PASS 配口令未配用户名：admin 凭据能写
+PASS 配口令未配用户名：别的用户名 401
+PASS 错口令 401
+PASS 被拒的写没改生效值
+PASS 两次被拒的写没新增 config.updated（1 → 1）
+PASS 成功写恰一条 config.updated
+PASS config.updated 只带键名
+EXIT=0（本轮修了脚本里一条跟 T042 model.roles 新形状打架的旧断言，见报告 §七）
+
+## 6 A1–A4 / A5 状态实测（全部在本工作树跑）
+
+### A3 仓库内零运行时写入
+$ ls -d .data
+ls: cannot access '.data': No such file or directory
+$ find . -maxdepth 1 -name .data
+（无输出 = 不存在）
+
+### A2 真实全局根未被本次运行触碰（基线：本次起跑时刻 04:31，根目录 mtime 02:16）
+$ stat -c %y ~/.local/share/hids-ai-console
+2026-11-20 02:16:46.583024758 +0800 /home/trtyr/.local/share/hids-ai-console
+$ find ~/.local/share/hids-ai-console -newermt "2026-11-20 04:31:00" | wc -l
+0
+（0 = 本轮所有套件与探针一个文件都没写真实全局根）
+
+### A4 旧位不自动迁移：旧目录仍在盘上，本进程不读不写
+$ ls -d /home/trtyr/code/backend/.data
+/home/trtyr/code/backend/.data
+$ stat -c %y /home/trtyr/code/backend/.data
+2026-11-19 12:15:20.084423572 +0800 /home/trtyr/code/backend/.data
+$ ls -d .data backend/.data
+ls: cannot access '.data': No such file or directory
+ls: cannot access 'backend/.data': No such file or directory
+
+### A5 docs 里「运行态落仓内 .data/」表述已清（本卡 scope 的 7 份文档 + 实现注释）
+$ grep -rn "仓内 .data\\|仓库 .data\\|缺省 .data\\|落仓内" docs README.md openapi.yaml .env.example server.js config-store.js prompt-store.js update-store.js wiki-store.js
+docs/architecture.md:394:**旧位不自动搬**（P003-T034 A4）：P003-T019 之前的 `<上一级>/backend/.data/` 与 P003-T019 的仓内 `.data/` 里的既有数据，
+server.js:1295:// 旧位不自动搬（P003-T034 A4）：仓内 `.data/` 与更早的 `<上一级>/backend/.data/` 里的既有数据进程不读也不写，
+prompt-store.js:128:// 没设就是 `~/.local/share/hids-ai-console`；定义在 config-store.js 的 dataRoot()）——**不是仓内 `.data/`**，
+（只剩 A4「旧位不自动搬」的历史说明三处：architecture.md:394、server.js:1295、prompt-store.js:128——都是「不是仓内 .data」的否定句）
+
+## 7 锚点全量核验（集成后树，--pre 取合并前 main 侧父提交 38732a0）
+$ node evidence/test/P003-T034/anchor-audit.mjs --pre 38732a0
+# 文档锚点全量核验 · 59be2cd · 扫描 19 份文档
+# 锚点 3976 处：PASS=3976  MOVED=0  UNVERIFIED=0  其他=0
+
+EXIT=0
+
+## 8 交接条（HANDOFF-continuation.md）说的 4 条红：实测不复现（逐条取证）
+
+交接条原文点名 evidence/test/P003-T013/acceptance.test.js，实测该文件里没有任何 HIDS_DATA_DIR 断言：
+$ grep -n "HIDS_DATA_DIR\\|local/share\\|全局根" evidence/test/P003-T013/acceptance.test.js
+（无输出）
+
+按测试名在全量 evidence 串行日志里逐条对：
+✔ A1 真进程不设 HIDS_DATA_DIR：覆盖层落 <HOME>/.local/share/hids-ai-console/，仓库内零写入
+✔ A2 HIDS_DATA_DIR 注入：落点全在注入根、HOME 全局根不被创建、重启后改过的值仍生效
+✔ A2/A5 HIDS_WIKI_DIR 注入：判据历史落判据库同级 .data/wiki-history，不落数据根
+✔ A2/A5 提示词覆盖文件默认落数据根；HIDS_PROMPT_STORE_FILE 仍优先
+
+交接条点名的那 4 条测试（在 evidence/test/P003-T034/acceptance.tester.test.js:161/208/266/320）在本树全绿；它们的语义与 T041 一致：
+  · A1 只断言「覆盖层落 fake HOME 的全局根」；A2 注入 HIDS_DATA_DIR 时断言 fake HOME 不被创建——T041 的「首启种全局根」只在根就是全局根时发生，两者不冲突；
+  · HIDS_WIKI_DIR 注入时历史落判据库同级 .data/wiki-history/（wiki-store.js 的 builtin 判定与注入判定分开，见 data-root.test.js 回归钉）；
+  · 提示词覆盖文件缺省落 <数据根>/prompt-overrides.json（prompt-store.js:17）。
+
+交接条的验收口径「node --test evidence 全量 287/0/1todo」在本树不成立，原因二（均与 T034 无关，见报告未决）：
+  1) node --test evidence（目录形式）会把 evidence 下 28 个 .mjs 探针当测试跑，其中一个挂死（实测 868s 后整轮被 timeout 杀掉）——门禁命令必须用 .test.js 全等 glob；
+  2) evidence/p003-t012-verify/acceptance.test.js 有 2 条历史红（required_evidence 形状、去重语义），不在本卡 scope、与数据根无关。
+
+$ node --test evidence/test/P003-T013/acceptance.test.js  ⟶ 14 pass / 0 fail / 1 todo（红的是 todo 那条，非 fail）
+$ node --test evidence/p003-t012-verify/acceptance.test.js ⟶ 14 pass / 2 fail（历史红，非本卡 scope）

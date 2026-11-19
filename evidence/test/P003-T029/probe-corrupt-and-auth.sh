@@ -42,7 +42,7 @@ printf '{ 这不是 JSON' > "$OVERRIDE"
 rm -f "$LOG"
 start_app || exit 1
 body=$(curl --max-time 5 --connect-timeout 2 -s "$BASE/api/config")
-echo "$body" | grep -q '"model":{"configured":true,"name":"env-model"}' \
+echo "$body" | grep -q '"model":{"configured":true,"name":"env-model"' \
   && ok "覆盖层坏了：进程照常起、生效值回到环境变量" || bad "覆盖层坏了：GET 不对 $body"
 grep -q '"event":"config.load_failed"' "$LOG" && ok "覆盖层坏了：日志有 config.load_failed" || bad "覆盖层坏了：没有 config.load_failed 日志"
 [ "$(grep -c '"event":"config.load_failed"' "$LOG")" = "1" ] && ok "config.load_failed 恰一条" || bad "config.load_failed 不是一条"
