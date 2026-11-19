@@ -43,7 +43,9 @@ test('new alerts enter triage once and the cursor survives restart', async t => 
   assert.equal(calls.length, 1);
 });
 
-test('resume after restart skips paused backlog and only investigates later alerts', async t => {
+// A2（P003-T036）改写了这条契约：暂停不再「跳过积压 + 清空队列 + 把游标推到点击时刻」，
+// 而是保留游标与队列，恢复后暂停期间进来的告警照常补跑（原来那套会让暂停期间的告警永久漏掉）。
+test('resume after restart keeps the cursor and the paused backlog instead of skipping it', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-control-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   let rows = [{ id: 'honeypot:1', createdAt: '2026-11-03T08:00:00.000Z' }];
@@ -55,24 +57,31 @@ test('resume after restart skips paused backlog and only investigates later aler
       verdict: { verdict: 'undetermined', summary: '待复核', claims: [] }, validation: { ok: true } }; } } };
   const monitor = new TriageMonitor(options);
   await monitor.load(); await monitor.poll();
+  const cursor = monitor.watermark;
+  assert.equal(cursor, '2026-11-03T08:00:00.000Z');
   assert.equal((await monitor.setEnabled(false)).enabled, false);
+  // 暂停期间到达两条：轮询不跑，队列也不动
   rows = [{ id: 'honeypot:2', createdAt: new Date(Date.now() - 1000).toISOString() }, ...rows];
   await monitor.poll();
   assert.equal(monitor.status('honeypot:2'), null);
   await monitor.enqueue('honeypot:manual');
   assert.equal(monitor.status('honeypot:manual').status, 'queued');
+  // 重启还是暂停：队列、游标都从盘上原样回来
   const resumed = new TriageMonitor(options);
   await resumed.load();
   assert.equal(resumed.summary().enabled, false);
+  assert.equal(resumed.watermark, cursor);
+  assert.equal(resumed.status('honeypot:manual').status, 'queued');
+  // 恢复：不删 queued、不把游标推到点击时刻；排队中的照常跑，暂停期间新增的告警下一轮轮询补上
   await resumed.setEnabled(true);
-  assert.equal(resumed.status('honeypot:2'), null);
-  assert.equal(resumed.status('honeypot:manual'), null);
-  assert.deepEqual(calls, []);
-  rows = [{ id: 'honeypot:3', createdAt: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString() }, ...rows];
+  for (let n = 0; n < 50 && resumed.status('honeypot:manual')?.status !== 'done'; n++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(resumed.status('honeypot:manual').status, 'done');
   await resumed.poll();
-  for (let n = 0; n < 50 && resumed.status('honeypot:3')?.status !== 'done'; n++) await new Promise(resolve => setTimeout(resolve, 5));
-  assert.equal(resumed.status('honeypot:3').status, 'done');
-  assert.deepEqual(calls, ['honeypot:3']);
+  for (let n = 0; n < 50 && resumed.status('honeypot:2')?.status !== 'done'; n++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(resumed.status('honeypot:2').status, 'done');
+  assert.deepEqual(calls.sort(), ['honeypot:2', 'honeypot:manual']);
   await assert.rejects(() => resumed.setEnabled('false'), /布尔值/);
 });
 
@@ -294,7 +303,8 @@ test('summary() 出结论分布、类型分布，since 只算该时刻起进入�
 
 test('syslog 模式的 summary 给出最后一条到达时刻，重启后不丢，失败投递不算', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-received-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  // 后台合并写与 teardown 抢跑：rm 撞上并发写入会 ENOTEMPTY，交给 Node 自带重试（与 integration.test.js 同一处理）
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 20 }));
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-03T08:00:00.000Z') });
   const options = { service: {}, inputMode: 'syslog', concurrency: 1,
     history: new InvestigationStore(path.join(directory, 'results')), file: path.join(directory, 'queue.json'),
@@ -335,7 +345,9 @@ test('syslog 模式的 summary 给出最后一条到达时刻，重启后不丢�
   assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
   await monitor.setEnabled(false);
   t.mock.timers.tick(5000);
-  assert.deepEqual(await monitor.acceptSyslog(line), { skipped: 'paused' });
+  // A2（P003-T036）：暂停期间不丢，报文进缓冲区等恢复回灌
+  assert.deepEqual(await monitor.acceptSyslog(line), { buffered: true, buffered_count: 1 });
+  assert.equal(monitor.summary().paused.received, 1);
   assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
 
   // 持久化：重启后仍是同一个最后到达时刻，而不是退回 null

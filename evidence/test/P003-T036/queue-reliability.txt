@@ -1,0 +1,88 @@
+{"time":"2026-11-19T14:36:21.825Z","level":"error","event":"triage.dead_letter","alert_id":"honeypot:1","attempts":10,"reason":"模型不可达"}
+✔ A1 退避曲线：每次失败翻倍、封顶 retryMaxMs，到上限判死信且不再有下次时刻 (2.835411ms)
+{"time":"2026-11-19T14:36:21.833Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:541e7eef-a6cb-44ef-aa53-dbbb72972fc4","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T14:36:21.836Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:541e7eef-a6cb-44ef-aa53-dbbb72972fc4","attempts":1,"error":"模型不可达"}
+{"time":"2026-11-19T14:36:21.842Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:541e7eef-a6cb-44ef-aa53-dbbb72972fc4","attempts":2,"error":"模型不可达"}
+{"time":"2026-11-19T14:36:21.854Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:541e7eef-a6cb-44ef-aa53-dbbb72972fc4","verdict":"uncertain","attempts":3,"duration_ms":2}
+✔ A1 瞬时故障自动重排后跑通，不再需要人工重跑 (30.69693ms)
+{"time":"2026-11-19T14:36:21.860Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:fa4dbbe9-1f0c-4320-80e7-6a4d588e019a","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T14:36:21.860Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:fa4dbbe9-1f0c-4320-80e7-6a4d588e019a","attempts":1,"error":"模型不可达"}
+{"time":"2026-11-19T14:36:21.867Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:fa4dbbe9-1f0c-4320-80e7-6a4d588e019a","attempts":2,"error":"模型不可达"}
+{"time":"2026-11-19T14:36:21.878Z","level":"error","event":"triage.dead_letter","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:fa4dbbe9-1f0c-4320-80e7-6a4d588e019a","attempts":3,"reason":"模型不可达"}
+{"time":"2026-11-19T14:36:21.878Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:fa4dbbe9-1f0c-4320-80e7-6a4d588e019a","attempts":3,"error":"模型不可达"}
+✔ A1 连续失败到上限进死信：保留原因、不再自动跑、summary 报得上 (84.212847ms)
+{"time":"2026-11-19T14:36:21.945Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1793692800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e01","verdict":"uncertain","attempts":2,"duration_ms":1}
+✔ A1 失败记录跨重启仍会重排：load + start 后逾期的那条自动回队 (2.733443ms)
+{"time":"2026-11-19T14:36:21.947Z","level":"info","event":"syslog.buffered","reason":"paused","buffered":1}
+{"time":"2026-11-19T14:36:21.947Z","level":"info","event":"syslog.buffered","reason":"paused","buffered":2}
+{"time":"2026-11-19T14:36:21.947Z","level":"info","event":"syslog.buffered","reason":"paused","buffered":3}
+{"time":"2026-11-19T14:36:21.949Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:a80780c7023b6679:1793692800:c8ab08e8-8e30-4abd-a1ef-dda739f6a7ef","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T14:36:21.949Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:e045e9c00840603e:1793692800:bff8a9c2-bef4-45be-acb8-274656723d5f","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T14:36:21.949Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:0f8ea24b7a9f489f:1793692800:0c563eb1-103e-4788-97b8-9b2afecceac5","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T14:36:21.951Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:a80780c7023b6679:1793692800:c8ab08e8-8e30-4abd-a1ef-dda739f6a7ef","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-19T14:36:21.952Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:e045e9c00840603e:1793692800:bff8a9c2-bef4-45be-acb8-274656723d5f","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T14:36:21.953Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:0f8ea24b7a9f489f:1793692800:0c563eb1-103e-4788-97b8-9b2afecceac5","verdict":"uncertain","attempts":1,"duration_ms":1}
+✔ A2 暂停期间报文进缓冲，重启仍在，恢复先回灌（一条不丢） (9.937557ms)
+{"time":"2026-11-19T14:36:21.957Z","level":"info","event":"syslog.buffered","reason":"paused","buffered":1}
+{"time":"2026-11-19T14:36:21.957Z","level":"info","event":"syslog.buffered","reason":"paused","buffered":2}
+{"time":"2026-11-19T14:36:21.957Z","level":"warn","event":"syslog.skipped","reason":"paused_buffer_full","limit":2}
+✔ A2 暂停缓冲有上限：超出的丢弃要计数，不静默涨内存 (1.475953ms)
+{"time":"2026-11-19T14:36:21.960Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"poll"}
+{"time":"2026-11-19T14:36:21.960Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":"uncertain","attempts":1,"duration_ms":0}
+✔ A2 暂停期间新增的告警恢复后不漏：轮询游标留在原处 (4.833636ms)
+{"time":"2026-11-19T14:36:21.963Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:38bceb8392db3d0c:1793692800:aeb42512-7219-4609-8732-fed5e39f908b","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T14:36:21.963Z","level":"info","event":"triage.cancelled","alert_id":"syslog:honeypot:38bceb8392db3d0c:1793692800:aeb42512-7219-4609-8732-fed5e39f908b"}
+{"time":"2026-11-19T14:36:21.963Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:38bceb8392db3d0c:1793692800:d749e976-8dd2-4d80-9981-dcf895b8a73b","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+✔ A3 取消排队记录时同步失效 dedupe：同一报文再来不会落在已删记录上 (22.045707ms)
+{"time":"2026-11-19T14:36:21.986Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:ed15baa71b41ab78:1793692800:97bc139d-fda3-4144-9773-1f8e9182aff8","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+✔ A3/A9 取消的边界：没有记录 404、已在研判 409、其余状态不被顺手删掉 (2.068136ms)
+{"time":"2026-11-19T14:36:21.987Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":2}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":3}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":4}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":5}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":6}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":7}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":8}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":9}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":10}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":11}
+{"time":"2026-11-19T14:36:21.988Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":12}
+{"time":"2026-11-19T14:36:21.989Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":13}
+{"time":"2026-11-19T14:36:21.989Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":14}
+{"time":"2026-11-19T14:36:21.989Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":15}
+{"time":"2026-11-19T14:36:21.989Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":16}
+{"time":"2026-11-19T14:36:21.989Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":17}
+{"time":"2026-11-19T14:36:21.989Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":18}
+{"time":"2026-11-19T14:36:21.989Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":19}
+{"time":"2026-11-19T14:36:21.989Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":20}
+{"time":"2026-11-19T14:36:21.989Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:32a36a8ca9fcdaa1:1793692800:bc690f79-d08a-4d71-9bb2-360bd31f04b7","repeat_count":21}
+✔ A4 重复投递不再每次全量重存：20 条重复 → 快照与研判记录重存都在合并写窗口里合并 (3.211506ms)
+✔ A4 写盘窗口可查：缺省 1 次/秒（峰值 ≤1 次/秒量级） (0.179352ms)
+✔ A4 在飞写期间标脏不丢：写完补排下一次合并写，脏状态最终落盘 (47.522499ms)
+{"time":"2026-11-19T14:36:22.040Z","level":"info","event":"triage.archived","count":1,"total":1,"file":"/tmp/hids-t036-9TmYFh/queue.json.archive.jsonl"}
+✔ A5 过期 done 记录归档出内存 Map：写进 .archive.jsonl、失效 dedupe、全表不再背着它 (3.184127ms)
+✔ A6 summary 报队列深度、最老等待时长、失败原因分布 (0.414786ms)
+✔ A7 启动回补用结果键/匹配键取研判记录，不再拿 syslog 队列键去撞文件键 (1.870695ms)
+✔ A7 三个键都取不到时退回队列键，读不到也不炸 (1.374683ms)
+{"time":"2026-11-19T14:36:22.045Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72d258d76b718f2e:1793692800:1abd78a2-767c-4532-9e79-f2b788dafc2f","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T14:36:22.045Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:72d258d76b718f2e:1793692800:1abd78a2-767c-4532-9e79-f2b788dafc2f","repeat_count":2}
+{"time":"2026-11-19T14:36:22.046Z","level":"warn","event":"syslog.parse_failed","error":"不是合法的 RFC5424 syslog 行","bytes":14}
+{"time":"2026-11-19T14:36:22.046Z","level":"warn","event":"syslog.skipped","reason":"no_agent_for_msgid","msgid":"cloudwalker-unknown-msgid"}
+✔ A8 收包计数进 summary：收入 / 新记录 / 合并 / 拒绝 各归各的 (1.636099ms)
+{"time":"2026-11-19T14:36:22.047Z","level":"error","event":"triage.persist_failed","file":"/tmp/hids-t036-XZ6vKE/queue.json","error":"ENOENT: no such file or directory, open '/tmp/hids-t036-XZ6vKE/queue.json.44183364-2889-419a-bed3-0eabca4bc49b.tmp'"}
+{"time":"2026-11-19T14:36:22.047Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:e8c2c32a6202877d:1793692800:5bdca1a5-135c-47f3-95a1-a8030d9a3554","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T14:36:22.061Z","level":"info","event":"triage.cancelled","alert_id":"syslog:honeypot:e8c2c32a6202877d:1793692800:5bdca1a5-135c-47f3-95a1-a8030d9a3554"}
+{"time":"2026-11-19T14:36:22.063Z","level":"info","event":"http.request","method":"DELETE","path":"/api/agent/triage/syslog%3Ahoneypot%3Ae8c2c32a6202877d%3A1793692800%3A5bdca1a5-135c-47f3-95a1-a8030d9a3554","status":200,"duration_ms":3}
+{"time":"2026-11-19T14:36:22.071Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Ae8c2c32a6202877d%3A1793692800%3A5bdca1a5-135c-47f3-95a1-a8030d9a3554","status":200,"duration_ms":0}
+{"time":"2026-11-19T14:36:22.073Z","level":"info","event":"http.request","method":"DELETE","path":"/api/agent/triage/syslog%3Ahoneypot%3Ae8c2c32a6202877d%3A1793692800%3A5bdca1a5-135c-47f3-95a1-a8030d9a3554","status":404,"duration_ms":1}
+{"time":"2026-11-19T14:36:22.074Z","level":"info","event":"http.request","method":"DELETE","path":"/api/agent/triage/%20","status":400,"duration_ms":0}
+✔ A9 DELETE /api/agent/triage/{alertId}：取消排队案件，之后读状态是 not_queued (28.728666ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 355.061068
