@@ -6,7 +6,7 @@ const fields = [
   ['platform_risky', ['risky']], ['handling_state', ['state']],
   ['observed_at', ['created_at', 'timestamp', 'start_time', 'shell_started_at', 'last_seen_at']],
   ['last_seen_at', ['last_seen_at', 'updated_at', 'end_time', 'shell_finished_at']],
-  ['host_id', ['host_view.host_id', 'host_view.id', 'host_id', 'id']],
+  ['host_id', ['host_view.host_id', 'host_view.id', 'host_id']],
   ['host_name', ['host_view.host_name', 'host_name']],
   ['host_ip', ['host_view.host_ip', 'host_ip', 'ip']],
   ['host_kernel_version', ['host_view.host_kernel_version', 'host_kernel_version']],
@@ -46,6 +46,9 @@ const nestedFields = {
   commands: ['seq', 'cwd', 'cmdline', 'started_at', 'finished_at', 'exit_code', 'label']
 };
 
+// 主机资产视图里裸 id 就是主机 ID；事件视图里裸 id 是事件 ID（见 host_id 字段表与 A4）。
+const hostAssetTools = new Set(['list_host_assets', 'get_host_info_detail']);
+
 const pointer = parts => '/' + parts.map(part => String(part).replace(/~/g, '~0').replace(/\//g, '~1')).join('/');
 function select(root, dotted, prefix) {
   const keys = dotted.split('.');
@@ -60,16 +63,22 @@ function select(root, dotted, prefix) {
   if (typeof value === 'number' && value < -60000000000) return null; // 牧云零时间哨兵
   return { value, pointer: pointer([...prefix, ...keys]) };
 }
-function itemFacts(item, prefix) {
+function itemFacts(item, prefix, bareHostId = false) {
   const out = {};
   for (const [friendly, options] of fields) {
     const match = options.map(name => select(item, name, prefix)).find(Boolean);
     if (match) out[friendly] = match;
   }
+  // 事件行的裸 id 是事件 ID，不是主机 ID：拿它当 host_id 会让必查项查到另一台机器，
+  // 再把空页报成「已查当前页但未返回记录」。只有主机资产视图才允许裸 id 当 host_id。
+  if (bareHostId && !out.host_id) {
+    const bare = select(item, 'id', prefix);
+    if (bare) out.host_id = bare;
+  }
   return out;
 }
-function assetFacts(item, prefix, kind) {
-  const facts = itemFacts(item, prefix);
+function assetFacts(item, prefix, kind, bareHostId = kind === 'host') {
+  const facts = itemFacts(item, prefix, bareHostId);
   if (kind === 'process') {
     if (facts.event_id) { facts.asset_id = facts.event_id; delete facts.event_id; }
     delete facts.event_name;
@@ -153,6 +162,7 @@ function nested(item, prefix) {
 }
 
 export function projectEvidence(tool, result) {
+  const bareHostId = hostAssetTools.has(tool);
   if (tool === 'get_internal_ip_define' && Array.isArray(result?.net_address)) {
     return { kind: 'internal_network_definition', tool, ranges: result.net_address.map((value, index) => ({
       value, pointer: pointer(['net_address', index]) })) };
@@ -214,7 +224,7 @@ export function projectEvidence(tool, result) {
       counts_on_returned_page: Object.fromEntries(Object.entries(counts).filter(([, value]) => Object.keys(value).length)),
       items: rows.slice(0, 5).map((row, index) => {
         const related = nested(row, [listKey, index]);
-        return { facts: assetFacts(row, [listKey, index], kind),
+        return { facts: assetFacts(row, [listKey, index], kind, bareHostId),
           ...(Object.keys(related).length ? { related_sequences: related } : {}) };
       })
     };
@@ -225,7 +235,7 @@ export function projectEvidence(tool, result) {
       : result.data && typeof result.data === 'object' && !Array.isArray(result.data) ? 'data' : null;
     const detail = detailKey ? result[detailKey] : result;
     const prefix = detailKey ? [detailKey] : [];
-    return { kind: 'detail', tool, facts: itemFacts(detail, prefix), related_sequences: nested(detail, prefix) };
+    return { kind: 'detail', tool, facts: itemFacts(detail, prefix, bareHostId), related_sequences: nested(detail, prefix) };
   }
   return { kind: 'scalar', tool, value: result };
 }

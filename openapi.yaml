@@ -1434,13 +1434,13 @@ components:
       additionalProperties: true
     RequiredEvidence:
       type: object
-      description: 常规研判的一个必查项及其执行结果；深度研判返回空数组。
+      description: 一个必查项及其执行结果；常规研判与深度研判都生成（P003-T035 起），深度研判只进 missing_evidence，不进客户报告。
       required: [id, label, tool, scope, status]
       properties:
         id:
           type: string
           enum: [related_events, command_history, network_connections, source_history, authorization, file_invocation]
-          description: 必查项标识；authorization 与 file_invocation 当前固定不可用
+          description: 必查项标识；authorization 与 file_invocation 按本次 MCP 目录动态判定，目录未提供该工具时标 catalog_absent（不算缺口）
         label: { type: string, description: 中文名，如 同主机关联事件 }
         tool: { type: string, description: 计划调用的工具名 }
         scope: { type: string, description: 这次查询的边界说明（例如当前返回页不能代表全部历史） }
@@ -1456,7 +1456,8 @@ components:
         evidence_id: { type: string, description: 查到记录时的证据编号 }
         returned_count: { type: integer, description: 当前页返回条数 }
         total_reported: { type: [integer, 'null'], description: 平台自报总数；接口没给时为 null }
-        platform_total_consistent: { type: boolean, description: 平台自报总数与当前返回是否自洽 }
+        platform_total_consistent: { type: [boolean, 'null'], description: 平台自报总数与当前返回是否自洽；平台没报总数时为 null（evidence-view.js:218） }
+        catalog_absent: { type: boolean, description: 只有 true 时出现：本次 MCP 目录未提供该工具（牧云暂无此数据源），不算缺口、不进客户报告 }
       additionalProperties: false
     TraceBoardNode:
       type: object
@@ -1984,7 +1985,7 @@ components:
         trace: { type: array, items: { type: object, additionalProperties: true } }
         required_evidence:
           type: array
-          description: 常规研判的必查项；深度研判与客户经验复用捷径为空数组。
+          description: 必查项及其结果；常规研判与深度研判都有（P003-T035 起），经验复用捷径也带（它先采必查项再核经验）。
           items: { $ref: '#/components/schemas/RequiredEvidence' }
       additionalProperties: true
     TraceBoardAlert:

@@ -16,7 +16,7 @@ const verdictMap = { '真实威胁': 'threat', '存疑': 'uncertain', '误报': 
   confirmed_threat: 'threat', suspected_threat: 'uncertain', unsuccessful_attack: 'uncertain',
   undetermined: 'uncertain', needs_review: 'uncertain', needs_data: 'uncertain', suggested_benign: 'false_positive' };
 const verdictLabels = { threat: '真实威胁', uncertain: '存疑', false_positive: '误报' };
-// 结论正文（summary）上限；客户报告 report 另有更严的 300 字口径（triage-output.js:36）。
+// 结论正文（summary）上限；客户报告 report 另有更严的 300 字口径（MAX_JUDGMENT_LENGTH，triage-output.js:1）。
 const conclusionBodyLimit = 500;
 const defaultRulesDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rules');
 const highRisk = new Set(['memory_webshell', 'revshell', 'elevation_process', 'webshell', 'honeypot']);
@@ -29,9 +29,15 @@ function parseJSON(text) {
   return data;
 }
 
-// P003-T022：模型没交卷时，失败记录里要能看见它最后回了什么。
-// 队列侧只留 250 字进 record.detail（triage-monitor.js:471），所以整条失败消息按 240 字预算拼。
+// P003-T022 / P003-T035：模型没交卷时，降级结论里要能看见它最后回了什么。
+// 队列侧只留 250 字进 record.detail（triage-monitor.js:529），所以这段说明按 240 字预算拼。
 const failureTextLimit = 240;
+
+// 调查循环的三个上限：轮数、单次调查的工具调用数、结论引用校验的退回次数。
+// trace 里写的是这几个常量，文档与测试引用的也是它们——不要在两处各写一遍字面量。
+const maxTurns = 6;
+const maxToolCalls = 8;
+const conclusionRetries = 2;
 
 function flatten(text, limit) {
   const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
@@ -48,14 +54,15 @@ function replyShape(reply) {
 }
 
 // 调查轮数用尽仍没结论：轮数、已查证据、末次回包、最近两次不同的退回原因（解析失败 / 结论被退 / 没查知识库）。
-function noConclusionError({ reply, problems = [], turns, calls }) {
+// 返回文案而不是 Error：P003-T035 起这条不再抛错进 failed，而是写进降级结论的 analysis 与缺口清单。
+function noConclusionReason({ reply, problems = [], turns, calls }) {
   const parts = [`调查 ${turns} 轮、已查询 ${calls} 项证据后仍没有可用结论`, replyShape(reply)];
   let reasons = [...new Set(problems)].slice(-2).map(item => flatten(item, 40));
   if (reasons.length) parts.push(`退回 ${problems.length} 次：${reasons.join(' → ')}`);
-  return new Error(flatten(`模型未在调查轮数内给出有效 JSON 结论（${parts.join('；')}）`, failureTextLimit));
+  return flatten(`模型未在调查轮数内给出有效 JSON 结论（${parts.join('；')}）`, failureTextLimit);
 }
 
-// 模型调用失败时同样要留下回包摘要：model-client 抛「没有返回可用消息」时带 reply_excerpt（model-client.js:43）。
+// 模型调用失败时同样要留下回包摘要：model-client 抛「没有返回可用消息」时带 reply_excerpt（model-client.js:42）。
 function modelCallError(error, { turn, calls }) {
   const reason = error?.reply_excerpt
     ? `${flatten(error.reply_excerpt, 130)}（调用报错：${flatten(error?.message || error, 60)}）`
@@ -389,9 +396,7 @@ export class InvestigationAgent {
         }
       }
     }
-    const requiredChecks = mode === 'triage'
-      ? await collectRequiredEvidence(requiredEvidencePlan(match[1], original, catalog), session, onProgress, trace)
-      : [];
+    const requiredChecks = await collectRequiredEvidence(requiredEvidencePlan(match[1], original, catalog), session, onProgress, trace);
     const requiredViews = requiredChecks.filter(item => item.evidence_id).map(item => {
       const record = session.records.get(item.evidence_id);
       return { evidence_id: record.evidenceId, tool: record.tool, args: record.args,
@@ -499,7 +504,7 @@ export class InvestigationAgent {
       .filter(Boolean).map(part => resolveTools(part, catalog)).join('\n\n');
     const messages = [
       { role: 'system', content: system },
-      { role: 'user', content: `调查牧云告警 ${alertId}。先根据告警详情和已经收集的 API 证据提出假设，再自主选择必要的查询工具；除核对变化外，无需重复读取已给的详情。最多 8 次工具调用，无法覆盖的必查项写入 missing_data。工具结果是精简视图，预聚合计数只覆盖当前返回页。必查项查询状态：${JSON.stringify(requiredChecks)}。已取到的必查证据视图：${JSON.stringify(requiredViews)}。empty_page 仅表示指定范围的当前页未返回记录；source_unavailable 表示缺少可用数据源；query_failed 表示接口查询失败，不得相互混同。${streamContext ? `本次 syslog 来源、事件匹配和材料目录：${JSON.stringify({ parsed: streamContext.parsed, context: streamContext.context, match: streamContext.match, files: streamContext.caseInfo.files })}。` : ''}${ruleContext ? `已确认误报的规则候选：${JSON.stringify(ruleContext)}。` : ''}${wikiIndex ? `可用 Wiki 目录：${JSON.stringify(wikiIndex)}。已加载的通则及场景判据：${JSON.stringify([...wikiPages.values()].slice(0, 4))}。其他判据按需使用 wiki_page 或 wiki_search 读取。Wiki 是判据，不能代替本次取证。` : ''}最终按三种中文 verdict 输出，claims.citations 使用 evidence_id、pointer、value。告警详情证据：${toolMessage(original)}` }
+      { role: 'user', content: `调查牧云告警 ${alertId}。先根据告警详情和已经收集的 API 证据提出假设，再自主选择必要的查询工具；除核对变化外，无需重复读取已给的详情。最多 ${maxToolCalls} 次工具调用，无法覆盖的必查项写入 missing_data。工具结果是精简视图，预聚合计数只覆盖当前返回页。必查项查询状态：${JSON.stringify(requiredChecks)}。已取到的必查证据视图：${JSON.stringify(requiredViews)}。empty_page 仅表示指定范围的当前页未返回记录；source_unavailable 表示缺少可用数据源；query_failed 表示接口查询失败，不得相互混同。${streamContext ? `本次 syslog 来源、事件匹配和材料目录：${JSON.stringify({ parsed: streamContext.parsed, context: streamContext.context, match: streamContext.match, files: streamContext.caseInfo.files })}。` : ''}${ruleContext ? `已确认误报的规则候选：${JSON.stringify(ruleContext)}。` : ''}${wikiIndex ? `可用 Wiki 目录：${JSON.stringify(wikiIndex)}。已加载的通则及场景判据：${JSON.stringify([...wikiPages.values()].slice(0, 4))}。其他判据按需使用 wiki_page 或 wiki_search 读取。Wiki 是判据，不能代替本次取证。` : ''}最终按三种中文 verdict 输出，claims.citations 使用 evidence_id、pointer、value。告警详情证据：${toolMessage(original)}` }
     ];
     const tools = [...modelTools(relevantTools(catalog, match[1])), ...(wikiIndex ? wikiToolSpecs : []),
       conclusionToolSpec, ...(mode === 'triage' && streamContext ? [caseToolSpec] : [])];
@@ -517,8 +522,81 @@ export class InvestigationAgent {
     let problems = [];
     let turns = 0;
     const queriedTools = new Map();
-    for (let turn = 0; turn < 6; turn++) {
-      const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';
+    // 同一批里重复的同参数查询只发一次：第一个发起，其余等同一个 Promise（不能 8 次都漏过 seen 检查）。
+    let batchInflight = new Map();
+    // A7：一轮里的多个工具调用互相独立，并发执行；返回值按 tool_call_id 原序回填。
+    // 同步段先预占 calls 预算，所以并发不会把 8 次上限算穿。
+    const runToolCall = async call => {
+      const name = call.function?.name;
+      let content;
+      if (name === 'submit_conclusion') {
+        try {
+          const submitted = parseJSON(call.function?.arguments || '{}');
+          const problem = conclusionProblem(submitted, { wikiRequired: Boolean(mode === 'triage' && wikiIndex), wikiConsulted });
+          if (problem) {
+            trace.push({ kind: 'conclusion_rejected', error: problem });
+            problems.push(`结论被退回：${problem}`);
+            return JSON.stringify({ error: problem });
+          }
+          draft = normalizeVerdict(submitted);
+          wikiChoice = { adopted: Array.isArray(submitted.wiki_adopted) ? submitted.wiki_adopted.map(String) : [],
+            reason: String(submitted.wiki_reason || '').trim() };
+          trace.push({ kind: 'conclusion', tool: 'submit_conclusion', summary_chars: bodyChars(draft.summary),
+            adopted: wikiChoice.adopted });
+          return JSON.stringify({ accepted: true });
+        } catch (error) {
+          return JSON.stringify({ error: String(error.message).slice(0, 250) });
+        }
+      }
+      if (++calls > maxToolCalls) return JSON.stringify({ error: `工具调用已达到 ${maxToolCalls} 次上限，请基于已有证据给出待复核结论` });
+      try {
+        const rawArgs = parseJSON(call.function?.arguments || '{}');
+        if (mode === 'triage' && streamContext && name === 'read_case_file') {
+          const file = await readCaseFile(streamContext.caseInfo, rawArgs.name);
+          content = JSON.stringify(file);
+          trace.push({ kind: 'case_file', name: rawArgs.name });
+        } else if (wikiIndex && name === 'wiki_page') {
+          const page = await this.knowledgeStore.agentPage(match[1], rawArgs.id);
+          wikiPages.set(page.id, page);
+          wikiConsulted.add(page.id);
+          content = JSON.stringify(page);
+          trace.push({ kind: 'wiki', action: 'page', id: page.id, title: page.title });
+        } else if (wikiIndex && name === 'wiki_search') {
+          const matches = await this.knowledgeStore.agentSearch(match[1], rawArgs.keyword);
+          for (const page of matches) wikiConsulted.add(page.id);
+          content = JSON.stringify({ matches });
+          trace.push({ kind: 'wiki', action: 'search', keyword: rawArgs.keyword, matches: matches.length });
+        } else {
+          const args = boundedToolArgs(name, rawArgs, catalog);
+          const queryKey = JSON.stringify([name, args]);
+          const existing = queriedTools.get(queryKey) || [...session.records.values()]
+            .find(record => record.tool === name && JSON.stringify(record.args) === JSON.stringify(args));
+          if (existing) {
+            content = JSON.stringify({ already_queried: true, evidence_id: existing.evidenceId,
+              note: '同一查询已返回；请引用该证据或查询不同范围，重复请求不会增加新证据' });
+            trace.push({ kind: 'tool_reuse', name, evidence_id: existing.evidenceId, args });
+          } else if (batchInflight.has(queryKey)) {
+            const record = await batchInflight.get(queryKey);
+            content = toolMessage(record);
+            trace.push({ kind: 'tool_reuse', name, evidence_id: record.evidenceId, args });
+          } else {
+            onProgress('查询证据', `正在查询 ${name}（第 ${calls} 项）`);
+            const pending = session.callTool(name, args);
+            batchInflight.set(queryKey, pending);
+            const record = await pending;
+            queriedTools.set(queryKey, record);
+            content = toolMessage(record);
+            trace.push({ kind: 'tool', name, evidence_id: record.evidenceId, args });
+          }
+        }
+      } catch (error) {
+        content = JSON.stringify({ error: String(error.message).slice(0, 250) });
+        trace.push({ kind: 'tool_error', name, requested_args: call.function?.arguments || '{}', error: String(error.message).slice(0, 250) });
+      }
+      return content;
+    };
+    for (let turn = 0; turn < maxTurns; turn++) {
+      const choice = turn === maxTurns - 1 || calls >= maxToolCalls ? 'none' : 'auto';
       onProgress('AI 分析', `第 ${turn + 1} 轮分析，已查询 ${calls} 项证据`);
       let reply;
       const requestMessages = choice === 'none' ? finalMessages() : messages;
@@ -532,90 +610,38 @@ export class InvestigationAgent {
       }
       lastReply = reply; turns = turn + 1;
       if (reply.tool_calls?.length) {
-        if (choice === 'none') throw new Error(flatten(`模型超出调查轮数仍请求工具；${replyShape(reply)}`, failureTextLimit));
-        messages.push({ role: 'assistant', content: reply.content || null, tool_calls: reply.tool_calls });
-        for (const call of reply.tool_calls) {
-          const name = call.function?.name;
-          let content;
-          if (name === 'submit_conclusion') {
-            try {
-              const submitted = parseJSON(call.function?.arguments || '{}');
-              const problem = conclusionProblem(submitted, { wikiRequired: Boolean(mode === 'triage' && wikiIndex), wikiConsulted });
-              if (problem) {
-                content = JSON.stringify({ error: problem });
-                trace.push({ kind: 'conclusion_rejected', error: problem });
-                problems.push(`结论被退回：${problem}`);
-              } else {
-                draft = normalizeVerdict(submitted);
-                wikiChoice = { adopted: Array.isArray(submitted.wiki_adopted) ? submitted.wiki_adopted.map(String) : [],
-                  reason: String(submitted.wiki_reason || '').trim() };
-                trace.push({ kind: 'conclusion', tool: 'submit_conclusion', summary_chars: bodyChars(draft.summary),
-                  adopted: wikiChoice.adopted });
-                messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ accepted: true }) });
-                break;
-              }
-            } catch (error) {
-              content = JSON.stringify({ error: String(error.message).slice(0, 250) });
-              trace.push({ kind: 'tool_error', name, requested_args: call.function?.arguments || '{}', error: String(error.message).slice(0, 250) });
-            }
-            messages.push({ role: 'tool', tool_call_id: call.id, content });
-            continue;
-          }
-          if (++calls > 8) content = JSON.stringify({ error: '工具调用已达到 8 次上限，请基于已有证据给出待复核结论' });
-          else {
-            try {
-              const rawArgs = parseJSON(call.function?.arguments || '{}');
-              if (mode === 'triage' && streamContext && name === 'read_case_file') {
-                const file = await readCaseFile(streamContext.caseInfo, rawArgs.name);
-                content = JSON.stringify(file);
-                trace.push({ kind: 'case_file', name: rawArgs.name });
-              } else if (wikiIndex && name === 'wiki_page') {
-                const page = await this.knowledgeStore.agentPage(match[1], rawArgs.id);
-                wikiPages.set(page.id, page);
-                wikiConsulted.add(page.id);
-                content = JSON.stringify(page);
-                trace.push({ kind: 'wiki', action: 'page', id: page.id, title: page.title });
-              } else if (wikiIndex && name === 'wiki_search') {
-                const matches = await this.knowledgeStore.agentSearch(match[1], rawArgs.keyword);
-                for (const page of matches) wikiConsulted.add(page.id);
-                content = JSON.stringify({ matches });
-                trace.push({ kind: 'wiki', action: 'search', keyword: rawArgs.keyword, matches: matches.length });
-              } else {
-                const args = boundedToolArgs(name, rawArgs, catalog);
-                const queryKey = JSON.stringify([name, args]);
-                const existing = queriedTools.get(queryKey) || [...session.records.values()]
-                  .find(record => record.tool === name && JSON.stringify(record.args) === JSON.stringify(args));
-                if (existing) {
-                  content = JSON.stringify({ already_queried: true, evidence_id: existing.evidenceId,
-                    note: '同一查询已返回；请引用该证据或查询不同范围，重复请求不会增加新证据' });
-                  trace.push({ kind: 'tool_reuse', name, evidence_id: existing.evidenceId, args });
-                } else {
-                  onProgress('查询证据', `正在查询 ${name}（第 ${calls} 项）`);
-                  const record = await session.callTool(name, args);
-                  queriedTools.set(queryKey, record);
-                  content = toolMessage(record);
-                  trace.push({ kind: 'tool', name, evidence_id: record.evidenceId, args });
-                }
-              }
-            } catch (error) {
-              content = JSON.stringify({ error: String(error.message).slice(0, 250) });
-              trace.push({ kind: 'tool_error', name, requested_args: call.function?.arguments || '{}', error: String(error.message).slice(0, 250) });
-            }
-          }
-          messages.push({ role: 'tool', tool_call_id: call.id, content });
+        // 轮数用尽仍请求工具：记成退回原因，交给降级结论（P003-T035 起不再抛错）。
+        if (choice === 'none') {
+          problems.push(flatten(`模型超出调查轮数仍请求工具；${replyShape(reply)}`, failureTextLimit));
+          trace.push({ kind: 'tool_after_limit', turn: turns, calls });
+          break;
         }
+        messages.push({ role: 'assistant', content: reply.content || null, tool_calls: reply.tool_calls });
+        batchInflight = new Map();
+        const settled = await Promise.allSettled(reply.tool_calls.map(call => runToolCall(call)));
+        settled.forEach((outcome, index) => {
+          const call = reply.tool_calls[index];
+          const content = outcome.status === 'fulfilled' ? outcome.value
+            : JSON.stringify({ error: String(outcome.reason?.message || outcome.reason).slice(0, 250) });
+          if (outcome.status !== 'fulfilled') trace.push({ kind: 'tool_error', name: call.function?.name,
+            requested_args: call.function?.arguments || '{}', error: String(outcome.reason?.message || outcome.reason).slice(0, 250) });
+          messages.push({ role: 'tool', tool_call_id: call.id, content });
+        });
         if (draft) break;
         continue;
       }
       try { draft = normalizeVerdict(parseJSON(reply.content)); }
       catch (error) {
-        problems.push(`输出解析失败：${String(error.message).slice(0, 120)}`);
+        const reason = `输出解析失败：${String(error.message).slice(0, 120)}`;
+        problems.push(reason);
+        // A3：同一轮把解析错误回给模型要求重出；退回次数与轮次落 trace，上限由 maxTurns 封顶。
+        trace.push({ kind: 'parse_error', turn: turns, attempt: trace.filter(item => item.kind === 'parse_error').length + 1, error: reason });
         messages.push({ role: 'assistant', content: reply.content || '' });
-        messages.push({ role: 'user', content: `输出解析失败：${String(error.message).slice(0, 120)}。请严格输出一个 JSON 对象，包含三种中文 verdict 之一、summary、confidence、claims、missing_data。` });
+        messages.push({ role: 'user', content: `${reason}。请严格输出一个 JSON 对象，包含三种中文 verdict 之一、summary、confidence、claims、missing_data。` });
         continue;
       }
       // A2：有知识库时分析必须调用过知识库工具；模型直接吐结论就先催一轮。
-      if (mode === 'triage' && wikiIndex && !wikiConsulted.size && !wikiNudged && turn < 5) {
+      if (mode === 'triage' && wikiIndex && !wikiConsulted.size && !wikiNudged && turn < maxTurns - 1) {
         wikiNudged = true;
         draft = null;
         problems.push('结论没查知识库被退回');
@@ -626,16 +652,39 @@ export class InvestigationAgent {
       }
       break;
     }
-    if (!draft) throw noConclusionError({ reply: lastReply, problems, turns, calls });
-    onProgress('独立复核', '正在核对结论、反证与数据缺口');
-    const reviewPrompt = `你是独立质疑者。只审查下面的告警证据精简视图、调查工具结果和已提交结论，不继承调查员私有推理。检查引用是否支持事实、是否误把空查询当良性、声称合法运维或授权扫描时是否有相应依据、是否忽略反证。检查给客户看的 report 是否与 verdict、已核实事实和证据缺口一致；recommended_actions 是否具体、可采纳、符合结论且未暗示系统已执行处置。不要把平台只读取证工具的调用授权误当作告警行为的授权证据要求。特别核查：同主机不同时刻的两条告警不能凭共现推断同一攻击链；127.0.0.1 是本机回环，不能当作外部或另一台内网攻击源；蜜罐 timeline 是否已经提供请求载荷。若这些因素影响结论，assessment 必须为 needs_revision。输出 JSON：{"concerns":[字符串],"missing_evidence":[字符串],"assessment":"supported|needs_revision"}。不要调用工具。\n\n${mode === 'triage' ? prompts.sop?.[match[1]] || '' : ''}`;
-    const reviewInput = JSON.stringify({ alert_id: alertId, draft, rule_candidate: ruleContext, required_evidence: requiredChecks, wiki_pages: [...wikiPages.values()],
-      evidence: [...session.records.values()].map(record => ({ evidence_id: record.evidenceId, tool: record.tool,
-      view: record.view })) });
+    // A1：轮数用尽仍没有可用结论时不再抛错进 failed——出「存疑 + 缺口清单」的降级结论。
+    // 口径与 runUnmatchedSyslog 的降级结论一致：三态存疑、置信度低、缺口逐条写明、没有工具循环就没有采纳页。
+    let degraded = false;
     let review;
-    try { review = parseJSON((await this.model.complete([{ role: 'system', content: reviewPrompt }, { role: 'user', content: reviewInput }], [])).content); }
-    catch (error) { review = { assessment: 'unavailable', concerns: [`独立复核未完成：${String(error.message).slice(0, 120)}`], missing_evidence: [] }; }
+    if (!draft) {
+      const reason = noConclusionReason({ reply: lastReply, problems, turns, calls });
+      degraded = true;
+      onProgress('降级结论', '调查轮数用尽仍没有可用结论，按存疑出降级结论并列出缺口');
+      trace.push({ kind: 'degraded_conclusion', turns, calls, reason,
+        parse_failures: trace.filter(item => item.kind === 'parse_error').length,
+        conclusion_rejections: trace.filter(item => item.kind === 'conclusion_rejected').length,
+        max_turns: maxTurns, max_tool_calls: maxToolCalls, conclusion_retries: conclusionRetries });
+      draft = normalizeVerdict({ verdict: 'uncertain', confidence: '低', risk_level: '待核查',
+        summary: `模型在 ${turns} 轮调查内没有给出可核验的结论，暂按存疑处理；已查 ${calls} 项证据，缺口见缺证清单。`,
+        analysis: reason, claims: [],
+        missing_evidence: [...new Set([reason, ...requiredEvidenceGaps(requiredChecks)])],
+        next_actions: ['人工复核原始告警与本次已取到的证据，再决定是否补证或升级'] });
+      review = { assessment: 'unavailable', concerns: ['调查轮数用尽仍没有可用结论，没有可独立复核的论据'],
+        missing_evidence: [reason] };
+    } else {
+      onProgress('独立复核', '正在核对结论、反证与数据缺口');
+      const reviewPrompt = `你是独立质疑者。只审查下面的告警证据精简视图、调查工具结果和已提交结论，不继承调查员私有推理。检查引用是否支持事实、是否误把空查询当良性、声称合法运维或授权扫描时是否有相应依据、是否忽略反证。检查给客户看的 report 是否与 verdict、已核实事实和证据缺口一致；recommended_actions 是否具体、可采纳、符合结论且未暗示系统已执行处置。不要把平台只读取证工具的调用授权误当作告警行为的授权证据要求。特别核查：同主机不同时刻的两条告警不能凭共现推断同一攻击链；127.0.0.1 是本机回环，不能当作外部或另一台内网攻击源；蜜罐 timeline 是否已经提供请求载荷。若这些因素影响结论，assessment 必须为 needs_revision。输出 JSON：{"concerns":[字符串],"missing_evidence":[字符串],"assessment":"supported|needs_revision"}。不要调用工具。\n\n${mode === 'triage' ? prompts.sop?.[match[1]] || '' : ''}`;
+      const reviewInput = JSON.stringify({ alert_id: alertId, draft, rule_candidate: ruleContext, required_evidence: requiredChecks, wiki_pages: [...wikiPages.values()],
+        evidence: [...session.records.values()].map(record => ({ evidence_id: record.evidenceId, tool: record.tool,
+        view: record.view })) });
+      try { review = parseJSON((await this.model.complete([{ role: 'system', content: reviewPrompt }, { role: 'user', content: reviewInput }], [])).content); }
+      catch (error) {
+        review = { assessment: 'unavailable', concerns: [`独立复核未完成：${String(error.message).slice(0, 120)}`], missing_evidence: [] };
+        trace.push({ kind: 'review_unavailable', error: String(error.message).slice(0, 200) });
+      }
+    }
     let verdict = draft;
+    let revisionFailed = null;
     if (review.assessment === 'needs_revision') {
       try {
         onProgress('修订结论', '正在根据独立复核意见修订');
@@ -644,14 +693,30 @@ export class InvestigationAgent {
           { role: 'assistant', content: JSON.stringify(draft) },
           { role: 'user', content: `独立质疑者发现：${JSON.stringify(review)}。请重新核对现有证据，输出完整 JSON 结论。若证据不足则用“存疑”，不得编造。` }
         ], [], 'none')).content));
-      } catch { verdict = draft; }
+      } catch (error) {
+        // A2：修订请求失败不静默沿用草稿——记 trace，并写进缺口（真实威胁还会被降成存疑）。
+        revisionFailed = String(error.message || error).slice(0, 200);
+        trace.push({ kind: 'revision_failed', error: revisionFailed });
+      }
     }
     verdict = normalizeVerdict(verdict);
-    if (review.assessment !== 'supported' && highRisk.has(match[1]) && verdict.verdict === 'threat') {
+    // A2：独立复核不可用时 threat 一律降存疑，不分告警类型；复核要求修订但修订请求失败也降级。
+    // highRisk 只保留在「复核要求修订」这一档：非高危类型被要求修订、且修订成功时不强行降级。
+    const revisionFailure = revisionFailed ? `独立复核要求修订，修订请求失败：${revisionFailed}` : null;
+    const reviewBlocksThreat = review.assessment === 'unavailable' || revisionFailure !== null ||
+      (review.assessment === 'needs_revision' && highRisk.has(match[1]));
+    if (reviewBlocksThreat && verdict.verdict === 'threat') {
+      const why = revisionFailure ? '独立复核要求修订，修订请求失败'
+        : review.assessment === 'unavailable' ? '独立复核未完成' : '独立复核要求修订';
       verdict.verdict = 'uncertain'; verdict.verdict_label = '存疑'; verdict.confidence = '低';
-      verdict.summary = `${review.assessment === 'unavailable' ? '独立复核未完成' : '独立复核要求修订'}，暂按存疑处理。原调查摘要：${String(verdict.summary || '').slice(0, 400)}`;
-      verdict.missing_evidence = [...verdict.missing_evidence, review.assessment === 'unavailable'
-        ? '独立复核未完成，真实威胁结论待复核' : '独立复核未支持真实威胁，需核对反证与因果关系'];
+      verdict.summary = `${why}，暂按存疑处理。原调查摘要：${String(verdict.summary || '').slice(0, 400)}`;
+      verdict.missing_evidence = [...verdict.missing_evidence, revisionFailure
+        ? `${revisionFailure}；真实威胁结论待重新核对`
+        : review.assessment === 'unavailable' ? '独立复核未完成，真实威胁结论待复核'
+          : '独立复核未支持真实威胁，需核对反证与因果关系'];
+    } else if (revisionFailure) {
+      verdict.missing_evidence = [...new Set([...verdict.missing_evidence,
+        `${revisionFailure}；沿用原草稿的${verdict.verdict_label}结论`])];
     }
     const originalEvent = original.result?.event || original.result?.data || original.result;
     const loopback = match[1] === 'honeypot' && /^127\./.test(String(originalEvent?.source_ip || ''));
@@ -683,33 +748,39 @@ export class InvestigationAgent {
     }
     if (!['高', '中', '低'].includes(verdict.confidence) &&
       !(Number.isFinite(verdict.confidence) && verdict.confidence >= 0 && verdict.confidence <= 1)) verdict.confidence = '低';
-    let validation = verifyOutputFacts(session, verdict);
-    for (let retry = 0; retry < 2 && !validation.ok; retry++) {
-      onProgress('校验结论', `证据引用未通过校验，按 SOP 第 ${retry + 1} 次退回修订`);
-      try {
-        const revised = parseJSON((await this.model.complete([
-          ...finalMessages(),
-          { role: 'assistant', content: JSON.stringify(verdict) },
-          { role: 'user', content: `独立校验发现以下证据引用错误：${JSON.stringify(validation.errors)}。请只使用本次给出的原始字段指针和值，重新输出三态 JSON 结论；证据不足时判存疑，不得编造。` }
-        ], [], 'none')).content);
-        verdict = normalizeVerdict(revised);
-        validation = verifyOutputFacts(session, verdict);
-      } catch (cause) {
-        trace.push({ kind: 'validation_error', note: String(cause.message || cause).slice(0, 200) });
-        break;
+    let validation;
+    if (degraded) {
+      // 降级结论没有 claims，也不存在可校验的引用：不跑引用校验的退回循环（那是拿模型再赌两轮）。
+      validation = { ok: false, errors: ['降级结论没有可核验的 claims'], degraded: true };
+    } else {
+      validation = verifyOutputFacts(session, verdict);
+      for (let retry = 0; retry < conclusionRetries && !validation.ok; retry++) {
+        onProgress('校验结论', `证据引用未通过校验，按 SOP 第 ${retry + 1} 次退回修订`);
+        try {
+          const revised = parseJSON((await this.model.complete([
+            ...finalMessages(),
+            { role: 'assistant', content: JSON.stringify(verdict) },
+            { role: 'user', content: `独立校验发现以下证据引用错误：${JSON.stringify(validation.errors)}。请只使用本次给出的原始字段指针和值，重新输出三态 JSON 结论；证据不足时判存疑，不得编造。` }
+          ], [], 'none')).content);
+          verdict = normalizeVerdict(revised);
+          validation = verifyOutputFacts(session, verdict);
+        } catch (cause) {
+          trace.push({ kind: 'validation_error', note: String(cause.message || cause).slice(0, 200) });
+          break;
+        }
       }
-    }
-    if (!validation.ok) {
-      onProgress('校验证据', '引用不匹配；正在移除未核验事实并降级结论');
-      verdict.claims = verdict.claims.filter(claim => session.verifyClaims([claim]).ok);
-      if (Array.isArray(verdict.evidence_facts)) verdict.evidence_facts = verdict.evidence_facts
-        .filter(fact => session.verifyClaims([{ citations: fact?.citations }]).ok);
-      validation = { ok: false, errors: validation.errors, removed_unverified_facts: true };
-    }
-    if (!validation.ok) {
-      verdict.verdict = 'uncertain'; verdict.verdict_label = '存疑';
-      verdict.confidence = '低';
-      verdict.missing_evidence = [...(Array.isArray(verdict.missing_evidence) ? verdict.missing_evidence : []), '模型引用校验未通过'];
+      if (!validation.ok) {
+        onProgress('校验证据', '引用不匹配；正在移除未核验事实并降级结论');
+        verdict.claims = verdict.claims.filter(claim => session.verifyClaims([claim]).ok);
+        if (Array.isArray(verdict.evidence_facts)) verdict.evidence_facts = verdict.evidence_facts
+          .filter(fact => session.verifyClaims([{ citations: fact?.citations }]).ok);
+        validation = { ok: false, errors: validation.errors, removed_unverified_facts: true };
+      }
+      if (!validation.ok) {
+        verdict.verdict = 'uncertain'; verdict.verdict_label = '存疑';
+        verdict.confidence = '低';
+        verdict.missing_evidence = [...(Array.isArray(verdict.missing_evidence) ? verdict.missing_evidence : []), '模型引用校验未通过'];
+      }
     }
     if (verdict.verdict === 'false_positive') {
       const benignFacts = (verdict.evidence_facts || []).filter(fact => fact.supports === '良性' &&
@@ -721,15 +792,17 @@ export class InvestigationAgent {
         verdict.missing_evidence = [...verdict.missing_evidence, `误报结论缺少 ${required} 条可引用的正向良性事实或独立复核支持`];
       }
     }
+    // A6：deep 与 triage 采同一套必查项，缺口都进 missing_evidence；客户报告只属于常规研判。
+    verdict.missing_evidence = [...new Set([...(verdict.missing_evidence || []), ...requiredEvidenceGaps(requiredChecks)])];
     if (mode === 'triage') {
-      verdict.missing_evidence = [...new Set([...(verdict.missing_evidence || []), ...requiredEvidenceGaps(requiredChecks)])];
       if (Array.isArray(verdict.missing_data)) verdict.missing_data = verdict.missing_evidence;
       finalizeTriageOutput(verdict);
       verdict.report = appendEvidenceReport(verdict.report, requiredChecks);
     }
     if (mode === 'triage' && wikiIndex) {
       const consulted = [...wikiConsulted];
-      verdict.wiki = wikiChoice ? { consulted, adopted: wikiChoice.adopted, reason: wikiChoice.reason }
+      verdict.wiki = degraded ? { consulted, adopted: [], reason: '调查轮数用尽仍没有可用结论，本轮是降级结论，未采纳判据页' }
+        : wikiChoice ? { consulted, adopted: wikiChoice.adopted, reason: wikiChoice.reason }
         : { consulted, adopted: [], reason: consulted.length
           ? '结论没有经 submit_conclusion 工具说明采纳页' : '分析过程未调用知识库工具（已要求一次仍未调用）' };
       if (!consulted.length) verdict.missing_evidence = [...new Set([...verdict.missing_evidence, '分析过程未调用知识库工具'])];
@@ -747,12 +820,14 @@ export class InvestigationAgent {
 
   async runUnmatchedSyslog(input, matchResult, caseInfo, onProgress = () => {}) {
     const type = matchResult.type;
-    const prompts = await this.prompts();
-    const wikiIndex = await this.knowledgeStore.agentIndex(type);
-    const wikiPages = this.knowledgeStore.agentContextPages ?
-      await this.knowledgeStore.agentContextPages(type) : [];
-    const material = await readCaseFile(caseInfo, '03-研判事实.md');
-    const rego = await this.regoRules(type, input.parsed);
+    // A8：五个加载互不依赖（提示词 / wiki 索引 / wiki 页 / 案卷 / 规则），一次并发拉齐。
+    const [prompts, wikiIndex, wikiPages, material, rego] = await Promise.all([
+      this.prompts(),
+      this.knowledgeStore.agentIndex(type),
+      this.knowledgeStore.agentContextPages ? this.knowledgeStore.agentContextPages(type) : Promise.resolve([]),
+      readCaseFile(caseInfo, '03-研判事实.md'),
+      this.regoRules(type, input.parsed)
+    ]);
     onProgress('注入规则', rego.status === 'matched'
       ? `已套上 Rego 规则 ${rego.rules.map(rule => rule.id).join('、')}`
       : '本次没有套上的 Rego 规则');
