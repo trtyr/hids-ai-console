@@ -129,6 +129,8 @@
 | `http.unauthorized` | Basic 认证失败（401） | `method` `path` `status` |
 | `http.failed` | 路由没接住的失败（多为牧云 / 模型调用） | `method` `path` `status` `error` |
 | `cloudwalker.call_failed` | 牧云调用失败 | `op` `alert_id` `error` |
+| `config.updated` | 配置覆盖层写入成功（`config-store.js` 的 `update()` 落盘并改了内存之后） | `keys`（本次写的键名数组，只记键名不记值） |
+| `config.load_failed` | 配置覆盖层读不出来或形状不对：读失败（`ENOENT` 除外）/ 不是合法 JSON / 不是对象——当空处理、进程照常启动 | `file` `error`（`level=error`） |
 | `syslog.listening` / `syslog.bind_failed` | UDP 接收器绑定成功 / 失败 | `bind` / `error` |
 | `syslog.received` / `syslog.collapsed` | 收下一条 / 重复投递合并到已有记录 | `alert_id` `msgid` `event_type` `occurrence` / `alert_id` `repeat_count` |
 | `syslog.parse_failed` / `syslog.skipped` | 报文解析失败 / 无对应事件类型（`reason=no_agent_for_msgid`）或队列已暂停（`reason=paused`） | `error` `bytes` / `reason` `msgid` |

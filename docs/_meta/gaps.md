@@ -99,7 +99,7 @@ $ grep -n "knowledge" server.js
 
 P003-T028 之前根 `package.json` 的 `test` 是裸 `node --test`。无参时它从仓根递归扫「测试命名约定 + `test/` 目录」，把三类东西一起吞进来：
 
-- 仓根 21 个后端单测（`*.test.js`）——这才是单测基线；
+- 仓根 22 个后端单测（`*.test.js`）——这才是单测基线；
 - `evidence/test/**` 21 个历史验证件，其中 6 个要 spawn `server.js` 并等 20s 超时（缺 `LLM_*` 配置就启动失败）——`timeout 180 npm test` 到点被杀、没有汇总行，看着就是「挂起」；
 - `web/test/**` 浏览器测试——它们的 DOM 环境来自 jsdom，而 `web/node_modules` 不在 git 里，没装时每个文件都以 `ERR_MODULE_NOT_FOUND: Cannot find package 'jsdom'` 失败。
 
@@ -107,9 +107,11 @@ P003-T028 之前根 `package.json` 的 `test` 是裸 `node --test`。无参时�
 
 | 命令 | 跑什么 | 实测 |
 | --- | --- | --- |
-| `npm test` | `node --test --test-timeout=60000 --test-force-exit *.test.js`，只跑仓根后端单测；`--test-timeout`/`--test-force-exit` 是复审修复轮加的挂起上界 | 198 条全绿，约 2s，退出码 0 |
+| `npm test` | `node --test --test-timeout=60000 --test-force-exit *.test.js`，只跑仓根后端单测；`--test-timeout`/`--test-force-exit` 是复审修复轮加的挂起上界 | 228 条全绿，约 0.8s，退出码 0 |
 | `npm run test:web` | `npm --prefix web test`，跑 `web/test/**` | 447 条全绿，约 5.8s，退出码 0 |
-| `npm run test:all` | 上面两段串跑 | 198 + 447 全绿，约 6.3s，退出码 0 |
+| `npm run test:all` | 上面两段串跑 | 228 + 447 全绿，约 6.3s，退出码 0 |
+
+后端那一行由 P003-T033 复测（2026-11-20：22 个测试文件、`npm test` 报 `tests 228 / pass 228 / fail 0`、`duration_ms 820`）；web 段沿用 P003-T028 的记录，本次没装 `web/node_modules`，未复跑。
 
 退出码：任一用例失败 → 1（实跑注入一条必红用例验证过），全绿 → 0。
 

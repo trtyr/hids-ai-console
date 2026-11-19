@@ -48,7 +48,7 @@ P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inven
 
 运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1073-1085`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
 
-**`createServer` 是依赖注入点**（`server.js:257-261`）：14 个参数都带默认值，默认指向模块级单例。测试与探针靠传替身换掉 `service`、`investigator`、`history`、`monitor`、`wiki`、`wikiAgent` 这些件。其中 `monitor` 与 `boardService` 的默认值写成「`service` 是不是模块级 `gateway`」的条件式——换了 `service`，就不再挂默认的研判队列与溯源白板。
+**`createServer` 是依赖注入点**（`server.js:815-819`）：18 个参数都带默认值，默认指向模块级单例。测试与探针靠传替身换掉 `service`、`investigator`、`history`、`monitor`、`wiki`、`wikiAgent` 这些件。其中 `monitor` 与 `boardService` 的默认值写成「`service` 是不是模块级 `gateway`」的条件式——换了 `service`，就不再挂默认的研判队列与溯源白板。
 
 **规则预筛挂在 `investigate()` 闭包上**（`server.js:262-273`）：`mode === 'triage'` 且 `monitor.ruleEngine` 存在时，先跑一次规则评估，把结果作为 `rule_evaluation` 挂到结论上；评估抛错就记成 `{ status: 'error' }` 继续往下走，不中断研判。
 
