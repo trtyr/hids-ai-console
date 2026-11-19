@@ -1,11 +1,15 @@
 // A2 · 暂停研判（真进程 poll 模式 + 替身牧云）
 //
-// 验什么（各一条断言，文档 docs/modules/triage-pipeline.md §5 / 表格 R-TRIAGE-06）：
+// 验什么（各一条断言，文档 docs/modules/triage-pipeline.md §5 / 表格 R-TRIAGE-05/06）：
 //   暂停后：新到告警**不入队**（轮询整体不跑：last_poll_at 不前进、队列计数不动、日志无 triage.enqueued）
-//   恢复后：暂停期到达的那条**不补跑**（恢复把游标重置到点击那一刻）；恢复后新到的那条**入队并跑到 done**
+//   恢复后：暂停期到达的那条**补判**（P003-T036 起「游标与队列原样不动 + 回灌后立刻 poll」，不丢告警），
+//           跑到 done 且结论走真实结论链路；恢复后新到的那条**入队并跑到 done**
 // 环境标注（A6）：真进程 + 替身牧云 + 替身模型（不是真牧云/真模型）。
 // 说明：TriageMonitor 轮询周期缺省 30s（triage-monitor.js:36，server.js:51-56 未注入更小值），
-//       所以两处等待各 ~31s；这是产品节奏，不是探针慢。
+//       等待是产品节奏，不是探针慢。
+// 替身模型的脚本是**按请求顺序消费**的：一场研判吃掉前三条（wiki_search → submit_conclusion → 独立复核），
+//       所以脚本只服务得到一场；本探针把「真实结论链路」断言挂在被补判的 malware:21 上，
+//       malware:22 只验队列活性（入队 / 跑到 done / 有结论），不赌第二个脚本位。
 // 跑法：node evidence/test/P003-T032/probe-a2-pause.mjs   （退出码 0 = 全过）
 import { checker, startStub, startApp, freePort, snapshotData, restoreData, sleep } from './harness.mjs';
 
@@ -106,21 +110,41 @@ try {
   const resumed = await control(true);
   check(resumed.status === 200 && resumed.body.enabled === true, '恢复：PUT control 回 200 且 enabled=true',
     `${resumed.status}/${resumed.body?.enabled}`);
-  // 恢复会把游标重置为点击那一刻：暂停期到达的 malware:21 事件时间早于新游标 → 不补跑（文档 R-TRIAGE-06）。
+  // P003-T036 起恢复不丢不漏：游标（watermark / watermarkIds）与队列原样不动，回灌暂停缓冲、补逾期重试，
+  // 然后立刻 poll()（triage-monitor.js:576-590；文档 R-TRIAGE-06）。所以暂停期到达的 malware:21 会被这一轮捞进来。
   const afterResume = await summary();
-  check(afterResume.counts.queued === 0 && afterResume.counts.running === 0 && afterResume.counts.done === 0,
-    '恢复：暂停期积压不补跑（队列仍空）', JSON.stringify(afterResume.counts));
-  const staleRecord = await record(pausedId);
-  check(staleRecord.status === 'not_queued', '恢复：malware:21 仍是 not_queued（没被补跑）', staleRecord.status);
+  const replayedQueued = (afterResume.counts?.queued || 0) + (afterResume.counts?.running || 0) +
+    (afterResume.counts?.done || 0);
+  check(replayedQueued >= 1, '恢复：暂停期积压补判——队列里有 malware:21（游标没跳到点击时刻）',
+    `${JSON.stringify(afterResume.counts)} last_poll_at=${afterResume.last_poll_at}`);
+  const replayedRecord = await record(pausedId);
+  check(replayedRecord.status !== 'not_queued', '恢复：malware:21 已经入队（不是 not_queued）', String(replayedRecord.status));
+  check(app.events('triage.enqueued').some(event => event.alert_id === pausedId && event.source === 'poll'),
+    '恢复：日志 triage.enqueued 记的是 malware:21 / source=poll',
+    JSON.stringify(app.events('triage.enqueued').map(event => `${event.alert_id}:${event.source}`)));
+  // 补判那条一路跑到 done，结论走真实结论链路（替身模型脚本前三条服务的正是它）。
+  const replayedDone = await waitFor('malware:21 补判跑完', async () => {
+    const value = await record(pausedId);
+    return value?.status === 'done' || value?.status === 'failed' ? value : null;
+  }, 60000);
+  check(replayedDone?.status === 'done', '恢复：malware:21 补判跑到 done（不是失败）',
+    `${replayedDone?.status}${replayedDone?.detail ? ` · ${String(replayedDone.detail).slice(0, 160)}` : ''}`);
+  check(replayedDone?.verdict === 'uncertain', '恢复：补判结论落到记录上（verdict=uncertain）',
+    String(replayedDone?.verdict));
+  check(String(replayedDone?.summary || '').includes('jsp 恶意文件事件'),
+    '恢复：补判结论来自 submit_conclusion（不是替身模型的兜底回包）',
+    String(replayedDone?.summary || '').slice(0, 120));
+  check(app.events('triage.done').some(event => event.alert_id === pausedId), '恢复：日志 triage.done 记 malware:21',
+    JSON.stringify(app.events('triage.done').map(event => event.alert_id)));
 
   // 恢复后新到的告警：等下一个轮询周期把它捞进来，并跑到 done。
-  // 同样隔过秒边界：恢复把游标重置到「点击那一刻的秒」，同一秒内的告警靠 watermark_ids 去重，
-  // 晚一个秒边界更接近现场（告警不会卡着点击那一毫秒到）。
+  // 隔过秒边界：恢复不动游标，新告警的事件时间必须晚于当前游标（秒级事件 vs 毫秒游标），
+  // 否则会被「早于游标」跳过——那时没入队是游标挡的，验不到轮询还在正常工作。
   await sleep(1200);
   const freshId = 'malware:22';
   const freshRow = malwareRow(22, Math.floor(Date.now() / 1000));
   await stub.ctl({ appendList: { malware: [freshRow] }, details: { [freshId]: freshRow } });
-  ok('恢复后：上游新增一条告警 malware:22', '事件时间晚于恢复游标');
+  ok('恢复后：上游新增一条告警 malware:22', '事件时间晚于恢复后的游标');
 
   const enqueued = await waitFor('malware:22 入队', async () => {
     const value = await record(freshId);
@@ -138,11 +162,13 @@ try {
   check(finished?.status === 'done', '恢复后：malware:22 跑到 done（不是失败）',
     `${finished?.status}${finished?.detail ? ` · ${String(finished.detail).slice(0, 160)}` : ''}`);
   check(finished?.verdict === 'uncertain', '恢复后：结论落到记录上（verdict=uncertain）', String(finished?.verdict));
-  check(String(finished?.summary || '').includes('jsp 恶意文件事件'),
-    '恢复后：结论正文来自 submit_conclusion（不是替身模型的兜底回包）', String(finished?.summary || '').slice(0, 120));
+  // 这条只验队列活性：替身模型脚本已被 malware:21 那一场吃掉，第二条走兜底回包也算跑通，
+  // 结论正文是否来自 submit_conclusion 由上面 malware:21 那三条断言负责。
+  check(String(finished?.summary || '').length > 0, '恢复后：malware:22 有结论正文（研判真的跑到了收尾）',
+    String(finished?.summary || '').slice(0, 120));
   check(app.events('triage.done').some(event => event.alert_id === freshId), '恢复后：日志有 triage.done');
   const modelCalls = (await stub.log()).filter(entry => entry.kind === 'model').length;
-  check(modelCalls >= 2, '恢复后：替身模型确实被调用（研判真的跑起来了）', `${modelCalls} 次`);
+  check(modelCalls >= 4, '恢复后：替身模型确实被调用（两场研判各至少两轮）', `${modelCalls} 次`);
 } catch (error) {
   bad('探针执行异常', String(error?.stack || error));
 } finally {

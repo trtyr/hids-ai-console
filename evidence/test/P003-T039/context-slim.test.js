@@ -1,8 +1,12 @@
 // P003-T039 单测：上下文瘦身各条改动各自可验（判端在模型实际收到的 messages / tools 上）。
 // 跑法：node --test evidence/test/P003-T039/context-slim.test.js
 // 纪律：不碰网络、不碰真实时钟、不作真实模型调用；每条都在几十毫秒内跑完。
-import test from 'node:test';
+// P003-T049：T040 起 run() 收尾会把必查项真写进 case_dir（syslog-case.js:187-206），所以案卷目录改成
+//   每轮一个真临时目录；A3 顺带断言落盘形状（total_reported / first_rows / files 回写）。
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
@@ -12,6 +16,11 @@ import { WikiStore, pageExcerpts, pageSummary } from '../../../wiki-store.js';
 import { boundSyslogView, compactEvidenceView, projectEvidence } from '../../../evidence-view.js';
 
 const wiki = new WikiStore(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'wiki'));
+
+// 每条用例自己的案卷目录（真盘），跑完统一删。不共享目录：谁写谁读都只碰自己那份。
+const caseDirs = [];
+const newCaseDir = () => { const dir = mkdtempSync(path.join(tmpdir(), 't039-case-')); caseDirs.push(dir); return dir; };
+after(() => { for (const dir of caseDirs) rmSync(dir, { recursive: true, force: true }); });
 
 // 一条蜜罐告警：事件带 61 行时间线（其中 2 行有响应长度、12 行带 HTTP 请求摘要）。
 const httpLine = index => Buffer.from(`GET /admin/${index} HTTP/1.1\r\nHost: 10.0.0.5\r\n\r\n`).toString('base64');
@@ -58,7 +67,7 @@ const streamContext = () => ({
   context: {},
   match: { matched: true, type: 'honeypot', alert_id: 'honeypot:7', event_id: 7, event: event(),
     gap_seconds: 12, candidates: 1, coverage: { returned: 1, total: 1, exact_event_id: true } },
-  caseInfo: { case_dir: '/tmp/hids-unit-case', files: ['00-这是什么.md', '03-研判事实.md'] }
+  caseInfo: { case_dir: newCaseDir(), files: ['00-这是什么.md', '03-研判事实.md'] }
 });
 
 const conclusion = () => ({ content: JSON.stringify({ verdict: '存疑', confidence: '低', summary: '蜜罐探测试验',
@@ -140,6 +149,28 @@ test('A3 首轮必查项只带 id/status/returned_count/total，不带 scope/rea
   }
   assert.equal(user.includes('已取到的必查证据视图'), false);
   assert.equal(/"scope":/.test(user), false);
+
+  // T040 A1：run() 收尾另落一份案卷（口径 docs/modules/triage-pipeline.md:630）。落盘形状与模型侧
+  // 状态条不是一回事：每项带 total_reported（平台报的总数）与前 5 行 first_rows，写成功后回写 files。
+  const persisted = JSON.parse(readFileSync(path.join(context.caseInfo.case_dir, '06-必查项.json'), 'utf8'));
+  assert.deepEqual(Object.keys(persisted), ['alert_id', 'mode', 'written_at', 'checks']);
+  assert.equal(persisted.alert_id, 'honeypot:7');
+  assert.equal(persisted.mode, 'triage');
+  assert.equal(Number.isNaN(Date.parse(persisted.written_at)), false);
+  assert.ok(persisted.checks.length >= 2);
+  for (const check of persisted.checks) assert.equal(typeof check.status, 'string');
+  const related = persisted.checks.find(check => check.id === 'related_events');
+  assert.equal(related.status, 'records_returned');
+  assert.equal(related.returned_count, 1);
+  assert.equal(related.total_reported, 3);
+  assert.ok(related.first_rows.length >= 1 && related.first_rows.length <= 5);
+  assert.equal(related.first_rows[0].facts.host_id.value, 41);
+  // 没有数据源的那项照实标 source_unavailable，不是记成空页。
+  assert.equal(persisted.checks.find(check => check.id === 'network_connections').status, 'source_unavailable');
+  // 这份案卷没超上界：不该有降级/缺项标记（有就是写坏了）。
+  assert.equal(persisted.truncated, undefined);
+  assert.equal(persisted.slimmed_items, undefined);
+  assert.ok(context.caseInfo.files.includes('06-必查项.json'));
 });
 
 test('A4 常驻 Wiki 页只给编号/标题/要点，wiki_page 返回摘要与命中段', async () => {
