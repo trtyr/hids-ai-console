@@ -23,6 +23,9 @@ test('可疑命令按主机先查关联事件和命令会话，并分别记录�
   assert.equal(checks[1].status, 'source_unavailable');
   assert.match(requiredEvidenceGaps(checks)[0], /当前页.*未返回记录/);
   assert.match(requiredEvidenceGaps(checks)[1], /没有可用数据源/);
+  // A5：目录里没有的授权工具不进缺口（否则每张告警都会多一条假缺口）。
+  assert.equal(requiredEvidenceGaps(checks).length, 2);
+  assert.doesNotMatch(requiredEvidenceGaps(checks).join('；'), /操作授权与测试工单/);
   const report = appendEvidenceReport('建议判定为存疑。需核对后续行为。', checks);
   assert.match(report, /已查同主机关联事件的限定范围当前页，未返回记录/);
   assert.match(report, /同主机命令会话没有可用数据源/);
