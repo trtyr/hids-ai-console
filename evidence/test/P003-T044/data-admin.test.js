@@ -121,19 +121,31 @@ test('A1 盘点七类存储：条数与字节逐类对得上，缺目录按 0 �
   assert.equal(row(inventory, 'cases').newest_at, new Date(NEW).toISOString());
   assert.equal(row(inventory, 'investigations').count, 2);
   assert.equal(row(inventory, 'investigations').bytes, invA + invB);
+  assert.equal(row(inventory, 'investigations').oldest_at, new Date(OLD).toISOString());
+  assert.equal(row(inventory, 'investigations').newest_at, new Date(NEW).toISOString());
   assert.equal(row(inventory, 'boards').count, 1);
   assert.equal(row(inventory, 'boards').bytes, board);
+  // 只有一条时最早=最晚＝那一条的时刻（目录 mtime 不是条目时刻）
+  assert.equal(row(inventory, 'boards').oldest_at, new Date(OLD).toISOString());
+  assert.equal(row(inventory, 'boards').newest_at, new Date(OLD).toISOString());
   assert.equal(row(inventory, 'wiki_sessions').count, 1);
   assert.equal(row(inventory, 'wiki_sessions').bytes, session);
-  // 队列：条数＝进程内记录数；字节＝队列文件 + 归档文件
+  assert.equal(row(inventory, 'wiki_sessions').oldest_at, new Date(NEW).toISOString());
+  assert.equal(row(inventory, 'wiki_sessions').newest_at, new Date(NEW).toISOString());
+  // 队列：条数＝进程内记录数；字节＝队列文件 + 归档文件；时刻取记录上的 updated_at
   assert.equal(row(inventory, 'queue').count, 2);
   assert.equal(row(inventory, 'queue').bytes, (await stat(locations.queue)).size);
   assert.equal(row(inventory, 'queue').oldest_at, '2020-01-01T00:00:00.000Z');
+  assert.equal(row(inventory, 'queue').newest_at, '2026-11-19T00:00:00.000Z');
   // 日志：只认 dataRoot 顶层的 *.log（后端自身不落文件）
   assert.equal(row(inventory, 'logs').count, 1);
   assert.equal(row(inventory, 'logs').bytes, logBytes);
+  assert.equal(row(inventory, 'logs').oldest_at, new Date(NEW).toISOString());
+  assert.equal(row(inventory, 'logs').newest_at, new Date(NEW).toISOString());
   assert.equal(row(inventory, 'config_overrides').count, 1);
   assert.equal(row(inventory, 'config_overrides').bytes, overrides);
+  assert.equal(row(inventory, 'config_overrides').oldest_at, new Date(OLD).toISOString());
+  assert.equal(row(inventory, 'config_overrides').newest_at, new Date(OLD).toISOString());
 
   const total = inventory.stores.reduce((sum, store) => ({ count: sum.count + store.count, bytes: sum.bytes + store.bytes }),
     { count: 0, bytes: 0 });
@@ -149,6 +161,9 @@ test('A1 空运行态：七类全 0，不报错', async t => {
   assert.ok(inventory.stores.every(store => store.count === 0 && store.bytes === 0));
   assert.equal(row(inventory, 'investigations').exists, false);
   assert.equal(row(inventory, 'config_overrides').exists, false);
+  // 没有条目时时刻是 null（不是 ''、不是缺字段、也不是目录 mtime）
+  assert.deepEqual(inventory.stores.map(store => [store.kind, store.oldest_at, store.newest_at]),
+    inventory.stores.map(store => [store.kind, null, null]));
 });
 
 test('A2 默认 dry-run：只报将删清单，盘上一动没动', async t => {
@@ -169,6 +184,37 @@ test('A2 默认 dry-run：只报将删清单，盘上一动没动', async t => {
   assert.deepEqual((await readdir(locations.investigations)).sort(), ['new.json', 'old.json']);
   // 响应里的盘点就是当下的：dry-run 之后没变
   assert.equal(row(result.body.inventory, 'investigations').count, 2);
+});
+
+test('A2 清理响应回显：kind/action/threshold 逐键，candidates.items 每条都带条目时刻（老到新）', async t => {
+  const { locations, deps } = await workspace(t);
+  const oldBytes = await writeAt(path.join(locations.investigations, 'old.json'), '{"a":1}', OLD);
+  const midBytes = await writeAt(path.join(locations.investigations, 'mid.json'), '{"b":2}', CUT + 1000);
+  await writeAt(path.join(locations.investigations, 'new.json'), '{"c":3}', NEW);
+  const base = await serve(t, deps);
+
+  // keep 阈值：回显 keep＝请求值、older_than＝null；清单每条 {name,bytes,at} 全对象，按时刻从老到新
+  const byKeep = await cleanup(base, { kind: 'investigations', keep: 1 });
+  assert.equal(byKeep.status, 200);
+  assert.equal(byKeep.body.kind, 'investigations');
+  assert.equal(byKeep.body.action, 'archive');
+  assert.deepEqual(byKeep.body.threshold, { older_than: null, keep: 1 });
+  assert.deepEqual(byKeep.body.candidates.items, [
+    { name: 'old.json', bytes: oldBytes, at: new Date(OLD).toISOString() },
+    { name: 'mid.json', bytes: midBytes, at: new Date(CUT + 1000).toISOString() }
+  ]);
+
+  // 只有 older_than：**原样**回显请求里的那串（不被改写成 UTC 标准形），keep＝null；动作原样回显
+  const echoed = '2024-01-01T08:00:00+08:00';
+  const byTime = await cleanup(base, { kind: 'investigations', older_than: echoed, action: 'delete' });
+  assert.equal(byTime.status, 200);
+  assert.equal(byTime.body.kind, 'investigations');
+  assert.equal(byTime.body.action, 'delete');
+  assert.deepEqual(byTime.body.threshold, { older_than: echoed, keep: null });
+  assert.deepEqual(byTime.body.candidates.items,
+    [{ name: 'old.json', bytes: oldBytes, at: new Date(OLD).toISOString() }]);
+  // dry-run 不动盘：三份都还在
+  assert.deepEqual((await readdir(locations.investigations)).sort(), ['mid.json', 'new.json', 'old.json']);
 });
 
 test('A2+A5 execute 真删：只删早于阈值的，清理后盘点数字立刻反映', async t => {
@@ -323,8 +369,11 @@ test('A4 队列只清 done：delete 移出内存，落盘后文件里也没了�
 
   const dry = await cleanup(base, { kind: 'queue', older_than: new Date(CUT).toISOString() });
   assert.equal(dry.body.candidates.count, 1);
-  assert.equal(dry.body.candidates.items[0].name, 'syslog:webshell:aa:1:u1');
-  assert.equal(dry.body.candidates.items[0].status, 'done');
+  // 队列条目多一个 status，at 是记录上的时刻（原样，不规范化），bytes 是记录 JSON 序列化字节
+  assert.deepEqual(dry.body.candidates.items, [{
+    name: 'syslog:webshell:aa:1:u1', status: 'done', at: '2020-01-01T00:00:00.000Z',
+    bytes: Buffer.byteLength(JSON.stringify(record('syslog:webshell:aa:1:u1', 'done', '2020-01-01T00:00:00.000Z')))
+  }]);
 
   const result = await cleanup(base, { kind: 'queue', action: 'delete',
     older_than: new Date(CUT).toISOString(), execute: true });
@@ -332,7 +381,9 @@ test('A4 队列只清 done：delete 移出内存，落盘后文件里也没了�
   assert.equal(result.body.applied.count, 1);
   assert.equal(deps.monitor.records.size, 1);
   const persisted = JSON.parse(await readFile(locations.queue, 'utf8'));
-  assert.deepEqual(persisted.records.map(item => item.alert_id), ['syslog:webshell:bb:2:u2']);
+  // 整对象比对：没被清的那条逐字段原样留下，没有多字段、没有改字段
+  assert.deepEqual(persisted.records, [record('syslog:webshell:bb:2:u2', 'done', '2026-11-19T00:00:00.000Z')]);
+  assert.deepEqual([...deps.monitor.records.values()], [record('syslog:webshell:bb:2:u2', 'done', '2026-11-19T00:00:00.000Z')]);
   assert.equal(row(result.body.inventory, 'queue').count, 1);
 });
 
@@ -417,6 +468,40 @@ test('配置覆盖层与日志也能按各自阈值清理', async t => {
   assert.equal(logs.body.applied.count, 1);
   assert.equal(row(logs.body.inventory, 'logs').count, 0);
   assert.equal((await readdir(path.join(root, 'archive', 'logs'))).length, 1);
+});
+
+test('鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错用户名 401，正文与四条头），正确凭据才 200', async t => {
+  const { locations, deps } = await workspace(t);
+  await writeAt(path.join(locations.investigations, 'a.json'), '{}', OLD);
+  const base = await serve(t, deps, { auth: { user: 'ops', password: 'ops-pw' } });
+  const basic = value => `Basic ${Buffer.from(value).toString('base64')}`;
+  const expect401 = async (response, label) => {
+    assert.equal(response.status, 401, label);
+    assert.equal(response.headers.get('www-authenticate'), 'Basic realm="HIDS AI Console", charset="UTF-8"', label);
+    assert.equal(response.headers.get('content-type'), 'text/plain; charset=utf-8', label);
+    assert.equal(response.headers.get('cache-control'), 'no-store', label);
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff', label);
+    assert.equal(await response.text(), '需要登录后访问', label);
+  };
+  const post = headers => fetch(`${base}/api/data/cleanup`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ kind: 'investigations', keep: 0, execute: true }) });
+
+  await expect401(await fetch(`${base}/api/data/inventory`), '盘点 无凭据');
+  await expect401(await fetch(`${base}/api/data/inventory`, { headers: { authorization: basic('ops:wrong') } }), '盘点 错口令');
+  await expect401(await fetch(`${base}/api/data/inventory`, { headers: { authorization: basic('admin:ops-pw') } }), '盘点 错用户名');
+  await expect401(await post({}), '清理 无凭据');
+  await expect401(await post({ authorization: basic('ops:wrong') }), '清理 错口令');
+  // 被拒的清理（execute:true）一个字节没动盘
+  assert.deepEqual(await readdir(locations.investigations), ['a.json']);
+
+  // 正确凭据：两条路由都过闸门
+  const allowed = { authorization: basic('ops:ops-pw') };
+  assert.equal((await fetch(`${base}/api/data/inventory`, { headers: allowed })).status, 200);
+  const cleaned = await post(allowed);
+  assert.equal(cleaned.status, 200);
+  assert.deepEqual((await cleaned.json()).applied, { count: 1, bytes: 2 });
+  assert.deepEqual(await readdir(locations.investigations), []);
 });
 
 test('GET 只认 GET：盘点用 POST 回 404（方法不对不在本路径兜）', async t => {

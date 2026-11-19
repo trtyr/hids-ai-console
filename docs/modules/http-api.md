@@ -481,12 +481,13 @@ node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 
 - 不保证「归档后还能从接口读回来」：归档目录只落盘，仓内没有读它的接口；要翻旧案直接看 `.data/archive/**`。
 - 队列候选只挑 `done`：`failed` / `queued` / `running` 一律 409，不静默跳过。
 
-**可重放证据**（`evidence/test/P003-T044/data-admin.test.js`，18 条，约 260ms）：
+**可重放证据**（`evidence/test/P003-T044/data-admin.test.js`，20 条，约 270ms）：
 
 ```bash
 cd /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T044
-node --test evidence/test/P003-T044/data-admin.test.js   # 18 条全绿
+node --test evidence/test/P003-T044/data-admin.test.js   # 20 条全绿
 node --test --test-timeout=60000 --test-force-exit *.test.js   # 根套件 210 条全绿（回归）
+bash evidence/test/P003-T044/mutation-round2.sh   # 20 条实现变异逐条打红新断言（断言自证的复现入口）
 ```
 
 单测全部在 tmp 目录里跑（`mkdtemp`）：替身目录 + 内存队列 + 进程内 HTTP 请求，mtime 用 `utimes` 钉死，不碰真实网络、不碰仓内 `.data/`、不依赖真实时钟。
