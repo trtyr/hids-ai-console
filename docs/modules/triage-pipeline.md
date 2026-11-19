@@ -2,7 +2,7 @@
 type: module
 id: MOD-TRIAGE-PIPELINE
 covers: [triage-monitor.js, syslog-input.js, syslog-case.js]
-updated: 2026-11-19
+updated: 2026-11-20
 depth: complete
 ---
 
@@ -13,6 +13,8 @@ depth: complete
 这份文档回答一个问题：**一条牧云告警从进来，到变成一份可读的案件材料，中间发生了什么。**
 
 行号基准是提交 `a16e0d5`（这三个文件最后一次进本页时的版本；`docs/architecture.md` 等页用 `35530d8`）。此后 `triage-monitor.js` 又长过两次：`3bb33b7`（+31/−5）与 P003-T009（列表筛选，+17/−2，本卡）；`server.js` 改动更多。所以**本页其余旧引用的行号都偏小，越靠后偏得越多**：读的时候按函数名对齐。§8 / §8.1 / §9 / §10 中本卡改写过的行号已按本卡提交重新取；全页重排留给文档卡。
+
+P003-T040 新增/改写的段落（页内标「P003-T040」的地方：§6.2 的 `06-必查项.json` 行与末段、§7.4 的 `evidence[]` 一段、§8 导出表）行号对提交 `201d278`。
 
 读法：
 
@@ -540,8 +542,20 @@ EOF
 | `03-研判事实.md` | 主机 IP、事件时间、来源、命令、文件路径、牧云匹配情况，外加牧云补充事件的 JSON | `syslog-case.js:105` |
 | `04-上下文.md` | 会话键、本条出现次数、投递次数、同会话时间窗，以及 `window`/`baseline`/`intel`/`history` 的 JSON | `syslog-case.js:106` |
 | `03b-判据索引.md` | 只有传了 `wiki` 才有：本次可用判据的编号与标题 | `syslog-case.js:108-111` |
+| `06-必查项.json` | 研判收尾时由 `investigation-agent` 追加（P003-T040）：每项必查的 `status`/`evidence_id`/`returned_count`/`total_reported` 与前 5 行 `first_rows` | `syslog-case.js:179-207`、`investigation-agent.js:495-497` |
 
 字段表里的 `|` 会被转义、换行会被压成空格（`syslog-case.js:99-100`）。这几个材料文件并行写入，权限 `0o600`（`syslog-case.js:112-113`），函数返回 `{ case_dir, files }`（`syslog-case.js:114`）。
+
+`06-必查项.json` 不在 `writeSyslogCase` 里写：它依赖研判的必查项结果，由 `run()` 收尾时调 `writeRequiredEvidence()`
+（`syslog-case.js:187-207`）原子追加，并把文件名补进 `caseInfo.files`（`syslog-case.js:204`）。
+写失败是真异常：捷径（客户经验复用）路径的落盘也在知识库 try 块之外，不被「经验核对失败」吞掉（`investigation-agent.js:592-595`）。
+**上界 64000 字符**（`syslog-case.js:180`）：超界的项先降级成「只留计数」（`slimmed_items`），仍放不下的整项不写并计入
+`omitted_items` + `truncated`（`syslog-case.js:191-197`）——宁可少写行，也不让案卷无界增长，更不静默丢项。
+复算入口 `readRequiredEvidence(caseInfo)`（`syslog-case.js:209-212`）只读这个文件，不碰牧云。
+
+**能被模型读的条件**：`readCaseFile` 有 25000 字符闸（`syslog-case.js:172`，见 §6.4），所以这个文件 ≤25000 字符时模型能用
+`read_case_file('06-必查项.json')` 直接读；超过 25000（一直到 64000）时模型读到的是错误提示，复算要走
+`readRequiredEvidence()`——它没有这道闸，读的是全文。
 
 **实测**：
 
@@ -675,6 +689,12 @@ md 行 -> 重复投递：2 次
 
 其中后两个来自 `evidenceSummary()`（`triage-monitor.js:11-16`）：只统计带 `citations` 的事实，且要求 `validation.ok` 或 `validation.removed_unverified_facts` 为真，否则 `verified_facts` 记 0；`evidence_sources` 是去重后的证据编号个数。
 
+**`evidence[]` 的形状（P003-T040 A6）**：队列记录里的证据条目只留 `evidence_id` / `tool` / `fetched_at` / `sha256`，
+加一个**条件性**的 `args`——只要它是 RPC 形态（`{id}` / `{count,offset}` 这类短参数，序列化后 ≤200 字、
+没有超过 80 字的字符串值）就保留，含原文的剥掉并置 `args_omitted: true`（`triage-monitor.js:16-32`）。
+改前一律剥 `args`，队列里看不出每条证据查的是什么范围。`view` 不进队列：快照随状态变更落盘，带上视图会把快照撑大
+（视图落盘在研判记录里，见 investigation-agent 模块页 §3.10）。
+
 **人工登记过误报的记录是例外**（`verdict='false_positive'` 且 `decision_source='human'`，`triage-monitor.js:13`）：`verdict` / `verdict_label` / `summary` / `decision_source` 保留原值，`detail` 跟着保留的那份 `summary` 走（`triage-monitor.js:452-460`）；`report` / `missing_evidence` / `next_actions` / `evidence_refs` / `evidence` / `saved_at` / `verified_facts` / `evidence_sources` 照常按这次研判刷新。AI 自己判出的 `false_positive` 不走这条例外。
 
 ## 8 对外契约
@@ -684,8 +704,8 @@ md 行 -> 重复投递：2 次
 | 文件 | 导出 |
 | --- | --- |
 | `syslog-input.js` | `parseSyslog`、`eventTypeFor`、`eventSeconds`、`sessionKey`、`fingerprint`、`SyslogReceiver` |
-| `syslog-case.js` | `matchSyslogEvent`、`writeSyslogCase`、`writeSyslogResult`、`updateSyslogDeliveryCount`、`readCaseFile` |
-| `triage-monitor.js` | `TriageMonitor` |
+| `syslog-case.js` | `matchSyslogEvent`、`writeSyslogCase`、`writeSyslogResult`、`updateSyslogDeliveryCount`、`readCaseFile`、`writeRequiredEvidence`、`readRequiredEvidence`、`requiredEvidenceFile`、`requiredEvidenceMaxChars`（P003-T040） |
+| `triage-monitor.js` | `TriageMonitor`、`queueEvidenceItem`、`queueArgsMaxChars`、`queueArgValueMaxChars`（P003-T040） |
 
 ```bash
 for f in syslog-input.js syslog-case.js triage-monitor.js; do printf "%s: " "$f"; node -e "import('./$f').then(m=>console.log(Object.keys(m).sort().join(', ')))"; done

@@ -13,9 +13,23 @@ const verdictRanks = Object.freeze({ threat: 0, uncertain: 1, false_positive: 2 
 // AI 自己判出的 false_positive 不算——那种重跑仍旧按这次研判覆盖。
 const humanFalsePositive = record => record.verdict === 'false_positive' && record.decision_source === 'human';
 
-// 研判记录里的证据条目只外露这四个字段：args 可能带原始事件内容，不外露。
-const evidenceItems = entries => (Array.isArray(entries) ? entries : [])
-  .map(({ evidence_id, tool, fetched_at, sha256 }) => ({ evidence_id, tool, fetched_at, sha256 }));
+// A6：队列里的证据条目只外露可复算的最小集合。工具入参要留——RPC 路径的 args 就是 {id} / {count,offset}，
+// 剥掉之后看不出「这条证据查的是哪个范围」。只有含原文（长字符串/大对象）的 args 才剥，并标 args_omitted。
+export const queueArgsMaxChars = 200;
+export const queueArgValueMaxChars = 80;
+function argsHaveRawText(args) {
+  return Object.values(args).some(value => typeof value === 'string'
+    ? value.length > queueArgValueMaxChars
+    : value && typeof value === 'object' && JSON.stringify(value).length > queueArgValueMaxChars);
+}
+export function queueEvidenceItem({ evidence_id, tool, args, fetched_at, sha256 }) {
+  const item = { evidence_id, tool, fetched_at, sha256 };
+  if (args === undefined) return item;
+  if (!argsHaveRawText(args) && JSON.stringify(args).length <= queueArgsMaxChars) item.args = args;
+  else item.args_omitted = true;
+  return item;
+}
+const evidenceItems = entries => (Array.isArray(entries) ? entries : []).map(queueEvidenceItem);
 
 function evidenceSummary(result) {
   const claims = result?.validation?.ok || result?.validation?.removed_unverified_facts

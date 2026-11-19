@@ -8,6 +8,12 @@ const MAX_INVESTIGATIONS = 12;
 const MAX_ROUNDS = 32;
 const WINDOW_HOURS = 72;
 const PAGE_SIZE = 50;
+// A4/A5：白板 findings 按页落完整投影（一次工具调用一页，最多 PAGE_SIZE 行），不再只留 12 行。
+// 两层上界：每个工具调用 16000 字、每个节点 120000 字。超界只按「行」收缩并记 rows_omitted，
+// 证据编号与计数一律保留——少的是行，不是「这次查过什么」。
+export const findingsRowLimit = PAGE_SIZE;
+export const findingsRowsMaxChars = 16000;
+export const findingsNodeMaxChars = 120000;
 const MAX_GLOBAL_PAGES = 30;
 const MAX_TYPE_PAGES = 10;
 const MAX_NODES = 64;
@@ -220,10 +226,39 @@ function summarizeRecord(record, board) {
       rows: [{ facts: view.facts || {} }], truncated: Boolean(view.truncated_for_context) };
   }
   const matching = rows.map((row, index) => ({ row, index })).filter(({ row }) => !board || withinWindow(row, board));
+  const bounded = boundedFindingsRows(matching, key);
   return { evidence_id: record.evidenceId, tool: record.tool, total: record.result?.total ?? null,
     returned: matching.length, page_returned: rows.length,
-    rows: matching.slice(0, 12).map(({ row, index }) => ({ facts: rowFacts(row, [key, index]) })),
-    truncated: matching.length > 12 || rows.length >= PAGE_SIZE };
+    rows: bounded.rows, rows_omitted: bounded.omitted,
+    truncated: bounded.omitted > 0 || rows.length >= PAGE_SIZE };
+}
+
+function boundedFindingsRows(matching, key) {
+  const kept = [], limit = findingsRowLimit;
+  let size = 0;
+  for (const { row, index } of matching) {
+    if (kept.length >= limit) break;
+    const facts = rowFacts(row, [key, index]);
+    const cost = JSON.stringify(facts).length;
+    if (size + cost > findingsRowsMaxChars) break;
+    kept.push({ facts });
+    size += cost;
+  }
+  return { rows: kept, omitted: matching.length - kept.length };
+}
+
+// 节点级上界：从行数最多的那一项开始逐行收缩（每次都缩短，一定收敛）。
+function boundNodeFindings(findings) {
+  const total = () => JSON.stringify(findings).length;
+  while (total() > findingsNodeMaxChars) {
+    const target = [...findings].filter(item => item.rows.length > 1)
+      .sort((left, right) => right.rows.length - left.rows.length)[0];
+    if (!target) break;
+    target.rows.pop();
+    target.rows_omitted = (target.rows_omitted || 0) + 1;
+    target.truncated = true;
+  }
+  return findings;
 }
 
 function profileFrom(record) {
@@ -474,7 +509,7 @@ export class TraceBoardService {
     }
     entry.touched_hosts = [...touched];
     entry.status = 'done'; entry.why = short(reason || 'AI 选择继续追查这个节点'); entry.investigated_at = now();
-    entry.findings = records.map(record => summarizeRecord(record, board));
+    entry.findings = boundNodeFindings(records.map(record => summarizeRecord(record, board)));
     entry.finding_count = entry.findings.filter(item => /^list_(?!global|host_assets|host_events)/.test(item.tool))
       .reduce((sum, item) => sum + item.returned, 0) +
       (records.some(record => record.tool.startsWith('get_') && record.tool.endsWith('_event')) ? 1 : 0);
