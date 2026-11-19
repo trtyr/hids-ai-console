@@ -1,0 +1,89 @@
+# P003-T034 合并轮验证日志（843a971 / 2026-11-20T00:50:00+08:00）
+
+## 0 合并基点
+843a971 merge: main（T035–T040）并入 P003-T034 数据根外置——两处冲突语义解，env 键与冷启动快照口径补齐
+parents: 0467223201e9d940d82d3646a12f5a2d0525e1cd 51aa3392a0233455dad1c26e90e1c2e8b76f5205 
+
+## 1 根套件 npm test
+ℹ tests 228
+ℹ suites 0
+ℹ pass 228
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 751.502526
+
+## 2 evidence 套件（node --test evidence/test/*/*.test.js）
+ℹ tests 214
+ℹ suites 0
+ℹ pass 213
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 1
+ℹ duration_ms 2019.310329
+
+## 3 P003-T029 探针一（数据根指到 tmp）：probe-config-write.sh
+PASS 起进程后 GET 报环境变量的值
+PASS 写之前 /api/status 连不上（502）
+PASS POST /api/config → 200
+PASS 响应 updated 逐键（正文顺序）
+PASS 写成功的正文不含 Token 原文
+PASS 不重启进程，GET /api/config 立刻报新值
+PASS 写完之后 /api/status 立刻连上新地址（200）
+PASS 牧云调用用的是写进去的新 Token（stub 收到 Cookie）
+PASS 覆盖层文件已落盘
+PASS 覆盖层权限 0600
+PASS 覆盖层只存改过的三个键
+PASS config.updated 只带键名
+PASS 日志里没有 Token 原文
+PASS 重启后改过的值仍生效
+PASS 没改过的键照旧读环境变量（模型三项仍齐）
+PASS 监听端口仍是环境变量那个
+PASS GET 正文不含 Token 原文
+PASS 重启后牧云仍指向覆盖层里的新地址
+PASS 删掉覆盖层后回到环境变量
+EXIT=0
+
+## 4 P003-T029 探针二：probe-corrupt-and-auth.sh
+PASS 覆盖层坏了：进程照常起、生效值回到环境变量
+PASS 覆盖层坏了：日志有 config.load_failed
+PASS config.load_failed 恰一条
+PASS 坏覆盖层之后仍能写（200）
+PASS 写后 GET 报新值
+PASS 配口令未配用户名：admin 凭据能写
+PASS 配口令未配用户名：别的用户名 401
+PASS 错口令 401
+PASS 被拒的写没改生效值
+PASS 两次被拒的写没新增 config.updated（1 → 1）
+PASS 成功写恰一条 config.updated
+PASS config.updated 只带键名
+EXIT=0
+
+## 5 负载面复核（合并后口径）
+-- 数据根唯一定义：
+31:export function dataRoot({ env = process.env, home = homedir() } = {}) {
+-- runtimePaths 缺省根：
+1010:export function runtimePaths(root = dataRoot()) {
+-- 判据历史落点：
+393:function historyDirectoryFor(directory) {
+394-  return directory === builtinWikiDirectory()
+395-    ? path.join(dataRoot(), 'wiki-history')
+396-    : path.join(path.dirname(directory), '.data', 'wiki-history');
+397-}
+-- main 的新语义在位（T036 取消接口 / T039 目录缓存 / T039 三纯函数）:
+829:          try { return json(res, 200, await monitor.cancel(alertId)); }
+37:    this.listCache = null;
+94:    if (this.listCache?.signature === signature) return [...this.listCache.rows];
+105:    this.listCache = { signature, rows: listed };
+404:export function pageBody(content) {
+449:export function pageSummary(content, limit = 200) {
+457:export function pageExcerpts(content, { keyword = '', limit = 3, maxChars = 600 } = {}) {
+-- .env.example 键数：
+38
+-- 仓库内没有 .data、真实全局根未被创建：
+repo/.data 不存在
+/home/trtyr/.local/share/hids-ai-console 不存在
+-- git 状态：
+?? evidence/test/P003-T034/merge-verify.txt
