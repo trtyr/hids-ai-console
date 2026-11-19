@@ -547,10 +547,15 @@ EOF
 字段表里的 `|` 会被转义、换行会被压成空格（`syslog-case.js:99-100`）。这几个材料文件并行写入，权限 `0o600`（`syslog-case.js:112-113`），函数返回 `{ case_dir, files }`（`syslog-case.js:114`）。
 
 `06-必查项.json` 不在 `writeSyslogCase` 里写：它依赖研判的必查项结果，由 `run()` 收尾时调 `writeRequiredEvidence()`
-（`syslog-case.js:187-207`）原子追加，并把文件名补进 `caseInfo.files`（`syslog-case.js:204`），随后能被 `readCaseFile` 读。
+（`syslog-case.js:187-207`）原子追加，并把文件名补进 `caseInfo.files`（`syslog-case.js:204`）。
+写失败是真异常：捷径（客户经验复用）路径的落盘也在知识库 try 块之外，不被「经验核对失败」吞掉（`investigation-agent.js:592-595`）。
 **上界 64000 字符**（`syslog-case.js:180`）：超界的项先降级成「只留计数」（`slimmed_items`），仍放不下的整项不写并计入
 `omitted_items` + `truncated`（`syslog-case.js:191-197`）——宁可少写行，也不让案卷无界增长，更不静默丢项。
 复算入口 `readRequiredEvidence(caseInfo)`（`syslog-case.js:209-212`）只读这个文件，不碰牧云。
+
+**能被模型读的条件**：`readCaseFile` 有 25000 字符闸（`syslog-case.js:172`，见 §6.4），所以这个文件 ≤25000 字符时模型能用
+`read_case_file('06-必查项.json')` 直接读；超过 25000（一直到 64000）时模型读到的是错误提示，复算要走
+`readRequiredEvidence()`——它没有这道闸，读的是全文。
 
 **实测**：
 

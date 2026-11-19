@@ -428,11 +428,13 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 追加到客户报告在 `appendEvidenceReport(report, checks, maxLength = 300)`（`required-evidence.js:154-165`）。
 
 **必查项结果落案卷（P003-T040 A1）**：常规研判带案卷目录时，`run()` 在返回前把每一项写进 `case_dir/06-必查项.json`
-（`investigation-agent.js:283-288`、`:495-497`、`:959`；写文件在 `syslog-case.js:187-207`）。
+（`investigation-agent.js:283-288`、`:495-498`、`:966`；写文件在 `syslog-case.js:187-207`）。
 每项原有字段照写，另加 `first_rows`——该项证据视图的前 5 行（`record.view.items`，`investigation-agent.js:283-288`）。
 行取的是投影视图，不另造投影、不发新查询；没有证据编号的项（`source_unavailable` / `missing_identifier`）不带 `first_rows`。
 复算入口 `readRequiredEvidence(caseInfo)`（`syslog-case.js:209-212`）只读这个文件，不发任何牧云请求。
-没有案卷目录（deep 模式、替身上下文）时不写，也不凭空新建目录（`investigation-agent.js:495-497`）。
+没有案卷目录（deep 模式、替身上下文）时不写，也不凭空新建目录（`investigation-agent.js:495-498`）。
+知识复用捷径命中时同样落（落盘与返回都在知识库 try 块**之外**，`investigation-agent.js:502`、`:592-595`）：
+写失败就是真异常，不会被「经验核对失败，继续完整研判」的 catch 吞掉，也不会白跑一整轮调查后才在收尾处二次失败（P003-T040 复审 major）。
 
 ### 3.6 客户报告整形
 
@@ -502,7 +504,7 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 | `args` | object | 是 | 本次实际传给工具的参数（原样回写） | `agent-tools.js:58`、`investigation-agent.js:555-556` |
 | `fetched_at` | string（date-time） | 是 | 取证时间 | `agent-tools.js:58` |
 | `sha256` | string（64 位小写十六进制） | 是 | 对 `{name,args,result}` 序列化后的 SHA-256 | `agent-tools.js:56`、`agent-tools.js:59` |
-| `view` | object \| null | 是（P003-T040） | 证据的投影视图原文，单条不超过 6000 字；deep 模式的原始事件同样带它 | `investigation-agent.js:274-279`、`:963` |
+| `view` | object \| null | 是（P003-T040） | 证据的投影视图原文，单条不超过 6000 字；deep 模式的原始事件同样带它 | `investigation-agent.js:274-279`、`:970` |
 
 同一份数据进队列（`TriageCase.evidence[]`，`triage-monitor.js:25-31`）时只留四个字段加一个可选 `args`：
 `evidence_id`、`tool`、`fetched_at`、`sha256`，以及 `args`——**只要它是 RPC 形态**（`{id}` / `{count,offset}` 这类，
@@ -872,12 +874,13 @@ uncertain 存疑 低
 只跑本卡的单测与变异检查：
 
 ```bash
-node --test evidence/test/P003-T040/evidence-rollup.test.js      # 7 pass，~150ms
-bash evidence/test/P003-T040/mutate-check.sh                     # 7/7 变异变红，末行 MUTATION_CHECK_PASS
+node --test evidence/test/P003-T040/evidence-rollup.test.js      # 8 pass，~155ms
+bash evidence/test/P003-T040/mutate-check.sh                     # 8/8 变异变红，末行 MUTATION_CHECK_PASS
 ```
 
 | 用例 | 断言（删掉对应实现就红） |
 | --- | --- |
+| 捷径写案卷失败（复审 major） | 知识复用命中但 `case_dir` 不存在 → `run()` 直接抛 ENOENT，错误文案里没有「经验核对失败」，模型只被调用 1 次（不白跑一整轮），`caseInfo.files` 没被塞进半个白名单项 |
 | 一条 triage 研判走完 | 案卷 `06-必查项.json` 里 `related_events` 有 `returned_count: 8`、`total_reported: 12`、`first_rows.length === 5`；`evidence[]` 里 `cw:1` 的 `sha256` 是 64 位十六进制且 `view.facts.command_line` 与引用的 `pointer`/`value` 对得上 |
 | 复算不重拉 | 读案卷 + `InvestigationStore.save/latest` 前后，替身牧云的 `callTool` 计数不变 |
 | deep 原始事件 | `mode: 'deep'` 的 `evidence[]` 里 `cw:1` 是 `get_suspicious_operation_event`，带 `sha256` 与 `view`；存进 `InvestigationStore` 再读回来 `view` 还在 |

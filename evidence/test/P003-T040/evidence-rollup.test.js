@@ -14,6 +14,8 @@ import { InvestigationStore } from '../../../investigation-store.js';
 import { requiredEvidenceFile, requiredEvidenceMaxChars, readRequiredEvidence, writeRequiredEvidence } from '../../../syslog-case.js';
 import { TraceBoardService, findingsRowLimit, findingsRowsMaxChars } from '../../../trace-board.js';
 import { queueArgValueMaxChars, queueEvidenceItem } from '../../../triage-monitor.js';
+import { KnowledgeStore } from '../../../knowledge-store.js';
+import { knowledgeFields } from '../../../knowledge-workbench.js';
 
 const syslogContext = (caseInfo) => ({ parsed: { msgid: 'cloudwalker-suspicious-command', ts: '2026-11-03T08:00:00Z',
   payload_format: 'keyvalue', payload: { event_id: '7', host_ip: '10.0.0.5', source_ip: '192.0.2.2',
@@ -232,4 +234,44 @@ test('A7 评估结论：description 与 cmdlines 纳入 agent 证据视图（含
   assert.equal(persistedEvidenceViewMax, 6000);
   const digest = createHash('sha256').update('probe').digest('hex');
   assert.equal(digest.length, 64);
+});
+
+test('A1 复审 major：捷径路径写案卷失败当场抛，不被「经验核对失败」吞掉也不白跑一整轮', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-t040-shortcut-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new KnowledgeStore(path.join(directory, 'knowledge'));
+  const created = await store.create();
+  await store.update(created.id, current => {
+    current.status = 'published'; current.scenario_id = 'suspicious_operation';
+    current.review = { reviewed_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 30 * 86400000).toISOString() };
+    current.fields = Object.fromEntries(knowledgeFields.map(([key]) => [key, { value: `${key} 已核对` }]));
+    current.fields.reason.value = '已核对本次巡检授权';
+    return current;
+  });
+  const toolbox = new AgentToolbox({
+    listTools: async () => [{ name: 'get_suspicious_operation_event',
+      inputSchema: { type: 'object', properties: { id: {} }, required: ['id'] } }],
+    callTool: async () => ({ event_id: 7, host_view: { host_name: 'app-7' }, cmdline: 'systemctl status nginx' })
+  });
+  let modelCalls = 0;
+  const model = { model: 'fake', complete: async () => { modelCalls++; return { content: JSON.stringify({
+    case_id: created.id, matched: true, summary: '同一主机的已授权巡检',
+    claims: [
+      { text: '主机为 app-7', citations: [{ evidence_id: 'cw:1', pointer: '/host_view/host_name', value: 'app-7' }] },
+      { text: '执行巡检命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'systemctl status nginx' }] }
+    ], unverified_conditions: [], conflicts: [] }) }; } };
+  // 案卷目录不存在：写 06-必查项.json 必失败。捷径路径的落盘在知识库 try 块之外，失败要原样抛出。
+  const caseInfo = { case_dir: path.join(directory, 'no-such-case'), files: [] };
+  const agent = new InvestigationAgent(toolbox, model, undefined, store);
+  await assert.rejects(() => agent.run('suspicious_operation:7',
+    { mode: 'triage', streamContext: syslogContext(caseInfo) }), error => {
+    assert.match(String(error.code || error.message), /ENOENT|no such file/i);
+    // 错误是案卷写不出来，不是「经验核对失败，继续完整研判」——归因不许写错。
+    assert.doesNotMatch(String(error.message), /经验核对失败/);
+    return true;
+  });
+  // 捷径命中就落盘、失败就抛：不再进调查循环「白跑一整轮」。
+  assert.equal(modelCalls, 1);
+  assert.deepEqual(caseInfo.files, [], '失败的落盘不能留下半个白名单项');
 });

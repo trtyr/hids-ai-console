@@ -70,6 +70,14 @@ new = "  unused_cmdlines: ['seq', 'cmdline']"
 assert s.count(old) == 1, "anchor"
 open(p, 'w', encoding='utf-8').write(s.replace(old, new))
 EOF
+cat >"$work/m8.py" <<'EOF'
+import sys
+p, s = sys.argv[1], open(sys.argv[1], encoding='utf-8').read()
+old = "            verdict.wiki = { consulted: [], adopted: [], reason: '命中已审核经验捷径，未调用知识库工具' };\n            shortcut = {"
+new = "            verdict.wiki = { consulted: [], adopted: [], reason: '命中已审核经验捷径，未调用知识库工具' };\n            await persistRequiredEvidence();\n            return {"
+assert s.count(old) == 1, "anchor"
+open(p, 'w', encoding='utf-8').write(s.replace(old, new))
+EOF
 cat >"$work/m7.py" <<'EOF'
 import sys
 p, s = sys.argv[1], open(sys.argv[1], encoding='utf-8').read()
@@ -86,6 +94,7 @@ mutate "A1 必查项不落前 5 行" investigation-agent.js "$work/m4.py"
 mutate "A6 队列一律剥 args" triage-monitor.js "$work/m5.py"
 mutate "A7 cmdlines 不进证据视图" evidence-view.js "$work/m6.py"
 mutate "A7 description 不进证据视图" evidence-view.js "$work/m7.py"
+mutate "复审 major 捷径落盘塞回知识库 try 块" investigation-agent.js "$work/m8.py"
 
 if [ "$fail" -ne 0 ]; then echo "MUTATION_CHECK_FAIL"; exit 1; fi
-echo "MUTATION_CHECK_PASS 7/7"
+echo "MUTATION_CHECK_PASS 8/8"

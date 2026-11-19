@@ -497,6 +497,9 @@ export class InvestigationAgent {
       if (!streamContext?.caseInfo?.case_dir) return;
       await writeRequiredEvidence(streamContext.caseInfo, { alertId, mode, checks: checksWithRows(requiredChecks, session) });
     };
+    // 捷径结果先攒着、出了知识库 try 块再落案卷并返回：写在 try 里会被「经验核对失败」的 catch 吞掉，
+    // 案卷缺失不报错、trace 归因写错、白跑一整轮调查后才在收尾处二次失败（P003-T040 复审 major）。
+    let shortcut = null;
     if (mode === 'triage' && this.knowledgeStore) {
       try {
         const cases = (await this.knowledgeStore.publishedFor(match[1]))
@@ -569,8 +572,7 @@ export class InvestigationAgent {
             // 捷径不走调查循环，但仍属「常规研判且知识库在位」：结果字段与主路径同口径（文档 §4）。
             verdict.rego = { status: rego.status, rule_ids: rego.rules.map(rule => rule.id) };
             verdict.wiki = { consulted: [], adopted: [], reason: '命中已审核经验捷径，未调用知识库工具' };
-            await persistRequiredEvidence();
-            return { alert_id: alertId, mode, model: this.model.model,
+            shortcut = { alert_id: alertId, mode, model: this.model.model,
               prompt_version: `${prompts.version}+${prompts.revision}+${systemDigest}`,
               scenario_ids: [match[1]], knowledge_reuse: { case_id: record.id, title: record.title,
                 reviewed_at: record.review.reviewed_at, expires_at: record.review.expires_at,
@@ -585,6 +587,11 @@ export class InvestigationAgent {
       } catch (error) {
         trace.push({ kind: 'knowledge', matched: false, note: `经验核对失败，继续完整研判：${String(error.message).slice(0, 180)}` });
       }
+    }
+    // 捷径命中：落案卷在这之后做（失败即真异常），不走调查循环。
+    if (shortcut) {
+      await persistRequiredEvidence();
+      return shortcut;
     }
     const cards = selectedCards(prompts.scenarios.cards, match[1], original.result);
     const resolved = resolvePromptParts([prompts.prompts.triage, mode === 'deep' ? prompts.prompts.deep : '',
