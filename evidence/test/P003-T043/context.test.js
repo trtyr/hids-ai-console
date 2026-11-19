@@ -107,14 +107,40 @@ test('A3 GEN-13 覆盖原 baseline.json 的四类信息', async () => {
 });
 
 // ── A4：白名单命令的分层口径写进判据页 ──────────────────────────────────────
+// 分层必须自洽：规则层只收「程序可复算」的载体（rego 规则库 + 误报规则集）；
+// `command_whitelist` 的场景提示是纯提示词（`prompts/scenarios.json`，无程序消费者），不能算硬判定。
+const tableRow = (source, label) => {
+  const row = source.split('\n').find(line => line.startsWith('|') && line.includes(label));
+  assert.ok(row, `GEN-13 的分层表缺了「${label}」这一行`);
+  return row;
+};
+
 test('A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考', async () => {
   const source = await readFile(path.join(wikiDirectory, 'common', 'GEN-13.md'), 'utf8');
-  assert.match(source, /规则层（硬判定）/, '缺「规则层（硬判定）」这一层');
-  assert.match(source, /研判参考/, '缺「研判参考」这一层');
-  for (const carrier of ['rules/*.rego', 'triage-rules.json', 'command_whitelist'])
-    assert.ok(source.includes(carrier), `分层口径没点名载体 ${carrier}`);
+  const hard = tableRow(source, '规则层（硬判定）');
+  for (const carrier of ['rules/*.rego', 'triage-rules.json'])
+    assert.ok(hard.includes(carrier), `规则层没点名载体 ${carrier}`);
+  assert.equal(hard.includes('command_whitelist'), false,
+    '规则层（硬判定）行把纯提示词 command_whitelist 算成了程序可复算的判定');
+
+  const promptLayer = tableRow(source, '场景提示（不是判定层）');
+  assert.ok(promptLayer.includes('command_whitelist'), '场景提示行没点名 command_whitelist');
+  assert.ok(promptLayer.includes('没有程序消费者'), '场景提示行没说清它没有程序消费者');
+
+  assert.ok(tableRow(source, '研判参考').includes('GEN-13.md'), '研判参考行没指向本页');
   assert.match(source, /不能代替规则层/, '没有「本页不能代替规则层结论」的禁令');
   assert.match(source, /不自动关闭、不加白、不处置/, '没有「不自动加白」的口径');
+  assert.match(source, /场景提示与\*\*本页清单都不是判定来源\*\*/, '硬结论没把场景提示排除在判定来源之外');
+});
+
+test('A4 判据页只引用当前 active 页，不引 deprecated 页', async () => {
+  const source = await readFile(path.join(wikiDirectory, 'common', 'GEN-13.md'), 'utf8');
+  const links = [...source.matchAll(/\]\((\.\.\/[a-z-]+\/[A-Z]{2}-\d+\.md)\)/g)].map(match => match[1]);
+  assert.ok(links.length > 0, 'GEN-13 一条页间引用都没有，这条守卫等于没生效');
+  for (const link of links) {
+    const target = await readFile(path.join(wikiDirectory, 'common', link), 'utf8');
+    assert.match(target, /^status: active$/m, `GEN-13 引了非 active 页：${link}`);
+  }
 });
 
 test('A4 入口页与日志登记了 GEN-13', async () => {
@@ -129,6 +155,13 @@ test('A5 对外文档里不再有九条路径与 04-上下文.md 带基线/情�
   assert.equal(pipeline.includes('`window`/`baseline`/`intel`/`history`'), false, 'triage-pipeline 还写着四段 JSON');
   assert.equal(pipeline.includes('baseline: {}, intel: {}'), false, 'triage-pipeline 示例还带 baseline/intel');
   assert.match(pipeline, /`window`\/`history` 的 JSON/, 'triage-pipeline 没写新的两段 JSON');
+  // §1「不做什么」的可复跑验证块必须对**当前**代码成立：脚本体与终端输出都要跟实测一致。
+  assert.ok(pipeline.includes("grep -niE 'http|router|auth|token' triage-monitor.js syslog-input.js syslog-case.js"),
+    'triage-pipeline 的验证命令被改了');
+  assert.ok(pipeline.includes('triage-monitor.js:562:'), '验证块的输出里没有实测那条命中');
+  assert.equal(pipeline.includes('triage-monitor.js:914:'), false,
+    '验证块还贴着已被删除的 :914 命中（那段基线读取随 P003-T043 一起删了）');
+  assert.equal(pipeline.includes('两处命中'), false, '验证块还写着「两处命中」，与当前代码不符');
 
   const architecture = await doc('docs/architecture.md');
   assert.equal(architecture.includes('| `<数据根>/baseline.json` |'), false, 'architecture §8.2 还留着 baseline.json 行');

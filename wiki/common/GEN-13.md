@@ -62,7 +62,7 @@ updated: 2026-11-20
 | `/opt/app/bin/rotate-logs` | 自带 ELF · `sha256:41ab…` | `web-prod` | ops-zhang | 2027-01-31 |
 
 **登记粒度**：路径 + 哈希 + 主机组 + 有效期四项齐全才登记。**不接受**「按目录放行」「`/usr/local/bin/*`」这类通配写法——
-一个写错的白名单等于给攻击者留一扇常开的门（见 [WS-11](../webshell/WS-11.md)、[AL-10](../abnormal-login/AL-10.md)）。
+一个写错的白名单等于给攻击者留一扇常开的门（判定流程见 [WS-13](../webshell/WS-13.md)、[AL-11](../abnormal-login/AL-11.md)）。
 
 ### 4 预期来源国家 / IP 清单
 
@@ -83,17 +83,19 @@ updated: 2026-11-20
 
 | 层 | 载体 | 干什么 | 谁算结论 | 模型能改吗 |
 | --- | --- | --- | --- | --- |
-| **规则层（硬判定）** | Rego 规则库 `rules/*.rego`（`RuleStore`）；误报规则集 `<数据根>/triage-rules.json`（`TriageRuleEngine`）；事件类型 `command_whitelist` 的场景提示（`prompts/scenarios.json`） | 按结构化字段做**可复算**的匹配：命中即产出 `matched` / `candidate` / `observed` 之类结论字段，挂到研判结果的 `rego` / `rule_evaluation` 上 | **程序** | 不能（研判侧只读；改规则走规则维护者与人工审核） |
+| **规则层（硬判定）** | Rego 规则库 `rules/*.rego`（`RuleStore`）；误报规则集 `<数据根>/triage-rules.json`（`TriageRuleEngine`） | 按结构化字段做**可复算**的匹配：命中即产出 `matched` / `candidate` / `observed` 之类结论字段，挂到研判结果的 `rego` / `rule_evaluation` 上 | **程序** | 不能（研判侧只读；改规则走规则维护者与人工审核） |
+| **场景提示（不是判定层）** | 事件类型 `command_whitelist` 的场景提示（`prompts/scenarios.json`） | 告诉模型这类告警该查什么（软件包归属、签名、哈希、执行用户、父进程链）；**没有程序消费者**，不产出任何结论字段 | 模型按卡研判，判定字段仍须规则层复核；提示词本身不算结论 | 不能（改卡走提示词维护流程） |
 | **研判参考（本页）** | `common/GEN-13.md` 的四类示例清单 | 只回答「登记过没有」这一条参考事实，供人读、供模型引用 | 模型**不得**据此写结论 | 只能引用（`wiki_adopted`），不能改写判定 |
 
 **硬结论只有规则层能出。** 具体三条：
 
 1. 白名单命中/未命中的**判定字段**只从规则层来（`rule_evaluation` / `rego`），模型不许自己算一遍。
-   本页清单与规则集不一致时，以规则层为准，并把不一致写进 `questions_for_human`。
+   `command_whitelist` 的场景提示与**本页清单都不是判定来源**：前者是提示词、没有程序消费者，后者是人填的参考事实；
+   两者都不能代替规则层的结论。本页清单与规则集不一致时，以规则层为准，并把不一致写进 `questions_for_human`。
 2. 模型据本页能说的最多是：「该路径 / 命令 / 账号在环境基线上有登记，需与工单 `CHG-…` 核对授权范围与有效期。」
    不能直接写「误报」「已授权」「建议加白」。
-3. 自动结论只出建议，**不自动关闭、不加白、不处置**（与 [GEN-12](GEN-12.md) 第 7 步、[AL-10](../abnormal-login/AL-10.md)、
-   [WS-11](../webshell/WS-11.md) 同一口径）。命中白名单不等于安全（`curl` / `python` / `certutil` 这类 LOLBins
+3. 自动结论只出建议，**不自动关闭、不加白、不处置**（与 [GEN-12](GEN-12.md) 第 7 步、[AL-11](../abnormal-login/AL-11.md)、
+   [WS-13](../webshell/WS-13.md) 的判定流程同一口径）。命中白名单不等于安全（`curl` / `python` / `certutil` 这类 LOLBins
    本来就在系统白名单里），未命中也不等于恶意——见 `prompts/triage.md` 的「白名单不等于安全」条。
 
 ## 怎么引用这页

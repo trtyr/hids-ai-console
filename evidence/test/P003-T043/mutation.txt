@@ -45,3 +45,13 @@ M5 变异：syslog-case.js 的 04-上下文.md 加回 baseline/intel（期望探
 ✔ GET /api/wiki/pages/common/GEN-13.md 读得到正文  [3760 字符]
 ✖ 探针失败：04-上下文.md 里还有 baseline/intel
 ✖ 探针有断言红（退出码 1）
+
+── 复审整改轮（2026-11-20，fail 判词两条 major + 三条 minor 之后）──
+M6 变异：把 `command_whitelist` 场景提示塞回「规则层（硬判定）」行（期望 A4 分层自洽红）→
+✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 (1.098462ms)
+ℹ tests 12
+ℹ pass 11
+ℹ fail 1
+✖ failing tests:
+✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 (1.098462ms)
+（M6 复原：注意 wiki/common/GEN-13.md 是本卡新文件，git checkout 会回到上一提交的版本）

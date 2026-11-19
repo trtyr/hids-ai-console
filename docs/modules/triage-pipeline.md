@@ -50,10 +50,12 @@ grep -niE 'http|router|auth|token' triage-monitor.js syslog-input.js syslog-case
 
 ```
 triage-monitor.js:562:      // 绑定失败不能让队列静默收不到消息：记进 summary()，队列照常服务（HTTP 还要活）。
-triage-monitor.js:914:      { test_tool_paths: [], authorized_operators: [], whitelist_commands: [], known_source_countries: ['CN'], asset: {} });
 ```
 
-两处命中都不是路由或鉴权代码：562 是一句中文注释里的「HTTP」，914 是基线配置字段名里的 `auth`。
+**当前只剩这一处命中**，是一句中文注释里的「HTTP」，不是路由或鉴权代码。（P003-T043 之前还有第二处：`contextFor` 里读
+基线 JSON 的那行带了 `authorized_operators`，`auth` 就命在里面；那段读取随 `baseline.json` / `intel.json` 一起删了，
+见 §6.2「研判背景不进上下文」。）命令退出码：有命中时 `0`、无命中时 `1`，两种都算验过——判据是**输出里没有路由/鉴权实现**，
+不是退出码。
 
 **谁触发它**：
 
@@ -622,7 +624,7 @@ EOF
 
 字段表里的 `|` 会被转义、换行会被压成空格（`syslog-case.js:99-100`）。这几个材料文件并行写入，权限 `0o600`（`syslog-case.js:112-113`），函数返回 `{ case_dir, files }`（`syslog-case.js:114`）。
 
-**研判背景不进上下文（P003-T043）**：`04-上下文.md` 的 JSON 只剩 `window` 与 `history` 两段。原来那两段——`baseline`（测试工具路径 / 授权运维 / 白名单命令 / 预期来源国家）与 `intel`（按 IP 的情报缓存）——已经整体砍掉：监视器不再读 `<数据根>/baseline.json` / `<数据根>/intel.json`（`triage-monitor.js:899-916` 的 `contextFor` 只算会话键、时间窗、出现/投递次数与历史结论），环境基线改由模型按需经 `wiki_page` 读判据页 `GEN-13`（`common/GEN-13.md`），白名单命令的硬判定归规则层（`rules/*.rego` 与 `triage-rules.json` 规则集）。`server.js` 的 `runtimePaths()` 同步只剩 7 个具名路径，装配处也不再传 `baselineFile` / `intelFile`。
+**研判背景不进上下文（P003-T043）**：`04-上下文.md` 的 JSON 只剩 `window` 与 `history` 两段。原来那两段——`baseline`（测试工具路径 / 授权运维 / 白名单命令 / 预期来源国家）与 `intel`（按 IP 的情报缓存）——已经整体砍掉：监视器不再读 `<数据根>/baseline.json` / `<数据根>/intel.json`（`triage-monitor.js:899-914` 的 `contextFor` 只算会话键、时间窗、出现/投递次数与历史结论），环境基线改由模型按需经 `wiki_page` 读判据页 `GEN-13`（`common/GEN-13.md`），白名单命令的硬判定归规则层（`rules/*.rego` 与 `triage-rules.json` 规则集）。`server.js` 的 `runtimePaths()` 同步只剩 7 个具名路径，装配处也不再传 `baselineFile` / `intelFile`。
 
 `06-必查项.json` 不在 `writeSyslogCase` 里写：它依赖研判的必查项结果，由 `run()` 收尾时调 `writeRequiredEvidence()`
 （`syslog-case.js:187-207`）原子追加，并把文件名补进 `caseInfo.files`（`syslog-case.js:204`）。
