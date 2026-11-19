@@ -161,8 +161,8 @@
 | 研判队列未配置 | 503 | 自动研判尚未配置 |
 
 `409` 的边界只在「已完成」上登记。**重跑不覆盖人工结论**（P003-T018）：`POST /api/agent/triage/{alertId}`（`retry:true`）重排一条已登记误报的记录时，
-`enqueue()` 把 `verdict` / `verdict_label` / `summary` / `decision_source` / `feedback` 带到新记录上（`triage-monitor.js:219-226`）；
-`run()` 收尾看到 `verdict === 'false_positive'` 且 `decision_source === 'human'` 就不写这四件（`triage-monitor.js:452-458`），
+`enqueue()` 把 `verdict` / `verdict_label` / `summary` / `decision_source` / `feedback` 带到新记录上（`triage-monitor.js:218-225`）；
+`run()` 收尾看到 `verdict === 'false_positive'` 且 `decision_source === 'human'` 就不写这四件（`triage-monitor.js:451-457`），
 报告 / 证据 / 缺证 / 下一步 / `saved_at` 照常按这次研判刷新。**AI 自己判出的 `false_positive` 不算人工登记**，重跑照旧被这次研判覆盖。
 
 **两个维护者都不是跑研判的那个 Agent**（A3）：

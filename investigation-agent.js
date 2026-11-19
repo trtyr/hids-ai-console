@@ -363,9 +363,14 @@ export class InvestigationAgent {
     let original;
     if (cachedEvent) {
       const args = { id: Number(match[2]) };
+      // 不调工具，但取证记账照 EvidenceSession.callTool 走：次数上限与 2MB 单次上限都不豁免
+      // （两条检查住在 agent-tools.js 的 callTool 里，复用分支得自己对一遍，否则「同形」只是形状同形）。
+      if (session.started >= session.maxCalls) throw new Error(`本次调查的取证调用已达到 ${session.maxCalls} 次上限`);
+      const serialized = JSON.stringify({ name: getName, args, result: cachedEvent });
+      if (serialized.length > 2_000_000) throw new Error('工具结果超出本次调查的单次取证上限');
       const evidenceId = `cw:${++session.started}`;
       original = { evidenceId, tool: getName, args, fetchedAt: new Date().toISOString(),
-        sha256: createHash('sha256').update(JSON.stringify({ name: getName, args, result: cachedEvent })).digest('hex'),
+        sha256: createHash('sha256').update(serialized).digest('hex'),
         result: cachedEvent, view: boundEvidenceView(projectEvidence(getName, cachedEvent)) };
       session.records.set(evidenceId, original);
       trace.push({ kind: 'tool', name: getName, evidence_id: evidenceId, note: '复用 syslog 匹配已取的事件详情' });

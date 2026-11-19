@@ -88,7 +88,6 @@ export class TriageMonitor {
     this.emptyPolls = 0;
     // 下一轮轮询的延迟：有新增就是 intervalMs，连续空轮翻倍到 maxBackoffMs（A1）。
     this.backoffMs = intervalMs;
-    this.concurrency = concurrency;
     this.inputMode = inputMode;
     this.eventToolbox = eventToolbox;
     this.wiki = wiki;

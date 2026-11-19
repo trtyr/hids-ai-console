@@ -33,16 +33,16 @@
 
 1. **告警进入**。牧云有 11 类事件，类型表在 `cloudwalker.js:2-6`。进入方式有两种：
    - **syslog 推送**：UDP 监听，默认 `127.0.0.1:15514`（`server.js:367-368`、`syslog-input.js:104`）。报文按 RFC5424 解析，正文支持结构化数据、JSON、键值对三种形态（`syslog-input.js:42-57`）。
-   - **轮询**：`TriageMonitor.poll()` 定期拉事件列表（`triage-monitor.js:164`）。哪种生效由 `HIDS_TRIAGE_INPUT_MODE` 决定，默认 `syslog`（`server.js:40`）。
-2. **去重与排队**。指纹相同、落在同一秒的重复投递合并为一条并累加次数（`triage-monitor.js:232-249`）；队列状态落盘，重启后未完成任务回到 `queued` 继续跑（`triage-monitor.js:56-57`）。
-3. **关联牧云事件**。优先按 syslog 里的 `event_id` 精确回查并核对主机身份，回查不到才按主机与时间窗口匹配（`syslog-case.js:23-84`）。匹配不上时走「未匹配」分支，结论强制为存疑（`investigation-agent.js:558-593`）。
+   - **轮询**：`TriageMonitor.poll()` 定期拉事件列表（`triage-monitor.js:163`）。哪种生效由 `HIDS_TRIAGE_INPUT_MODE` 决定，默认 `syslog`（`server.js:40`）。
+2. **去重与排队**。指纹相同、落在同一秒的重复投递合并为一条并累加次数（`triage-monitor.js:231-248`）；队列状态落盘，重启后未完成任务回到 `queued` 继续跑（`triage-monitor.js:56-57`）。
+3. **关联牧云事件**。优先按 syslog 里的 `event_id` 精确回查并核对主机身份，回查不到才按主机与时间窗口匹配（`syslog-case.js:23-84`）。匹配不上时走「未匹配」分支，结论强制为存疑（`investigation-agent.js:563-598`）。
 4. **规则预筛**（仅常规研判）。规则引擎按主机、字段条件与有效期评估当前事件，命中则作为「误报候选」交给 AI 复核，而不是直接下结论（`triage-rules.js:258-305`、`server.js:117-129`）。
-5. **取证**。研判智能体自主选择工具查询，最多 6 轮对话、8 次工具调用（`investigation-agent.js:378`、`investigation-agent.js:396`）。每次调用产出一条带证据编号的记录（`agent-tools.js:57-68`）。
+5. **取证**。研判智能体自主选择工具查询，最多 6 轮对话、8 次工具调用（`investigation-agent.js:383`、`investigation-agent.js:401`）。每次调用产出一条带证据编号的记录（`agent-tools.js:57-68`）。
 6. **出结论**。模型输出 JSON，结论被映射到三态（`investigation-agent.js:63-73`），随后进入独立复核、引用校验、多级降级三道关卡（第 6 节）。
 7. **落盘**。结论写进研判记录库（`investigation-store.js:14-23`）；syslog 触发的案件还会生成一份可读的案件目录，含原始告警、字段表、研判事实、上下文与结果（`syslog-case.js:92-147`）。
 8. **交付**。给客户看的 `report` 被限制在 300 字符以内（`triage-output.js:1`、`triage-output.js:47-50`、`triage-output.js:64`），并且必须与三态结论、已核实事实、数据缺口三者一致，否则会被重写（`triage-output.js:35-66`）。
 
-**贯穿全程的一条纪律**：本后端不下指令。它只产出建议——每份研判记录都带 `auto_action: false`（`investigation-agent.js:555`），意思是「未执行任何处置动作」。隔离、封禁、加白一类动作不在本仓范围内。
+**贯穿全程的一条纪律**：本后端不下指令。它只产出建议——每份研判记录都带 `auto_action: false`（`investigation-agent.js:560`），意思是「未执行任何处置动作」。隔离、封禁、加白一类动作不在本仓范围内。
 
 **另一个闭环**：客户或运维对结论不认可以及，会通过知识库维护会话提出修订，走「会话 → 草案 → 回放 → 人工审核发布」四步（第 7 节），修订后的判据会被后续研判读到。
 
@@ -216,7 +216,7 @@
 
 ### 5.4 未匹配的 syslog 走另一条路
 
-syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 `run()`，而是走 `runUnmatchedSyslog()`（`investigation-agent.js:558`）。该分支的提示词里写死了「最终结论必须是‘存疑’」（`investigation-agent.js:567`），返回的 `verdict` 也是硬编码的 `uncertain`（`investigation-agent.js:582`），并把「牧云 API 没有匹配到对应事件」列入证据缺口（`investigation-agent.js:585`）。
+syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 `run()`，而是走 `runUnmatchedSyslog()`（`investigation-agent.js:563`）。该分支的提示词里写死了「最终结论必须是‘存疑’」（`investigation-agent.js:572`），返回的 `verdict` 也是硬编码的 `uncertain`（`investigation-agent.js:587`），并把「牧云 API 没有匹配到对应事件」列入证据缺口（`investigation-agent.js:590`）。
 
 ## 6. 证据链与结论校验
 
@@ -240,23 +240,23 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 ### 6.3 校验失败怎么降级
 
-1. 首次不通过，退回模型重写，最多两次（`investigation-agent.js:504-519`）。
-2. 仍不通过，就删掉没通过校验的事实，并把 `validation.removed_unverified_facts` 置为 true（`investigation-agent.js:520-526`）。
-3. 再不行，结论降为存疑、置信度降为低、缺口里加一条「模型引用校验未通过」（`investigation-agent.js:527-531`）。
+1. 首次不通过，退回模型重写，最多两次（`investigation-agent.js:509-524`）。
+2. 仍不通过，就删掉没通过校验的事实，并把 `validation.removed_unverified_facts` 置为 true（`investigation-agent.js:525-531`）。
+3. 再不行，结论降为存疑、置信度降为低、缺口里加一条「模型引用校验未通过」（`investigation-agent.js:532-536`）。
 
 ### 6.4 误报结论的额外门槛
 
-判「误报」比判其他两态更严（`investigation-agent.js:532-541`）：需要有带引用的**正向良性事实**，并且独立复核状态为 `supported`，并且引用校验通过。门槛条数按告警类型分档——高风险类型（内存马、反弹 Shell、提权、WebShell、蜜罐，见 `investigation-agent.js:15`）要 2 条，其余要 1 条。任一条不满足，结论降为存疑。
+判「误报」比判其他两态更严（`investigation-agent.js:537-546`）：需要有带引用的**正向良性事实**，并且独立复核状态为 `supported`，并且引用校验通过。门槛条数按告警类型分档——高风险类型（内存马、反弹 Shell、提权、WebShell、蜜罐，见 `investigation-agent.js:15`）要 2 条，其余要 1 条。任一条不满足，结论降为存疑。
 
 ### 6.5 独立复核
 
-调查结束后会有一次独立的「质疑者」调用（`investigation-agent.js:449-467`）。它不继承调查过程，只看证据视图与已提交结论，检查引用是否支持事实、是否把空查询当成良性、声称合法运维时有无依据、是否忽略反证。
+调查结束后会有一次独立的「质疑者」调用（`investigation-agent.js:454-472`）。它不继承调查过程，只看证据视图与已提交结论，检查引用是否支持事实、是否把空查询当成良性、声称合法运维时有无依据、是否忽略反证。
 
-复核有三种结果：`supported`、`needs_revision`、`unavailable`（模型调用失败时落到 `unavailable`，见 `investigation-agent.js:454`）。处理方式：
+复核有三种结果：`supported`、`needs_revision`、`unavailable`（模型调用失败时落到 `unavailable`，见 `investigation-agent.js:459`）。处理方式：
 
-- `needs_revision`：让模型按复核意见重出结论（`investigation-agent.js:457-466`）。
-- 不是 `supported` 且告警类型属于高风险且结论本是「真实威胁」：强制降为存疑、置信度降为低（`investigation-agent.js:468-473`）。
-- 蜜罐场景另有一条专门的降级：来源是 `127.` 开头回环地址、且事件时间线里没有任何响应长度时，即使判了真实威胁也会被改写成存疑，并说明回环地址不代表外部入侵（`investigation-agent.js:475-485`）。
+- `needs_revision`：让模型按复核意见重出结论（`investigation-agent.js:462-471`）。
+- 不是 `supported` 且告警类型属于高风险且结论本是「真实威胁」：强制降为存疑、置信度降为低（`investigation-agent.js:473-478`）。
+- 蜜罐场景另有一条专门的降级：来源是 `127.` 开头回环地址、且事件时间线里没有任何响应长度时，即使判了真实威胁也会被改写成存疑，并说明回环地址不代表外部入侵（`investigation-agent.js:480-490`）。
 
 ### 6.6 必查项不是可选的
 
@@ -274,7 +274,7 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` 是仓库内文件；其余 12 个场景的 SOP 实际来自 `wiki/` 下的判据页，映射表在 `prompt-store.js:10-16`（例如 `webshell` → `webshell/WS-13.md`）。
 
-`PromptStore.load()`（`prompt-store.js:33-48`）把这三块拼起来，并叠加 `.data/prompt-overrides.json` 里的本地覆盖（`prompt-store.js:17`、`prompt-store.js:38-44`）。拼完算出一个 `revision`：对 `prompts + scenarios + sop + release` 做 SHA-256 取前 16 位（`prompt-store.js:21-23`、`prompt-store.js:45`）。这个 revision 是整套提示词的版本指纹，写进每份研判记录的 `prompt_version`（形如 `版本号+revision+系统提示摘要`，见 `investigation-agent.js:551`）。
+`PromptStore.load()`（`prompt-store.js:33-48`）把这三块拼起来，并叠加 `.data/prompt-overrides.json` 里的本地覆盖（`prompt-store.js:17`、`prompt-store.js:38-44`）。拼完算出一个 `revision`：对 `prompts + scenarios + sop + release` 做 SHA-256 取前 16 位（`prompt-store.js:21-23`、`prompt-store.js:45`）。这个 revision 是整套提示词的版本指纹，写进每份研判记录的 `prompt_version`（形如 `版本号+revision+系统提示摘要`，见 `investigation-agent.js:556`）。
 
 可改的地方与限制：
 
@@ -345,8 +345,8 @@ P003-T019 之前的版本把这里算成「本文件所在目录的上一级」+
 | `.data/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:42` |
 | `.data/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:47`、`triage-monitor.js:69-71` |
 | `.data/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:51`、`syslog-case.js:92-115` |
-| `.data/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:52`、`triage-monitor.js:282` |
-| `.data/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:53`、`triage-monitor.js:284` |
+| `.data/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:52`、`triage-monitor.js:281` |
+| `.data/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:53`、`triage-monitor.js:283` |
 | `.data/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:54` |
 | `.data/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:96` |
 | `.data/prompt-overrides.json` | 提示词与 SOP 的本地覆盖 | `PromptStore` | `prompt-store.js:17` |
@@ -423,7 +423,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 ### 9.6 本系统不下指令
 
-整条链路上没有「隔离」「封禁」「加白」的执行动作。研判记录里的 `auto_action: false`（`investigation-agent.js:555`）就是这个意思；规则命中也只是「交由 AI 复核」的候选（`server.js:122`、`triage-monitor.js:344`）。
+整条链路上没有「隔离」「封禁」「加白」的执行动作。研判记录里的 `auto_action: false`（`investigation-agent.js:560`）就是这个意思；规则命中也只是「交由 AI 复核」的候选（`server.js:122`、`triage-monitor.js:343`）。
 
 ## 10. 配置项速查
 

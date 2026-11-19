@@ -694,7 +694,34 @@ test('A5 并发与队列上限可由配置查，队列到上限拒收并计丢�
   assert.equal(byEnv.queueLimit, 5);
   assert.deepEqual([byEnv.summary().concurrency, byEnv.summary().queue_limit, byEnv.summary().dropped], [3, 5, 0]);
 
-  // 非法值回落默认，不把队列卡死（0 / 负数 / 非数）。
+  // 显式构造参数走同一条规范化：合法值原样保留，非法值回落默认（0 / 负数 / 非数）。
+  // 回归（复审 blocker）：构造尾部曾有一行 `this.concurrency = concurrency` 把规范化结果覆盖回原值，
+  // 显式传 0 时 drain 条件 active < 0 恒假，队列永不执行——这两段断言就是防它再回来。
+  // 先清掉 env，回落目标才是硬默认 2 / 1000（否则测的是 env）。
+  delete process.env.HIDS_TRIAGE_CONCURRENCY;
+  delete process.env.HIDS_TRIAGE_QUEUE_MAX;
+  assert.equal(new TriageMonitor({ file: path.join(directory, 'explicit.json'), concurrency: 4,
+    service: {}, investigator: {}, history: {} }).summary().concurrency, 4, '显式合法值原样生效');
+  for (const bad of [0, -5, 'abc', null, 1.5]) {
+    const explicit = new TriageMonitor({ file: path.join(directory, 'explicit-bad.json'), concurrency: bad,
+      queueLimit: bad, service: {}, investigator: {}, history: {} });
+    assert.deepEqual([explicit.concurrency, explicit.summary().concurrency, explicit.queueLimit], [2, 2, 1000],
+      `显式非法参数 ${JSON.stringify(bad)}`);
+  }
+
+  // 行为面：显式 concurrency:0 不能把队列卡死，入队的记录必须真的跑起来（复审用 node -e 复现的那条路径）。
+  const stuck = [];
+  const rescued = new TriageMonitor({ service: {}, file: path.join(directory, 'stuck.json'), concurrency: 0,
+    history: new InvestigationStore(path.join(directory, 'results')),
+    investigator: { run: async id => { stuck.push(id); return { alert_id: id, mode: 'triage',
+      verdict: { verdict: 'uncertain', summary: '待复核', claims: [] }, validation: { ok: true } }; } } });
+  await rescued.load();
+  await rescued.enqueue('honeypot:1');
+  await awaitRecord(rescued, () => stuck.length === 1);
+  assert.deepEqual(stuck, ['honeypot:1'], 'concurrency:0 回落默认后队列照常执行');
+  assert.equal(rescued.status('honeypot:1').status, 'done');
+
+  // env 路径：非法值同样回落默认，不把队列卡死（0 / 负数 / 非数 / 空串）。
   for (const bad of ['0', '-1', '半', '']) {
     process.env.HIDS_TRIAGE_CONCURRENCY = bad;
     process.env.HIDS_TRIAGE_QUEUE_MAX = bad;

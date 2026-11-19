@@ -722,3 +722,33 @@ test('A2 syslog 已取的事件详情随 match.event 进研判，入口不再拉
   await agent.run('suspicious_operation:7', { mode: 'triage' });
   assert.equal(calls.filter(call => call.name === 'get_suspicious_operation_event').length, 1);
 });
+
+test('A2 复用已取详情不豁免取证上限：次数用尽与超 2MB 照抛', async () => {
+  const detail = { id: 7, cmdline: 'id' };
+  const toolbox = new AgentToolbox({
+    listTools: async () => [{ name: 'get_suspicious_operation_event',
+      inputSchema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } }],
+    callTool: async () => detail
+  });
+  const model = { model: 'fake', complete: async () => ({ content: '{}' }) };
+  const context = () => {
+    const value = syslogContext('id');
+    value.match = { matched: true, event_id: 7, event: detail };
+    return value;
+  };
+
+  // 次数用尽：EvidenceSession.callTool 会抛，复用分支不许绕过。
+  const exhausted = new InvestigationAgent(toolbox, model);
+  const nativeInvestigation = exhausted.toolbox.investigation.bind(exhausted.toolbox);
+  exhausted.toolbox.investigation = () => { const session = nativeInvestigation(); session.started = session.maxCalls; return session; };
+  await assert.rejects(exhausted.run('suspicious_operation:7', { mode: 'triage', streamContext: context() }),
+    /本次调查的取证调用已达到 20 次上限/);
+  exhausted.toolbox.investigation = nativeInvestigation;
+
+  // 2MB 上限：复用分支拿到的是同一条详情，超限照样抛，不悄悄收进证据表。
+  const huge = new InvestigationAgent(toolbox, model);
+  const hugeContext = context();
+  hugeContext.match.event = { id: 7, blob: 'x'.repeat(2_000_001) };
+  await assert.rejects(huge.run('suspicious_operation:7', { mode: 'triage', streamContext: hugeContext }),
+    /工具结果超出本次调查的单次取证上限/);
+});

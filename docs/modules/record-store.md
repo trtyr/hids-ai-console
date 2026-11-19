@@ -86,9 +86,9 @@ latest(alertId, mode = 'deep')
 | 业务 API（流式分支） | `server.js:315` | `history.save(result)` |
 | 业务 API（普通分支） | `server.js:322` | `history.save(result)` |
 | 业务 API（查最近一次） | `server.js:332` | `history.latest(alertId, mode)` |
-| 自动研判流水线 | `triage-monitor.js:375` | `history.save(result)` |
+| 自动研判流水线 | `triage-monitor.js:374` | `history.save(result)` |
 | 自动研判流水线（补证据） | `triage-monitor.js:62` | `history.latest(alert_id, 'triage')` |
-| 自动研判流水线（去重后改写） | `triage-monitor.js:242-243` | 先 `latest()` 再 `save()` |
+| 自动研判流水线（去重后改写） | `triage-monitor.js:241-242` | 先 `latest()` 再 `save()` |
 
 ## 4 值语义
 
