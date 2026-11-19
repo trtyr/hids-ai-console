@@ -31,6 +31,7 @@ security:
   - basicAuth: []
 tags:
   - name: 状态
+  - name: 数据管理
   - name: 告警
   - name: 自动研判
   - name: 深度研判
@@ -208,6 +209,112 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /api/data/inventory:
+    get:
+      tags: [数据管理]
+      summary: 盘点七类运行态存储的条数与字节
+      operationId: getDataInventory
+      description: |
+        七类存储各报**条数**与**字节量**，再给一个总数；只读本地运行态目录，不碰牧云、不碰模型、不读日志文件内容。
+
+        | kind | 中文 | 什么算「一条」 | 路径来源 |
+        | --- | --- | --- | --- |
+        | `cases` | 案卷 | 案件目录下的一级子目录（字节按目录内文件递归累加） | `HIDS_CASES_DIR`，缺省 `.data/cases` |
+        | `investigations` | 研判记录 | 一个 `*.json` 文件 | `.data/investigations` |
+        | `boards` | 溯源白板 | 一个 `*.json` 文件 | `.data/trace-boards` |
+        | `wiki_sessions` | 知识库会话 | 一个 `*.json` 文件 | `.data/wiki-sessions` |
+        | `queue` | 研判队列 | 一条队列记录（有研判队列时按进程内记录数，否则读队列文件 `records`）；字节＝队列文件 + 同名 `.archive.jsonl` | `.data/triage-monitor.json` |
+        | `logs` | 日志 | `.data/` **顶层**的一个 `*.log` 文件 | 后端自身不落日志文件（只上 stdout），正常部署下这里是 0 |
+        | `config_overrides` | 配置覆盖层 | 那一个覆盖层文件（`config-overrides.json`） | `.data/config-overrides.json` |
+
+        `oldest_at` / `newest_at` 是这一类的条目时刻：文件取 mtime，案卷取目录内**文件**的最新 mtime（空目录退回目录 mtime），
+        队列取记录上的 `updated_at`（没有则 `saved_at`、`created_at`）。没有条目时为 `null`。
+        `exists` 表示那条存储路径在不在盘上（目录/文件缺失不报错，按 `count: 0` 返回，`exists: false`）。
+        每次请求都现扫盘：`POST /api/data/cleanup` 执行完再调它，数字立刻是清理后的。
+      responses:
+        '200':
+          description: 七类存储的占用明细与总数（`stores` 顺序固定，见 `DataStoreUsage.kind` 的枚举顺序）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataInventory'
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/data/cleanup:
+    post:
+      tags: [数据管理]
+      summary: 按类型与阈值归档或删除老数据（默认 dry-run 只报清单）
+      operationId: cleanData
+      description: |
+        按 `kind`（与盘点同一套七类）与阈值挑候选，再按 `action` **归档**或**删除**。
+        **默认 dry-run**：`execute` 不给或为 `false` 时只回将清清单（`candidates`），盘上一个字节都不动；
+        带 `"execute": true` 才真执行。
+
+        阈值（两条都要给至少一条，一个都不给回 400——不许无阈值一把抹掉）：
+        - `older_than`：ISO 8601 时间，**早于**它的条目进候选；
+        - `keep`：保留**最新** N 条（按条目时刻倒序），排在它后面的进候选。
+        两条同时给时取**并集**（不重复计）。
+
+        动作：
+        - `archive`（缺省）：文件/案卷目录 `rename` 进 `.data/archive/<kind>/<执行时刻>-<原名>`；队列记录追加到
+          `.data/triage-monitor.json.archive.jsonl`（带 `archived_at`，与 TTL 归档同格式）再移出队列。
+        - `delete`：直接删文件/目录；队列记录从内存与队列文件里删掉（同时失效对应去重条目）。
+
+        **已完结案件才可清**：`queue` 的候选里只要有一条状态不是 `done`（`queued` / `running` / `failed` 都算没完），
+        整个请求回 **409**，盘上一动不动；`cases` 的候选目录上挂着非 `done` 记录的同样 409。
+        没有装配研判队列（没配牧云或模型）时清 `queue` 回 **503**（不拿队列文件硬删，那是另一条进程的状态）。
+
+        **留痕**：`execute: true` 且真的执行时落一条 `data.cleaned` 日志，字段只有 `kind` / `action` / `count` / `bytes`——
+        与 `config.updated` 同口径：不记文件名、不记记录内容。dry-run 不留痕。
+
+        响应里的 `inventory` 是**执行之后**重新扫出来的盘点（dry-run 时就是当下未变的数字），
+        与紧接着调 `GET /api/data/inventory` 的结果一致。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataCleanupRequest'
+            examples:
+              dryRunOldCases:
+                summary: 只看早于 2026-11-01 的案卷会被清几个（不动盘）
+                value: { kind: cases, older_than: '2026-11-01T00:00:00.000Z' }
+              deleteExtraInvestigations:
+                summary: 研判记录只留最新 200 条，多出来的删掉
+                value: { kind: investigations, keep: 200, action: delete, execute: true }
+              archiveOldWikiSessions:
+                summary: 知识库会话早于一个月前的归档
+                value: { kind: wiki_sessions, older_than: '2026-10-19T00:00:00.000Z', action: archive, execute: true }
+      responses:
+        '200':
+          description: |
+            `candidates` 是将清清单（`truncated: true` 表示超过 100 条只列了前 100）；
+            `applied` 是这次真清掉的条数与字节（dry-run 恒为 0）；`inventory` 是执行后的盘点。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataCleanupResult'
+        '400':
+          description: |
+            调用方传错（`code=caller_error`）：正文不是 JSON 对象、`kind` 不在七类里、`action` 不是 archive/delete、
+            `execute` 不是布尔、`older_than` 解析不出时间、`keep` 不是非负整数、`older_than` 与 `keep` 一个都没给、带未知参数。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '409':
+          description: |
+            状态冲突（`code=caller_error`）：候选里有还没完结的案件（`queued` / `running` / `failed`），
+            或案卷对应的案件还在排/在跑。整个请求被拒绝，盘上没有任何变化；等研判收尾或把阈值调窄再试。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503':
+          description: '`code=not_configured`：没装配研判队列（没配牧云或模型）时清 `queue` 会被拒（不拿队列文件硬删）。'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /api/status:
     get:
       tags: [状态]
@@ -1341,6 +1448,119 @@ components:
       schema: { type: string, const: '1' }
       description: 写入请求还会校验 Origin 和 Sec-Fetch-Site
   schemas:
+    DataStoreUsage:
+      type: object
+      description: 一类运行态存储的占用：条数与字节，外加这一类的条目时刻区间。
+      required: [kind, label, path, exists, count, bytes, oldest_at, newest_at]
+      properties:
+        kind:
+          type: string
+          enum: [cases, investigations, boards, wiki_sessions, queue, logs, config_overrides]
+          description: 存储类型；`GET /api/data/inventory` 的 `stores` 按这个枚举的顺序返回
+        label: { type: string, description: 这一类的中文名（案卷 / 研判记录 / 溯源白板 / 知识库会话 / 研判队列 / 日志 / 配置覆盖层） }
+        path: { type: string, description: 这一类在盘上的绝对路径（队列是队列文件路径，日志是 `.data/` 目录本身） }
+        exists: { type: boolean, description: 那条路径在不在盘上；不在时 count 恒为 0 }
+        count: { type: integer, minimum: 0, description: 条数：文件 = 文件个数，案卷 = 一级子目录个数，配置覆盖层 = 0/1，队列 = 记录数 }
+        bytes: { type: integer, minimum: 0, description: 字节量：目录/案卷递归累加；队列是队列文件 + `.archive.jsonl` }
+        oldest_at:
+          type: [string, 'null']
+          format: date-time
+          description: 这一类最早的条目时刻；没有条目为 null
+        newest_at:
+          type: [string, 'null']
+          format: date-time
+          description: 这一类最新的条目时刻；没有条目为 null
+    DataInventory:
+      type: object
+      required: [data_dir, stores, total]
+      properties:
+        data_dir: { type: string, description: 运行态根目录（仓内 `.data/`）的绝对路径 }
+        stores:
+          type: array
+          description: 七类存储，顺序固定为 cases → investigations → boards → wiki_sessions → queue → logs → config_overrides
+          items: { $ref: '#/components/schemas/DataStoreUsage' }
+        total:
+          type: object
+          required: [count, bytes]
+          description: 七类之和
+          properties:
+            count: { type: integer, minimum: 0 }
+            bytes: { type: integer, minimum: 0 }
+    DataCleanupRequest:
+      type: object
+      required: [kind]
+      additionalProperties: false
+      description: |
+        按类型与阈值清理。`older_than` 与 `keep` 至少给一个（都空回 400）；两条同给时取并集。
+        默认 `action: archive`、`execute: false`（只报清单不动盘）。
+      properties:
+        kind:
+          type: string
+          enum: [cases, investigations, boards, wiki_sessions, queue, logs, config_overrides]
+          description: 要清理的存储类型（与盘点同一套）
+        action:
+          type: string
+          enum: [archive, delete]
+          default: archive
+          description: 归档（移进 `.data/archive/<kind>/`，队列追加到 `.archive.jsonl`）或删除
+        execute:
+          type: boolean
+          default: false
+          description: 不给或 false 是 dry-run（只报将清清单）；true 才真动盘
+        older_than:
+          type: string
+          format: date-time
+          description: 早于这个时刻的条目进候选（ISO 8601）
+        keep:
+          type: integer
+          minimum: 0
+          description: 保留最新 N 条；排在 N 条之后的进候选
+    DataCleanupResult:
+      type: object
+      required: [dry_run, kind, action, threshold, candidates, applied, inventory]
+      properties:
+        dry_run: { type: boolean, description: 没有真动盘时为 true（请求里 execute 不给或 false） }
+        kind: { type: string, enum: [cases, investigations, boards, wiki_sessions, queue, logs, config_overrides] }
+        action: { type: string, enum: [archive, delete] }
+        threshold:
+          type: object
+          required: [older_than, keep]
+          properties:
+            older_than: { type: [string, 'null'], format: date-time, description: 回显请求里的 older_than；没给为 null }
+            keep: { type: [integer, 'null'], minimum: 0, description: 回显请求里的 keep；没给为 null }
+        candidates:
+          type: object
+          description: 将清清单（dry-run 时是预测，execute 时是刚被清掉的那些）
+          required: [count, bytes, items, truncated]
+          properties:
+            count: { type: integer, minimum: 0 }
+            bytes: { type: integer, minimum: 0, description: 候选的字节合计（队列按记录 JSON 序列化字节估算） }
+            items:
+              type: array
+              description: 最多 100 条（按条目时刻从老到新）；多出来的只体现在 count/bytes 与 truncated
+              items:
+                type: object
+                required: [name, bytes, at]
+                properties:
+                  name: { type: string, description: 文件名 / 案卷目录名；队列是告警 ID }
+                  bytes: { type: integer, minimum: 0 }
+                  at: { type: [string, 'null'], format: date-time, description: 条目时刻 }
+                  status:
+                    type: string
+                    enum: [done]
+                    description: 只有队列条目带这个字段；能进候选的一律是 done（非 done 会 409）
+            truncated: { type: boolean, description: 候选多于 100 条时为 true }
+        applied:
+          type: object
+          required: [count, bytes]
+          description: 这次真清掉的条数与字节；dry-run 恒为 0
+          properties:
+            count: { type: integer, minimum: 0 }
+            bytes: { type: integer, minimum: 0 }
+        inventory:
+          allOf:
+            - $ref: '#/components/schemas/DataInventory'
+            - description: 执行之后重新扫出来的盘点（dry-run 时是当下未变的数字）
     ClaimCitation:
       type: object
       description: 一条证据引用，指向本次取证记录里的某个原始字段（`agent-tools.js:79-90` 逐条核：证据存在、pointer 是 JSON Pointer、字段能解出、值相等）。

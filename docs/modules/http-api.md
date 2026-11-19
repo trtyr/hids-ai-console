@@ -5,6 +5,7 @@
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
 - 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。
+P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inventory` 与 `POST /api/data/cleanup`、新增 §3.7）按本卡提交时的 `server.js` 标号（1309 行，`server.js:598-799` 的 helper、`server.js:864-870` 的两个分支、`server.js:829` 的 `dataDeps`）与 `triage-monitor.js` 标号（924 行，`triage-monitor.js:349-407` 的三个新方法，见 [evidence/recon/P003-T044.md](../../evidence/recon/P003-T044.md)）：新代码全部落在文件末尾与 `server.js:864-870`，前面所有锚点没挪。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
 ## 1. 模块职责与边界
@@ -72,16 +73,18 @@
 
 ### 3.1 路由表
 
-37 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
+39 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
 
-> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）。
-> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 37 行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
+> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）；P003-T044 再加两条数据管理路由（`GET /api/data/inventory`、`POST /api/data/cleanup`，见 §3.7）。
+> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 39 行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
 
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/session` | 200 `{authenticated:true, user, role}` | — | `server.js:208-214` |
 | GET | `/api/config` | 200 生效配置（`{host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required}`） | —（只读环境变量：不探上游、不因缺件 503；机密只在 `secrets` 里给布尔） | `server.js:642` |
 | POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写五键；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:646-650` |
+| GET | `/api/data/inventory` | 200 七类存储的条数与字节（`{data_dir, stores, total}`，见 §3.7） | —（只读本地运行态目录：不探上游、不碰模型，缺目录按 0 报，不 503） | `server.js:864` |
+| POST | `/api/data/cleanup` | 200 `{dry_run, kind, action, threshold, candidates, applied, inventory}`（见 §3.7） | 默认 dry-run；`kind` / 阈值 / 动作 / `execute` 不合法回 400；候选里有没完结的案件回 409；没装配研判队列时清 `queue` 回 503 | `server.js:866-870` |
 | GET | `/api/updates` | 200 升级包概览 | — | `server.js:215` |
 | GET | `/api/status` | 200 / 502 | 未配牧云回 200（`configured:false`）；配了但连不上回 502，正文仍是 `{configured, connected:false, reason}` | `server.js:216-220` |
 | GET | `/api/agent/tools` | 200 工具清单 | 无 API 工具箱回 503 | `server.js:221-225` |
@@ -279,7 +282,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 ```
 
 - **值的形状**用模块级装配处同一套构造器判（`config-store.js:35` → `rpc-client.js:4-5`、`model-client.js:22-24`）：`CLOUDWALKER_URL` / `LLM_BASE_URL` 必须 `http(s)://` 开头；`CLOUDWALKER_API_TOKEN` 至少 6 位；`LLM_API_KEY`、`LLM_MODEL` 非空。校验对象是**合并后的生效值**（只改 `LLM_MODEL` 也要三项齐——进程里这三项本来就被启动闸门保证齐全）。
-- **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只增不减，要清掉改过的值就手工删 `.data/config-overrides.json` 后重启。
+- **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只能新增/改值、不能删键；要清掉改过的值，用 P003-T044 的数据管理接口删掉覆盖层（`POST /api/data/cleanup`，`kind: config_overrides`，见 §3.7），或手工删 `.data/config-overrides.json`——两种都要**重启进程**才回到「按环境变量生效」，因为覆盖层是启动时同步读进 `env` 的。
 
 **响应**：`200`，`Cache-Control: no-store`：
 
@@ -340,6 +343,153 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 160ms
 # 真进程手工验三件事（起进程 → 写 → 读 → 杀 → 再起 → 读）
 ```
+
+### 3.7 数据管理（`GET /api/data/inventory`、`POST /api/data/cleanup`，P003-T044）
+
+**关键路径**：两个分支在 `server.js:864-870`；实现是 `server.js:593-799` 的一批 helper（`DATA_KINDS` 在 `server.js:598`、`dataStores()` 在 `server.js:610`、`dataInventory()` 在 `server.js:712`、`dataCleanup()` 在 `server.js:776`）；队列侧的候选挑选与清理在 `triage-monitor.js:349-407`（`cleanCandidates()` / `clean()` / `blockedCaseDirs()`）；路径来源在 `server.js:829` 的 `dataDeps`（`{history, monitor, boardService, wikiAgent, config}`）。
+
+**它管什么**：给运维一眼看清仓内 `.data/` 下七类运行态各占多少，再按类型与阈值把老数据**归档或删除**。**不管**页面（`web/**` 不在本卡 scope）、不管各 store 的类（`investigation-store.js` 等仍然没有删除方法——清理是文件系统层的运维动作）、不新增配置键、不引入自动清理定时器。
+
+#### 3.7.1 七类存储与「一条」的口径
+
+`kind` 的枚举顺序就是响应里 `stores[]` 的顺序，测试按它写期望：
+
+| `kind` | 中文 | 路径来源（缺省值） | 什么算「一条」 | 条目时刻（`oldest_at` / `newest_at` / 排序） |
+| --- | --- | --- | --- | --- |
+| `cases` | 案卷 | `monitor.casesDirectory` → `HIDS_CASES_DIR` → `.data/cases` | 一级子目录（一个案件目录） | 目录内**文件**的最新 mtime；空目录退回目录自身 mtime |
+| `investigations` | 研判记录 | `history.directory` → `.data/investigations` | 一个 `*.json` | 文件 mtime |
+| `boards` | 溯源白板 | `boardService.directory` → `.data/trace-boards` | 一个 `*.json` | 文件 mtime |
+| `wiki_sessions` | 知识库会话 | `wikiAgent.directory` → `.data/wiki-sessions` | 一个 `*.json` | 文件 mtime |
+| `queue` | 研判队列 | `monitor.file` → `.data/triage-monitor.json` | 一条队列记录 | 记录上 `updated_at` → `saved_at` → `created_at` 第一个能解析的 |
+| `logs` | 日志 | `.data/` 目录本身 | `.data/` **顶层**的一个 `*.log` | 文件 mtime |
+| `config_overrides` | 配置覆盖层 | `config.file` → `.data/config-overrides.json` | 那一个文件（0 或 1） | 文件 mtime |
+
+- **路径全部取自注入件**（`createServer` 的 `history` / `monitor` / `boardService` / `wikiAgent` / `config`）：换替身就是换盘点对象，测试不必碰仓内 `.data/`。
+- **`logs` 的真相**：后端日志只上 stdout、不落文件（`docs/architecture.md` §3.6 末句）。这一类只盘点**部署端自己**把 stdout 重定向到 `.data/*.log` 时产生的文件，正常部署下恒为 `count: 0`；子目录里的 `*.log` 不算（只认顶层）。
+- **`bytes` 口径**：文件取 `stat.size`；案卷按目录内文件递归累加；`queue` 是队列文件 + 同名 `.archive.jsonl`；读不到的条目按 0 算（一个断掉的符号链接不该让整次盘点 500）。
+- **`exists`**：路径在不在盘上。缺目录不报错，回 `count: 0`、`bytes: 0`、`exists: false`。
+- **每次请求现扫盘**，没有缓存：清完再盘点，数字立刻是清后的（A5）。
+
+**响应**（200，`Cache-Control: no-store`）：
+
+```json
+{"data_dir":"/…/.data",
+ "stores":[{"kind":"cases","label":"案卷","path":"/…/.data/cases","exists":true,
+            "count":2,"bytes":12,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"investigations","label":"研判记录","path":"/…/.data/investigations","exists":true,
+            "count":2,"bytes":9,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"boards","label":"溯源白板","path":"/…/.data/trace-boards","exists":true,"count":1,"bytes":11,
+            "oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2020-01-01T00:00:00.000Z"},
+           {"kind":"wiki_sessions","label":"知识库会话","path":"/…/.data/wiki-sessions","exists":true,"count":1,"bytes":7,
+            "oldest_at":"2026-11-19T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"queue","label":"研判队列","path":"/…/.data/triage-monitor.json","exists":true,"count":2,"bytes":333,
+            "oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"logs","label":"日志","path":"/…/.data","exists":true,"count":1,"bytes":9,
+            "oldest_at":"2026-11-19T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"config_overrides","label":"配置覆盖层","path":"/…/.data/config-overrides.json","exists":true,
+            "count":1,"bytes":33,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2020-01-01T00:00:00.000Z"}],
+ "total":{"count":10,"bytes":414}}
+```
+
+`total` 就是七类 `count` / `bytes` 之和（上面这份样例逐项加起来对得上）。空运行态时七类全 0、`total` 为 `{count:0,bytes:0}`，不报错。
+
+#### 3.7.2 清理（`POST /api/data/cleanup`）
+
+**请求**：`Content-Type: application/json`，正文对象只收五个键（`additionalProperties: false`，多带一个就 400）：
+
+```json
+{"kind":"investigations","older_than":"2026-11-01T00:00:00.000Z","keep":200,"action":"archive","execute":false}
+```
+
+| 键 | 必填 | 取值 | 缺省 | 语义 |
+| --- | --- | --- | --- | --- |
+| `kind` | 是 | 七类之一 | — | 与盘点同一套 `kind` |
+| `older_than` | 二选一 | ISO 8601 时间串（`Date.parse` 解析得出） | `null` | 条目时刻**早于**它 → 进候选 |
+| `keep` | 二选一 | 不小于 0 的整数 | `null` | 保留最新 N 条（按条目时刻倒序），排在后面的进候选 |
+| `action` | 否 | `archive` / `delete` | `archive` | 归档或删除 |
+| `execute` | 否 | 布尔 | `false` | `false`＝dry-run 只报清单；`true` 才真动盘 |
+
+- **阈值至少给一个**：`older_than` 与 `keep` 都不给回 400——不许无阈值一把抹掉。
+- **两条同给取并集**：早于时间的 ∪ 超出数量的，同一「条」不会重复计。
+- **`archive` 落到哪**：文件/案卷目录 `rename` 进 `.data/archive/<kind>/<执行时刻>-<原名>`（前缀是 ISO 时间去掉了 `:` 与 `.`，同一路径清两次不会覆盖上一份）；队列记录追加到 `.data/triage-monitor.json.archive.jsonl`（带 `archived_at`，与 TTL 归档 `archiveDone()` 同格式）再移出队列。**归档目录不在七类盘点的任何一类里**，所以盘点数字会降。
+- **`delete` 落到哪**：文件/目录 `rm -r`；队列记录从内存与队列文件里删掉，并按 R-TRIAGE-13 同时失效指向它的 `dedupe` 条目（走 `dropRecord()`，`triage-monitor.js:322-330`）。
+- **`config_overrides` 的特殊后果**：删/归档只动盘上的覆盖层文件，**进程内的 `env` 仍是旧值**；要回到「按环境变量生效」必须重启进程（覆盖层是启动时同步读进 `env` 的，见 §3.6）。
+
+**已完结案件才可清（A4）**：
+
+| 情形 | 状态 | 行为 |
+| --- | --- | --- |
+| `queue` 候选里有 `queued` / `running` / `failed` | **409**（`caller_error`） | 整个请求拒绝，内存与队列文件都不动；`error` 原话形如「2 条记录状态不是 done（queued、running），已完结的案件才可清理」 |
+| `cases` 候选目录上挂着非 `done` 的记录（记录的 `case_dir` 就是它） | **409** | 同上，一个案卷都不动 |
+| 没装配研判队列（没配牧云或模型）时清 `queue` | **503**（`not_configured`） | 不读也不改队列文件——那是另一条进程的状态 |
+
+`failed` 也按「没完结」拒：它还可能被重排（`resumeRetries()`，`triage-monitor.js:306-318`）。要清就先把阈值调窄，或者等它重排/收尾。
+
+没有装配研判队列（`monitor` 为 `null`，没配牧云或模型）时，`cases` 清理不按案件状态拦（没有记录可判）：这时能进候选的就是没有活案件的目录。`queue` 反过来直接 503——它没有内存主人，不许拿队列文件硬删。
+
+**响应**（200）：
+
+```json
+{"dry_run":false,"kind":"investigations","action":"delete",
+ "threshold":{"older_than":"2026-11-01T00:00:00.000Z","keep":null},
+ "candidates":{"count":1,"bytes":7,"items":[{"name":"old.json","bytes":7,"at":"2020-01-01T00:00:00.000Z"}],"truncated":false},
+ "applied":{"count":1,"bytes":7},
+ "inventory":{"data_dir":"…","stores":[…七类…],"total":{"count":…,"bytes":…}}}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `dry_run` | `true`＝没动盘（`execute` 不给或 `false`） |
+| `threshold` | 回显请求里的 `older_than` / `keep`（没给为 `null`） |
+| `candidates` | 将清清单：`count` / `bytes` 是全量，`items` 最多 100 条（条目时刻从老到新），超出只体现在 `truncated: true` |
+| `candidates.items[]` | `{name, bytes, at}`；`queue` 的 `name` 是告警 ID，并多一个 `status: "done"`（能进候选的一律是 done） |
+| `applied` | 这次真清掉的条数与字节；dry-run 恒为 `{count:0, bytes:0}` |
+| `inventory` | **执行之后**重新扫出来的盘点，与紧接着 `GET /api/data/inventory` 完全一致（dry-run 时就是当下未变的数字） |
+
+**留痕（A3）**：`execute: true` 时落一条 `data.cleaned`，字段只有 `kind` / `action` / `count` / `bytes`——与 `config.updated` 同口径（§3.6「留痕」），**不记文件名、不记记录内容**；dry-run 与校验失败都不落这条：
+
+```json
+{"time":"…","level":"info","event":"data.cleaned","kind":"investigations","action":"delete","count":1,"bytes":7}
+```
+
+> 这条事件还没进 `docs/architecture.md` §3.6 的事件名表——那张表不在本卡 scope，已在 `coding-reports/P003-T044.md` 的「未决」里申报。
+
+**错误**（四类口径见 §8，路由自己判的一律走 `callerError`）：
+
+| 情形 | 状态 | `code` | 正文 `error`（原话） |
+| --- | --- | --- | --- |
+| 正文不是 JSON / 过大 | 400 | `caller_error` | 「请求正文不是 JSON」/「请求正文过大」 |
+| 正文不是对象 | 400 | `caller_error` | 「请求正文必须是 JSON 对象」 |
+| `kind` 不在七类里（或没给） | 400 | `caller_error` | 「要清理的类型只能是 cases、investigations、boards、wiki_sessions、queue、logs、config_overrides」 |
+| 带未知参数 | 400 | `caller_error` | 「不认识的参数：surprise」 |
+| `action` 不是 archive/delete | 400 | `caller_error` | 「action 只能是 archive 或 delete」 |
+| `execute` 不是布尔 | 400 | `caller_error` | 「execute 必须是布尔值」 |
+| `older_than` 解析不出时间 | 400 | `caller_error` | 「older_than 必须是可解析的时间（ISO 8601）」 |
+| `keep` 不是非负整数 | 400 | `caller_error` | 「keep 必须是不小于 0 的整数」 |
+| 两个阈值都没给 | 400 | `caller_error` | 「至少要给一个阈值：older_than（早于某时间）或 keep（保留最新 N 条）」 |
+| 候选里有没完结的案件 | 409 | `caller_error` | 「N 条记录状态不是 done（queued、…），已完结的案件才可清理」/「N 个案卷对应的案件还在排或在跑，已完结的案件才可清理」 |
+| 没装配研判队列时清 `queue` | 503 | `not_configured` | 「自动研判尚未配置（没有研判队列），无法清理队列」 |
+| 没通过 Basic 认证（启用了认证时） | 401 | —（纯文本） | 「需要登录后访问」，见 §4 |
+
+**鉴权**：与其它业务路由同一个 Basic 闸门（§4）。本卡**没有**为清理新增独立令牌（`.env.example` 不在 scope，新增配置键要同步那份文件与启动闸门文档）；防误删靠两层：默认 dry-run + `execute: true` 必须显式给，再加 Basic 认证。
+
+**不做什么**（测试别按这些写期望）：
+
+- 不做页面、不动 `web/**`。
+- 不改各 store 的类：`InvestigationStore` / `TraceBoardService` / `WikiWorkbench` 仍然没有删除方法。
+- 不自动清理：没有定时器，只有这两个接口（队列的 TTL 归档 `archiveDone()` 是既有能力，不受本卡影响）。
+- 不保证「归档后还能从接口读回来」：归档目录只落盘，仓内没有读它的接口；要翻旧案直接看 `.data/archive/**`。
+- 队列候选只挑 `done`：`failed` / `queued` / `running` 一律 409，不静默跳过。
+
+**可重放证据**（`evidence/test/P003-T044/data-admin.test.js`，18 条，约 260ms）：
+
+```bash
+cd /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T044
+node --test evidence/test/P003-T044/data-admin.test.js   # 18 条全绿
+node --test --test-timeout=60000 --test-force-exit *.test.js   # 根套件 210 条全绿（回归）
+```
+
+单测全部在 tmp 目录里跑（`mkdtemp`）：替身目录 + 内存队列 + 进程内 HTTP 请求，mtime 用 `utimes` 钉死，不碰真实网络、不碰仓内 `.data/`、不依赖真实时钟。
 
 ## 4. Basic 认证
 
@@ -558,7 +708,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 ### 9.1 与 `openapi.yaml` 的关系
 
-对外 HTTP 契约在 `openapi.yaml`，声明 39 条路径（`grep -c '^  /' openapi.yaml` → `39`，P003-T013 提交时）。它与 `server.js` 的路由是**分开维护的两份文本**，改路由时两边都要动（这条在 [architecture.md](../architecture.md) 第 11.3 节也记着）。本页只描述 `server.js` 实际跑出来的行为；两边逐条比对不是本卡做的事。
+对外 HTTP 契约在 `openapi.yaml`，声明 42 条路径（`grep -c '^  /' openapi.yaml` → `42`，P003-T044 提交时；P003-T013 提交时是 39，本卡加了两条数据管理路由）。它与 `server.js` 的路由是**分开维护的两份文本**，改路由时两边都要动（这条在 [architecture.md](../architecture.md) 第 11.3 节也记着）。本页只描述 `server.js` 实际跑出来的行为；两边逐条比对不是本卡做的事。
 
 ### 9.2 同一类为什么还有多个 4xx，以及还剩下的不齐之处
 

@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -590,6 +590,215 @@ async function triageFilteredAlerts(service, monitor, query, { statuses, verdict
   }
   return { ...envelope, alerts: collected.slice(offset, offset + count), total: collected.length, truncated };
 }
+
+// ── 数据管理（P003-T044）：盘点 / 归档 / 清理 ───────────────────────────────
+// 七类运行态的真源路径一律取自 createServer 的注入件（history / boardService / wikiAgent / monitor / config），
+// 不另立一套路径表：测试换掉注入件里的替身目录，盘点的就是那份替身目录。
+// dataRoot 取配置覆盖层文件所在目录（缺省就是仓内 .data）：队列的 .archive.jsonl 与清理归档目录都落在这下面。
+export const DATA_KINDS = Object.freeze(['cases', 'investigations', 'boards', 'wiki_sessions', 'queue', 'logs', 'config_overrides']);
+const DATA_KIND_LABELS = Object.freeze({ cases: '案卷', investigations: '研判记录', boards: '溯源白板',
+  wiki_sessions: '知识库会话', queue: '研判队列', logs: '日志', config_overrides: '配置覆盖层' });
+const DATA_CLEAN_ACTIONS = Object.freeze(['archive', 'delete']);
+const DATA_CANDIDATE_LIMIT = 100; // dry-run 清单最多列这么多条，多出来的只给数字（truncated: true）
+
+function dataRoot(deps) {
+  return deps.config?.file ? path.dirname(deps.config.file) : runtime.data;
+}
+
+// 布局四种：dirs（一级子目录各算一条）/ files（匹配扩展名的文件）/ single（单文件）/ queue（队列文件，条数＝记录）。
+// logs 也走 files 布局，匹配 *.log，目录就是 dataRoot：后端自身不落日志文件（docs/architecture.md:156）。
+function dataStores(deps = {}) {
+  const root = dataRoot(deps);
+  const store = (kind, layout, location, extension = null) => ({ kind, label: DATA_KIND_LABELS[kind], layout, path: location, extension, root });
+  return new Map([
+    ['cases', store('cases', 'dirs', deps.monitor?.casesDirectory || process.env.HIDS_CASES_DIR || path.join(root, 'cases'))],
+    ['investigations', store('investigations', 'files', deps.history?.directory || path.join(root, 'investigations'), 'json')],
+    ['boards', store('boards', 'files', deps.boardService?.directory || path.join(root, 'trace-boards'), 'json')],
+    ['wiki_sessions', store('wiki_sessions', 'files', deps.wikiAgent?.directory || path.join(root, 'wiki-sessions'), 'json')],
+    ['queue', store('queue', 'queue', deps.monitor?.file || path.join(root, 'triage-monitor.json'))],
+    ['logs', store('logs', 'files', root, 'log')],
+    ['config_overrides', store('config_overrides', 'single', deps.config?.file || path.join(root, 'config-overrides.json'))]
+  ]);
+}
+
+async function statOrNull(location) {
+  try { return await stat(location); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+
+async function listOrNull(directory) {
+  try { return await readdir(directory, { withFileTypes: true }); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+
+// 一个文件/目录占多少字节、最后一次写是什么时候。
+// 目录递归累加字节；at 取目录里**文件**的最新 mtime（空目录退回目录自身的 mtime）——
+// 目录 mtime 只在建/删条目时变，拿它当「这个案卷最后动过是什么时候」会偏到刚建目录那一刻。
+// 读不到的条目按 0 字节算：盘点不能因为一个断掉的符号链接整个 500。
+async function measure(location) {
+  let info;
+  try { info = await stat(location); }
+  catch { return { bytes: 0, at: null, exists: false }; }
+  if (!info.isDirectory()) return { bytes: info.size, at: info.mtimeMs, exists: true };
+  let bytes = 0, at = null;
+  let entries = [];
+  try { entries = await readdir(location, { withFileTypes: true }); } catch { entries = []; }
+  for (const entry of entries) {
+    // 只把文件的时间算进来：子目录自己的 mtime 同样是「建/删条目」时刻，不是内容时刻。
+    const child = await measure(path.join(location, entry.name));
+    bytes += child.bytes;
+    if (child.at != null && (at == null || child.at > at)) at = child.at;
+  }
+  return { bytes, at: at ?? info.mtimeMs, exists: true };
+}
+
+const isoOrNull = at => (at == null ? null : new Date(at).toISOString());
+
+// 一类存储里的「条」：文件布局是一个文件，dirs 布局是一个下级目录，single 是那一个文件。
+async function storeEntries(store) {
+  if (store.layout === 'single') {
+    const measured = await measure(store.path);
+    return measured.exists ? [{ name: path.basename(store.path), path: store.path, bytes: measured.bytes, at: measured.at }] : [];
+  }
+  const entries = await listOrNull(store.path);
+  if (!entries) return [];
+  const picked = entries.filter(entry => entry.isDirectory()
+    ? store.layout === 'dirs'
+    : store.layout === 'files' && entry.name.endsWith(`.${store.extension}`));
+  const rows = [];
+  for (const entry of picked) {
+    const location = path.join(store.path, entry.name);
+    const measured = await measure(location);
+    rows.push({ name: entry.name, path: location, bytes: measured.bytes, at: measured.at });
+  }
+  return rows;
+}
+
+// 队列条数：有研判队列时按进程内记录数（内存才是活口径），没有队列时退回读队列文件里的 records。
+// 字节数＝队列文件 + 同名 .archive.jsonl（归档也是队列这块存储的占用）。
+async function queueMeasure(store, deps) {
+  const queueFile = await statOrNull(store.path);
+  const archiveFile = await statOrNull(`${store.path}.archive.jsonl`);
+  let records = [];
+  if (deps.monitor?.records instanceof Map) records = [...deps.monitor.records.values()];
+  else if (queueFile) {
+    try {
+      const data = JSON.parse(await readFile(store.path, 'utf8'));
+      records = Array.isArray(data.records) ? data.records : [];
+    } catch { records = []; }
+  }
+  const stamps = records.map(record => Date.parse(record.updated_at || record.saved_at || record.created_at || ''))
+    .filter(Number.isFinite).sort((a, b) => a - b);
+  return { exists: Boolean(queueFile), count: records.length,
+    bytes: (queueFile?.size || 0) + (archiveFile?.size || 0),
+    oldestAt: stamps[0] ?? null, newestAt: stamps[stamps.length - 1] ?? null };
+}
+
+async function inventoryRow(store, deps) {
+  if (store.layout === 'queue') {
+    const queue = await queueMeasure(store, deps);
+    return { kind: store.kind, label: store.label, path: store.path, exists: queue.exists,
+      count: queue.count, bytes: queue.bytes, oldest_at: isoOrNull(queue.oldestAt), newest_at: isoOrNull(queue.newestAt) };
+  }
+  const entries = await storeEntries(store);
+  const exists = store.layout === 'single' ? entries.length > 0 : (await listOrNull(store.path)) !== null;
+  const ats = entries.map(entry => entry.at).filter(at => at != null);
+  return { kind: store.kind, label: store.label, path: store.path, exists,
+    count: entries.length, bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
+    oldest_at: isoOrNull(ats.length ? Math.min(...ats) : null), newest_at: isoOrNull(ats.length ? Math.max(...ats) : null) };
+}
+
+// 盘点：七类各报条数与字节，再给一个总数。每次都现扫盘（清理前后的数字立刻对得上，A5）。
+export async function dataInventory(deps = {}) {
+  const stores = dataStores(deps);
+  const rows = [];
+  for (const kind of DATA_KINDS) rows.push(await inventoryRow(stores.get(kind), deps));
+  const total = rows.reduce((sum, row) => ({ count: sum.count + row.count, bytes: sum.bytes + row.bytes }), { count: 0, bytes: 0 });
+  return { data_dir: dataRoot(deps), stores: rows, total };
+}
+
+const dataCallerError = message => Object.assign(new Error(message), { status: 400 });
+
+// 案卷清理的 409：目录上挂着非 done 记录（还在排 / 在跑 / 等重排）的，整个请求拒绝，盘上一动不动。
+function assertCasesSettled(store, chosen, deps) {
+  if (store.kind !== 'cases' || typeof deps.monitor?.blockedCaseDirs !== 'function') return;
+  const blocked = deps.monitor.blockedCaseDirs();
+  const hit = chosen.filter(entry => blocked.has(path.resolve(entry.path)));
+  if (!hit.length) return;
+  const error = new Error(`${hit.length} 个案卷对应的案件还在排或在跑，已完结的案件才可清理`);
+  error.status = 409;
+  throw error;
+}
+
+// 归档文件名前加执行时刻：同一路径清理两次不会覆盖上一份（rename 对已存在的目标是静默替换）。
+function archiveTarget(directory, name, now) {
+  const stamp = new Date(now).toISOString().replace(/[:.]/g, '-');
+  return path.join(directory, `${stamp}-${name}`);
+}
+
+async function fileCleanup(deps, store, { action, execute, olderThan, keep, now }) {
+  const entries = await storeEntries(store);
+  const ranked = entries.slice().sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  const selected = new Map();
+  if (Number.isInteger(keep)) for (const entry of ranked.slice(keep)) selected.set(entry.path, entry);
+  if (Number.isFinite(olderThan))
+    for (const entry of entries) if (entry.at != null && entry.at < olderThan) selected.set(entry.path, entry);
+  const chosen = [...selected.values()].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+  assertCasesSettled(store, chosen, deps);
+  const bytes = chosen.reduce((sum, entry) => sum + entry.bytes, 0);
+  const listed = { count: chosen.length, bytes,
+    items: chosen.slice(0, DATA_CANDIDATE_LIMIT).map(entry => ({ name: entry.name, bytes: entry.bytes, at: isoOrNull(entry.at) })),
+    truncated: chosen.length > DATA_CANDIDATE_LIMIT };
+  if (!execute || !chosen.length) return { count: chosen.length, bytes, listed };
+  const archiveDir = path.join(store.root, 'archive', store.kind);
+  if (action === 'archive') await mkdir(archiveDir, { recursive: true, mode: 0o700 });
+  for (const entry of chosen) {
+    if (action === 'archive') await rename(entry.path, archiveTarget(archiveDir, entry.name, now));
+    else await rm(entry.path, { recursive: true, force: true });
+  }
+  return { count: chosen.length, bytes, listed };
+}
+
+async function queueCleanup(deps, store, { action, execute, olderThan, keep }) {
+  const monitor = deps.monitor;
+  if (typeof monitor?.clean !== 'function') {
+    // 没有研判队列就没有「案件状态」可判：不拿队列文件硬删（那是另一条进程的活）。
+    throw Object.assign(new Error('自动研判尚未配置（没有研判队列），无法清理队列'), { failure: 'config' });
+  }
+  const result = await monitor.clean({ action, execute, olderThan, keep });
+  return { count: result.count, bytes: result.bytes,
+    listed: { count: result.count, bytes: result.bytes,
+      items: result.items.slice(0, DATA_CANDIDATE_LIMIT), truncated: result.items.length > DATA_CANDIDATE_LIMIT } };
+}
+
+// 清理：按类型 + 阈值（早于某时间 / 超过某数量）归档或删除；默认 dry-run 只报清单，execute: true 才动盘。
+// 真执行才落 data.cleaned 一条（只带类型、动作、条数、字节，不带文件名与内容——与 config.updated 同一口径）。
+export async function dataCleanup(deps = {}, body = null, { now = Date.now() } = {}) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw dataCallerError('请求正文必须是 JSON 对象');
+  const unknown = Object.keys(body).filter(key => !['kind', 'action', 'execute', 'older_than', 'keep'].includes(key));
+  if (unknown.length) throw dataCallerError(`不认识的参数：${unknown.join('、')}`);
+  if (!DATA_KINDS.includes(body.kind)) throw dataCallerError(`要清理的类型只能是 ${DATA_KINDS.join('、')}`);
+  const action = body.action ?? 'archive';
+  if (!DATA_CLEAN_ACTIONS.includes(action)) throw dataCallerError(`action 只能是 ${DATA_CLEAN_ACTIONS.join(' 或 ')}`);
+  const execute = body.execute ?? false;
+  if (typeof execute !== 'boolean') throw dataCallerError('execute 必须是布尔值');
+  const olderThan = body.older_than == null ? null : Date.parse(body.older_than);
+  if (body.older_than != null && !Number.isFinite(olderThan)) throw dataCallerError('older_than 必须是可解析的时间（ISO 8601）');
+  const keep = body.keep ?? null;
+  if (keep != null && (!Number.isSafeInteger(keep) || keep < 0)) throw dataCallerError('keep 必须是不小于 0 的整数');
+  if (olderThan == null && keep == null) throw dataCallerError('至少要给一个阈值：older_than（早于某时间）或 keep（保留最新 N 条）');
+  const store = dataStores(deps).get(body.kind);
+  const outcome = body.kind === 'queue'
+    ? await queueCleanup(deps, store, { action, execute, olderThan, keep })
+    : await fileCleanup(deps, store, { action, execute, olderThan, keep, now });
+  if (execute) log('data.cleaned', { kind: body.kind, action, count: outcome.count, bytes: outcome.bytes });
+  return { dry_run: !execute, kind: body.kind, action,
+    threshold: { older_than: body.older_than ?? null, keep },
+    candidates: outcome.listed,
+    applied: { count: execute ? outcome.count : 0, bytes: execute ? outcome.bytes : 0 },
+    inventory: await dataInventory(deps) };
+}
+
 export function createServer(service = gateway, toolbox = apiToolbox, investigator = agent, history = investigationStore, prompts = promptStore, monitor = service === gateway ? triageMonitor : null, knowledge = null,
   access = { user: process.env.HIDS_BASIC_AUTH_USER, password: process.env.HIDS_BASIC_AUTH_PASSWORD }, boardService = service === gateway ? traceBoard : null,
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
@@ -616,6 +825,8 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   // 本进程里正在跑维护的告警：重复登记靠它挡，不靠记录上的 maintenance.status——进程重启后记录会停在 updating，
   // 拿那个当日志会把这个案件永久锁死在 updating。
   const runningMaintenance = new Set();
+  // 数据管理（P003-T044）的路径来源：全部是本次注入的构件，换替身就是换盘点对象。
+  const dataDeps = { history, monitor, boardService, wikiAgent, config };
   return http.createServer(async (req, res) => {
     const startedAt = Date.now();
     // 只记方法与路径（query 一律不记：可能带令牌），请求头一个字段都不碰——Authorization / Cookie 不进日志（A4）。
@@ -647,6 +858,14 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const updated = await config.update(await readJSON(req));
         applyLiveConfig({ gateway, model, agentToolbox }, config.values());
         return json(res, 200, { updated, config: configSummary(config.env) });
+      }
+      // 数据管理（P003-T044）：盘点七类运行态的条数与字节；清理按类型与阈值归档或删除（默认 dry-run）。
+      // 两个路径不碰上游、不碰模型，只读本地运行态目录；清理的 409（还有案件在排/在跑）由 causeError 原样回。
+      if (url.pathname === '/api/data/inventory' && req.method === 'GET')
+        return json(res, 200, await dataInventory(dataDeps));
+      if (url.pathname === '/api/data/cleanup' && req.method === 'POST') {
+        try { return json(res, 200, await dataCleanup(dataDeps, await readJSON(req))); }
+        catch (cause) { return causeError(res, cause, 'internal'); }
       }
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
