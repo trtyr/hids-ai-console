@@ -51,19 +51,20 @@ PY
 }
 
 start_app() {
+  env -i PATH="$PATH" HOME="$HOME" \
   HIDS_HOST=127.0.0.1 HIDS_PORT="$PORT" HIDS_TRIAGE_INPUT_MODE=poll \
   CLOUDWALKER_URL=http://127.0.0.1:1 CLOUDWALKER_API_TOKEN=fake-token-123456 \
   LLM_BASE_URL=http://127.0.0.1:1/v1 LLM_API_KEY=fake-key-abcdef LLM_MODEL=env-model \
   node server.js >>"$APPLOG" 2>&1 &
   PID=$!
   for _ in $(seq 1 100); do
-    curl -sf -o /dev/null "$BASE/api/config" && return 0
+    curl --max-time 5 --connect-timeout 2 -sf -o /dev/null "$BASE/api/config" && return 0
     sleep 0.1
   done
   echo "进程没起来"; tail -5 "$APPLOG"; return 1
 }
 stop_app() { kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; }
-model_name() { curl -s "$BASE/api/config" | python3 -c 'import json,sys;print(json.load(sys.stdin)["model"]["name"])'; }
+model_name() { curl --max-time 5 --connect-timeout 2 -s "$BASE/api/config" | python3 -c 'import json,sys;print(json.load(sys.stdin)["model"]["name"])'; }
 
 rm -f "$OVERRIDE" "$APPLOG"
 start_stub
@@ -72,10 +73,10 @@ start_app || exit 1
 [ "$(model_name)" = "env-model" ] && ok "起进程后 GET 报环境变量的值" || bad "起进程后应报 env-model"
 
 # 起点：牧云地址指到不可达的 127.0.0.1:1 → /api/status 502
-[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/status")" = "502" ] \
+[ "$(curl --max-time 5 --connect-timeout 2 -s -o /dev/null -w '%{http_code}' "$BASE/api/status")" = "502" ] \
   && ok "写之前 /api/status 连不上（502）" || bad "写之前 /api/status 应 502"
 
-WRITE=$(curl -s -o /tmp/t029-write.json -w '%{http_code}' -X POST "$BASE/api/config" -H 'Content-Type: application/json' \
+WRITE=$(curl --max-time 5 --connect-timeout 2 -s -o /tmp/t029-write.json -w '%{http_code}' -X POST "$BASE/api/config" -H 'Content-Type: application/json' \
   -d "{\"LLM_MODEL\":\"runtime-model\",\"CLOUDWALKER_URL\":\"$STUB\",\"CLOUDWALKER_API_TOKEN\":\"$NEW_TOKEN\"}")
 [ "$WRITE" = "200" ] && ok "POST /api/config → 200" || bad "POST 状态码应是 200，实测 $WRITE"
 grep -q '"updated":\["LLM_MODEL","CLOUDWALKER_URL","CLOUDWALKER_API_TOKEN"\]' /tmp/t029-write.json \
@@ -85,7 +86,7 @@ grep -q "$NEW_TOKEN" /tmp/t029-write.json && bad "写成功的正文回显了 To
 [ "$(model_name)" = "runtime-model" ] && ok "不重启进程，GET /api/config 立刻报新值" || bad "GET 应报 runtime-model"
 
 # 运行中生效：新地址通、新 Token 真被用上
-[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/status")" = "200" ] \
+[ "$(curl --max-time 5 --connect-timeout 2 -s -o /dev/null -w '%{http_code}' "$BASE/api/status")" = "200" ] \
   && ok "写完之后 /api/status 立刻连上新地址（200）" || bad "写完之后 /api/status 应 200"
 for _ in $(seq 1 50); do grep -q "$NEW_TOKEN" "$STUBLOG" 2>/dev/null && break; sleep 0.1; done
 grep -q "API-Token=$NEW_TOKEN" "$STUBLOG" && ok "牧云调用用的是写进去的新 Token（stub 收到 Cookie）" || bad "stub 没收到新 Token：$(cat "$STUBLOG" 2>/dev/null)"
@@ -106,11 +107,11 @@ grep -q "$NEW_TOKEN" "$APPLOG" && bad "日志里出现了 Token 原文" || ok "�
 # 重启：环境变量仍是 env-model / 127.0.0.1:1，覆盖层的值要赢
 start_app || exit 1
 [ "$(model_name)" = "runtime-model" ] && ok "重启后改过的值仍生效" || bad "重启后应报 runtime-model"
-body=$(curl -s "$BASE/api/config")
+body=$(curl --max-time 5 --connect-timeout 2 -s "$BASE/api/config")
 echo "$body" | grep -q '"model":{"configured":true' && ok "没改过的键照旧读环境变量（模型三项仍齐）" || bad "没改过的键没生效：$body"
 echo "$body" | grep -q "\"port\":$PORT" && ok "监听端口仍是环境变量那个" || bad "端口被带偏"
 echo "$body" | grep -q "$NEW_TOKEN" && bad "GET 正文回显了 Token 原文" || ok "GET 正文不含 Token 原文"
-[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/status")" = "200" ] \
+[ "$(curl --max-time 5 --connect-timeout 2 -s -o /dev/null -w '%{http_code}' "$BASE/api/status")" = "200" ] \
   && ok "重启后牧云仍指向覆盖层里的新地址" || bad "重启后 /api/status 应 200"
 
 stop_app
