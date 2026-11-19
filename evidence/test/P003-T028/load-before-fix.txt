@@ -1,0 +1,41 @@
+# 负载下改动前（HEAD 995711e 的 test 脚本与 teardown）复现：npm test 连跑三把全挂
+# 负载：16 核机器上 16 个 busy-loop（nproc=16）
+
+=== load run1：timeout 120 npm test
+Interrupted while running:
+ℹ tests 199
+ℹ pass 197
+ℹ fail 1
+ℹ cancelled 1
+ℹ duration_ms 119664.543478
+  [Error: ENOTEMPTY: directory not empty, rmdir '/tmp/hids-triage-fa404db5-3e93-4433-af14-a7e0c20294a9'] { errno: -39, code: 'ENOTEMPTY', syscall: 'rmdir', path: '/tmp/hids-triage-fa404db5-3e93-4433-af14-a7e0c20294a9' }
+  'Promise resolution is still pending but the event loop has already resolved'
+
+=== load run2：timeout 120 npm test
+Interrupted while running:
+ℹ tests 199
+ℹ pass 197
+ℹ fail 1
+ℹ cancelled 1
+ℹ duration_ms 119620.853931
+  [Error: ENOTEMPTY: directory not empty, rmdir '/tmp/hids-triage-1e5fb597-768f-40b5-b9d9-84f1954017d4'] { errno: -39, code: 'ENOTEMPTY', syscall: 'rmdir', path: '/tmp/hids-triage-1e5fb597-768f-40b5-b9d9-84f1954017d4' }
+  'Promise resolution is still pending but the event loop has already resolved'
+
+=== load run3：timeout 120 npm test
+Interrupted while running:
+ℹ tests 199
+ℹ pass 197
+ℹ fail 1
+ℹ cancelled 1
+ℹ duration_ms 119599.260445
+  [Error: ENOTEMPTY: directory not empty, rmdir '/tmp/hids-triage-e62cc059-0e6f-4f5f-a298-2b6b4d516421'] { errno: -39, code: 'ENOTEMPTY', syscall: 'rmdir', path: '/tmp/hids-triage-e62cc059-0e6f-4f5f-a298-2b6b4d516421' }
+  'Promise resolution is still pending but the event loop has already resolved'
+
+# 单文件隔离复现（同一负载，10 次里第 5 次红）：timeout 60 node --test --test-name-pattern="TriageCase 三处都带" integration.test.js
+ℹ tests 2
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 1
+ℹ duration_ms 59920.278914
+  [Error: ENOTEMPTY: directory not empty, rmdir '/tmp/hids-triage-48394b87-07e0-4eaa-bbe6-9fb8d45ae8ac'] { errno: -39, code: 'ENOTEMPTY', syscall: 'rmdir', path: '/tmp/hids-triage-48394b87-07e0-4eaa-bbe6-9fb8d45ae8ac' }
+  'Promise resolution is still pending but the event loop has already resolved'

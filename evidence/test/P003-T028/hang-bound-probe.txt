@@ -1,0 +1,20 @@
+# 挂起有界：注入一条永不 settle 的探针，看 test 命令自己能不能收场
+# 探针 zz-hang-probe.test.js：import test from "node:test"; test("故意挂起", () => new Promise(() => {}));
+# 最终命令：node --test --test-timeout=60000 --test-force-exit *.test.js
+
+## --test-timeout 单独用（单文件）
+命令：timeout 30 node --test --test-timeout=2000 zz-hang-probe.test.js
+→ EXIT=1 ELAPSED=2090ms；tests 1 / pass 0 / cancelled 1
+
+## 全套 + 缩时上界（--test-timeout=2000 --test-force-exit）
+命令：for r in 1..6; timeout 30 npm test
+  run1 EXIT=1（ℹ cancelled 1）
+  run2 EXIT=1（ℹ cancelled 1）
+  run3 EXIT=1（ℹ cancelled 1）
+  run4 EXIT=1（ℹ cancelled 1）
+  run5 EXIT=1（ℹ cancelled 1）
+  run6 EXIT=1（ℹ cancelled 1）
+→ 6/6 EXIT=1，2452–2854ms，无 124
+
+## 反证：去掉 --test-force-exit 后，ENOTEMPTY 型挂起无界（详见 mutations.txt 配置 B）
+→ 3/8 EXIT=124（外部 timeout 40s 才收）——所以两个 flag 都得留

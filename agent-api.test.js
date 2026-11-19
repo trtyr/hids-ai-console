@@ -555,7 +555,8 @@ test('A1 误报入口先把结论落成误报再回 202，维护者没跑完也�
   assert.equal(visible.verdict_label, '误报');
   assert.equal(visible.feedback.reason, '运维的蜜罐探针，不是攻击');
   assert.equal(visible.maintenance.status, 'updating');
-  // 维护还在跑时重复登记不重起一轮
+  // 维护是后台起的：先钉住第一轮确实已开跑，再验重复登记不重起一轮（否则 ruleCalls 读到 0 只是调度时序）
+  await waitFor(() => ruleCalls === 1, '第一轮维护已起');
   assert.equal((await reportFalsePositive(base)).status, 202);
   assert.equal(ruleCalls, 1);
 
