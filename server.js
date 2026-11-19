@@ -10,11 +10,11 @@ import { CloudwalkerGateway, eventTypes, parseInstant } from './cloudwalker.js';
 import { createAgentToolboxFromEnv, TriageEvidenceToolbox } from './agent-tools.js';
 import { ApiEvidenceToolbox } from './api-tools.js';
 import { applyModelValues, createModelRolesFromEnv, modelRoleSummary, modelRoleValues, MODEL_ROLES } from './model-client.js';
-import { InvestigationAgent } from './investigation-agent.js';
+import { InvestigationAgent, replayInvestigation } from './investigation-agent.js';
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
 import { TriageMonitor } from './triage-monitor.js';
-import { log, logFileOptions, pruneLogFiles, readLogEntries, queryLevels, useLogFile } from './log.js';
+import { log, logFileOptions, pruneLogFiles, readLogEntries, queryLevels, traceModelCall, useLogFile } from './log.js';
 import { SyslogReceiver, parseSyslog } from './syslog-input.js';
 import { eventTypeFor } from './syslog-input.js';
 import { WikiStore } from './wiki-store.js';
@@ -259,12 +259,18 @@ export class RegoRuleMaintainer {
       }
       const prompt = (await this.prompts.load())?.prompts?.rule;
       if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('规则维护提示词未配置');
-      const message = await this.model.complete([
+      const messages = [
         { role: 'system', content: prompt },
         { role: 'user', content: JSON.stringify({ case_id: caseId, event_type: eventType, false_positive_reason: reason,
           reported_by: who, alert, matched_rules: matched, existing_rules: inventory.rules }) }
-      ], [], 'none');
-      const output = ruleProposal(message.content);
+      ];
+      // P003-T046 A4：规则维护是单发调用，同样落 ai.model_call；session_id 与 T041 的维护会话互引
+      //（事件说「这次调用属于哪次维护」，会话文件说「这次维护提了什么、验过没过、落在哪」）。
+      const maintainMeta = { domain: 'rule', role: 'rule_maintainer', turn: 1, phase: 'maintain',
+        sessionId: record?.id ?? null, model: this.model?.model || null, messages, tools: [] };
+      const replied = await traceModelCall(maintainMeta, () => this.model.complete(messages, [], 'none'),
+        { decode: value => ruleProposal(value.content) });
+      const output = replied.decoded;
       if (output.ready === false)
         throw new Error(`规则维护者没有给出可落盘的修订：${String(output.reason || '').slice(0, 200) || '未说明原因'}`);
       const id = String(output.id || '').trim();
@@ -1289,6 +1295,20 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           return json(res, 200, await history.save(result));
         }
         catch (e) { return causeError(res, e, 'upstream'); }
+      }
+      // 研判会话回放（P003-T046 A3）：读已落盘的研判记录与证据，**不重放模型**。
+      // 必须排在下面那条 startsWith 之前：否则 `/replay` 会被当成告警 ID 的后半段，回 400。
+      const replay = url.pathname.match(/^\/api\/agent\/investigations\/(.+)\/replay$/);
+      if (replay && req.method === 'GET') {
+        let alertId;
+        try { alertId = decodeURIComponent(replay[1]); }
+        catch { return callerError(res, '告警 ID 编码无效'); }
+        const mode = url.searchParams.get('mode') || 'deep';
+        if (!['deep', 'triage'].includes(mode) || !(mode === 'triage' ? validTriageId(alertId) : validAlertId(alertId)))
+          return callerError(res, '告警 ID 或研判模式无效');
+        const saved = await history.latest(alertId, mode);
+        if (!saved) return callerError(res, '该告警暂无已保存的研判记录', 404);
+        return json(res, 200, replayInvestigation(saved));
       }
       if (url.pathname.startsWith('/api/agent/investigations/') && req.method === 'GET') {
         let alertId;

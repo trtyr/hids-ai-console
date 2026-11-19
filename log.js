@@ -68,6 +68,80 @@ export let log = createJournal();
 // 单测的注入缝：ESM 活绑定，换掉后已 import 的模块也走新 journal。
 export function useJournal(next) { log = next || createJournal(); return log; }
 
+// ── 模型调用事件（P003-T046）─────────────────────────────────────────────────
+// 三域（研判 / 规则维护 / wiki 维护）每一次模型调用落**两条** `ai.model_call`：
+//   `direction: 'request'`  —— 发出去那一刻：域、角色、轮次、input_chars、消息与工具条数；
+//   `direction: 'response'` —— 收回来那一刻：同一批定位字段 + input_chars / output_chars / duration_ms / outcome。
+// 拆两条的理由：调用挂死或被 kill 时，只有 request 那条能证明「这次确实发出去了」；单条事件做不到。
+// **正文与密钥一个字都不进字段**：请求体只在下面这个函数栈上算长度，落日志的只有字符量；
+// 失败原因走 `error` 字段，与其它事件一样过两道脱敏闸（键名 + 字符串里的 Basic/Bearer/token=）。
+const MODEL_EVENT = 'ai.model_call';
+
+// 请求体字符量：真发出去的那两份（messages / tools）序列化之后多长。
+const requestChars = (messages, tools) => {
+  try { return JSON.stringify({ messages, tools }).length; } catch { return 0; }
+};
+const replyChars = reply => (typeof reply?.content === 'string' ? reply.content.length : 0);
+const toolCallCount = reply => (Array.isArray(reply?.tool_calls) ? reply.tool_calls.length : 0);
+const errorText = error => String(error?.message || error).slice(0, 120);
+
+// 结局四值（`docs/architecture.md` §3.6 的事件表按它写）：ok / timeout / invalid_json / error。
+// 超时判据与研判循环里的重试判据同一套（AbortSignal 报 TimeoutError，文案带 timeout / 超时 / aborted）。
+function outcomeOf(error) {
+  const text = `${error?.name || ''} ${error?.message || ''}`;
+  return /timeout|超时|aborted/i.test(text) ? 'timeout' : 'error';
+}
+
+/**
+ * 包一次模型调用：进两条 `ai.model_call` 事件，把回包与「解码结果」一起交回调用方。
+ *
+ * - `meta`：`{ domain, role, turn, phase, attempt, alertId, sessionId, model, messages, tools }`；
+ *   `domain` 取 `triage | rule | wiki`，`role` 取 `triage | review | rule_maintainer | wiki_maintainer`。
+ * - `run`：真正发出请求的函数（`() => client.complete(...)`）。
+ * - `decode`：可选。回包解码（`parseJSON` / `normalizeVerdict` 之类）。解不出来记 `outcome: 'invalid_json'`，
+ *   原始错误上打 `model_decode` / `model_reply` / `model_call` 三个标记后原样抛出——调用方的退回逻辑不必改形状。
+ *
+ * 返回 `{ reply, decoded, call }`；`call` 是这一条的计量（input_chars / output_chars / duration_ms / outcome /
+ * tool_calls），研判侧拿它填逐轮快照（`turns`），不再自己算一遍。
+ */
+export async function traceModelCall(meta = {}, run, { decode = null } = {}) {
+  const { domain, role, turn = 1, phase = null, attempt = 1, alertId = null, sessionId = null,
+    model = null, messages = [], tools = [] } = meta;
+  const base = { domain, role, turn, attempt };
+  if (phase) base.phase = phase;
+  if (alertId) base.alert_id = alertId;
+  if (sessionId) base.session_id = sessionId;
+  if (model) base.model = model;
+  const inputChars = requestChars(messages, tools);
+  const startedAt = Date.now();
+  log(MODEL_EVENT, { ...base, direction: 'request', input_chars: inputChars,
+    messages: Array.isArray(messages) ? messages.length : 0, tools: Array.isArray(tools) ? tools.length : 0 });
+  const settle = fields => log(MODEL_EVENT, { ...base, direction: 'response', input_chars: inputChars,
+    duration_ms: Date.now() - startedAt, ...fields });
+  let reply;
+  try { reply = await run(); }
+  catch (error) {
+    settle({ outcome: outcomeOf(error), output_chars: 0, error: errorText(error) });
+    throw error;
+  }
+  let decoded = null;
+  if (decode) {
+    try { decoded = decode(reply); }
+    catch (error) {
+      // 回包到手了但解不出来：这是「模型没按约定输出」，与调用失败分开记，调用方的退回逻辑照旧。
+      const call = { input_chars: inputChars, output_chars: replyChars(reply),
+        duration_ms: Date.now() - startedAt, outcome: 'invalid_json', tool_calls: toolCallCount(reply) };
+      settle({ ...call, error: errorText(error) });
+      Object.assign(error, { model_decode: true, model_reply: reply, model_call: call });
+      throw error;
+    }
+  }
+  const call = { input_chars: inputChars, output_chars: replyChars(reply),
+    duration_ms: Date.now() - startedAt, outcome: 'ok', tool_calls: toolCallCount(reply) };
+  settle(call);
+  return { reply, decoded, call };
+}
+
 // ── 文件 sink 与轮转（P003-T045）─────────────────────────────────────────────
 // 缺省值：单文件 10 MiB 一换、历史留 5 份。两个键都不是必填（不配就用缺省），非法值（0 / 负数 / 小数 / 非数）
 // 同样回落缺省——与 HIDS_TRIAGE_CONCURRENCY 同一口径，坏配置不让进程起不来，也不静默把轮转关掉。

@@ -918,6 +918,30 @@ paths:
               schema: { $ref: '#/components/schemas/Investigation' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/agent/investigations/{alertId}/replay:
+    get:
+      tags: [深度研判]
+      summary: 回放一次已保存的研判会话（逐轮摘要 / 工具序列 / 结论变化）
+      description: |
+        按告警 ID 读**已保存**的研判记录（`<数据根>/investigations/<sha256>.json`）与其中的证据清单，
+        **不重放模型、不重查牧云**。新记录带 `turns` 逐轮快照；P003-T046 之前落的旧记录没有快照，
+        回 `turns: []` / `verdicts: []`，`tool_calls` 仍按 `trace` 给出——不 500，也不假装有逐轮数据。
+        这条分支排在 `GET /api/agent/investigations/{alertId}` 之前（否则 `/replay` 会被当成告警 ID 的后半段）。
+      operationId: replayInvestigation
+      parameters:
+        - $ref: '#/components/parameters/TriageId'
+        - name: mode
+          in: query
+          description: 与 `GET /api/agent/investigations/{alertId}` 同一套：按告警 ID + 模式取那一份记录
+          schema: { type: string, enum: [triage, deep], default: deep }
+      responses:
+        '200':
+          description: 回放视图
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvestigationReplay' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/trace/boards:
     get:
       tags: [深度研判]
@@ -2611,11 +2635,130 @@ components:
           description: 本次取证会话的全部记录，按取证顺序；syslog 未匹配旁路固定一条 syslog:1。
           items: { $ref: '#/components/schemas/EvidenceRecord' }
         trace: { type: array, items: { type: object, additionalProperties: true } }
+        turns:
+          type: array
+          description: |
+            本次会话的逐轮快照（P003-T046）：每次模型调用一条，只记计量与结论，不含消息正文。
+            回放接口 `GET /api/agent/investigations/{alertId}/replay` 读的就是它；旧记录没有这个键。
+          items: { $ref: '#/components/schemas/InvestigationTurn' }
         required_evidence:
           type: array
           description: 必查项及其结果；常规研判与深度研判都有（P003-T035 起），经验复用捷径也带（它先采必查项再核经验）。
           items: { $ref: '#/components/schemas/RequiredEvidence' }
       additionalProperties: true
+    InvestigationTurn:
+      type: object
+      description: |
+        一次模型调用的逐轮快照（P003-T046）。只记计量与结论，**消息正文一个字都不在这里**。
+        `turn` 是调查轮次；循环外的单发调用顺延：捷径=1、独立复核=调查轮数+1、修订=+2、引用校验退回=+3+第几次。
+      required: [turn, phase, role, attempt, messages, input_chars, reply_chars, tools, outcome, conclusion, note]
+      properties:
+        turn: { type: integer, description: 轮次（1 起） }
+        phase: { type: string, enum: [shortcut, investigate, review, revision, validation, narrative] }
+        role: { type: string, enum: [triage, review], description: review＝独立复核那一轮用的复核模型 }
+        attempt: { type: integer, description: 同一轮同一 phase 的第几次调用（超时重试＝2） }
+        messages: { type: integer, description: 这一轮发给模型的消息条数 }
+        input_chars: { type: [integer, 'null'], description: 请求体（messages 与 tools）序列化后的字符数；调用本身挂掉、拿不到计量时为 null }
+        reply_chars: { type: [integer, 'null'], description: 回包 content 字符数（tool_calls 不计入） }
+        tools:
+          type: array
+          description: 这一轮模型**点了**哪些工具（不是请求里给了哪些可选工具——工具目录整轮不变，列它没意义）
+          items: { type: string }
+        outcome: { type: string, enum: [ok, timeout, invalid_json, error] }
+        conclusion: { $ref: '#/components/schemas/InvestigationTurnConclusion' }
+        note: { type: [string, 'null'], description: 这一轮的附注（解析失败 / 结论被退回 / 复核结论 / 修订失败的原因摘要） }
+      additionalProperties: false
+    InvestigationTurnConclusion:
+      type: [object, 'null']
+      description: 这一轮模型给出的结论摘要；没有结论（点了工具 / 解析失败 / 复核轮）时为 null。
+      required: [verdict, verdict_label, confidence]
+      properties:
+        verdict: { type: string, enum: [threat, uncertain, false_positive] }
+        verdict_label: { type: string, enum: [真实威胁, 存疑, 误报] }
+        confidence: { type: [string, 'number'] }
+      additionalProperties: false
+    InvestigationReplay:
+      type: object
+      description: 一次研判会话的回放视图（P003-T046）：读已落盘的研判记录与证据，不重放模型。
+      required: [alert_id, mode, degraded, counts, turns, tool_calls, verdicts, final, evidence]
+      properties:
+        alert_id: { type: string }
+        mode: { type: string, enum: [triage, deep] }
+        model: { type: [string, 'null'], description: 当时用的模型名 }
+        saved_at: { type: [string, 'null'], format: date-time }
+        prompt_version: { type: [string, 'null'] }
+        degraded: { type: boolean, description: 这轮是不是降级结论（调查轮数用尽 / 引用校验未通过） }
+        counts:
+          type: object
+          required: [turns, tool_calls, evidence]
+          properties:
+            turns: { type: integer, description: 逐轮快照条数＝这次会话里落过事件的模型调用数（旧记录为 0） }
+            tool_calls: { type: integer }
+            evidence: { type: integer }
+          additionalProperties: false
+        turns:
+          type: array
+          items: { $ref: '#/components/schemas/InvestigationTurn' }
+        tool_calls:
+          type: array
+          description: 工具调用序列，按发生顺序；含重复查询（kind=tool_reuse）、失败的那次（kind=tool_error）、读回证据与读判据页
+          items: { $ref: '#/components/schemas/ReplayToolCall' }
+        verdicts:
+          type: array
+          description: 各轮结论变化——只列模型真给出结论的轮（调查轮 / 修订轮 / 引用校验退回轮）
+          items: { $ref: '#/components/schemas/ReplayVerdict' }
+        final:
+          type: object
+          required: [verdict, verdict_label, confidence, summary]
+          properties:
+            verdict: { type: [string, 'null'], description: threat / uncertain / false_positive；没有结论时为 null }
+            verdict_label: { type: [string, 'null'], description: 真实威胁 / 存疑 / 误报 }
+            confidence: { type: [string, 'number', 'null'] }
+            summary: { type: [string, 'null'] }
+          additionalProperties: false
+        review: { type: [object, 'null'], additionalProperties: true, description: 独立复核结论（assessment / concerns / missing_evidence） }
+        validation: { type: [object, 'null'], additionalProperties: true, description: 引用校验结果（ok / errors / degraded） }
+        evidence:
+          type: array
+          description: 本次取证会话的证据清单（编号 / 工具 / 取到时刻 / 指纹），不带证据正文
+          items: { $ref: '#/components/schemas/ReplayEvidence' }
+      additionalProperties: false
+    ReplayToolCall:
+      type: object
+      description: 回放里的工具调用序列一项。只白名单取字段（req 参数与正文一律不进回放）。
+      required: [step, kind]
+      properties:
+        step: { type: integer, description: 第几次（1 起） }
+        kind: { type: string, enum: [tool, tool_reuse, tool_error, read_evidence, case_file, wiki] }
+        turn: { type: integer, description: 发生在调查第几轮；取证前的原始事件读取没有轮次 }
+        name: { type: string, description: 工具名（kind=case_file 时是案卷文件名，kind=wiki 时没有这个名字） }
+        action: { type: string, description: kind=wiki 时的动作：index / context / page / search / required }
+        id: { type: string, description: kind=wiki 时的判据页编号 }
+        keyword: { type: string, description: kind=wiki 且 action=search 时的关键词 }
+        evidence_id: { type: string, description: 这次调用产出的证据编号 }
+        found: { type: boolean, description: kind=read_evidence 时：证据取回来了没有 }
+        error: { type: string, description: kind=tool_error 时的失败原因（≤200 字） }
+        matches: { type: integer, description: kind=wiki 且 action=search 时命中几页 }
+      additionalProperties: false
+    ReplayVerdict:
+      type: object
+      required: [turn, verdict]
+      properties:
+        turn: { type: [integer, 'null'] }
+        phase: { type: [string, 'null'] }
+        verdict: { type: string, enum: [threat, uncertain, false_positive] }
+        verdict_label: { type: string, enum: [真实威胁, 存疑, 误报] }
+        confidence: { type: [string, 'number'] }
+      additionalProperties: false
+    ReplayEvidence:
+      type: object
+      required: [evidence_id, tool, fetched_at, sha256]
+      properties:
+        evidence_id: { type: string }
+        tool: { type: string }
+        fetched_at: { type: [string, 'null'], format: date-time }
+        sha256: { type: [string, 'null'] }
+      additionalProperties: false
     TraceBoardAlert:
       type: object
       description: 白板绑定的那条告警；手填 IP 起的白板 type / occurred_at 为 null。

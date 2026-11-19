@@ -695,6 +695,43 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 **复算不重拉**：`readRequiredEvidence()` 与 `InvestigationStore.latest()` 都是纯读盘，不发牧云请求。
 单测用替身牧云计数验证前后调用数不变（`evidence/test/P003-T040/evidence-rollup.test.js` 第一条用例）。
 
+### 3.11 逐轮快照与研判会话回放（P003-T046）
+
+两件事：**每一次模型调用在结果里留一条快照**（`turns`），**回放接口只读已落盘的记录**把这批快照摊开。
+三域（研判 / 规则维护 / wiki 维护）的模型调用事件（`ai.model_call`）与 `turns` 是同一批计量的两个去处：
+事件进日志（`docs/architecture.md` §3.6），快照进研判记录（本页）。
+
+**`turns[]`：逐轮快照**（`run()` 与 `runUnmatchedSyslog()` 的返回体新增；每次模型调用一条，`investigation-agent.js:91-96` 的 `turnRecord()`）
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `turn` | integer | 调查轮次。循环外的单发调用顺延：客户经验捷径=1、独立复核=调查轮数+1、复核要求修订=+2、引用校验退回=+3+第几次 |
+| `phase` | string | `shortcut` / `investigate` / `review` / `revision` / `validation` / `narrative` |
+| `role` | string | `triage`（研判模型）或 `review`（复核模型，P003-T042 的分层） |
+| `attempt` | integer | 同一轮同一 phase 的第几次调用；超时重试是 2，1 起 |
+| `messages` | integer | 这一轮发给模型的消息条数 |
+| `input_chars` | integer \| null | 请求体（messages 与 tools）序列化后的字符数；调用本身挂掉、拿不到计量时为 null |
+| `reply_chars` | integer \| null | 回包 `content` 字符数（`tool_calls` 不计入） |
+| `tools` | string[] | **这一轮模型点了哪些工具**（不是请求里给了哪些可选工具——工具目录整轮不变，列它没意义） |
+| `outcome` | string | `ok` / `timeout` / `invalid_json` / `error`，与 `ai.model_call` 同一套结局 |
+| `conclusion` | object \| null | 这一轮给出的三态结论摘要 `{verdict, verdict_label, confidence}`；点了工具 / 解析失败 / 复核轮为 null |
+| `note` | string \| null | 附注：`parse_error`、`submit_conclusion`、`conclusion_rejected_未查知识库`、`独立复核=…`、`修订失败：…` |
+
+**正文一个字都不在快照里**：只记字符量、工具名与结论三态；提示词、回包正文、工具返回正文一律不进 `turns`。
+`evidence/test/P003-T046/model-call-events.test.js` 有用例钉住「快照里搜不到提示词与正文片段」。
+
+**`replayInvestigation(record)`：回放视图（纯函数）**
+
+- 输入：`InvestigationStore.latest()` 读出来的那份研判记录；输出：`{alert_id, mode, model, saved_at, prompt_version,
+  degraded, counts, turns, tool_calls, verdicts, final, review, validation, evidence}`。
+- **不重放模型、不重查牧云、不读案卷目录**：只做白名单映射——`turns` 原样（只取白名单字段）、
+  `tool_calls` 从 `trace` 的 `tool` / `tool_reuse` / `tool_error` / `read_evidence` / `case_file` / `wiki` 六类映射成
+  `{step, kind, turn?, name?, action?, id?, keyword?, evidence_id?, found?, error?, matches?}`（请求参数与正文不进回放）、
+  `verdicts` 取 `turns[].conclusion` 非空的轮、`evidence` 只留编号 / 工具 / 取到时刻 / sha256。
+- 旧记录（本卡之前落的案卷）没有 `turns`：`turns: []`、`verdicts: []`、`counts.turns: 0`，其余按 `trace` / `verdict` 给出。
+- 入参不是对象（`null` 等）返回 `null`，由路由决定怎么回；HTTP 合同见 [http-api.md 3.10](http-api.md#310-研判会话回放get-apiagentinvestigationsalertidreplayp003-t046)。
+- 代码：`investigation-agent.js:1149-1173`。
+
 ## 4. 公开面
 
 | 导出 | 签名 / 形态 | 作用 | 证据 |
@@ -704,6 +741,7 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 | `.runUnmatchedSyslog(input, matchResult, caseInfo, onProgress?)` | `Promise<研判记录>` | 未匹配 syslog 的旁路，见 [2.4](#24-未匹配-syslog-的旁路) | `investigation-agent.js:728` |
 | `.prompts()` / `.updatePrompt(section, content, revision)` | `Promise<…>` | 读 / 改提示词，转调提示词存储 | `investigation-agent.js:211-212` |
 | `boundedToolArgs(name, rawArgs, catalog)` | `(name, args, catalog) => args` | 工具参数收窄，见 [3.2](#32-工具轮次与调用上限) | `investigation-agent.js:177` |
+| `replayInvestigation(record)` | `(record) => 回放视图 \| null` | 把已落盘的研判记录压成回放视图（逐轮摘要 / 工具序列 / 结论变化），**不调模型**；见 [3.11](#311-逐轮快照与研判会话回放p003-t046) | `investigation-agent.js:1149-1173` |
 | `agentConfigured(env?)` | `(env?) => boolean` | 五个环境变量齐了才算配好：牧云地址、牧云 Token、模型地址、模型密钥、模型名 | `investigation-agent.js:620-622` |
 | `requiredEvidencePlan(type, original, catalog)` | `=> 检查项[]` | 生成必查项清单；`catalog` 决定动态数据源那两项能不能查 | `required-evidence.js:69` |
 | `collectRequiredEvidence(plan, session, onProgress?, trace?)` | `Promise<检查结果[]>` | 并发执行必查项（`Promise.allSettled`） | `required-evidence.js:121` |
@@ -713,7 +751,7 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 | `finalizeTriageOutput(verdict)` | `(verdict) => verdict` | 客户报告与建议动作整形 | `triage-output.js:35` |
 
 `run()` 的返回体固定带这几个字段：`alert_id`、`mode`、`model`、`prompt_version`、`scenario_ids`、`verdict`、`review`、
-`validation`、`trace`、`required_evidence`、`evidence`、`auto_action`（`investigation-agent.js:573-578`）。
+`validation`、`trace`、`turns`（P003-T046）、`required_evidence`、`evidence`、`auto_action`（`investigation-agent.js:1056-1060`）。
 客户经验复用那条捷径返回同一个结构，只是 `review.assessment` 记作 `knowledge_reuse`、`validation.ok` 写死 true（`investigation-agent.js:344-345`），
 另外多一个 `knowledge_reuse` 字段记命中的经验（`investigation-agent.js:339-342`）。
 P003-T012 起 `verdict` 里固定多两个只读字段：`rego`（`{status, rule_ids}`）与 `wiki`（仅常规研判且知识库在位时出现，`{consulted, adopted, reason}`），见 [3.8](#38-规则注入知识库必查与结论工具p003-t012)。

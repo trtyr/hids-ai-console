@@ -147,6 +147,10 @@
 | `policy.usage` | `package-policy.js` 参数不对，打印用法后退出码 1 | `message`（`level=error`） |
 | `log.serialize_failed` | 日志字段序列化不出来，兜底一条 | `level=error` |
 | `log.cleaned` | `POST /api/logs/cleanup` 真删了历史文件（dry-run 不落） | `by`（`age` / `size` / `age+size`）`count` `bytes`；不记文件名与内容 |
+| `ai.model_call`（`direction: request`） | 三域（研判 / 规则维护 / wiki 维护）**每一次模型调用发出去时**（P003-T046） | `domain`（`triage` / `rule` / `wiki`）`role`（`triage` / `review` / `rule_maintainer` / `wiki_maintainer`）`turn` `phase` `attempt` `input_chars` `messages` `tools`；有则带 `alert_id` / `session_id` / `model` |
+| `ai.model_call`（`direction: response`） | 同一次调用收回来时：成功、超时、回包解不出 JSON、调用报错都落这一条 | 同上定位字段 + `input_chars` `output_chars` `duration_ms` `outcome`（`ok` / `timeout` / `invalid_json` / `error`）`tool_calls`，失败时多一个 `error`（≤120 字） |
+
+**`ai.model_call` 为什么要两条**（P003-T046）：一次模型调用按方向拆成 request / response 两条，`request` 在调用发出去时落（那一刻只能知道输入计量），`response` 在回包或失败时落（带 `output_chars` / `duration_ms` / `outcome`）。拆开是因为调用挂死或进程被 kill 时，只有 request 那条能证明「这次确实发出去了」；单条事件做不到。合成一次调用看 `(domain, role, turn, attempt, direction)` 定位，一次调用必是一对（失败也有 response）。事件由 `log.js:107-143` 的 `traceModelCall()` 统一落，正文与密钥一个字都不进字段——请求体只在函数栈上算长度；域 / 角色 / 结局口径见 [modules/investigation-agent.md §3.11](modules/investigation-agent.md#311-逐轮快照与研判会话回放p003-t046) 与 [modules/http-api.md §3.10](modules/http-api.md#310-研判会话回放get-apiagentinvestigationsalertidreplayp003-t046)。
 
 `cloudwalker.call_failed` 的 `op` 取值：`status` / `alerts` / `alert`（告警详情）/ `tools`（牧云 API 工具列表）/ `mcp_tools` / `call_tool` / `list_events`（syslog 事件匹配）。
 
@@ -636,7 +640,7 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 
 ### 11.3 接口契约
 
-`openapi.yaml` 是对外 HTTP 契约，声明为 OpenAPI 3.1（`openapi.yaml:1`），头部注明它「依据 backend/server.js 和 backend/maintenance-server.js 的实际路由整理」（`openapi.yaml:6`）。它列了 43 条路径（P003-T041 补了三条规则维护路径：`/api/rules/sessions`、`/api/rules/{id}/history`、`/api/rules/{id}/rollback`，另给 `/api/rules/{id}` 加了 `PUT`）。**它与 `server.js` 是两套独立维护的真源**：改路由时两边都要动。
+`openapi.yaml` 是对外 HTTP 契约，声明为 OpenAPI 3.1（`openapi.yaml:1`），头部注明它「依据 backend/server.js 和 backend/maintenance-server.js 的实际路由整理」（`openapi.yaml:6`）。它列了 48 条路径（P003-T041 补了三条规则维护路径：`/api/rules/sessions`、`/api/rules/{id}/history`、`/api/rules/{id}/rollback`，另给 `/api/rules/{id}` 加了 `PUT`；P003-T044 / P003-T045 补了数据管理与日志四条；P003-T046 补了 `/api/agent/investigations/{alertId}/replay`）。**它与 `server.js` 是两套独立维护的真源**：改路由时两边都要动。
 
 ## 12. 模块清单
 

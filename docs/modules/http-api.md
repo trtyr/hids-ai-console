@@ -4,7 +4,7 @@
 
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
-- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。P003-T042 的模型分层按 1387 行的 `server.js` 标号（见 [evidence/recon/P003-T042.md](../../evidence/recon/P003-T042.md)）：新增装配在 `server.js:42`（五个角色实例）与 `configSummary` 的 `model.roles`（`server.js:1355`），`applyLiveConfig` 涨到 `server.js:74-95`，路由行号整体 +5（`GET /api/config` 在 `server.js:871`、`POST` 在 `server.js:875-879`）；§3.5 与 §3.6 的表与样例已按本卡更新，其余章节的旧锚点没挪。P003-T030 只重取了 §3.1 路由表里 `POST /api/agent/triage/{alertId}` 那一格的行号（`server.js:826` → `server.js:1169-1179`，按本卡提交时 1449 行的 `server.js`，见 [evidence/recon/P003-T030.md](../../evidence/recon/P003-T030.md)），并新增 §3.9；本轮没改代码，其余锚点一律未动。
+- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。P003-T042 的模型分层按 1387 行的 `server.js` 标号（见 [evidence/recon/P003-T042.md](../../evidence/recon/P003-T042.md)）：新增装配在 `server.js:42`（五个角色实例）与 `configSummary` 的 `model.roles`（`server.js:1355`），`applyLiveConfig` 涨到 `server.js:74-95`，路由行号整体 +5（`GET /api/config` 在 `server.js:871`、`POST` 在 `server.js:875-879`）；§3.5 与 §3.6 的表与样例已按本卡更新，其余章节的旧锚点没挪。P003-T046 新增的研判回放（§3.1 表里 `GET /api/agent/investigations/{alertId}/replay`、新增 §3.10）按本卡提交时 1463 行的 `server.js` 标号（回放分支 `server.js:1299-1312`、既有单条研判阅读分支 `server.js:1313-1321`），其余章节的旧锚点本轮没动。P003-T030 只重取了 §3.1 路由表里 `POST /api/agent/triage/{alertId}` 那一格的行号（`server.js:826` → `server.js:1169-1179`，按本卡提交时 1449 行的 `server.js`，见 [evidence/recon/P003-T030.md](../../evidence/recon/P003-T030.md)），并新增 §3.9；本轮没改代码，其余锚点一律未动。
 P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inventory` 与 `POST /api/data/cleanup`、新增 §3.7）按本卡提交时的 `server.js` 标号（1309 行，`server.js:598-799` 的 helper、`server.js:864-870` 的两个分支、`server.js:829` 的 `dataDeps`）与 `triage-monitor.js` 标号（924 行，`triage-monitor.js:349-407` 的三个新方法，见 [evidence/recon/P003-T044.md](../../evidence/recon/P003-T044.md)）：新代码全部落在文件末尾与 `server.js:864-870`，前面所有锚点没挪。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
@@ -73,15 +73,11 @@ P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inven
 
 ### 3.1 路由表
 
-39 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
-
-> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）；P003-T044 再加两条数据管理路由（`GET /api/data/inventory`、`POST /api/data/cleanup`，见 §3.7）。
-> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 39 行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
-43 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
-P003-T045 加了两条日志路由（`GET /api/logs`、`POST /api/logs/cleanup`，见 §3.8）：41 → 43。
+44 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
+P003-T045 加了两条日志路由（`GET /api/logs`、`POST /api/logs/cleanup`，见 §3.8）：41 → 43；P003-T046 加了一条研判回放路由（`GET /api/agent/investigations/{alertId}/replay`，见 §3.10）：43 → 44。
 
 > 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）。P003-T041 把规则维护做成正式接口，补了 `PUT /api/rules/{id}`、`GET /api/rules/{id}/history`、`POST /api/rules/{id}/rollback`、`GET /api/rules/sessions` 四条。
-> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 44 行；P003-T045 的两条日志路由各占一行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
+> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 45 行；P003-T045 的两条日志路由、P003-T046 的回放路由各占一行），不是组合数：一行可以给出多条组合（`server.js:1166` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:1191` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
 
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
@@ -128,7 +124,8 @@ P003-T045 加了两条日志路由（`GET /api/logs`、`POST /api/logs/cleanup`�
 | POST | `/api/wiki/sessions/{id}/replay` | 200 | 需知识库管理员令牌 | `server.js:711-714` |
 | POST | `/api/wiki/sessions/{id}/publish` | 200 | 需知识库管理员令牌 | `server.js:715-719` |
 | POST | `/api/agent/investigations` | 200 | 无研判器回 503 | `server.js:406-430` |
-| GET | `/api/agent/investigations/{alertId}` | 200 / 404 | — | `server.js:431-439` |
+| GET | `/api/agent/investigations/{alertId}` | 200 / 404 | — | `server.js:1313-1321` |
+| GET | `/api/agent/investigations/{alertId}/replay` | 200 / 404 | 排在上面那条之前；读已保存的研判记录与证据，不重放模型（见 §3.10） | `server.js:1299-1312` |
 | GET | `/api/alerts` | 200 | 无牧云服务回 503；上游连不上且窗口内没有快照时回 502 `upstream_error`（**首批列表有 ≤15 秒快照**，`HIDS_LIST_SNAPSHOT_TTL_MS`，P003-T037：窗口内同一 `类型|批大小|起点` 直接回缓存，上游刚挂的这段窗口里可能仍是 200 的陈旧页） | `server.js:440-454` |
 | GET | `/api/alerts/{type}:{id}` | 200 | 无牧云服务回 503 | `server.js:456-475` |
 
@@ -150,8 +147,8 @@ P003-T045 加了两条日志路由（`GET /api/logs`、`POST /api/logs/cleanup`�
 
 | 校验函数 | 接受什么 | 用在哪 | 出处 |
 | --- | --- | --- | --- |
-| `validAlertId` | `<小写类型>:<正整数>`，类型须在事件类型表里，序号须是安全整数 | `GET /api/agent/investigations/{alertId}`（`mode=deep` 时）、单条告警路由的类型段 | `server.js:102-105` |
-| `validTriageId` | `validAlertId`，或 syslog 形态 `syslog:<类型>:<16 位十六进制>:<数字或 unknown>:<36 位 UUID>` | `GET/POST /api/agent/triage/{alertId}`、`POST /api/agent/triage/{alertId}/false-positive`、`GET /api/agent/investigations/{alertId}`（`mode=triage` 时） | `server.js:383` |
+| `validAlertId` | `<小写类型>:<正整数>`，类型须在事件类型表里，序号须是安全整数 | `GET /api/agent/investigations/{alertId}`（`mode=deep` 时）、`GET /api/agent/investigations/{alertId}/replay`（`mode=deep` 时）、单条告警路由的类型段 | `server.js:489-493` |
+| `validTriageId` | `validAlertId`，或 syslog 形态 `syslog:<类型>:<16 位十六进制>:<数字或 unknown>:<36 位 UUID>` | `GET/POST /api/agent/triage/{alertId}`、`POST /api/agent/triage/{alertId}/false-positive`、`GET /api/agent/investigations/{alertId}` 与 `/replay`（`mode=triage` 时） | `server.js:492-494` |
 | `validTraceTarget` | 告警 ID，或去掉 `ip:` 前缀后的 IPv4（每段 ≤ 255） | 溯源白板三条路由 | `server.js:116-256` |
 
 解码失败与校验失败给的是不同的文案：解码失败回「告警 ID 编码无效」，校验失败回「告警 ID 无效」或「告警 ID 或研判模式无效」。
@@ -564,6 +561,7 @@ bash evidence/test/P003-T044/mutation-round2.sh   # 20 条实现变异逐条打�
 - `total` 是**筛选后、切页前**的条数；`echo` 回显本次的 `count` / `offset`。
 - `files` 是这次读了几个文件——测试拿它证明「读的是盘，不是内存」。
 - **上限**：命中超过 20000 条时只收前 20000 条并回 `truncated: true`（`log.js:77` 的 `QUERY_SCAN_LIMIT`）：调窄时间范围再查。
+- **过滤只有事件名 / 级别 / 时间三项，不按字段过滤**：三域模型调用（P003-T046）统一是 `event=ai.model_call`，行里带 `domain`（`triage` / `rule` / `wiki`）与 `role`（`triage` / `review` / `rule_maintainer` / `wiki_maintainer`）——先按事件名拉，再在客户端按这两个字段细分；本接口不做字段级筛选。事件字段口径见 [architecture.md §3.6](../architecture.md)。
 - 不是 JSON 对象、没有字符串 `time` / `event` 的行（截断的半行、人手写的空行）直接跳过，不报错（`parseLogLine()`，`log.js:164-175`）。
 - **脱敏第三道闸**：落盘那行已经过脱敏，读的时候按同一套规则**再擦一遍**——盘上的文件可能是人手改过或老版本写的。
 
@@ -676,6 +674,80 @@ grep -cE '^[A-Z0-9_]+=' .env.example                          # 41（头部注�
 
 ```bash
 node --test evidence/test/P003-T030/live-alert-to-triage.test.js
+```
+
+### 3.10 研判会话回放（`GET /api/agent/investigations/{alertId}/replay`，P003-T046）
+
+**关键路径**：分支在 `server.js:1299-1312`；纯函数构建器 `replayInvestigation()` 在 `investigation-agent.js:1149-1173`；
+逐轮快照 `turns` 在研判过程中生成（`investigation-agent.js:473`、`:91-96` 的 `turnRecord()`，随结果一起落盘 `investigation-agent.js:1059`）；
+记录存储仍是 `investigation-store.js` 的 `InvestigationStore.latest()`。OpenAPI 契约见 `openapi.yaml` 的 `replayInvestigation` / `InvestigationReplay`。
+
+**它管什么**：把一次研判会话摊开给人看——**逐轮消息摘要**（每轮发了多少条消息、输入/输出字符量、模型点了哪些工具、结局）、
+**工具调用序列**（按发生顺序，含重复查询、读回证据、读判据页、失败的那次）、**各轮结论变化**（调查轮 / 修订轮 / 校验退回轮
+给出的三态结论），外加终局结论、独立复核、引用校验与证据清单（编号 / 工具 / 取到时刻 / 指纹，不带正文）。
+
+**它不做什么**：**不重放模型、不重查牧云、不读案卷目录**。数据只来自已经落盘的那份研判记录
+（`<数据根>/investigations/<sha256>.json`）与其中的 `evidence` / `trace` / `turns`；记录里没有的东西就回空，
+不补、不猜、不 500。回放接口本身不产生任何 `ai.model_call` 事件（没有模型调用）。
+
+**参数**
+
+| 位置 | 名称 | 缺省 | 合法值 | 不合法时 |
+| --- | --- | --- | --- | --- |
+| path | `alertId` | — | `mode=deep`：`validAlertId`；`mode=triage`：`validTriageId`（syslog 形态也认） | 400「告警 ID 编码无效」/「告警 ID 或研判模式无效」（§3.3） |
+| query | `mode` | `deep` | `deep` / `triage`，与 `GET /api/agent/investigations/{alertId}` 同一套 | 400「告警 ID 或研判模式无效」 |
+
+**响应（200）**
+
+```json
+{"alert_id":"revshell:7","mode":"deep","model":"fake-model","saved_at":"2026-11-20T00:00:00.000Z","prompt_version":"…",
+ "degraded":false,
+ "counts":{"turns":3,"tool_calls":2,"evidence":2},
+ "turns":[{"turn":1,"phase":"investigate","role":"triage","attempt":1,"messages":2,
+           "input_chars":12512,"reply_chars":0,"tools":["list_host_events"],"outcome":"ok","conclusion":null,"note":null},
+          {"turn":2,"phase":"investigate","role":"triage","attempt":1,"messages":4,
+           "input_chars":11612,"reply_chars":183,"tools":[],"outcome":"ok",
+           "conclusion":{"verdict":"uncertain","verdict_label":"存疑","confidence":"低"},"note":null},
+          {"turn":3,"phase":"review","role":"review","attempt":1,"messages":2,
+           "input_chars":2859,"reply_chars":62,"tools":[],"outcome":"ok","conclusion":null,"note":"独立复核=supported"}],
+ "tool_calls":[{"step":1,"kind":"tool","name":"get_revshell_event","evidence_id":"cw:1"},
+               {"step":2,"kind":"tool","turn":1,"name":"list_host_events","evidence_id":"cw:2"}],
+ "verdicts":[{"turn":2,"phase":"investigate","verdict":"uncertain","verdict_label":"存疑","confidence":"低"}],
+ "final":{"verdict":"uncertain","verdict_label":"存疑","confidence":"低","summary":"需要更多证据"},
+ "review":{"assessment":"supported","concerns":[],"missing_evidence":[]},
+ "validation":{"ok":true,"errors":[]},
+ "evidence":[{"evidence_id":"cw:1","tool":"get_revshell_event","fetched_at":"…","sha256":"…"}]}
+```
+
+| 字段 | 口径 |
+| --- | --- |
+| `turns[]` | 每次模型调用一条快照：`turn` 是调查轮次，循环外的单发调用顺延（捷径=1、独立复核=轮数+1、修订=+2、引用校验退回=+3+第几次）；`phase` 取 `shortcut / investigate / review / revision / validation / narrative`；`role` 取 `triage / review`；`attempt` 是同一轮同一 phase 的第几次（超时重试=2）；`tools` 是**这一轮模型点了哪些工具**（不是请求里给了哪些可选工具）；`outcome` 与 `ai.model_call` 的结局同一套四值（§architecture §3.6）；`conclusion` 是这一轮给出的三态结论摘要，没有结论时为 `null`；`note` 是附注（解析失败 / 结论被退回 / 复核结论 / 修订失败的原因摘要） |
+| `tool_calls[]` | 按发生顺序的 `trace` 白名单映射：`kind` 取 `tool`（真查询）/`tool_reuse`（同一查询已取过）/`tool_error`（失败）/`read_evidence`（取回已取证据）/`case_file`（读案卷文件）/`wiki`（读判据页或检索，带 `action` / `id` / `keyword`）；只带名与编号，**请求参数与正文不进回放** |
+| `verdicts[]` | 各轮结论变化：只列 `turns[].conclusion` 非空的轮 |
+| `final` | 落盘结论的三态 + 置信度 + 摘要；没有结论时各字段 `null` |
+| `degraded` | 降级结论标记：`validation.degraded === true`，或 `trace` 里有 `degraded_conclusion` |
+| `evidence[]` | 证据清单四项（编号 / 工具 / 取到时刻 / sha256），**不带证据正文与视图** |
+| `counts` | `turns` / `tool_calls` / `evidence` 三条计数，供页面做空态判断 |
+
+**旧记录（P003-T046 之前落的案卷）**：没有 `turns` 键 → `turns: []`、`verdicts: []`、`counts.turns: 0`，
+`tool_calls` / `evidence` / `final` 照旧按 `trace` 与 `verdict` 给出。这是**有意的降级**：不伪造逐轮数据。
+
+**失败口径**
+
+| 情况 | 状态 | `code` | 正文 |
+| --- | --- | --- | --- |
+| 这条告警没有已保存的研判记录（或 `mode` 取错） | 404 | `caller_error` | 「该告警暂无已保存的研判记录」（与 `GET /api/agent/investigations/{alertId}` 同一句） |
+| `alertId` 解码失败 | 400 | `caller_error` | 「告警 ID 编码无效」 |
+| `alertId` 形状不对 / `mode` 不在白名单 | 400 | `caller_error` | 「告警 ID 或研判模式无效」 |
+
+**分支顺序**：这条分支必须排在 `GET /api/agent/investigations/{alertId}` 的 `startsWith` 之前，否则 `/replay` 会被当成
+告警 ID 的后半段解码，回 400「告警 ID 或研判模式无效」。`evidence/test/P003-T046/investigation-replay.test.js` 钉住这一点。
+
+**可重放证据**：
+
+```bash
+cd /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T046
+node --test evidence/test/P003-T046/investigation-replay.test.js   # 3 条全绿，约 0.15s
 ```
 
 ## 4. Basic 认证
