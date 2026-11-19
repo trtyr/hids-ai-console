@@ -1,0 +1,47 @@
+M1 变异：runtimePaths 加回 baseline（期望 A1 键集断言红）
+=== 
+✖ A1 runtimePaths 只剩七个具名路径，baseline/intel 两键不在其中 (1.944937ms)
+✖ A1 server.js 里不再出现 baselineFile/intelFile 与 runtime.baseline/runtime.intel (4.056024ms)
+ℹ tests 11
+ℹ pass 9
+ℹ fail 2
+✖ failing tests:
+✖ A1 runtimePaths 只剩七个具名路径，baseline/intel 两键不在其中 (1.944937ms)
+✖ A1 server.js 里不再出现 baselineFile/intelFile 与 runtime.baseline/runtime.intel (4.056024ms)
+
+M2 变异：04-上下文.md JSON 加回 baseline/intel（期望 A2 红）
+=== 
+✖ A2 04-上下文.md 的 JSON 只留 window/history，会话与投递次数照旧 (4.1325ms)
+ℹ tests 11
+ℹ pass 10
+ℹ fail 1
+✖ failing tests:
+✖ A2 04-上下文.md 的 JSON 只留 window/history，会话与投递次数照旧 (4.1325ms)
+
+M3 变异：删 wiki/common/GEN-13.md（期望 A3/A4 红）
+=== 
+✖ A3 GEN-13 在种子页里，agentIndex / agentPage / agentSearch 都能读到 (20.482383ms)
+✖ A3 GEN-13 覆盖原 baseline.json 的四类信息 (0.851433ms)
+✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 (0.542665ms)
+ℹ tests 11
+ℹ pass 8
+ℹ fail 3
+✖ failing tests:
+✖ A3 GEN-13 在种子页里，agentIndex / agentPage / agentSearch 都能读到 (20.482383ms)
+
+M4 变异：contextFor 读回 baseline 文件（期望 A1 contextFor 断言红：坏 JSON 抛错/多出 baseline 字段）
+=== 
+✖ A1 contextFor 不读基线/情报文件，返回值里没有 baseline/intel 两段 (3.353772ms)
+ℹ tests 11
+ℹ pass 10
+ℹ fail 1
+✖ failing tests:
+✖ A1 contextFor 不读基线/情报文件，返回值里没有 baseline/intel 两段 (3.353772ms)
+
+M5 变异：syslog-case.js 的 04-上下文.md 加回 baseline/intel（期望探针段 3 黑盒红）→
+✔ 真进程启动（独立数据根）  [HIDS_PORT=38597 summary.input_mode=syslog]
+✔ GET /api/wiki/pages 列出 GEN-13  [common/GEN-13.md · active]
+✔ 种子落在注入根（不是仓库）  [$RUN/data/wiki/common/GEN-13.md]
+✔ GET /api/wiki/pages/common/GEN-13.md 读得到正文  [3760 字符]
+✖ 探针失败：04-上下文.md 里还有 baseline/intel
+✖ 探针有断言红（退出码 1）
