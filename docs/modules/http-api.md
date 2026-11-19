@@ -125,7 +125,7 @@ P003-T045 加了两条日志路由（`GET /api/logs`、`POST /api/logs/cleanup`�
 | POST | `/api/wiki/sessions/{id}/publish` | 200 | 需知识库管理员令牌 | `server.js:715-719` |
 | POST | `/api/agent/investigations` | 200 | 无研判器回 503 | `server.js:406-430` |
 | GET | `/api/agent/investigations/{alertId}` | 200 / 404 | — | `server.js:1313-1321` |
-| GET | `/api/agent/investigations/{alertId}/replay` | 200 / 404 | 排在上面那条之前；读已保存的研判记录与证据，不重放模型（见 §3.10） | `server.js:1299-1312` |
+| GET | `/api/agent/investigations/{alertId}/replay` | 200 / 404 | 排在上面那条之前；读已保存的研判记录与证据，不重放模型（见 §3.10） | `server.js:1301-1312` |
 | GET | `/api/alerts` | 200 | 无牧云服务回 503；上游连不上且窗口内没有快照时回 502 `upstream_error`（**首批列表有 ≤15 秒快照**，`HIDS_LIST_SNAPSHOT_TTL_MS`，P003-T037：窗口内同一 `类型|批大小|起点` 直接回缓存，上游刚挂的这段窗口里可能仍是 200 的陈旧页） | `server.js:440-454` |
 | GET | `/api/alerts/{type}:{id}` | 200 | 无牧云服务回 503 | `server.js:456-475` |
 
@@ -678,8 +678,8 @@ node --test evidence/test/P003-T030/live-alert-to-triage.test.js
 
 ### 3.10 研判会话回放（`GET /api/agent/investigations/{alertId}/replay`，P003-T046）
 
-**关键路径**：分支在 `server.js:1299-1312`；纯函数构建器 `replayInvestigation()` 在 `investigation-agent.js:1149-1173`；
-逐轮快照 `turns` 在研判过程中生成（`investigation-agent.js:473`、`:91-96` 的 `turnRecord()`，随结果一起落盘 `investigation-agent.js:1059`）；
+**关键路径**：分支在 `server.js:1301-1312`；纯函数构建器 `replayInvestigation()` 在 `investigation-agent.js:1152-1176`；
+逐轮快照 `turns` 在研判过程中生成（`investigation-agent.js:476`、`:91-96` 的 `turnRecord()`，随结果一起落盘 `investigation-agent.js:1062`）；
 记录存储仍是 `investigation-store.js` 的 `InvestigationStore.latest()`。OpenAPI 契约见 `openapi.yaml` 的 `replayInvestigation` / `InvestigationReplay`。
 
 **它管什么**：把一次研判会话摊开给人看——**逐轮消息摘要**（每轮发了多少条消息、输入/输出字符量、模型点了哪些工具、结局）、
