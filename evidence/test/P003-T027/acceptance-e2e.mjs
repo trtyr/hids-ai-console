@@ -196,13 +196,19 @@ check('A2-4 time_window 分支（上游查询失败）',
   '查询本身失败时同 rule 带 reason（牧云事件查询失败：…）',
   JSON.stringify(twErr || null));
 
-// 文档事件表字段名：rule / msgid / event_type / reason
-const docFields = ['rule', 'msgid', 'event_type', 'reason'];
+// 文档事件表字段名：从 docs/architecture.md 的事件名表里 syslog.match_failed 那一行解析（不硬编码期望）
+// 读法照 logging.test.js 的 docRow：首列里带 `事件名` 的那行，取「关键字段」列（第 3 列）里的全部 `字段`。
+const archDoc = fs.readFileSync(path.join(WT, 'docs/architecture.md'), 'utf8');
+const archRow = archDoc.split('\n').find((line) => line.startsWith('|')
+  && (line.split('|')[1] || '').includes('`syslog.match_failed`'));
+const docFields = archRow ? [...archRow.split('|')[3].matchAll(/`([a-z_]+)`/g)].map((m) => m[1]) : [];
 const keySet = new Set(matchFailed.flatMap((l) => Object.keys(l)));
-check('A4-1 文档事件表字段名一致（architecture.md §3.6：rule msgid event_type reason）',
-  docFields.every((f) => keySet.has(f)),
-  '事件表写 `rule` `msgid` `event_type` `reason`',
-  '实测 syslog.match_failed 的键：' + [...keySet].sort().join(',') + '（缺：' + docFields.filter((f) => !keySet.has(f)).join(',') + '）');
+check('A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行）',
+  Boolean(archRow) && docFields.length > 0 && docFields.every((f) => keySet.has(f)),
+  '事件表 syslog.match_failed 行「关键字段」列里写的每个 `字段`，真日志里都有',
+  (archRow ? '文档字段：' + docFields.join(',') : '文档事件名表里找不到 syslog.match_failed 行')
+    + '；实测键：' + [...keySet].sort().join(',')
+    + (docFields.length ? '（缺：' + docFields.filter((f) => !keySet.has(f)).join(',') + '）' : ''));
 
 const leak = SECRETS.filter((s) => pipe.out.includes(s));
 check('A3-1 真管道日志不出现凭据（报文里的 token/password/Bearer 与上游错误里的 token）',

@@ -1,24 +1,24 @@
 PASS A2-1 payload 分支（缺 host_ip）
   文档说: rule=payload、missing 列缺项、reason 说明、level=warn
-  实测  : {"time":"2026-11-19T12:34:24.210Z","level":"warn","event":"syslog.match_failed","rule":"payload","msgid":"cloudwalker-webshell","missing":["host_ip"],"reason":"syslog 缺少主机 IP 或有效事件时间"}
+  实测  : {"time":"2026-11-19T12:44:15.732Z","level":"warn","event":"syslog.match_failed","rule":"payload","msgid":"cloudwalker-webshell","missing":["host_ip"],"reason":"syslog 缺少主机 IP 或有效事件时间"}
 PASS A2-2 event_id 分支（主机不符）
   文档说: mismatch 只列真对不上的项，每项 {wanted, returned}（ID 对得上 → 不出现 event_id 项）
-  实测  : {"time":"2026-11-19T12:34:24.252Z","level":"warn","event":"syslog.match_failed","rule":"event_id","type":"webshell","msgid":"cloudwalker-webshell","event_id":7,"mismatch":{"host_ip":{"wanted":"10.0.0.5","returned":"10.0.0.6"},"host_id":{"wanted":1,"returned":2}},"reason":"牧云事件 ID 对应的主机与 syslog 不一致"}
+  实测  : {"time":"2026-11-19T12:44:15.782Z","level":"warn","event":"syslog.match_failed","rule":"event_id","type":"webshell","msgid":"cloudwalker-webshell","event_id":7,"mismatch":{"host_ip":{"wanted":"10.0.0.5","returned":"10.0.0.6"},"host_id":{"wanted":1,"returned":2}},"reason":"牧云事件 ID 对应的主机与 syslog 不一致"}
 PASS A2-3 time_window 分支（窗外有候选）
   文档说: window_seconds=300、candidates=本次取到的条数、reason 说明窗宽
-  实测  : {"time":"2026-11-19T12:34:24.279Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":2,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+  实测  : {"time":"2026-11-19T12:44:15.819Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":2,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
 PASS A2-4 time_window 分支（上游查询失败）
   文档说: 查询本身失败时同 rule 带 reason（牧云事件查询失败：…）
-  实测  : {"time":"2026-11-19T12:34:25.411Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"malware","msgid":"cloudwalker-malware","host_ip":"10.0.0.5","reason":"牧云事件查询失败：牧云 /rpc 500: upstream boom api_token=[redacted]"}
-FAIL A4-1 文档事件表字段名一致（architecture.md §3.6：rule msgid event_type reason）
-  文档说: 事件表写 `rule` `msgid` `event_type` `reason`
-  实测  : 实测 syslog.match_failed 的键：candidates,event,event_id,host_ip,level,mismatch,missing,msgid,nearest_gap_seconds,reason,rule,time,type,window_seconds（缺：event_type）
+  实测  : {"time":"2026-11-19T12:44:16.923Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"malware","msgid":"cloudwalker-malware","host_ip":"10.0.0.5","reason":"牧云事件查询失败：牧云 /rpc 500: upstream boom api_token=[redacted]"}
+PASS A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行）
+  文档说: 事件表 syslog.match_failed 行「关键字段」列里写的每个 `字段`，真日志里都有
+  实测  : 文档字段：rule,msgid,type,reason,mismatch,missing,candidates,nearest_gap_seconds,window_seconds；实测键：candidates,event,event_id,host_ip,level,mismatch,missing,msgid,nearest_gap_seconds,reason,rule,time,type,window_seconds（缺：）
 PASS A3-1 真管道日志不出现凭据（报文里的 token/password/Bearer 与上游错误里的 token）
   文档说: 日志不出现 Token 与密码；文本里的 token=… / Bearer … 擦成 [redacted]
   实测  : 零命中；同批日志里出现 [redacted] = true
 PASS A1-1 维护端启动行走 log.js（maintenance.listening）
   文档说: host/port/preview/message 四键，level=info（architecture.md §3.2）
-  实测  : {"time":"2026-11-19T12:34:26.759Z","level":"info","event":"maintenance.listening","host":"127.0.0.1","port":18593,"preview":true,"message":"HIDS maintenance（只读预览）: http://127.0.0.1:18593"}
+  实测  : {"time":"2026-11-19T12:44:18.273Z","level":"info","event":"maintenance.listening","host":"127.0.0.1","port":18593,"preview":true,"message":"HIDS maintenance（只读预览）: http://127.0.0.1:18593"}
 PASS A1-2 旧中文启动文案留在 message（部署端 grep 就绪探测）
   文档说: message 里保留 `HIDS maintenance（只读预览）: http://127.0.0.1:<port>`
   实测  : "HIDS maintenance（只读预览）: http://127.0.0.1:18593"
@@ -27,16 +27,16 @@ PASS A3-2 维护端日志不出现 HIDS_MAINTENANCE_PASSWORD
   实测  : 零命中
 PASS A1-3 policy.keys_created 形状 + 退出码 0
   文档说: event=policy.keys_created，directory/files/message，退出码 0（maintenance-service.md §4.1）
-  实测  : code=0 line={"time":"2026-11-19T12:34:28.240Z","level":"info","event":"policy.keys_created","directory":"/tmp/p27-keys-CKhoTX","files":["signing-private.pem","signing-public.pem","encryption.key"],"message":"密钥已创建。签名私钥只留在内部，不交付客户服务器。"}
+  实测  : code=0 line={"time":"2026-11-19T12:44:19.765Z","level":"info","event":"policy.keys_created","directory":"/tmp/p27-keys-B614Lj","files":["signing-private.pem","signing-public.pem","encryption.key"],"message":"密钥已创建。签名私钥只留在内部，不交付客户服务器。"}
 PASS A1-4 密钥文件权限 600（目录 700）
   文档说: 三个文件 600（package-policy.js:17、:23）
   实测  : {"encryption.key":"600","signing-private.pem":"600","signing-public.pem":"600"}
 PASS A1-5 policy.package_built 形状 + 退出码 0
   文档说: event=policy.package_built，output/version/sequence/target/message，退出码 0（§4.2）
-  实测  : code=0 line={"time":"2026-11-19T12:34:28.346Z","level":"info","event":"policy.package_built","output":"/tmp/p27-out-ovEC6n/26.11.008.hids-policy","version":"26.11.008","sequence":2,"target":"demo-customer","message":"已生成加密签名策略包；请通过维护端上传，核对详情后应用。"}
+  实测  : code=0 line={"time":"2026-11-19T12:44:19.877Z","level":"info","event":"policy.package_built","output":"/tmp/p27-out-DW1w2j/26.11.008.hids-policy","version":"26.11.008","sequence":2,"target":"demo-customer","message":"已生成加密签名策略包；请通过维护端上传，核对详情后应用。"}
 PASS A1-6 policy.usage 形状 + 退出码 1（level=error）
   文档说: event=policy.usage、level=error、message 是用法、退出码 1（§2.4）
-  实测  : code=1 line={"time":"2026-11-19T12:34:28.301Z","level":"error","event":"policy.usage","message":"生成密钥：node package-policy.js --init-keys <内部密钥目录>\n制作更新包：node package-policy.js <公开更新说明.json> <输出.hids-policy>\n密钥路径与环境标识通过 HIDS_UPDATE_* 环境变量提供。"}
+  实测  : code=1 line={"time":"2026-11-19T12:44:19.835Z","level":"error","event":"policy.usage","message":"生成密钥：node package-policy.js --init-keys <内部密钥目录>\n制作更新包：node package-policy.js <公开更新说明.json> <输出.hids-policy>\n密钥路径与环境标识通过 HIDS_UPDATE_* 环境变量提供。"}
 PASS A1-7 边界：缺环境变量 / 扩展名不对都非 0 退出
   文档说: 少一个 HIDS_UPDATE_* 或扩展名不是 .hids-policy 就报错退出（§2.4）
   实测  : 缺 TARGET exit=1；扩展名 .zip exit=1
@@ -47,5 +47,4 @@ PASS A3-3 package-policy 日志不出现密钥正文 / 密钥路径取值
   文档说: 日志里只有输出路径、版本、序号、环境标识，密钥内容不进（package-policy.js:42-43）
   实测  : 零命中；policy.* 三条的键里最大字段长度 = 142
 
-==== 15/16 PASS ====
-失败项：A4-1 文档事件表字段名一致（architecture.md §3.6：rule msgid event_type reason）
+==== 16/16 PASS ====
