@@ -1,4 +1,4 @@
-// 可写配置（P003-T029）：牧云与模型的六项能在运行中改，写盘后重启仍生效，响应与日志都不回显原文。
+// 可写配置（P003-T029）：牧云与模型的五项能在运行中改，写盘后重启仍生效，响应与日志都不回显原文。
 //
 // 三层关系，别在别处再写一套：
 //   1) 覆盖层文件（`<仓库>/.data/config-overrides.json`）只存「改过的键」，没改过的键继续读环境变量；
@@ -10,14 +10,14 @@
 // 否则重启时装配就抛。判据只有一份，不在这里另写一套 URL / 长度正则。
 // 校验对象是「合并后的生效值」：只改 LLM_MODEL 也要三项齐全——进程里这三项本来就由启动闸门保证齐全。
 import { readFileSync } from 'node:fs';
-import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { log } from './log.js';
 import { RpcClient } from './rpc-client.js';
 import { ChatModelClient } from './model-client.js';
 
-// 能写的只有这六项（A1 逐字点名：牧云地址/令牌、模型地址/密钥/模型名）。表外的键一律 400：
+// 能写的只有这五项（A1 逐字点名：牧云地址/令牌、模型地址/密钥/模型名）。表外的键一律 400：
 // HIDS_HOST/HIDS_PORT/HIDS_TRIAGE_INPUT_MODE 改起来必须重启进程；Basic 口令与两个 admin 令牌是鉴权凭据本身，写进来等于自己给自己开门。
 export const WRITABLE_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN',
   'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL']);
@@ -62,11 +62,14 @@ function readOverrides(file, journal) {
 }
 
 // 原子写：同目录 tmp + rename（跨设备不会发生在同一个目录里）。文件里是机密原文，权限收到 0600。
+// 失败（写或 rename 抛）时删掉 tmp 再原样抛：失败路径不在 .data/ 里留垃圾，调用方看到的错误不变。
 async function writeOverrides(file, overrides) {
   await mkdir(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(overrides, null, 2)}\n`, { mode: 0o600 });
-  await rename(temporary, file);
+  try {
+    await writeFile(temporary, `${JSON.stringify(overrides, null, 2)}\n`, { mode: 0o600 });
+    await rename(temporary, file);
+  } catch (cause) { await unlink(temporary).catch(() => {}); throw cause; }
 }
 
 // env / file / journal 都可注入：单测用字面量 env 与 tmp 目录，不碰真实 process.env 与仓内 .data/。

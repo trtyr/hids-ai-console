@@ -127,7 +127,7 @@ paths:
       summary: 写配置（运行中改牧云与模型，持久化且不回显）
       operationId: writeConfig
       description: |
-        运行中改牧云与模型的六项：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。
+        运行中改牧云与模型的五项：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。
         写成功之后：
         - `GET /api/config` 立刻报新值（不用重启进程）；
         - 后续牧云 / 模型调用立刻走新地址与新凭据（进程内客户端原地换值，不新建进程）；
@@ -158,7 +158,7 @@ paths:
                 LLM_MODEL: { type: string, description: 模型名，非空 }
             examples:
               changeModel:
-                summary: 只换模型名（部分更新，其余五项不动）
+                summary: 只换模型名（部分更新，其余四项不动）
                 value: { 'LLM_MODEL': qwen2.5-72b-instruct }
       responses:
         '200':

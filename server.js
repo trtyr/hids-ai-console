@@ -640,7 +640,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       // 机密只给有/没有——本路由的响应体里不出现任何 Token 与密码原文（A3）。
       // 读的是注入的 store 的 env（缺省就是 process.env）：写配置盖进的覆盖层立刻反映在这里（P003-T029 A1）。
       if (url.pathname === '/api/config' && req.method === 'GET') return json(res, 200, configSummary(config.env));
-      // 写配置（P003-T029）：运行中改牧云与模型六项，落盘后重启仍生效（store 建时读回覆盖层）。
+      // 写配置（P003-T029）：运行中改牧云与模型五项，落盘后重启仍生效（store 建时读回覆盖层）。
       // 顺序＝先校验、再落盘、再改 env（config.update 内部），最后原地换活着的客户端值。
       // 响应只回「改了哪几个键 + 生效摘要」：机密永远只以布尔出现（A2）。
       if (url.pathname === '/api/config' && req.method === 'POST') {

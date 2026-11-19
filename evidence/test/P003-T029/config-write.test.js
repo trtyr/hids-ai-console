@@ -1,13 +1,13 @@
 // P003-T029：配置可写——牧云与模型运行中可改，持久化且不回显。
 // 口径见 docs/modules/http-api.md §3.5/§3.6 与 openapi.yaml 的 `writeConfig`：
-//   A1 不重启进程写六项，GET /api/config 立刻反映；活着的客户端对象原地换值（applyLiveConfig）
+//   A1 不重启进程写五项，GET /api/config 立刻反映；活着的客户端对象原地换值（applyLiveConfig）
 //   A2 任何响应（写成功的、写失败的）里都不出现 Token 与密码原文
-//   A3 写操作过 Basic 认证闸门；没启用手势（没配 HIDS_BASIC_AUTH_PASSWORD）时放行——文档写明
+//   A3 写操作过 Basic 认证闸门；没启用鉴权（没配 HIDS_BASIC_AUTH_PASSWORD）时放行——文档写明
 //   A4 改过的值落盘、重启仍生效；没改过的键继续读环境变量；覆盖层文件坏了不影响启动
 //   A5 每次写落一条 config.updated，只带键名不带值
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createConfigStore, WRITABLE_CONFIG_KEYS } from '../../../config-store.js';
@@ -56,7 +56,7 @@ function post(base, patch, headers = {}) {
     headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(patch) });
 }
 
-test('A1 写六项后 GET /api/config 立刻反映，updated 逐键回键名（不重启进程）', async t => {
+test('A1 写五项后 GET /api/config 立刻反映，updated 逐键回键名（不重启进程）', async t => {
   const file = path.join(await tempDir(t), 'config-overrides.json');
   const env = { ...FAKE_ENV };
   const store = createConfigStore({ file, env });
@@ -225,7 +225,18 @@ test('写接口的拒绝面：表外的键、空值、非对象正文、空正�
   assert.equal((await fetch(`${base}/api/config`, { method: 'PUT' })).status, 404);
 });
 
-test('可写键表钉死六项：多一项少一项都算契约被改', () => {
+test('可写键表钉死五项：多一项少一项都算契约被改', () => {
   assert.deepEqual([...WRITABLE_CONFIG_KEYS], ['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN',
     'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL']);
+});
+
+// 写盘失败的清理（复审 nit）：目标路径被目录占住 → rename 必失败，失败后同目录不许留 `<file>.<pid>.tmp`。
+test('写盘失败不留临时文件：rename 失败后 tmp 已删，原错误原样抛给调用方', async t => {
+  const dir = await tempDir(t);
+  const file = path.join(dir, 'config-overrides.json');
+  const store = createConfigStore({ file, env: { ...FAKE_ENV } }); // 建时 ENOENT → 覆盖层当空
+  await mkdir(file); // 先占住目标路径：后一步 rename 必失败
+  await assert.rejects(store.update({ LLM_MODEL: 'another-model' }), /EISDIR|ENOTDIR|EPERM|EACCES/);
+  assert.deepEqual((await readdir(dir)).filter(name => name.includes('.tmp')), []);
+  assert.deepEqual(store.overrides(), {}, '失败时内存与覆盖层都不许变');
 });

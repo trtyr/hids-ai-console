@@ -81,7 +81,7 @@
 | --- | --- | --- | --- | --- |
 | GET | `/api/session` | 200 `{authenticated:true, user, role}` | — | `server.js:208-214` |
 | GET | `/api/config` | 200 生效配置（`{host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required}`） | —（只读环境变量：不探上游、不因缺件 503；机密只在 `secrets` 里给布尔） | `server.js:642` |
-| POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写六键；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:646-650` |
+| POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写五键；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:646-650` |
 | GET | `/api/updates` | 200 升级包概览 | — | `server.js:215` |
 | GET | `/api/status` | 200 / 502 | 未配牧云回 200（`configured:false`）；配了但连不上回 502，正文仍是 `{configured, connected:false, reason}` | `server.js:216-220` |
 | GET | `/api/agent/tools` | 200 工具清单 | 无 API 工具箱回 503 | `server.js:221-225` |
@@ -267,9 +267,9 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 ### 3.6 写配置（`POST /api/config`，P003-T029）
 
-**是什么**：不重启进程改牧云与模型的六项，改完立刻生效、落盘、重启仍生效，且不回显。实现：路由两行（`server.js:646-650`），行为全在新文件 `config-store.js`（`createConfigStore`，`config-store.js:73`）。OpenAPI 契约见 `openapi.yaml` 的 `writeConfig`。
+**是什么**：不重启进程改牧云与模型的五项，改完立刻生效、落盘、重启仍生效，且不回显。实现：路由两行（`server.js:646-650`），行为全在新文件 `config-store.js`（`createConfigStore`，`config-store.js:76`）。OpenAPI 契约见 `openapi.yaml` 的 `writeConfig`。
 
-**可写的只有六个键**（`WRITABLE_CONFIG_KEYS`，`config-store.js:22`）：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。表外键一律 400，包括看起来很顺手的 `HIDS_PORT`：`HIDS_HOST` / `HIDS_PORT` / `HIDS_TRIAGE_INPUT_MODE` 改起来必须重启进程；Basic 口令与两个管理员令牌是鉴权凭据本身，写进来等于自己给自己开门。
+**可写的只有五个键**（`WRITABLE_CONFIG_KEYS`，`config-store.js:22`）：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。表外键一律 400，包括看起来很顺手的 `HIDS_PORT`：`HIDS_HOST` / `HIDS_PORT` / `HIDS_TRIAGE_INPUT_MODE` 改起来必须重启进程；Basic 口令与两个管理员令牌是鉴权凭据本身，写进来等于自己给自己开门。
 
 **请求**：`POST /api/config`，`Content-Type: application/json`，正文是一个对象，只放要改的键（部分更新）：
 
@@ -333,10 +333,10 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 - 不新增环境变量：覆盖层路径固定由 `runtimePaths()` 的 `.data/` 推出，`.env.example` 不变。
 - 不改 `GET /api/config` 的响应形状（§3.5 契约照旧）。
 
-**可重放证据**（`evidence/test/P003-T029/config-write.test.js`，9 条）：
+**可重放证据**（`evidence/test/P003-T029/config-write.test.js`，10 条）：
 
 ```bash
-node --test evidence/test/P003-T029/config-write.test.js   # 9 条全绿，约 160ms
+node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 160ms
 # 真进程手工验三件事（起进程 → 写 → 读 → 杀 → 再起 → 读）
 ```
 
