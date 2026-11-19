@@ -1211,7 +1211,8 @@ paths:
       operationId: getFpMaintenanceSession
       description: |
         整份会话：`turns[]`（四轮推进）、`messages[]`（人读得懂的上下文与决策）、`decision`（动哪几边、为什么）、
-        `outcomes{rule, wiki}`（每侧实际动没动、幂等键、错误）、`validation`（自校验项）、`auto_verdict`（待启用的自动判定）。
+        `outcomes{rule, wiki}`（每侧实际动没动、幂等键、错误）、`validation`（自校验项）、
+        `auto_verdict`（闭环自动判定的生效口径：以 Rego 规则库为准，见 `FpAutoVerdict`）。
       parameters:
         - name: id
           in: path

@@ -7,8 +7,9 @@
 //      本文件不直写 `rules/` 与 `wiki/`，那是 T041 的写入口。
 //   2. **单腿可补跑**：幂等键 `case_id:库:库版本`。已成功的一侧（`status: 'updated'` 且库版本仍是当时那个）
 //      再跑记 `state: 'skipped'`，不调模型、不写盘；失败的一侧照常重跑。
-//   3. **自动判定待启用**（A7）：A/B 口径没拍板之前，Agent 产出照写，闭环标注 `auto_verdict.enabled=false`，
-//      不把 AI 结论直接落成案件结论。
+//   3. **闭环自动判定以 Rego 为准**（A7，A/B 已拍板）：生效判据是 Rego 规则库——研判管线读的和规则维护写的是同一本库
+//      （同源），信任链只走这一条（单源）；JSON 规则集修订照写留痕，但不作为生效判据。Agent 只写库，
+//      不在会话里判案件结论（`auto_verdict` 记的是「按哪条口径生效」，不是结论本身）。
 //
 // 会话形制对齐 `wiki-sessions`（`wiki-workbench.js` 的 `save/list`）：一份 JSON 一个会话，
 // `messages[]` 记人读得懂的一段话，`turns[]` 记程序推进到第几步，目录缺省是 `<数据根>/fp-sessions/`。
@@ -24,8 +25,13 @@ const SESSION_ID = /^[0-9a-f-]{36}$/i;
 
 /** 两个可维护的库：规则库（Rego）与知识库（判据页）。 */
 export const FP_LIBRARIES = Object.freeze(['rule', 'wiki']);
-/** 决策轮 `decision.source` 的取值表：契约（openapi + 两页文档）与实现共用这一份。 */
+/**
+ * 决策轮 `decision.source` 的取值表：契约（openapi 的 enum + 两页文档）与实现共用这一份。
+ * 下面三个常量从这张表里解出来，三处发射点（决策模型的结论、退化兜底、全跳轮）都引用常量而不是字面量——
+ * 改表就改到发射点，`contract.test.js` 再断一次「表与契约文本一致」。
+ */
 export const FP_DECISION_SOURCES = Object.freeze(['model', 'fallback', 'idempotent']);
+const [DECISION_MODEL, DECISION_FALLBACK, DECISION_IDEMPOTENT] = FP_DECISION_SOURCES;
 /** T046 事件里这一域的域名（`ai.model_call.domain`）：误报维护。 */
 export const FP_DOMAIN = 'false_positive';
 /** 这一域的模型角色名。决策模型复用 `models.rule_maintainer` 实例，角色标签单独记。 */
@@ -265,7 +271,7 @@ export class FalsePositiveMaintainer {
 
   // 提修订（第三轮）：这一次动哪边、为什么。没配模型就退化为按请求的库逐个尝试（决策来源如实记下）。
   async #decide({ record, pending, caseBrief, libraryBrief, reason, who }) {
-    const fallback = why => ({ source: 'fallback', libraries: pending, why, at: this.now(), error: null });
+    const fallback = why => ({ source: DECISION_FALLBACK, libraries: pending, why, at: this.now(), error: null });
     if (!this.model) return fallback('统一维护模型未配置：按请求的库逐个尝试');
     let prompt;
     try { prompt = await readFile(this.promptFile, 'utf8'); }
@@ -284,7 +290,7 @@ export class FalsePositiveMaintainer {
       const output = replied.decoded;
       const picked = (Array.isArray(output.libraries) ? output.libraries : [])
         .map(value => text(value)).filter(value => pending.includes(value));
-      return { source: 'model', libraries: [...new Set(picked)],
+      return { source: DECISION_MODEL, libraries: [...new Set(picked)],
         why: clipped(text(output.why) || '模型未说明理由', 500), at: this.now(), error: null,
         call: replied.call };
     } catch (cause) {
@@ -426,7 +432,7 @@ export class FalsePositiveMaintainer {
       if (!pending.length) {
         record = await this.#step(record, { outcomes, status: 'done', terminal: true,
           validation: { ok: true, checks: [] },
-          decision: { source: 'idempotent', libraries: [], why: '请求的库都已维护过：这一轮没有执行任何写入', at: this.now(), error: null } });
+          decision: { source: DECISION_IDEMPOTENT, libraries: [], why: '请求的库都已维护过：这一轮没有执行任何写入', at: this.now(), error: null } });
         await turn('skip', '补跑判定：请求的库都已在同一版本上维护过，本轮不写盘、不调模型');
         return record;
       }

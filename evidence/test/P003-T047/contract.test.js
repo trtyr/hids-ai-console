@@ -23,6 +23,14 @@ test('decision.source 三处契约与实现同一份取值表（model / fallback
 
   const pipeline = await read('docs/modules/triage-pipeline.md');
   assert.match(pipeline, /\| `decision` \| `source`（[^)]*idempotent/, 'triage-pipeline 的 decision 行没补 idempotent');
+
+  // 「共用这一份」得是真的：发射点引用表里解出来的常量，不许回退成字面量
+  const source = await read('fp-maintainer.js');
+  assert.match(source, /const \[DECISION_MODEL, DECISION_FALLBACK, DECISION_IDEMPOTENT\] = FP_DECISION_SOURCES/,
+    '取值表没有解成发射点用的常量');
+  for (const literal of ["source: 'model'", "source: 'fallback'", "source: 'idempotent'"]) {
+    assert.equal(source.includes(literal), false, `发射点又硬编码了字面量 ${literal}`);
+  }
 });
 
 test('闭环自动判定的生效口径三处一致：以 Rego 为准（A/B 已拍板），JSON 规则集只留痕', async () => {
@@ -43,6 +51,15 @@ test('闭环自动判定的生效口径三处一致：以 Rego 为准（A/B 已�
   const pipeline = await read('docs/modules/triage-pipeline.md');
   assert.match(pipeline, /criterion: "rego"/, 'triage-pipeline 的 auto_verdict 行没同步');
   assert.equal(/A\/B 口径待拍板/.test(pipeline), false, 'triage-pipeline 还写着「A/B 口径待拍板」');
+
+  // 「待启用 / 待拍板」这两个作废口径在契约全文里必须清零——上一轮就是漏了会话端点那句 description
+  for (const [file, text] of [['openapi.yaml', openapi], ['docs/modules/http-api.md', httpApi],
+    ['docs/modules/triage-pipeline.md', pipeline]]) {
+    assert.equal(/待启用/.test(text), false, `${file} 里还留着「待启用」的旧口径`);
+    assert.equal(/待拍板/.test(text), false, `${file} 里还留着「待拍板」的旧口径`);
+  }
+  assert.match(openapi, /`auto_verdict`（闭环自动判定的生效口径：以 Rego 规则库为准/,
+    '会话端点 description 没写清新口径');
 });
 
 test('architecture.md §3.6 事件表已补误报维护域（域表是加事件的第一落点）', async () => {
