@@ -131,7 +131,7 @@
 | `syslog.received` / `syslog.collapsed` | 收下一条 / 重复投递合并到已有记录 | `alert_id` `msgid` `event_type` `occurrence` / `alert_id` `repeat_count` |
 | `syslog.parse_failed` / `syslog.skipped` | 报文解析失败 / 无对应事件类型（`reason=no_agent_for_msgid`）或队列已暂停（`reason=paused`） | `error` `bytes` / `reason` `msgid` |
 | `syslog.receiver_error` / `syslog.handler_failed` / `syslog.accept_failed` | socket 错误 / 收包回调抛错 / 收包链抛错 | `error` |
-| `syslog.match_failed` | syslog 报文没对上牧云事件（`syslog-case.js` 的 `matchSyslogEvent` 每条失败分支都从这里出） | `rule` `msgid` `event_type` `reason`，加差在哪：`mismatch` / `missing` / `candidates` `nearest_gap_seconds` `window_seconds` |
+| `syslog.match_failed` | syslog 报文没对上牧云事件（`syslog-case.js` 的 `matchSyslogEvent` 每条失败分支都从这里出） | `rule` `msgid` `type` `reason`，加差在哪：`mismatch` / `missing` / `candidates` `nearest_gap_seconds` `window_seconds` |
 | `triage.enqueued` | 进入研判队列 | `alert_id` `source`（`manual` / `retry` / `poll`） |
 | `triage.done` / `triage.failed` | 研判完成 / 失败 | `alert_id` `verdict` `attempts` `duration_ms` / `alert_id` `attempts` `error` |
 | `triage.persist_failed` / `triage.poll_failed` | 状态落盘失败 / 轮询失败 | `alert_id` `error` / `error` |
@@ -151,6 +151,8 @@
 | `payload` | 前置字段齐不齐 | `missing`：缺 `host_ip` 或 `event_time` |
 | `event_id` | 按 syslog `event_id` 精确读取牧云事件 | `mismatch.{event_id,host_ip,host_id}`：只列真对不上的项，每项 `{wanted, returned}` |
 | `time_window` | 同主机 ±5 分钟时间窗 | `window_seconds`、`candidates`、`nearest_gap_seconds`（最近一条差多远）；查询本身失败时带 `reason` |
+
+`syslog.match_failed` 的字段名是 `type`，不叫 `event_type`——`event_type` 是 `syslog.received` 那条事件的键名。`type` 只在已知事件类型时出现（`msgid_map` 与 `payload` 两条分支没有它）。
 日志只上 stdout，不落文件、不轮转；采集交给部署端（本卡不引入日志依赖）。
 
 ## 4. 模块分层与依赖

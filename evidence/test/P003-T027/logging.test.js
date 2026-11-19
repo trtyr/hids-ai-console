@@ -173,9 +173,34 @@ test('A3：匹配失败原因里带凭据时，落到日志的原文已擦除', 
   assert.match(text, /\[redacted\]/);
 });
 
-test('A1/A2：新事件名都进了 docs/architecture.md 的事件名表', async () => {
+// 事件名表的一行：首列里带反引号的 `事件名`，删掉整行就要红（不能只认「文档里出现过这个名字」）。
+const docRow = (doc, event) => doc.split('\n').find(line => line.startsWith('|')
+  && (line.split('|')[1] || '').includes('`' + event + '`'));
+
+test('A1/A2：新事件名在 docs/architecture.md 事件名表里各占一行', async () => {
   const doc = await readFile(path.join(root, 'docs/architecture.md'), 'utf8');
   for (const event of ['maintenance.listening', 'policy.keys_created', 'policy.package_built',
     'policy.usage', 'syslog.match_failed'])
-    assert.ok(doc.includes('`' + event + '`'), `docs/architecture.md 事件名表缺 ${event}`);
+    assert.ok(docRow(doc, event), `docs/architecture.md 事件名表缺 ${event} 这一行`);
+});
+
+test('A2：事件表写的 syslog.match_failed 字段名与四条 rule 分支的真日志逐键对得上', async () => {
+  const doc = await readFile(path.join(root, 'docs/architecture.md'), 'utf8');
+  const row = docRow(doc, 'syslog.match_failed');
+  assert.ok(row, 'docs/architecture.md 事件名表缺 syslog.match_failed 这一行');
+  const documented = [...row.split('|')[3].matchAll(/`([a-z_]+)`/g)].map(match => match[1]);
+  const journal = collect();
+  // 四条 rule 分支各真跑一次，键集合以落下来的日志为准，不以文档为准。
+  await matchSyslogEvent({}, parseSyslog(prefix + 'cloudwalker-unknown-type ' + fields)); // msgid_map
+  await matchSyslogEvent({}, honeypot('source_ip="192.0.2.2" event_create_time="2026-11-11 08:00:00"')); // payload
+  await matchSyslogEvent({ callTool: async () => ({ id: 9, host_id: 2, host_view: { host_ip: '10.0.0.6' } }) },
+    honeypot(fields + ' event_id=7')); // event_id
+  await matchSyslogEvent({ listEvents: async () => ({ total: 0, events: [] }) }, honeypot(fields)); // time_window
+  const lines = journal.event('syslog.match_failed');
+  assert.deepEqual(lines.map(line => line.rule), ['msgid_map', 'payload', 'event_id', 'time_window']);
+  const emitted = new Set(lines.flatMap(line => Object.keys(line)));
+  assert.ok(documented.includes('type'), `事件表没写实际字段 type（实际键：${[...emitted].sort().join(',')}）`);
+  for (const field of documented)
+    assert.ok(emitted.has(field),
+      `事件表写了 ${field}，真日志里没有这个键（实际键：${[...emitted].sort().join(',')}）`);
 });
