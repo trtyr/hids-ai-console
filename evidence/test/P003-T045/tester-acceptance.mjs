@@ -375,8 +375,18 @@ async function main() {
     const s = await boot('keepdefault', { file, maxBytes: 200 });
     try {
       for (let i = 0; i < 14; i += 1) await getLogs(s.base, '?event=probe.never');
-      const rotated = rotatedOf(await names(root));
-      ok('A2 缺省 HIDS_LOG_KEEP=5：历史文件只留 5 份', rotated.length === 5, `${rotated.length} 份：${rotated.join(',')}`);
+      // 轮转是 rename→unlink 两步：采样可能正撞「新名已建、旧的还没 unlink」的窗口（审计 P003-T045 :379）。
+      // 撞窗就隔 20ms 重采，采到 5 份再断言（2s 内采不到照判红，不放过真违约）；撞窗次数记进 detail。
+      const deadline = Date.now() + 2000;
+      let rotated = rotatedOf(await names(root));
+      let windows = 0;
+      while (rotated.length !== 5 && Date.now() < deadline) {
+        windows += 1;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        rotated = rotatedOf(await names(root));
+      }
+      ok('A2 缺省 HIDS_LOG_KEEP=5：历史文件只留 5 份', rotated.length === 5,
+        `${rotated.length} 份：${rotated.join(',')}${windows ? `（撞 rename→unlink 窗口 ${windows} 次后重采落定）` : ''}`);
     } finally { await s.stop(); await rm(root, { recursive: true, force: true }); }
   }
 

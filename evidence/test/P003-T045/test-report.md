@@ -1,7 +1,7 @@
 # P003-T045 测试席验收报告（日志落盘 / 轮转 / 查询与清理接口，2026-11-20）
 
 - 工作树：`/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T045`
-- 起验 HEAD：`1681eb2`（复审整改轮，只改 `docs/modules/http-api.md` 四行，代码零改动）
+- 起验 HEAD：`1681eb2`（首轮）；本轮复审 HEAD `7eeed50`（只加过测试席探针，实现零改动）
 - 上游判词：`verdicts/P003-T045-gc-backend-code-review-mwnx5n43.json`（pass，作废链含 mwnx4exb）
 - 判据只取契约：`docs/modules/http-api.md` §3.8（:477 起）/ §7 分页（:714）/ §8（:772）/ §4 认证（:495）、
   `openapi.yaml` 的 `getLogs`（:320）/ `cleanLogs`（:383）/ `LogEntry` / `LogQueryResult` / `LogCleanupRequest` /
@@ -12,14 +12,29 @@
 ## 结论
 
 **PASS。** 四条门禁全部我在自己终端里亲手跑：卡套件 16/16、根套件 228/228、T025 config-check 14/14、
-我的黑盒探针 151 条断言 MISS 0；变异 4 条按预期红、还原复绿。三条 `minor` 属文档/测试自身的 nit，
-不挡推进，见 §五。
+我的黑盒探针 151 条断言 MISS 0；变异 4 条按预期红、还原复绿（本轮又重跑了 M2，仍恰红）。
+审计 reject 的两处时序依赖 + 一条名不副实**本轮已整改并复验**（修前红→修后绿、撞窗口径亲手撞到，见 §〇）。
+剩下的 `openapi.yaml:354` 自相矛盾（doc-side）与 `syslog-pipeline.test.js:96` 前置抖动不挡推进，见 §五。
+
+## 〇、本轮整改（审计 reject 后，2026-11-20 复审轮；实现零改动）
+
+审计点名「两处时序依赖只假红不假绿 + 一条名不副实」，全在我自己的测试件里，已改；下面每条证据都是本轮亲手跑到：
+
+| # | 位置（改前行号） | 改法 | 修前复现（亲手） | 修后证据（亲手） |
+| --- | --- | --- | --- | --- |
+| 1 | `evidence/test/P003-T045/log-file.test.js:126` | 文件命中后不再立刻读 stdout：轮询 stdout 到出现 `server.started` 再断言（5 s 上限；只认整行，避开半行）；+7 行 | 把 HEAD 版套件存成临时件、4 个 CPU 忙进程下跑 20 次 → **红 1 次**（`A1 真进程…stdout 也应有一条 server.started`，stdout 还是空） | 同一负载、同一命令 20 次 → **0 红**；不加载 30 次 → 0 红 |
+| 2 | `evidence/test/P003-T045/tester-acceptance.mjs:379` | 撞 rename→unlink 窗口不判 MISS：隔 20 ms 重采，采到 5 份再断言（2 s 采不到照判红，不放过真违约），撞窗次数写进 detail；+10 行 | 修前平跑 6 次 → **3 次 MISS**：`MISS A2 缺省 HIDS_LOG_KEEP=5… :: 6 份：hids.…-069Z-1.log,…,hids.…-072Z.log`（`/tmp/t045-probe-r4..r6.log`） | 平跑 5 次 → 0 MISS（其中 1 次真撞窗，detail 写「撞 rename→unlink 窗口 1 次后重采落定」）；4 个忙进程下 12 次 → 0 MISS、**3 次真撞窗**且全部重采落定 |
+| 3 | `evidence/test/P003-T045/log-file.test.js:92` | 用例名「顺序文件在前」副实 → 按文档 `docs/modules/http-api.md:521`（§3.8.1「先写文件再写 stdout」）**补断言**：stdout 写回调里 `readFileSync` 回看盘面，断言那一刻文件里已有该行；用例名同步改成「先写文件再写 stdout」 | 旧断言只比两份内容相同，不比顺序 | 卡套件 16/16 绿；负对照（用公开导出 `createFileSink`/`createJournal` 拼一个「先 stdout 后文件」的 journal，临时件跑完已删）**恰红**：`AssertionError: 写 stdout 的时候文件里已经有这行了（先文件后 stdout） actual [''] expected ['{"time":"2026-11-20T00:00:00.000Z",…}']` |
+
+- 审计提到的 `syslog-pipeline.test.js:96` 是前置风险（基提交即抖），按审计口径**不计**，本轮未动。
+- 本轮改动只这两个测试件，产品代码 / 文档 / `.env.example` 零改动（`git status` 见 §七）。
+- 本轮复审门禁全部重跑：卡套件 16/16、根套件 228/228、T025 14/14、探针 151 条 MISS 0，四条 exit 0（§一）。
 
 ## 一、门禁（命令原文 + 退出码，全是我亲跑）
 
 | 门 | 命令原文 | 实测 |
 | --- | --- | --- |
-| 本卡套件 | `node --test --test-timeout=60000 --test-force-exit evidence/test/P003-T045/log-file.test.js` | `ℹ tests 16 / pass 16 / fail 0`，约 480 ms，**exit 0**（此后又跑 30 次全绿，见 §五 第 2 条） |
+| 本卡套件 | `node --test --test-timeout=60000 --test-force-exit evidence/test/P003-T045/log-file.test.js` | `ℹ tests 16 / pass 16 / fail 0`，约 480 ms，**exit 0**（本轮又跑 50 次全绿：不加载 30 次 + 4 忙进程 20 次，见 §〇 第 1 条） |
 | 根套件 | `npm test`（= `node --test --test-timeout=60000 --test-force-exit *.test.js`） | `ℹ tests 228 / pass 228 / fail 0`，784 ms，**exit 0**；随后 13 次里 2 次红在 `syslog-pipeline.test.js:96`——同一抖动在**基提交 `ed2bd30`** 上也能复现（基线 8 轮并发里红 2 轮），不是本卡引入，见 §五 第 3 条 |
 | T025 键集 | `node --test --test-timeout=60000 --test-force-exit evidence/test/P003-T025/config-check.test.js` | `ℹ tests 14 / pass 14 / fail 0`，634 ms，**exit 0** |
 | A6 键数 | `grep -cE '^[A-Z0-9_]+=' .env.example` | `41`，与头注「41 个键」一致 |
@@ -58,16 +73,14 @@
 | M4 | `log.js:16-44` 写路径 `[redacted]` → 别的串（§3.6 脱敏段） | 红：`A5 落盘与查询结果都不出现 Authorization / Cookie / Token 原文`，`pass 15 / fail 1` |
 | 还原 | 三个文件都从备份盖回 | 复绿：`pass 16 / fail 0` |
 
-## 五、三条 minor（不挡推进）
+## 五、minor 记录（不挡推进；第 2 条本轮已修）
 
 1. **`openapi.yaml:354` 自相矛盾（doc-side）**：`level` 参数 description 写「逗号分隔可多选」，schema 却是 `{ type: string, enum: [info, warn, error] }`。
    实测 `GET /api/logs?level=warn,error` → 200（§3.8.2 也是这么写的），按 openapi 的 enum 校验会把合法请求判非法。
    复现：`node evidence/test/P003-T045/tester-acceptance.mjs`（A3 level 逗号多选两条）。
    改法：删掉该参数 schema 的 `enum`（取值写在 description），或改成 `type: array, style: form, explode: false`。
-2. **卡套件 A1 真进程用例有 race（test-side）**：`log-file.test.js:104` 只轮询文件里的 `server.started`，文件行一到就断言 stdout；
-   §3.8.1 明写「先写文件再写 stdout」，两者之间有窗口。我 31 次跑里见红 **1 次**（首次与根套件并发时，`15/16`，断言「stdout 也应有一条 server.started」，stdout 还是空），此后 30 次全绿。
-   复现：`(npm test &) ; node --test --test-timeout=60000 --test-force-exit evidence/test/P003-T045/log-file.test.js`
-   改法：把 stdout 断言也塞进同一个 8 s 轮询（stdout 没到就继续等），别在文件命中后立刻断言。
+2. **卡套件 A1 真进程用例的 race（test-side，本轮已修）**：`log-file.test.js:126` 原先文件行一到就断言 stdout。
+   §3.8.1 明写「先写文件再写 stdout」，两者之间必然有窗口。现已改成轮询 stdout 再断言，修前 1/20 红 → 修后 0/20（同负载），见 §〇 第 1 条。
 3. **根套件在负载下会红（pre-existing，非本卡）**：`syslog-pipeline.test.js:96`（「…区分重复投递与跨秒行为」，`1 !== 2`），
    并发跑时 HEAD 13 次红 2 次；同一抖动在**基提交 `ed2bd30`**（`git archive ed2bd30` 解到 `/tmp` 后并发 8 轮）也红 2 轮，
    单跑 `syslog-pipeline.test.js` 两边各 25 次 0 红。结论：负载敏感的既有抖动，记残留风险，不记本卡 finding。
@@ -81,8 +94,10 @@
 
 ```
 $ git -C . status --short
- D .pi-child-claim.json            # 引擎运行态（起活前就在，未碰）
-?? evidence/test/P003-T045/tester-acceptance.mjs   # 我加的黑盒探针
+ M .pi-child-claim.json                             # 引擎运行态（起活前就在，未碰）
+ M evidence/test/P003-T045/log-file.test.js         # 本轮整改第 1、3 条（时序轮询 + 顺序断言）
+ M evidence/test/P003-T045/tester-acceptance.mjs    # 本轮整改第 2 条（撞窗重采 + 标注）
 ```
 
-产品代码/文档/卡套件我一个字没改：变异全在 `/tmp` 副本里做，跑完已删；探针跑完自清 `mkdtemp`（`ls /tmp | grep hids-` 只剩无关文件）。
+产品代码 / 文档 / `.env.example` 零改动：变异全在 `/tmp` 副本（本轮 M2 重跑：`log.js:77` 的 `20000`→`3` → 卡套件 15/16 红，删副本后复绿）；
+负对照与修前对照用的临时测试件跑完即删（`ls evidence/test/P003-T045/` 只剩 3 个交付件）；探针跑完自清 `mkdtemp`。

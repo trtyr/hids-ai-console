@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -89,15 +90,18 @@ test('A1 不配路径：useLogFile 原样返回现有 journal，盘上不多出�
   assert.deepEqual(await namesIn(dir), []);
 });
 
-test('A1 配了路径：同一行既给 stdout 又落文件（同份），顺序文件在前', async t => {
+test('A1 配了路径：同一行既给 stdout 又落文件（同份），先写文件再写 stdout', async t => {
   const { file } = await workspace(t);
   const stdout = [];
-  useLogFile({ file, write: line => stdout.push(line) });
+  const fileAtStdout = [];
+  // stdout 写回调里回看盘面：文档 §3.8.1 承诺「先写文件再写 stdout」（stdout 断了文件那份也不丢）
+  useLogFile({ file, write: line => { fileAtStdout.push(readFileSync(file, 'utf8')); stdout.push(line); } });
   t.after(() => useJournal());
   log('demo.event', { n: 1 });
   const written = await linesOf(file);
   assert.equal(written.length, 1);
   assert.deepEqual(stdout, [`${JSON.stringify(written[0])}\n`], 'stdout 那份与文件那份逐字相同');
+  assert.deepEqual(fileAtStdout, stdout, '写 stdout 的时候文件里已经有这行了（先文件后 stdout）');
   assert.equal(written[0].event, 'demo.event');
 });
 
@@ -123,7 +127,14 @@ test('A1 真进程：配了 HIDS_LOG_FILE，server.started 同时出现在文件
     if (!fileLine) await new Promise(resolve => setTimeout(resolve, 20));
   }
   assert.ok(fileLine, 'server.started 应落进配置文件');
-  const stdoutLine = stdout.split('\n').filter(Boolean).map(line => JSON.parse(line)).find(entry => entry.event === 'server.started');
+  // 文件命中不等于 stdout 已 flush 到父进程管道：轮询等 stdout 也出现 server.started 再断言（只认整行，避开半行）
+  const stdoutDeadline = Date.now() + 5000;
+  let stdoutLine = null;
+  while (!stdoutLine) {
+    if (Date.now() > stdoutDeadline) break;
+    stdoutLine = stdout.split('\n').slice(0, -1).filter(Boolean).map(line => JSON.parse(line)).find(entry => entry.event === 'server.started') ?? null;
+    if (!stdoutLine) await new Promise(resolve => setTimeout(resolve, 20));
+  }
   assert.ok(stdoutLine, `stdout 也应有一条 server.started：${stdout}`);
   assert.equal(stdoutLine.port, fileLine.port, '文件与 stdout 是同一条（同份）');
 });
