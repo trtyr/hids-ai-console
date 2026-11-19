@@ -13,6 +13,7 @@
 
 关键结论都标了 `文件:行号`，行号对应三份实现文件在提交 `35530d8` 时的内容；本卡只新增这份文档，没动这三份实现文件。
 例外：§3.8 与 §4 里 `InvestigationAgent` 构造签名那两处是 P003-T012 补的，行号对 P003-T012 提交；其余旧行号未重排。
+P003-T035 改写的段落（页内标了「P003-T035」的地方）行号对提交 `0230c28`；旧段落里的行号仍是 `35530d8`，读旧段落按内容对码，别按数字跳。
 全文只描述现状，不评价该改成什么。
 
 **术语**（第一次出现先给一句话解释，后面直接用）：
@@ -59,7 +60,7 @@
 | 文件 | 角色 | 对外导出 |
 | --- | --- | --- |
 | `investigation-agent.js` | 编排与决策 | `InvestigationAgent`（`investigation-agent.js:206`）、`boundedToolArgs`（`investigation-agent.js:177`）、`agentConfigured`（`investigation-agent.js:597`） |
-| `required-evidence.js` | 必查项清单 | `requiredEvidencePlan`（`required-evidence.js:36`）、`collectRequiredEvidence`（`required-evidence.js:92`）、`requiredEvidenceGaps`（`required-evidence.js:131`）、`requiredEvidenceReport`（`required-evidence.js:141`）、`appendEvidenceReport`（`required-evidence.js:154`） |
+| `required-evidence.js` | 必查项清单 | `requiredEvidencePlan`（`required-evidence.js:69`）、`collectRequiredEvidence`（`required-evidence.js:121`）、`requiredEvidenceGaps`（`required-evidence.js:167`）、`requiredEvidenceReport`（`required-evidence.js:178`）、`appendEvidenceReport`（`required-evidence.js:192`）——行号对 P003-T035 提交 |
 | `triage-output.js` | 客户报告整形 | `finalizeTriageOutput`（`triage-output.js:35`） |
 
 依赖方向是单向的：`investigation-agent.js` import 另外两个（`investigation-agent.js:6-7`），
@@ -89,18 +90,21 @@
 | 收 syslog 字段 | 常规研判且带 `streamContext` 时，把 syslog 报文登记为 `syslog:1` | `investigation-agent.js:238-244` |
 | 注入规则 | 用规则库对 syslog 告警事实求值，命中把整段 Rego 写进系统提示，见 [3.8](#38-规则注入知识库必查与结论工具p003-t012) | `investigation-agent.js:333-341` |
 | 载判据目录 | 常规研判且知识库在位时，取本类与通用判据目录及上下文页 | `investigation-agent.js:247-257` |
-| 跑必查项 | 常规研判按告警类型生成清单并逐项查询 | `investigation-agent.js:258-260` |
+| 跑必查项 | 按告警类型生成清单并**并发**逐项查询；deep 与 triage 同一套（P003-T035） | `investigation-agent.js:399` |
 | 复用客户经验 | 常规研判且知识库在位时，尝试命中已审核经验 | `investigation-agent.js:266-351` |
 | 建系统提示 | 拼核心提示词、场景卡、输出契约与场景边界 | `investigation-agent.js:353-361` |
 | 调查循环 | 最多 6 轮模型交互，见 [3.2](#32-工具轮次与调用上限) | `investigation-agent.js:378-446` |
-| 独立复核 | 一次独立的「质疑者」调用，见 [3.3](#33-独立复核) | `investigation-agent.js:448-455` |
-| 降级与整形 | 复核降级、引用校验、误报门槛、客户报告整形 | `investigation-agent.js:468-547` |
+| 独立复核 | 一次独立的「质疑者」调用；降级结论不调它，见 [3.3](#33-独立复核) | `investigation-agent.js:680-686` |
+| 降级与整形 | 轮数用尽降级、复核降级、引用校验、误报门槛、客户报告整形 | `investigation-agent.js:657-806` |
 | 返回 | 组装研判记录对象 | `investigation-agent.js:550-555` |
 
-两种模式的差别集中在三处：判据目录、必查项、客户报告契约——这三样都只在 `mode === 'triage'` 时出现
-（`investigation-agent.js:247`、`investigation-agent.js:258`、`investigation-agent.js:357`）。
-深度研判不生成必查项：实测 `mode: 'deep'` 时返回的 `required_evidence` 是空数组，
-`mode: 'triage'` 时同一告警类型会得到三项（`related_events`、`network_connections`、`source_history`）。
+两种模式的差别只剩两项：判据目录与客户报告契约——都只在 `mode === 'triage'` 时出现
+（`investigation-agent.js:247`、`investigation-agent.js:357`）。
+
+**必查项不再是模式差别**（P003-T035 改）：`requiredEvidencePlan` + `collectRequiredEvidence` 两种模式都跑
+（`investigation-agent.js:399`），`required_evidence` 字段两种模式都有、五态语义一致，缺口也都并进 `missing_evidence`
+（`investigation-agent.js:796`）。差别只剩客户报告那一段——`finalizeTriageOutput` 与 `appendEvidenceReport` 仍然只给常规研判
+（`investigation-agent.js:797-801`），所以 `mode: 'deep'` 的返回体里没有 `verdict.report`。
 
 ### 2.3 客户经验复用：一条会提前返回的捷径
 
@@ -122,7 +126,8 @@
 `runUnmatchedSyslog(input, matchResult, caseInfo, onProgress)`（`investigation-agent.js:558`）处理
 「syslog 推来的告警在牧云 API 找不到对应事件」，它不经过 `run()`：
 
-- 读案件材料 `03-研判事实.md`（`investigation-agent.js:564`）。
+- **五个加载一次并发拉齐**（P003-T035 改）：提示词、Wiki 索引、Wiki 上下文页、案件材料 `03-研判事实.md`、Rego 规则求值
+  互不依赖，用一次 `Promise.all` 起（`investigation-agent.js:824-830`）；改前是五次串行 `await`。
 - 提示词里写死「最终结论必须是『存疑』」（`investigation-agent.js:567`）。
 - 事实由 syslog payload 里前 5 个非空字段拼成，引用指向 `syslog:1` 的 JSON Pointer（`investigation-agent.js:577-579`）。
 - 结论三态写死 `uncertain`、风险级别写死「待核查」、置信度写死「低」（`investigation-agent.js:582-583`）。
@@ -131,8 +136,9 @@
 - trace 里补一条 `tool_error`，把回查失败的原因写进去（`investigation-agent.js:591`）。
 - `alert_id` 是 `syslog:<类型>:<原始报文 sha256 的前 16 位>`（`investigation-agent.js:580`）。
 
-与 `run()` 的一个差别：这条路径无条件调用 `this.knowledgeStore.agentIndex(type)`（`investigation-agent.js:561`），
-没有像 `run()` 那样先判断知识库是否在位（对比 `investigation-agent.js:247`）。
+与 `run()` 的两个差别：①这条路径无条件调用 `this.knowledgeStore.agentIndex(type)`（`investigation-agent.js:827`），
+没有像 `run()` 那样先判断知识库是否在位（对比 `investigation-agent.js:247`）；
+②它的降级结论口径就是 §3.2.1 那张表的口径——`run()` 轮数用尽时按同一套字段降级（P003-T035）。
 
 ## 3. 覆盖构件
 
@@ -165,26 +171,42 @@
 另两个地方用到三态：复用客户经验时走同一张表（`investigation-agent.js:326-327`）；
 未匹配 syslog 的旁路把三态写死成 `uncertain`（`investigation-agent.js:582`）。
 
-### 3.2 工具轮次与调用上限
+### 3.2 工具轮次与调用上限（P003-T035 改写）
 
-调查是一个固定上限的循环 `for (let turn = 0; turn < 6; turn++)`（`investigation-agent.js:520`），最多 6 轮。
+调查是一个固定上限的循环 `for (let turn = 0; turn < maxTurns; turn++)`（`investigation-agent.js:598`）。
+三个上限都是文件顶部的常量，**代码、trace、本页引用的都是同一组数字**（`investigation-agent.js:38-40`）：
+
+| 常量 | 值 | 管什么 |
+| --- | --- | --- |
+| `maxTurns` | 6 | 调查轮数；末轮强制不带工具 |
+| `maxToolCalls` | 8 | 单次调查的工具调用次数上限 |
+| `conclusionRetries` | 2 | 结论引用校验不通过时的退回次数 |
+
 每轮开头决定这一轮能不能调工具：
 
 ```js
-const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-agent.js:521
+const choice = turn === maxTurns - 1 || calls >= maxToolCalls ? 'none' : 'auto';   // investigation-agent.js:599
 ```
 
-- 第 6 轮（`turn === 5`）强制 `'none'`；
-- 工具调用计数已达 8（`calls >= 8`）也强制 `'none'`；
+- 第 6 轮（`turn === maxTurns - 1`）强制 `'none'`；
+- 工具调用计数已达 8（`calls >= maxToolCalls`）也强制 `'none'`；
 - 其余轮次是 `'auto'`。
 
 `'none'` 轮不带工具，提示词换成 `finalMessages()`，写明「请根据以下已查询证据直接输出完整 JSON 结论。不得再请求工具；没有足够证据时 verdict 必须为『存疑』」（`investigation-agent.js:506-512`、`investigation-agent.js:521-525`）。
-模型在这一轮仍然请求工具，抛「模型超出调查轮数仍请求工具」，并附带这一轮回包的形状（`investigation-agent.js:535`，见 §3.2.1）。
+模型在这一轮仍然请求工具时，**不再抛错**（P003-T035 改）：把这句「模型超出调查轮数仍请求工具；<回包形状>」记成退回原因，
+trace 落一条 `tool_after_limit`（`investigation-agent.js:614-618`），循环就此结束，走 §3.2.1 的降级结论。
 
-**8 次调用上限**是这样执行的：每收到一个工具调用请求，先把计数器加一，加一后的值超过 8 就不执行，回一条错误「工具调用已达到 8 次上限，请基于已有证据给出待复核结论」（`investigation-agent.js:564`）。
-被上限挡下的请求不产生证据记录。
+**8 次调用上限**是这样执行的：每解释一个工具调用请求，先把计数器加一（在发起任何 `await` 之前的同步段），
+加一后的值超过 8 就不执行，回一条错误「工具调用已达到 8 次上限，请基于已有证据给出待复核结论」（`investigation-agent.js:551`）。
+被上限挡下的请求不产生证据记录。预占发生在并发之前，所以同一批并发调用不会把上限算穿。
 
-**重复查询不重复取证**：同名且同参数的调用会被识别出来，回一条 `already_queried` 并指出已有证据编号，不新调工具（`investigation-agent.js:586-592`）。
+**一轮多个工具调用并发执行**（P003-T035 改）：一轮里模型返回 N 个 `tool_calls` 时整批并发跑
+（`Promise.allSettled`，`investigation-agent.js:621`）；tool 消息按**模型声明顺序**（即 `tool_call_id` 的顺序）逐条回填
+（`investigation-agent.js:622-631`），不按完成先后——慢的那个先发起、后回填。某条抛错只影响它自己那条
+`{error}` 消息与 `tool_error` trace。
+
+**重复查询不重复取证**：同一批里同名同参数的调用只有第一个真的发出去，其余等同一个 Promise、复用它的证据编号
+（`investigation-agent.js:578-586`）；跨轮的同名同参调用回一条 `already_queried` 并指出已有证据编号（`investigation-agent.js:572-577`）。
 
 **参数收窄**在 `boundedToolArgs()`（`investigation-agent.js:287-314`）里做：
 
@@ -199,23 +221,43 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 - 单条工具结果超过 20000 字符就不给模型看内容，只回一句「结果超出模型上下文……不能引用其字段」（`investigation-agent.js:234-239`）。
 - 模型调用报错时，只有报错信息含 `timeout` 或「超时」才原样重试一次；重试再失败或其它错误，一律包成带轮次、已查证据数与回包摘要的失败消息抛出（`investigation-agent.js:526-531`、`investigation-agent.js:57-64`，见 §3.2.1）。
 
-### 3.2.1 模型没交卷时，失败记录里留下什么（P003-T022）
+### 3.2.1 轮数用尽仍没有结论：出存疑降级结论（P003-T035 改写 P003-T022 的抛错口径）
 
-六轮调查用完仍没有 `draft` 时，抛出的不再是「模型未在调查轮数内给出有效 JSON 结论」这一句（旧口径），
-而是把模型最后回了什么、为什么退回一起带上（`investigation-agent.js:629`、`investigation-agent.js:34-55`）。
-这条消息是运维在队列记录 `detail` 里唯一能看到的东西：`triage-monitor.js:471` 把它截到 250 字写进 `record.detail`，
-所以整条消息按 240 字预算拼（`investigation-agent.js:34`）。
+六轮调查用完仍没有 `draft` 时，`run()` **不再抛错**（P003-T022 的口径是抛「模型未在调查轮数内给出有效 JSON 结论」，
+队列记录转 `failed`、案件目录没有 `05-研判结果.md`）。现在改成出**降级结论**，与 `runUnmatchedSyslog` 的降级结论同一口径
+（`investigation-agent.js:655-673`）：
 
-消息形状（四段，用「；」隔开）：
+| 字段 | 值 |
+| --- | --- |
+| `verdict` / `verdict_label` / `confidence` / `risk_level` | `uncertain` / 「存疑」/「低」/「待核查」 |
+| `summary` | `模型在 N 轮调查内没有给出可核验的结论，暂按存疑处理；已查 M 项证据，缺口见缺证清单。` |
+| `analysis` | `noConclusionReason(...)` 拼的那句话（见下表） |
+| `missing_evidence` | 那句话 + `requiredEvidenceGaps(requiredChecks)`（必查项缺口） |
+| `next_actions` | 一条人工复核建议 |
+| `review` | `{assessment:'unavailable', concerns:['调查轮数用尽仍没有可用结论，没有可独立复核的论据'], missing_evidence:[那句话]}`——降级不调独立复核 |
+| `validation` | `{ok:false, errors:['降级结论没有可核验的 claims'], degraded:true}`——降级不跑引用校验的退回循环 |
+
+**落盘**：`run()` 正常返回后，`triage-monitor` 照常走 `writeSyslogResult`（`triage-monitor.js:502`）写
+`05-研判结果.md`，记录状态变 `done`（`triage-monitor.js:507`）。只有真正的异常（模型接口报错、案卷写不出来）
+才进 `failed`。
+
+**可查的上限**：trace 里留一条 `{kind:'degraded_conclusion', turns, calls, reason, parse_failures, conclusion_rejections,
+max_turns, max_tool_calls, conclusion_retries}`（`investigation-agent.js:663-666`）。上限值与代码常量同源
+（`investigation-agent.js:38-40`），测试直接断言这几个数，不需要另写常量。
+
+`noConclusionReason({reply, problems, turns, calls})`（`investigation-agent.js:58-64`）就是 P003-T022 那条消息的文案，
+四段不变，只是现在**返回字符串**（进 `analysis` 与 `missing_evidence[0]`）而不是 Error。
+这段话同时是队列记录 `detail` 的来源：triage-monitor 用它（或结论文案）截到 250 字写进 `record.detail`
+（`triage-monitor.js:529`），所以按 240 字预算拼（`investigation-agent.js:34-36`）。
 
 | 段 | 内容 | 出处 |
 | --- | --- | --- |
 | 轮数与取证量 | `调查 N 轮、已查询 M 项证据后仍没有可用结论` | `investigation-agent.js:52` |
 | 末次回包 | `末次回包 K 字：「正文开头 50 字」`；正文为空时是 `末次回包没有正文`；这一轮点了工具再加 `末次工具调用：<名字>` | `investigation-agent.js:42-49`、`investigation-agent.js:533` |
-| 退回次数与原因 | `退回 N 次：<倒数第二个不同原因> → <最后一个原因>`，原因分三类：`输出解析失败：…`（`investigation-agent.js:612`）、`结论被退回：…`（结论工具 `submit_conclusion` 被 `conclusionProblem` 拒，`investigation-agent.js:547`）、`结论没查知识库被退回`（`investigation-agent.js:621`） | `investigation-agent.js:51-55` |
+| 退回次数与原因 | `退回 N 次：<倒数第二个不同原因> → <最后一个原因>`，原因分四类：`输出解析失败：…`（`investigation-agent.js:635`）、`结论被退回：…`（结论工具 `submit_conclusion` 被 `conclusionProblem` 拒，`investigation-agent.js:538`）、`结论没查知识库被退回`（`investigation-agent.js:647`）、`模型超出调查轮数仍请求工具；…`（`investigation-agent.js:615`） | `investigation-agent.js:58-63` |
 | 原文 | `flatten()` 把换行压成空格、超出预算截断并补 `…` | `investigation-agent.js:36-39` |
 
-实测（假 model 每轮都只回散文，告警 `suspicious_operation:7`）：
+实测（假 model 每轮都只回散文，告警 `suspicious_operation:7`；下面是 `verdict.analysis` 的内容）：
 
 ```text
 模型未在调查轮数内给出有效 JSON 结论（调查 6 轮、已查询 0 项证据后仍没有可用结论；末次回包 50 字：「我先梳理一下这条告警：主机 10.0.0.5 上以 root 执行了 id，需要核对授权与前后会话。」；退回 6 次：输出解析失败：Unexpected token '我', "我先梳理一下这条告警…）
@@ -234,27 +276,39 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 正文非空（哪怕只是空格）就是可用消息，`model-client` 不抛错；那种回包由研判循环自己判断，解析不了就落到上一段的
 `输出解析失败`。摘要里不含请求头、密钥与整段正文。
 
-**失败仍然只是抛错**：没有写一条降级结论、也没有碰研判记录库（`investigation-agent.js` 不持有 `InvestigationStore`），
-所以已经写成的结论不会被这次失败盖掉；同一个 `InvestigationAgent` 实例的失败状态只活在这次调用的局部变量里
-（`investigation-agent.js:516-517`），下一次研判从零开始。
+**真异常仍然抛错**：模型调用本身失败（HTTP 错、超时重试后再失败）、告警 ID 非法、牧云事件详情读不出来，
+这些照旧抛错，队列记录转 `failed`。抛错路径不写降级结论、也不碰研判记录库（`InvestigationAgent` 不持有 `InvestigationStore`），
+所以已经写成的结论不会被这次失败盖掉；同一个实例的失败状态只活在那次调用的局部变量里，下一次研判从零开始。
+
+**两条路不要混**：`模型没交卷`（模型回了，但六轮里没有一次给出可用 JSON）→ 降级结论、记录 `done`；
+`模型调用失败`（模型接口报错）→ 抛错、记录 `failed`。测试分别断言这两条，见 [5.6](#56-降级结论与复核口径p003-t035可照着写测试)。
 
 ### 3.3 独立复核
 
-调查出草稿后，会再发一次独立的模型调用当「质疑者」（`investigation-agent.js:448-455`）：
+调查出草稿后，会再发一次独立的模型调用当「质疑者」（`investigation-agent.js:680-686`）。
+**降级结论那条路上没有这次调用**：轮数用尽时直接记 `review.assessment = 'unavailable'`（§3.2.1）。
 
 - **提示词**写明「你是独立质疑者……不继承调查员私有推理」，并列出要查的四类问题：引用是否支持事实、是否误把空查询当良性、
   声称合法运维或授权扫描时有没有依据、是否忽略反证；另要求核对客户报告与结论是否一致、建议动作是否暗示系统已执行处置（`investigation-agent.js:449`）。
 - **输入**是告警 ID、草稿结论、规则候选、必查项、已加载的判据页，以及每条证据的 `view` 精简视图——不含原始返回（`investigation-agent.js:450-452`）。
 - **不传工具**：这一次调用的工具参数是空数组（`investigation-agent.js:454`）。
 - **期望输出**是 `{"concerns":[…],"missing_evidence":[…],"assessment":"supported|needs_revision"}`（`investigation-agent.js:449`）。
-- 复核调用失败或输出解析不了，`assessment` 记作 `unavailable`，concerns 里写「独立复核未完成：…」（`investigation-agent.js:455`）。
+- 复核调用失败或输出解析不了，`assessment` 记作 `unavailable`，concerns 里写「独立复核未完成：…」，
+  trace 再落一条 `review_unavailable`（`investigation-agent.js:679-684`）。
 
-复核结果怎么影响结论：
+复核结果怎么影响结论（P003-T035 改）：
 
-- `needs_revision` 时让模型按复核意见重出一次结论（`investigation-agent.js:457-464`）；这次重出再失败，就保留原草稿（`investigation-agent.js:465`）。
-- 复核**不是** `supported`、告警类型属于高风险、结论本是「真实威胁」——三条同时成立，结论强制降为存疑、置信度降为低，
-  缺口里加一条「独立复核未完成，真实威胁结论待复核」或「独立复核未支持真实威胁，需核对反证与因果关系」（`investigation-agent.js:468-473`）。
-  高风险类型五种：内存马、反弹 Shell、提权、WebShell、蜜罐（`investigation-agent.js:15`）。
+- `needs_revision` 时让模型按复核意见重出一次结论（`investigation-agent.js:688-696`）。
+  **这次重出再失败不再静默沿用草稿**：`revisionFailed` 记下错误、trace 落 `revision_failed`（`investigation-agent.js:697-701`），
+  然后按下面第三条处理（真实威胁降存疑；其它结论把「修订请求失败」写进缺口）。
+- 降级条件（`reviewBlocksThreat`，`investigation-agent.js:706-707`）——满足任一条且结论本是「真实威胁」，就降为存疑、置信度降为低：
+  1. 复核 `unavailable`：**不分告警类型**（P003-T035 前只有高风险五类才降，其余类型会顶着「真实威胁」出门）；
+  2. 复核要求修订、但修订请求失败：同样不分类型；
+  3. 复核要求修订、且告警类型属于高风险（内存马、反弹 Shell、提权、WebShell、蜜罐，`investigation-agent.js:15`）。
+- 降级时 `summary` 前缀写明是哪一种（「独立复核未完成」/「独立复核要求修订，修订请求失败」/「独立复核要求修订」），
+  缺口里对应写「独立复核未完成，真实威胁结论待复核」或「<修订失败原因>；真实威胁结论待重新核对」
+  （`investigation-agent.js:708-716`）。非真实威胁的草稿撞上修订失败时，缺口里写「…修订请求失败…；沿用原草稿的<结论>结论」
+  （`investigation-agent.js:717-720`），不静默沿用。
 
 复核提示词里还点名三条禁区：同主机不同时刻的两条告警不能凭共现推断同一攻击链；`127.0.0.1` 是本机回环、不能当外部攻击源；
 蜜罐 timeline 是否已经提供请求载荷（`investigation-agent.js:449`）。
@@ -289,18 +343,26 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 同时要求复核是 `supported` 且引用校验通过。任一条不满足，结论降为存疑、置信度降为低，
 缺口里加一条「误报结论缺少 N 条可引用的正向良性事实或独立复核支持」（`investigation-agent.js:532-541`）。
 
-**缺口合并**：常规研判下，必查项缺口与结论原有的缺口去重合并（`investigation-agent.js:542-544`）。
+**缺口合并**：必查项缺口与结论原有的缺口去重合并，**两种模式都并**（P003-T035 改；改前只有常规研判并，
+`investigation-agent.js:796`）。客户报告那一段仍只属于常规研判（`investigation-agent.js:797-801`）。
 
-**整条降级链的顺序**（从早到晚）：独立复核降级 → 蜜罐回环降级 → 蜜罐/提权缺口文案修正 → 置信度归一 →
-引用校验（退回两次 → 删事实 → 降为存疑）→ 误报门槛 → 必查项缺口合并 → 客户报告整形
-（`investigation-agent.js:468-473`、`investigation-agent.js:475-501`、`investigation-agent.js:502-503`、
-`investigation-agent.js:504-531`、`investigation-agent.js:532-541`、`investigation-agent.js:542-544`、`investigation-agent.js:545-546`）。
+**降级结论不跑引用校验**（P003-T035）：轮数用尽出的降级结论没有 `claims`，也不存在可校验的引用，
+所以整段「退回两次 → 删事实 → 降为存疑」直接跳过，`validation` 记成 `{ok:false, errors:['降级结论没有可核验的 claims'], degraded:true}`
+（`investigation-agent.js:751-755`）。不跳过的话，那个退回循环会再向模型赌两轮。
+
+**整条降级链的顺序**（从早到晚）：轮数用尽降级（§3.2.1）→ 独立复核降级 → 蜜罐回环降级 → 蜜罐/提权缺口文案修正 → 置信度归一 →
+引用校验（退回 `conclusionRetries` 次 → 删事实 → 降为存疑）→ 误报门槛 → 必查项缺口合并 → 客户报告整形
+（`investigation-agent.js:655-673`、`investigation-agent.js:708-720`、`investigation-agent.js:721-732`、
+`investigation-agent.js:733-748`、`investigation-agent.js:749-750`、`investigation-agent.js:751-784`、
+`investigation-agent.js:785-794`、`investigation-agent.js:796`、`investigation-agent.js:797-801`）。
 
 ### 3.5 必查项清单
 
-必查项是常规研判的最低取证要求：**生成 → 执行 → 汇总缺口 → 写进客户报告**。
+必查项是研判的最低取证要求：**生成 → 执行 → 汇总缺口 → 写进缺证清单（常规研判还写进客户报告）**。
 
-清单只在常规研判下生成并执行（`investigation-agent.js:258-260`）。深度研判的返回体里 `required_evidence` 是空数组（实测）。
+**deep 与 triage 同一套**（P003-T035 改）：清单两种模式都生成并执行（`investigation-agent.js:399`），
+状态机、缺口写法、五态语义完全一致；不同只有下游——常规研判把必查项摘要追加到客户报告，deep 只进 `missing_evidence`
+（`investigation-agent.js:796-801`）。改前 deep 的 `required_evidence` 恒为空数组。
 
 生成在 `requiredEvidencePlan(type, original, catalog)`（`required-evidence.js:36-90`）：
 
@@ -310,19 +372,33 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | `command_history` 同主机命令会话 | 8 类告警 | `list_full_commands_by_host` 或 `list_full_commands`，`count: 20` | `required-evidence.js:16-17`、`required-evidence.js:51-58` |
 | `network_connections` 相关来源的网络连接 | 3 类告警 | `list_firewall_connection_records`，按来源地址过滤，`count: 20`；蜜罐按来源 IP，其余按主机 IP | `required-evidence.js:18`、`required-evidence.js:60-70` |
 | `source_history` 同来源同类告警 | 蜜罐、暴力破解 | `list_<类型>_events`，按来源 IP 过滤，`count: 20` | `required-evidence.js:19`、`required-evidence.js:72-78` |
-| `authorization` 操作授权与测试工单 | 可疑操作、提权 | 当前工具池没有这个数据源，固定不可用 | `required-evidence.js:79-83` |
-| `file_invocation` 文件调用或对应 Web 请求 | WebShell | 当前工具池没有这个数据源，固定不可用 | `required-evidence.js:84-88` |
+| `authorization` 操作授权与测试工单 | 可疑操作、提权 | `authorization_record`，**按本次 MCP 目录动态判定**（P003-T035 改）：目录里没有就标 `catalog_absent`，不算缺口 | `required-evidence.js:38-43`、`required-evidence.js:60-66`、`required-evidence.js:112-114` |
+| `file_invocation` 文件调用或对应 Web 请求 | WebShell | `web_request_or_file_access_log`，同样动态判定 | `required-evidence.js:41-43`、`required-evidence.js:115-117` |
 
-上表六项各带一句 `scope`，讲清这次查的边界，例如「同主机命令记录的当前返回页；不能证明命令获得授权或执行成功」（`required-evidence.js:54-57`）。
-能不能用这个工具，由 `supports()` 判定：工具存在、参数里有所需键、且工具自己声明的必填键都在所需键之内（`required-evidence.js:21-25`）。
+上表六项各带一句 `scope`，讲清这次查的边界，例如「同主机命令记录的当前返回页；不能证明命令获得授权或执行成功」。
+能不能用这个工具，由 `supports()` 判定：工具存在、参数里有所需键、且工具自己声明的必填键都在所需键之内（`required-evidence.js:22-25`）。
 
-执行在 `collectRequiredEvidence(plan, session, onProgress, trace)`（`required-evidence.js:92-129`），每项落一个状态，**五种状态互不混同**：
+**动态数据源的两项怎么组参数**（P003-T035）：`dynamicCheck()`（`required-evidence.js:60-66`）先看目录里有没有这个工具——
+
+| 目录里的情况 | 计划项 | 执行后状态 |
+| --- | --- | --- |
+| 没有这个工具 | `source:false` + `reason:'牧云暂无此数据源：本次 MCP 目录未提供 <工具>'` + `catalog_absent:true` | `source_unavailable`，**不进缺口、不进客户报告** |
+| 有，且必需字段都能从告警事实取值 | `args` 由 `dynamicArgs()` 从告警自己的字段组出来（`host_id` / `host_ip` / `user_name` / `process_name` / `command_line` / `file_path` / `observed_at`，`count` 固定 20，`required-evidence.js:44-58`） | 真查，五态按查询结果 |
+| 有，但必需字段组不出来 | `source:true` + `args:null` + 一句「牧云提供 <工具>，但本条告警缺少该工具必需字段…」 | `missing_identifier`——这是本条告警的缺口，要写出来 |
+
+`catalog_absent` 是**标记不是状态**：`status` 仍然只有五个值。
+
+执行在 `collectRequiredEvidence(plan, session, onProgress, trace)`（`required-evidence.js:121-165`），
+**逐项并发**（P003-T035 改）：整个 plan 一次 `map` 成 `Promise.allSettled`（`required-evidence.js:124`），
+trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），与完成先后无关——所以状态、trace、返回数组三者顺序一致。
+单条抛出异常只影响它自己：落成 `query_failed` + 「必查项执行异常：…」（`required-evidence.js:156-158`）。
+每项落一个状态，**五种状态互不混同**：
 
 | 状态 | 含义 | 证据 |
 | --- | --- | --- |
 | `records_returned` | 查到了；附带返回条数、平台自报总数、总数是否自洽 | `required-evidence.js:112-115` |
 | `empty_page` | 查了，当前页没有记录 | `required-evidence.js:112` |
-| `source_unavailable` | 没有可用数据源 | `required-evidence.js:96-98` |
+| `source_unavailable` | 没有可用数据源（`catalog_absent:true` 时是「牧云暂无此数据源」） | `required-evidence.js:126-130` |
 | `missing_identifier` | 原始事件缺少这项查询所需的主机或来源标识 | `required-evidence.js:99-101` |
 | `query_failed` | 查询抛错，或接口没返回可确认数量的列表 | `required-evidence.js:108-110`、`required-evidence.js:120-123` |
 
@@ -330,9 +406,10 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 `status` 是**枚举**，取值只有上面五个，不存在第六种；`openapi.yaml` 的 `RequiredEvidence.status` 用同一个枚举，`id` 也同样是枚举（`required-evidence.js:33-35` 起的六个固定值）。
 查到的必查项证据会以精简视图回灌给模型（`investigation-agent.js:261-265`）。
 
-缺口汇总在 `requiredEvidenceGaps(checks)`（`required-evidence.js:131-139`）：
-状态不是 `records_returned` 的项进缺口，带 `reason` 的项也进缺口（例如接口报告部分类型查询失败，`required-evidence.js:116`）。
-按状态拼成一句话的在 `requiredEvidenceReport(checks)`（`required-evidence.js:141-152`），
+缺口汇总在 `requiredEvidenceGaps(checks)`（`required-evidence.js:167-176`）：
+状态不是 `records_returned` 的项进缺口，带 `reason` 的项也进缺口（例如接口报告部分类型查询失败）；
+**带 `catalog_absent` 的项一律跳过**（P003-T035 改：平台暂不提供这个数据源，不是本条告警缺证据）。
+按状态拼成一句话的在 `requiredEvidenceReport(checks)`（`required-evidence.js:178-190`），同样先过滤掉 `catalog_absent`，
 追加到客户报告在 `appendEvidenceReport(report, checks, maxLength = 300)`（`required-evidence.js:154-165`）。
 
 ### 3.6 客户报告整形
@@ -453,7 +530,8 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | `evidence_id` | string | 否 | 查到记录时的证据编号 | `required-evidence.js:107` |
 | `returned_count` | integer | 否 | 当前页返回条数 | `required-evidence.js:113` |
 | `total_reported` | integer 或 null | 否 | 平台自报总数 | `required-evidence.js:114` |
-| `platform_total_consistent` | boolean | 否 | 平台总数与当前返回是否自洽 | `required-evidence.js:115` |
+| `platform_total_consistent` | boolean | 否 | 平台总数与当前返回是否自洽 | `required-evidence.js:146` |
+| `catalog_absent` | boolean | 否 | 只有 `true` 时出现：这项工具本次 MCP 目录里没有，属「牧云暂无此数据源」，不算缺口、不进客户报告（P003-T035） | `required-evidence.js:128`、`required-evidence.js:169`、`required-evidence.js:179` |
 
 ### 3.8 规则注入、知识库必查与结论工具（P003-T012）
 
@@ -523,11 +601,11 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 | `.prompts()` / `.updatePrompt(section, content, revision)` | `Promise<…>` | 读 / 改提示词，转调提示词存储 | `investigation-agent.js:211-212` |
 | `boundedToolArgs(name, rawArgs, catalog)` | `(name, args, catalog) => args` | 工具参数收窄，见 [3.2](#32-工具轮次与调用上限) | `investigation-agent.js:177` |
 | `agentConfigured(env?)` | `(env?) => boolean` | 五个环境变量齐了才算配好：牧云地址、牧云 Token、模型地址、模型密钥、模型名 | `investigation-agent.js:597-599` |
-| `requiredEvidencePlan(type, original, catalog)` | `=> 检查项[]` | 生成必查项清单 | `required-evidence.js:36` |
-| `collectRequiredEvidence(plan, session, onProgress?, trace?)` | `Promise<检查结果[]>` | 执行必查项 | `required-evidence.js:92` |
-| `requiredEvidenceGaps(checks)` | `=> string[]` | 汇总缺口 | `required-evidence.js:131` |
-| `requiredEvidenceReport(checks)` | `=> string` | 按状态拼一句摘要 | `required-evidence.js:141` |
-| `appendEvidenceReport(report, checks, maxLength?)` | `=> string` | 把摘要追加到客户报告，默认上限 300 | `required-evidence.js:154` |
+| `requiredEvidencePlan(type, original, catalog)` | `=> 检查项[]` | 生成必查项清单；`catalog` 决定动态数据源那两项能不能查 | `required-evidence.js:69` |
+| `collectRequiredEvidence(plan, session, onProgress?, trace?)` | `Promise<检查结果[]>` | 并发执行必查项（`Promise.allSettled`） | `required-evidence.js:121` |
+| `requiredEvidenceGaps(checks)` | `=> string[]` | 汇总缺口；跳过 `catalog_absent` | `required-evidence.js:167` |
+| `requiredEvidenceReport(checks)` | `=> string` | 按状态拼一句摘要；跳过 `catalog_absent` | `required-evidence.js:178` |
+| `appendEvidenceReport(report, checks, maxLength?)` | `=> string` | 把摘要追加到客户报告，默认上限 300 | `required-evidence.js:192` |
 | `finalizeTriageOutput(verdict)` | `(verdict) => verdict` | 客户报告与建议动作整形 | `triage-output.js:35` |
 
 `run()` 的返回体固定带这几个字段：`alert_id`、`mode`、`model`、`prompt_version`、`scenario_ids`、`verdict`、`review`、
@@ -643,30 +721,36 @@ console.log(system.includes('package hids.rules.honeypot_probe'), JSON.stringify
 
 预期输出：`true {"status":"matched","rule_ids":["honeypot_probe"]}`——仓内 `rules/honeypot_probe.rego` 的 `type`/`peer`/`user` 三个条件都被这次 syslog 事实满足。
 
-### 5.6 失败记录摘要（P003-T022，可照着写测试）
+### 5.6 降级结论与复核口径（P003-T035，可照着写测试）
 
-只跑本卡新增的 6 条：
+只跑本卡改到的几条：
 
 ```bash
-node --test investigation-agent.test.js 2>&1 | grep -E "A1 |A2 |A3 |model-client"
+node --test investigation-agent.test.js 2>&1 | grep -E "A1 |A2 |A3 |model-client|常规研判把必查|deep"
 ```
 
-预期 10 行 `✔`：P003-T012 的 4 条（Rego / 必调知识库 / 未采纳原因 / 501 字退回）加本卡 6 条——A1 三条（六轮都没给 JSON /
-模型没有返回可用消息 / 结论连续被退回）、A2 一条（同一实例失败后能再跑）、A3 一条（失败不覆盖已经写成的结论）、
-model-client 一条（`reply_excerpt` 形状与「不带密钥」）。
+预期全 `✔`。本卡**新增 6 条**：复核不可用时非高危类型也降（A2）、修订请求失败降级（A2）、
+无效 JSON 同轮反馈与上限（A3）、一轮多工具并发与保序回填（A7）、降级路径并发加载（A8）、`05-研判结果.md` 落盘（A1）。
+**改写 5 条**（原文断言「抛错」的那几条）：六轮都没给 JSON、结论连续被退回、同一实例连出两次降级结论、
+真异常不覆盖已写成结论、常规研判把必查空页与 deep 采同一套。
 
 每条用例的断言口径（照抄可改）：
 
 | 用例 | 断言 |
 | --- | --- |
-| 六轮都没给 JSON（假 model 每轮回同一段散文） | 消息含 `调查 6 轮、已查询 0 项证据后仍没有可用结论`、`末次回包 <正文长度> 字：「<开头>`、`退回 6 次：输出解析失败：`；整条 `[...message].length <= 250` |
-| 模型没有返回可用消息 | 消息含 `模型调用失败（第 1 轮、已查询 0 项证据）：` + 假 `reply_excerpt`，且 `error.cause.message === '模型没有返回可用消息'` |
-| 结论连续被退回（有知识库但没查，前五轮 `submit_conclusion` 被拒，末轮只能发文本） | 消息含 `退回 6 次：结论被退回：…没有调用知识库工具…→ 输出解析失败：`、`末次回包 6 字：「结论：存疑。」` |
-| 同一实例失败后能再跑 | 两次 `run` 各抛一次，第二次的摘要只含第二次的回包开头；第三次 `run` 正常出结论 |
-| 失败不覆盖已写成的结论 | 预存一条 `InvestigationStore` 记录 → `run` 抛错 → 目录里仍只有一个文件、`latest()` 与预存对象 `deepEqual` |
-| model-client 摘要 | `error.message === '模型没有返回可用消息'`；`reply_excerpt` 含 `正文 0 字、工具调用 0 次（finish_reason=length）`、不含 `apiKey`；正文非空时**不抛错** |
+| 六轮都没给 JSON（假 model 每轮回同一段散文） | `verdict.verdict === 'uncertain'`、`verdict_label === '存疑'`、`confidence === '低'`；`missing_evidence[0]` 含 `调查 6 轮、已查询 0 项证据后仍没有可用结论`、`末次回包 <正文长度> 字：「<开头>`、`退回 6 次：输出解析失败：`，且 `[...missing_evidence[0]].length <= 250`；trace 的 `degraded_conclusion` 里 `{turns:6, calls:0, parse_failures:6, max_turns:6, max_tool_calls:8, conclusion_retries:2}` |
+| 结论连续被退回（有知识库但没查，前五轮 `submit_conclusion` 被拒） | 同一句话里含 `退回 6 次：结论被退回：…没有调用知识库工具…→ 输出解析失败：`、`末次回包 6 字：「结论：存疑。」`；`degraded_conclusion.conclusion_rejections === 5`、`parse_failures === 1`；`verdict.wiki.adopted` 为空且 reason 含「降级结论」 |
+| 模型没有返回可用消息 | 仍然抛错：消息含 `模型调用失败（第 1 轮、已查询 0 项证据）：` + 假 `reply_excerpt`，`error.cause.message === '模型没有返回可用消息'` |
+| 真异常不覆盖已写成结论 | 预存一条 `InvestigationStore` 记录 → 假 model 抛 `模型接口 HTTP 502` → `run` 抛错 → 目录里仍只有一个文件、`latest()` 与预存对象 `deepEqual` |
+| 同一实例连出两次降级结论 | 两次 `run` 的 `missing_evidence[0]` 各自只含自己那 6 条回包的开头；第三次 `run` 正常出结论且 `trace` 里没有 `degraded_conclusion` |
+| 复核不可用（非高危类型 `suspicious_operation`） | 模型第 2 次调用抛错 → `verdict.verdict === 'uncertain'`、`confidence === '低'`、`missing_evidence` 含 `独立复核未完成，真实威胁结论待复核`、trace 有 `review_unavailable` |
+| 修订请求失败 | 第 3 次调用抛错 → `verdict.verdict === 'uncertain'`、`summary` 含 `独立复核要求修订，修订请求失败`、`missing_evidence` 含 `修订请求失败：…`、trace 有 `revision_failed` |
+| 无效 JSON 同轮反馈 + 上限 | 假 model 永远回散文 → 只被调用 6 次；trace 里 6 条 `parse_error`，`turn` 与 `attempt` 都是 1…6；第 2 次请求的 messages 里既有第一轮原文（assistant），也有一条以 `输出解析失败：` 开头的 user 消息 |
+| 一轮多工具并发 | 一条回包带两个 `tool_calls`（第一个故意慢 15ms）→ 两个工具同时在途（峰值 2），完成顺序与声明相反，但 tool 消息顺序仍是 `['call-a','call-b']`，证据编号按声明顺序分配 |
+| 降级路径并发加载 | 四个替身加载（提示词 / wiki 索引 / wiki 页 / Rego 求值）各自延迟 5ms → 同时在途峰值 4；串行实现只能是 1 |
+| `05-研判结果.md` 落盘 | 真 `TriageMonitor` + 假牧云 + 假 model（只回散文），syslog 投一条 → 记录 `status === 'done'`、`verdict_label === '存疑'`、案件目录里 `05-研判结果.md` 含「结论：存疑」 |
 
-手工看一条真实消息（假 model，不碰网络）：
+手工看一条降级结论（假 model，不碰网络）：
 
 ```bash
 node --input-type=module -e "
@@ -674,13 +758,22 @@ import { InvestigationAgent } from './investigation-agent.js';
 import { AgentToolbox } from './agent-tools.js';
 const toolbox = new AgentToolbox({ listTools: async () => [{ name: 'get_suspicious_operation_event', inputSchema: { type: 'object', properties: { id: {} }, required: ['id'] } }], callTool: async () => ({ id: 7, cmdline: 'id' }) });
 const model = { model: 'fake', complete: async () => ({ content: '我先梳理一下这条告警：需要核对授权。' }) };
-try { await new InvestigationAgent(toolbox, model).run('suspicious_operation:7', { mode: 'triage' }); }
-catch (error) { console.log([...error.message].length, error.message); }
+const result = await new InvestigationAgent(toolbox, model).run('suspicious_operation:7', { mode: 'triage' });
+console.log(result.verdict.verdict, result.verdict.verdict_label, result.verdict.confidence);
+console.log([...result.verdict.missing_evidence[0]].length, result.verdict.missing_evidence[0]);
+console.log(JSON.stringify(result.trace.find(i => i.kind === 'degraded_conclusion')));
 "
 ```
 
-预期输出以 `模型未在调查轮数内给出有效 JSON 结论（调查 6 轮…` 开头，末尾是 `退回 6 次：输出解析失败：…`。
+实测输出：
 
+```text
+uncertain 存疑 低
+127 模型未在调查轮数内给出有效 JSON 结论（调查 6 轮、已查询 0 项证据后仍没有可用结论；末次回包 18 字：「我先梳理一下这条告警：需要核对授权。」；退回 6 次：输出解析失败：Unexpected token '我', "我先梳理一下这条告警…）
+{"kind":"degraded_conclusion","turns":6,"calls":0,"reason":"…","parse_failures":6,"conclusion_rejections":0,"max_turns":6,"max_tool_calls":8,"conclusion_retries":2}
+```
+
+不抛错、记录不会进 `failed`——这就是 A1 要的「不再抛错进 failed」。
 
 ## 6. 已知边界与未决
 
@@ -691,12 +784,17 @@ catch (error) { console.log([...error.message].length, error.message); }
 （`required-evidence.js:164`）。被裁剪段末尾不是「，、；：。」或空白时，返回长度是 `maxLength + 1`。
 复跑命令见 [5.2](#52-必查项缺口与报告长度)。
 
-### 6.2 必查项里有两项当前固定不可用
+### 6.2 必查项里那两项数据源目前在生产上恒为「暂无」
 
-`authorization`（操作授权与测试工单）与 `file_invocation`（文件调用或对应 Web 请求）的数据源标记写死为不可用
-（`required-evidence.js:79-83`、`required-evidence.js:84-88`）。执行时这两项走的第一个分支，状态固定落在 `source_unavailable`（`required-evidence.js:96-98`）。
-这个状态不是 `records_returned`，按 `requiredEvidenceGaps` 的过滤条件会进证据缺口（`required-evidence.js:132`）；
-`requiredEvidenceReport` 的分组里也有这一档（`required-evidence.js:144`），所以它会出现在客户报告的必查项摘要里。
+`authorization`（操作授权与测试工单，工具 `authorization_record`）与 `file_invocation`（文件调用或对应 Web 请求，
+工具 `web_request_or_file_access_log`）从 P003-T035 起改成**按本次 MCP 目录动态判定**（`required-evidence.js:60-66`）：
+目录里没有这两件工具就标 `catalog_absent`，状态落 `source_unavailable`、reason 写「牧云暂无此数据源：本次 MCP 目录未提供 <工具>」，
+且**不进证据缺口、不进客户报告**（`required-evidence.js:167-189`）。
+
+但生产上它们**仍然永远是 `catalog_absent`**：`AgentToolbox.listTools()` 按 `investigationToolNames` 白名单过滤
+（`agent-tools.js:8-19`、`agent-tools.js:38-51`），这两个工具名不在白名单里；`TriageEvidenceToolbox` 的补证白名单
+（`agent-tools.js:99-104`）同样只有命令会话 / 连接记录 / 进程与端口资产。所以「有工具就真查」这条分支今天只能靠替身目录走到，
+要真接通得先扩 `agent-tools.js` 的工具面——那是扩大牧云只读工具面，不属于本卡（P003-T035 的 scope 不含 `agent-tools.js`）。
 
 ### 6.3 未匹配 syslog 的旁路依赖知识库
 

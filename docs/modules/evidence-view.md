@@ -80,6 +80,13 @@ updated: 2026-11-17
 
 1. **取字段**。按字段表逐个友好名找候选原始键（`evidence-view.js:3-40`、`evidence-view.js:63-70`）。候选键是点号路径，逐段下钻（`evidence-view.js:51-56`）。
 2. **丢弃四类值**：取不到、`null`、空串、对象或数组（`evidence-view.js:57`）。
+
+**`host_id` 的候选键里没有裸 `id`**（P003-T035 改）。字段表里 `host_id` 只认 `host_view.host_id`、`host_view.id`、`host_id`
+（`evidence-view.js:9`）；裸 `id` 在事件行里是**事件 ID**，拿它当主机 ID 会让必查项按错的主机去查
+（`required-evidence.js:71`），再把空页写成「已查当前页但未返回记录」——等于把「查错机器」报成「那台机器没事」。
+主机资产视图是例外：`list_host_assets` / `get_host_info_detail` 的行里裸 `id` 就是主机 ID，`projectEvidence` 给这两件工具
+打开 `bareHostId` 开关，`get_process_asset` 的 `host_info` 段按 `kind === 'host'` 也开着（`evidence-view.js:50`、
+`evidence-view.js:66-79`、`evidence-view.js:80-81`、`evidence-view.js:165`）。
 3. **丢弃超长文本**：末段键名属于命令类的（`cmdline` / `command` / `shell_cmdline` / `process_cmdline`）上限 3000 字符，其余上限 500 字符（`evidence-view.js:58-59`）。超限的整条丢弃，不是截断。
 4. **丢弃零时间哨兵**：数值小于 `-60000000000` 的时间戳丢掉（`evidence-view.js:60`）。
 5. **产出事实**：`{value, pointer}`，pointer 由前缀加上实际走过的段拼成（`evidence-view.js:61`）。
@@ -483,6 +490,9 @@ node --test evidence-view.test.js
 - **裁剪后计数不重算**，`counts_on_returned_page` 仍是裁剪前的整页计数（`evidence-view.js:239-242`）。
 - **指针转义在当前字段表下不会触发**。`pointer()` 把 `~` 转成 `~0`、`/` 转成 `~1`（`evidence-view.js:49`），而 104 个候选键与嵌套字段名里没有这两个字符（实测见 §10.2）。
 - **视图被裁两次**。取证会话先按 12000 裁一次（`agent-tools.js:65`），结论证据再按 3000 / 4000 裁一次（`investigation-agent.js:139`）。
+- **`host_id` 没有兜底之后，缺 `host_id` 的事件行就拿不到主机身份**（P003-T035）。这不是回归：事件行只有裸 `id` 时，
+  下游必查项会落成 `missing_identifier`（「无法发起限定范围查询」），而不是拿事件 ID 去查另一台机器。`host_ip` 仍保留裸 `ip` 兜底，
+  这一条没跟着改——它是否同样会指向别的实体，本卡没有核实。
 
 ### 11.4 被排除的方案
 

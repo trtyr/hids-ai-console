@@ -452,7 +452,11 @@ EOF
 
 阶段推进会留痕：`onProgress` 每次把阶段追加进 `steps`，超过 80 条就丢最早一条（`triage-monitor.js:379-382`）。
 
-失败处理：抛错就记 `status = 'failed'`、阶段「研判失败」、`detail` 截断到 250 字符（`triage-monitor.js:416-417`）；无论成败最后都落一次盘（`triage-monitor.js:418`）。
+失败处理：抛错就记 `status = 'failed'`、阶段「研判失败」、`detail` 截断到 250 字符（`triage-monitor.js:529`）；无论成败最后都落一次盘（`triage-monitor.js:532`）。
+
+**「模型没交卷」不是失败**（P003-T035）：`investigation-agent` 在调查轮数用尽时改出「存疑 + 缺口清单」的降级结论并正常返回
+（`investigation-agent.js:655-673`），所以这一档走的是成功通路——`writeSyslogResult` 照常写 `05-研判结果.md`、记录转 `done`。
+这里仍然只接「真抛错」：模型接口报错、案卷写不出来、告警 ID 非法。
 
 ### 5.4 人工干预的入口
 
@@ -792,7 +796,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | 不保证 `cases()` 能列出研判记录；它只列有原始报文的记录 | `triage-monitor.js:117` |
 | 不保证结论正确；结论由 `investigator` 产出，本模块只搬运 | `triage-monitor.js:385-389` |
 | 不保证事件时间准确；取决于部署方给的偏移量，越界按 0 | `syslog-input.js:61`、`69` |
-| 不保证研判一定成功；`investigator` 抛错就是 `failed` | `triage-monitor.js:416-417` |
+| 不保证研判一定成功；`investigator` 抛错就是 `failed`（轮数用尽的降级结论不算抛错，见 §5.3） | `triage-monitor.js:529` |
 
 ## 11 失败面
 
@@ -809,7 +813,8 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | 牧云事件详情读取失败 | 匹配返回未匹配，原因写明「牧云事件 ID 详情读取失败：…」（`syslog-case.js:33-35`） | 走未匹配分支 | — | 结论按未匹配口径给 |
 | 牧云事件列表查询失败 | 匹配返回未匹配，原因写明「牧云事件查询失败：…」（`syslog-case.js:55`） | 同上 | — | 同上 |
 | 牧云事件与 syslog 主机对不上 | 匹配返回未匹配，原因写明「牧云事件 ID 对应的主机与 syslog 不一致」（`syslog-case.js:26-29`） | 同上 | — | 同上 |
-| 研判抛错 | 记录置 `failed`，`detail` 截断到 250 字符（`triage-monitor.js:416-417`） | 队列记录保留，可再入队 | 能，用 `enqueue(..., { retry: true })` | 无 |
+| 研判抛错 | 记录置 `failed`，`detail` 截断到 250 字符（`triage-monitor.js:529`） | 队列记录保留，可再入队 | 能，用 `enqueue(..., { retry: true })` | 无 |
+| 调查轮数用尽仍无结论 | **不抛错**：`investigator` 返回「存疑 + 缺口清单」降级结论（`investigation-agent.js:655-673`） | 记录置 `done`，`05-研判结果.md` 照常写（`triage-monitor.js:502`） | 能，用 `enqueue(..., { retry: true })` | 降级为存疑 |
 | 进度落盘失败 | `onProgress` 里失败：`lastError` =「研判进度保存失败：…」（`triage-monitor.js:383`）；`drain()` 里 run 的兜底失败：`lastError` =「研判状态保存失败：…」（`triage-monitor.js:345`） | 研判继续 | — | 记录里的阶段可能滞后 |
 | 案件目录写不出来 | `run()` 抛错，记录转 `failed`（`triage-monitor.js:374-378`、`390-391`） | 记录保留 | 能 | 无 |
 | 回写重复次数时 `result.json` 不存在 | 直接返回，两个文件都不动（`syslog-case.js:126`） | 重复次数没更新 | — | 无 |

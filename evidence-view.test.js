@@ -152,3 +152,21 @@ test('oversized list view keeps citable rows within the model budget', () => {
   assert.equal(view.returned_count, 5);
   assert.equal(view.items[0].facts.asset_id.pointer, '/result/0/id');
 });
+
+test('A4 事件视图的裸 id 不当主机 ID，主机资产视图才认它', () => {
+  // 替身牧云的事件行：只有事件 ID 与主机名（api-tools 的列表返回 {total, events}）。
+  const events = projectEvidence('list_suspicious_operation_events', { total: 1,
+    events: [{ id: 7, host_view: { host_name: 'app-7' }, cmdline: 'id' }] });
+  assert.equal(events.items[0].facts.host_id, undefined);
+  assert.deepEqual(events.items[0].facts.event_id, { value: 7, pointer: '/events/0/id' });
+  // 事件详情同理：裸 id 只进 event_id。
+  const detail = projectEvidence('get_suspicious_operation_event', { id: 9, cmdline: 'id' });
+  assert.equal(detail.facts.host_id, undefined);
+  assert.equal(detail.facts.event_id.value, 9);
+  // 主机资产视图里裸 id 就是主机 ID。
+  const assets = projectEvidence('list_host_assets', { total: 1, events: [{ id: 42, host_name: 'app-42' }] });
+  assert.deepEqual(assets.items[0].facts.host_id, { value: 42, pointer: '/events/0/id' });
+  // host_view.id 仍然算主机身份（牧云在 host_view 下放的是主机自己的 ID）。
+  const view = projectEvidence('list_honeypot_events', { total: 1, events: [{ id: 7, host_view: { id: 41 } }] });
+  assert.deepEqual(view.items[0].facts.host_id, { value: 41, pointer: '/events/0/host_view/id' });
+});
