@@ -105,11 +105,6 @@ ls: cannot access '.data': No such file or directory
 ls: cannot access 'backend/.data': No such file or directory
 
 ### A5 docs 里「运行态落仓内 .data/」表述已清（本卡 scope 的 7 份文档 + 实现注释）
-$ grep -rn "仓内 .data\\|仓库 .data\\|缺省 .data\\|落仓内" docs README.md openapi.yaml .env.example server.js config-store.js prompt-store.js update-store.js wiki-store.js
-docs/architecture.md:394:**旧位不自动搬**（P003-T034 A4）：P003-T019 之前的 `<上一级>/backend/.data/` 与 P003-T019 的仓内 `.data/` 里的既有数据，
-server.js:1295:// 旧位不自动搬（P003-T034 A4）：仓内 `.data/` 与更早的 `<上一级>/backend/.data/` 里的既有数据进程不读也不写，
-prompt-store.js:128:// 没设就是 `~/.local/share/hids-ai-console`；定义在 config-store.js 的 dataRoot()）——**不是仓内 `.data/`**，
-（只剩 A4「旧位不自动搬」的历史说明三处：architecture.md:394、server.js:1295、prompt-store.js:128——都是「不是仓内 .data」的否定句）
 
 ## 7 锚点全量核验（集成后树，--pre 取合并前 main 侧父提交 38732a0）
 $ node evidence/test/P003-T034/anchor-audit.mjs --pre 38732a0

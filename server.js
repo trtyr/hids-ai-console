@@ -1159,7 +1159,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           record.maintenance.status = 'failed';
           record.maintenance.error = scrubCredentials(cause?.message || cause).slice(0, 300);
         }).finally(() => { runningMaintenance.delete(alertId);
-          // 误报维护的结局只从这里出来：两侧各自的状态与原因都带上，别让人去翻 .data/triage-monitor.json。
+          // 误报维护的结局只从这里出来：两侧各自的状态与原因都带上，别让人去翻数据根下的 triage-monitor.json。
           log('maintenance.result', { alert_id: alertId, status: record.maintenance.status,
             rule: record.maintenance.rule?.status ?? null, wiki: record.maintenance.wiki?.status ?? null,
             rule_error: record.maintenance.rule?.error ?? null, wiki_error: record.maintenance.wiki?.error ?? null });
