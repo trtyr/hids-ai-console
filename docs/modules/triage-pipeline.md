@@ -37,7 +37,7 @@ depth: complete
 | 不出研判结论。结论由注入的 `investigator` 产出，本模块只负责调用与转交 | `triage-monitor.js:385-389` |
 | 不做规则判定。`ruleEngine` 是外部注入的对象，本模块只把它的结论记进步骤、挂到结果上 | `triage-monitor.js:363-373`、`triage-monitor.js:390` |
 | 不存研判记录本体。记录由注入的 `history.save()` 落盘，落盘位置不在这三个文件里（`history` 的行为见 §14 第 3 条） | `triage-monitor.js:400` |
-| 不查牧云事件。事件详情与列表都由 `eventToolbox` 去取，本模块只发起调用并处理返回 | `triage-monitor.js:360`、`syslog-case.js:23`、`syslog-case.js:39` |
+| 不查牧云事件。事件详情与列表都由 `eventToolbox` 去取，本模块只发起调用并处理返回 | `triage-monitor.js:360`、`syslog-case.js:32`、`syslog-case.js:61` |
 | 不管 HTTP 路由与鉴权。三个文件的 import 列表只含 node 内置模块与本模块内的文件 | `triage-monitor.js:1-5`、`syslog-input.js:1-2`、`syslog-case.js:1-4`；另用下表后那条搜索命令验无 HTTP、路由、鉴权代码 |
 
 最后一条用可复跑命令验，不是靠 import 猜（在仓根跑，退出码 0）：
@@ -67,8 +67,8 @@ triage-monitor.js:308:      { test_tool_paths: [], authorized_operators: [], whi
 | **syslog 接收与解析** | `syslog-input.js` | §3 | `SyslogReceiver.start()`（`syslog-input.js:108`）、`parseSyslog()`（`syslog-input.js:42`） |
 | **指纹去重** | `syslog-input.js` + `triage-monitor.js` | §4 | `fingerprint()`（`syslog-input.js:92`）、`TriageMonitor._acceptSyslog()`（`triage-monitor.js:247`） |
 | **队列与游标** | `triage-monitor.js` | §5 | `poll()`（`triage-monitor.js:189`）、`drain()`（`triage-monitor.js:336`）、`persist()`（`triage-monitor.js:80`） |
-| **案件目录** | `syslog-case.js` | §6 | `writeSyslogCase()`（`syslog-case.js:64`）、`matchSyslogEvent()`（`syslog-case.js:15`） |
-| **结果写回** | `syslog-case.js` + `triage-monitor.js` | §7 | `writeSyslogResult()`（`syslog-case.js:89`）、`updateSyslogDeliveryCount()`（`syslog-case.js:121`） |
+| **案件目录** | `syslog-case.js` | §6 | `writeSyslogCase()`（`syslog-case.js:92`）、`matchSyslogEvent()`（`syslog-case.js:23`） |
+| **结果写回** | `syslog-case.js` + `triage-monitor.js` | §7 | `writeSyslogResult()`（`syslog-case.js:117`）、`updateSyslogDeliveryCount()`（`syslog-case.js:149`） |
 
 一条告警在这五个构件之间的流转：
 
@@ -188,7 +188,7 @@ JSON + 自由文本 -> 抛错: Unexpected non-whitespace character after JSON at
 
 表里没有的 MsgId 返回 `null`（`syslog-input.js:59`），接收侧直接跳过这一条，返回 `{ skipped: 'no_agent_for_msgid', msgid }`（`triage-monitor.js:253-254`）。
 
-类型名在本模块里还有两处用途：拼事件详情工具名 `get_<type>_event`（`syslog-case.js:23`）、作案件目录的第一段路径与中文标题（`syslog-case.js:69`、`syslog-case.js:58-62`）。
+类型名在本模块里还有两处用途：拼事件详情工具名 `get_<type>_event`（`syslog-case.js:32`）、作案件目录的第一段路径与中文标题（`syslog-case.js:97`、`syslog-case.js:86-90`）。
 
 ### 3.5 事件时间换算
 
@@ -286,7 +286,7 @@ webshell 改 source_ip 后指纹改变 -> true
 1. `delivery_count` 与 `event_delivery_count` 各加 1（`triage-monitor.js:260-261`）
 2. 原记录的 `repeat_count` 更新为 `event_delivery_count`，`updated_at` 刷新（`triage-monitor.js:264-265`）
 3. 原记录已完结且有结果时，把新的重复次数回写进研判记录（`triage-monitor.js:266-270`）
-4. 原记录已完结时，回写案件目录里的 `result.json` 与 `05-研判结果.md`（`triage-monitor.js:271`，实现在 `syslog-case.js:121-139`）
+4. 原记录已完结时，回写案件目录里的 `result.json` 与 `05-研判结果.md`（`triage-monitor.js:271`，实现在 `syslog-case.js:149-167`）
 
 返回给调用方的是 `{ collapsed: true, repeat_count, alert_id }`（`triage-monitor.js:274`）。
 
@@ -475,31 +475,31 @@ EOF
 
 ### 6.1 目录长什么样
 
-案件目录路径形如 `<目录根>/<MsgId>/<时间戳>-<摘要>-<随机后缀>/`（`syslog-case.js:69`）：
+案件目录路径形如 `<目录根>/<MsgId>/<时间戳>-<摘要>-<随机后缀>/`（`syslog-case.js:97`）：
 
 | 段 | 怎么来的 | 依据 |
 | --- | --- | --- |
-| MsgId | 报文里的 MsgId 原文，例如 `cloudwalker-webshell` | `syslog-case.js:69` |
-| 时间戳 | ISO 时间去掉 `-` 与 `:`、把 `T` 换成 `-`、去掉小数部分，形如 `20261117-102940` | `syslog-case.js:66` |
-| 摘要 | `sha1(原始报文 + \0 + 牧云事件 + \0 + 上下文)` 的前 8 位十六进制 | `syslog-case.js:67-68` |
-| 随机后缀 | uuid 的前 8 位 | `syslog-case.js:69` |
+| MsgId | 报文里的 MsgId 原文，例如 `cloudwalker-webshell` | `syslog-case.js:97` |
+| 时间戳 | ISO 时间去掉 `-` 与 `:`、把 `T` 换成 `-`、去掉小数部分，形如 `20261117-102940` | `syslog-case.js:94` |
+| 摘要 | `sha1(原始报文 + \0 + 牧云事件 + \0 + 上下文)` 的前 8 位十六进制 | `syslog-case.js:95-96` |
+| 随机后缀 | uuid 的前 8 位 | `syslog-case.js:97` |
 
-目录按 `0o700` 创建（`syslog-case.js:70`）。
+目录按 `0o700` 创建（`syslog-case.js:98`）。
 
 ### 6.2 目录里的文件
 
-固定 5 个（`syslog-case.js:73-78`）；传入 `wiki` 时多写 1 个（`syslog-case.js:80-83`）：
+固定 5 个（`syslog-case.js:101-106`）；传入 `wiki` 时多写 1 个（`syslog-case.js:108-111`）：
 
 | 文件 | 内容 | 依据 |
 | --- | --- | --- |
-| `00-这是什么.md` | 入口：先看 `03-研判事实.md`，再按需核对原始告警、字段、上下文 | `syslog-case.js:74` |
-| `01-原始告警.txt` | syslog 原始报文 | `syslog-case.js:75` |
-| `02-告警字段.md` | 消息时间、载荷格式，以及 `payload` 按键逐行展开的字段表 | `syslog-case.js:76` |
-| `03-研判事实.md` | 主机 IP、事件时间、来源、命令、文件路径、牧云匹配情况，外加牧云补充事件的 JSON | `syslog-case.js:77` |
-| `04-上下文.md` | 会话键、本条出现次数、投递次数、同会话时间窗，以及 `window`/`baseline`/`intel`/`history` 的 JSON | `syslog-case.js:78` |
-| `03b-判据索引.md` | 只有传了 `wiki` 才有：本次可用判据的编号与标题 | `syslog-case.js:80-83` |
+| `00-这是什么.md` | 入口：先看 `03-研判事实.md`，再按需核对原始告警、字段、上下文 | `syslog-case.js:102` |
+| `01-原始告警.txt` | syslog 原始报文 | `syslog-case.js:103` |
+| `02-告警字段.md` | 消息时间、载荷格式，以及 `payload` 按键逐行展开的字段表 | `syslog-case.js:104` |
+| `03-研判事实.md` | 主机 IP、事件时间、来源、命令、文件路径、牧云匹配情况，外加牧云补充事件的 JSON | `syslog-case.js:105` |
+| `04-上下文.md` | 会话键、本条出现次数、投递次数、同会话时间窗，以及 `window`/`baseline`/`intel`/`history` 的 JSON | `syslog-case.js:106` |
+| `03b-判据索引.md` | 只有传了 `wiki` 才有：本次可用判据的编号与标题 | `syslog-case.js:108-111` |
 
-字段表里的 `|` 会被转义、换行会被压成空格（`syslog-case.js:71-72`）。这几个材料文件并行写入，权限 `0o600`（`syslog-case.js:84-85`），函数返回 `{ case_dir, files }`（`syslog-case.js:86`）。
+字段表里的 `|` 会被转义、换行会被压成空格（`syslog-case.js:99-100`）。这几个材料文件并行写入，权限 `0o600`（`syslog-case.js:112-113`），函数返回 `{ case_dir, files }`（`syslog-case.js:114`）。
 
 **实测**：
 
@@ -522,49 +522,49 @@ files -> ["00-这是什么.md","01-原始告警.txt","02-告警字段.md","03-�
 03-研判事实.md 首行 -> # 研判事实
 ```
 
-时间戳与随机后缀每次运行都不同；摘要 `ea0fab91` 在同一份输入下不变（它由报文、牧云事件、上下文三部分算出，`syslog-case.js:67-68`）。
+时间戳与随机后缀每次运行都不同；摘要 `ea0fab91` 在同一份输入下不变（它由报文、牧云事件、上下文三部分算出，`syslog-case.js:95-96`）。
 
 ### 6.3 牧云事件怎么关联
 
-`matchSyslogEvent(toolbox, parsed)`（`syslog-case.js:15-56`）两条路径：
+`matchSyslogEvent(toolbox, parsed)`（`syslog-case.js:23-84`）两条路径：
 
-**路径一：按 `event_id` 精确读**（`syslog-case.js:20-36`）。条件是 `payload.event_id` 是合法正整数且工具箱可调用（`syslog-case.js:21`），用 `get_<类型>_event` 读详情（`syslog-case.js:23`）。回读结果要同时满足三条才算数（`syslog-case.js:26-28`）：事件 ID 对得上、主机 IP 对得上（去掉 `/32` 后缀再比）、`host_id` 是合法整数且等于 `payload.host_id`。任一条不符就是未匹配，原因写「牧云事件 ID 对应的主机与 syslog 不一致」（`syslog-case.js:29`）；读取抛错则是「牧云事件 ID 详情读取失败：…」（`syslog-case.js:33-35`）。成功时 `coverage.exact_event_id` 为真（`syslog-case.js:32`）。
+**路径一：按 `event_id` 精确读**（`syslog-case.js:29-56`）。条件是 `payload.event_id` 是合法正整数且工具箱可调用（`syslog-case.js:30`），用 `get_<类型>_event` 读详情（`syslog-case.js:32`）。回读结果要同时满足三条才算数（`syslog-case.js:37-45`）：事件 ID 对得上、主机 IP 对得上（去掉 `/32` 后缀再比）、`host_id` 是合法整数且等于 `payload.host_id`。任一条不符就是未匹配，原因写「牧云事件 ID 对应的主机与 syslog 不一致」（`syslog-case.js:46-48`）；读取抛错则是「牧云事件 ID 详情读取失败：…」（`syslog-case.js:52-55`）。成功时 `coverage.exact_event_id` 为真（`syslog-case.js:51`）。
 
-**路径二：按同主机同类型的第一批事件匹配**（`syslog-case.js:37-55`）。只查第一页 50 条（`syslog-case.js:39`），在时间差不超过 300 秒的事件里取最近的一条（`syslog-case.js:41-46`）。没有落在窗口内的 → 「同主机首批事件中没有落在事件时间前后 5 分钟的同类记录」（`syslog-case.js:47-48`）；最近的一条没有合法 ID → 未匹配（`syslog-case.js:49-51`）；查询抛错 → 「牧云事件查询失败：…」（`syslog-case.js:55`）。成功时 `coverage.first_page_only` 为真，`returned` 与 `total` 是这一页的条数与总数（`syslog-case.js:54`）。
+**路径二：按同主机同类型的第一批事件匹配**（`syslog-case.js:57-83`）。只查第一页 50 条（`syslog-case.js:61`），在时间差不超过 300 秒的事件里取最近的一条（`syslog-case.js:63-70`）。没有落在窗口内的 → 「同主机首批事件中没有落在事件时间前后 5 分钟的同类记录」（`syslog-case.js:71-74`）；最近的一条没有合法 ID → 未匹配（`syslog-case.js:75-78`）；查询抛错 → 「牧云事件查询失败：…」（`syslog-case.js:82-83`）。成功时 `coverage.first_page_only` 为真，`returned` 与 `total` 是这一页的条数与总数（`syslog-case.js:81`）。
 
-缺主机 IP 或有效事件时间时直接未匹配（`syslog-case.js:37`）。**未匹配不是错误**，它是正常分支：主流程据此改走 `runUnmatchedSyslog`（`triage-monitor.js:385-386`）。
+缺主机 IP 或有效事件时间时直接未匹配（`syslog-case.js:57-59`）。**未匹配不是错误**，它是正常分支：主流程据此改走 `runUnmatchedSyslog`（`triage-monitor.js:385-386`）。
 
 ### 6.4 读回材料
 
-`readCaseFile(caseInfo, name)`（`syslog-case.js:141-146`）有道闸：
+`readCaseFile(caseInfo, name)`（`syslog-case.js:169-174`）有道闸：
 
-- `name` 不在 `caseInfo.files` 里 → 抛「研判材料文件不在当前告警目录」（`syslog-case.js:142`）
-- 内容超过 25000 字符 → 返回 `{ name, error: '材料超过本次读取上限，请使用 03-研判事实.md 的摘要' }`，**不给内容**（`syslog-case.js:144`）
+- `name` 不在 `caseInfo.files` 里 → 抛「研判材料文件不在当前告警目录」（`syslog-case.js:170`）
+- 内容超过 25000 字符 → 返回 `{ name, error: '材料超过本次读取上限，请使用 03-研判事实.md 的摘要' }`，**不给内容**（`syslog-case.js:172`）
 
 ## 7 关键路径五：结果写回
 
 ### 7.1 写回什么
 
-`writeSyslogResult(caseInfo, result)`（`syslog-case.js:89-119`）往案件目录里追加两个文件：
+`writeSyslogResult(caseInfo, result)`（`syslog-case.js:117-147`）往案件目录里追加两个文件：
 
-- `05-研判结果.md`：给运维看的（`syslog-case.js:92-111`）
-- `result.json`：`result` 的完整序列化，结构化证据、引用、独立复核都在里面（`syslog-case.js:112`）
+- `05-研判结果.md`：给运维看的（`syslog-case.js:120-139`）
+- `result.json`：`result` 的完整序列化，结构化证据、引用、独立复核都在里面（`syslog-case.js:140`）
 
 md 每一行的取值与缺省：
 
 | 行 | 取自 | 缺省 | 依据 |
 | --- | --- | --- | --- |
-| 结论 | `verdict.verdict_label` | 存疑 | `syslog-case.js:94` |
-| 置信度 | `verdict.confidence` | 低 | `syslog-case.js:95` |
-| 事件关联 | `result.syslog.event_id_match` 为真则「已关联牧云事件」，否则「牧云事件未匹配」 | — | `syslog-case.js:96` |
-| 重复投递 | `result.repeat_count` | 1 次 | `syslog-case.js:97` |
-| 给运维看的报告 | `verdict.report` → `verdict.analysis` → `verdict.summary` | 本次研判未生成报告 | `syslog-case.js:101` |
-| 可核验事实 | `verdict.claims` 的条数 | 0 条 | `syslog-case.js:105` |
-| 证据校验 | `result.validation.ok` 为真则「通过」，否则「未通过，需人工复核」 | — | `syslog-case.js:105` |
-| 数据缺口 | `verdict.missing_evidence` 用 `；` 连接 | 无已记录缺口 | `syslog-case.js:106` |
-| 建议行动 | `verdict.next_actions` 用 `；` 连接 | 人工复核 | `syslog-case.js:107` |
+| 结论 | `verdict.verdict_label` | 存疑 | `syslog-case.js:122` |
+| 置信度 | `verdict.confidence` | 低 | `syslog-case.js:123` |
+| 事件关联 | `result.syslog.event_id_match` 为真则「已关联牧云事件」，否则「牧云事件未匹配」 | — | `syslog-case.js:124` |
+| 重复投递 | `result.repeat_count` | 1 次 | `syslog-case.js:125` |
+| 给运维看的报告 | `verdict.report` → `verdict.analysis` → `verdict.summary` | 本次研判未生成报告 | `syslog-case.js:129` |
+| 可核验事实 | `verdict.claims` 的条数 | 0 条 | `syslog-case.js:133` |
+| 证据校验 | `result.validation.ok` 为真则「通过」，否则「未通过，需人工复核」 | — | `syslog-case.js:133` |
+| 数据缺口 | `verdict.missing_evidence` 用 `；` 连接 | 无已记录缺口 | `syslog-case.js:134` |
+| 建议行动 | `verdict.next_actions` 用 `；` 连接 | 人工复核 | `syslog-case.js:135` |
 
-末尾一句「结构化证据、引用与独立复核见同目录 result.json」（`syslog-case.js:109`）。这两个文件各自用「临时文件 + `rename`」落位，权限 `0o600`，临时名带 uuid（`syslog-case.js:113-118`）。
+末尾一句「结构化证据、引用与独立复核见同目录 result.json」（`syslog-case.js:137`）。这两个文件各自用「临时文件 + `rename`」落位，权限 `0o600`，临时名带 uuid（`syslog-case.js:141-146`）。
 
 ### 7.2 什么时候写
 
@@ -574,15 +574,15 @@ md 每一行的取值与缺省：
 
 ### 7.3 重复次数回写
 
-同秒重复投递且原记录已完结时，`updateSyslogDeliveryCount(caseDir, count)`（`syslog-case.js:121-139`）改两个地方：
+同秒重复投递且原记录已完结时，`updateSyslogDeliveryCount(caseDir, count)`（`syslog-case.js:149-167`）改两个地方：
 
 | 改动 | 做法 | 依据 |
 | --- | --- | --- |
-| `result.json` 的 `repeat_count` | 直接赋值 | `syslog-case.js:127` |
-| `result.json` 的 `syslog.repeat_count` | 有 `syslog` 字段才改 | `syslog-case.js:128` |
-| `05-研判结果.md` 的「重复投递」行 | 正则 `^重复投递：.*$` 整行替换 | `syslog-case.js:133` |
+| `result.json` 的 `repeat_count` | 直接赋值 | `syslog-case.js:155` |
+| `result.json` 的 `syslog.repeat_count` | 有 `syslog` 字段才改 | `syslog-case.js:156` |
+| `05-研判结果.md` 的「重复投递」行 | 正则 `^重复投递：.*$` 整行替换 | `syslog-case.js:161` |
 
-两个边界：`caseDir` 为空直接返回（`syslog-case.js:122`）；`result.json` 不存在也直接返回（`syslog-case.js:126`）。写回同样是临时文件 + `rename`（`syslog-case.js:135-137`）。
+两个边界：`caseDir` 为空直接返回（`syslog-case.js:150`）；`result.json` 不存在也直接返回（`syslog-case.js:154`）。写回同样是临时文件 + `rename`（`syslog-case.js:163-165`）。
 
 调用点在 `triage-monitor.js:271`——只有原记录已经 `done` 时才回写案件目录；原记录还在排队或运行中时不回写。
 
@@ -741,15 +741,15 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | `delivery_count` | 整数 | 次 | ≥ 1 | 1 | — | `triage-monitor.js:286` |
 | `event_delivery_count` | 整数 | 次 | ≥ 1 | 1 | — | `triage-monitor.js:287` |
 | `watermark` | 字符串 | — | ISO 8601 时间戳 | `null` | `null` = 游标还没初始化 | `triage-monitor.js:40`、`52` |
-| `watermark_ids` | 字符串集合 | 个 | 与游标同一时刻的事件 ID | 空集合 | 空集合 = 该时刻没有事件 | `triage-monitor.js:41`、`53` |
+| `watermark_ids` | 字符串集合 | 个 | 与游标同一时刻的事件 ID | 空集合 | 空集合 = 该时刻没有事件 | `triage-monitor.js:41`、`80` |
 | 事件时间（`eventSeconds` 返回） | 整数或 `null` | 秒 | Unix 秒 | — | `null` = 时间解析不出来 | `syslog-input.js:63-71` |
 | 时间偏移 `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | 整数 | 分钟 | 绝对值 ≤ 840（14 小时），超出按 0 | 0 | — | `syslog-input.js:61`、`69` |
-| 匹配时间差 `gap_seconds` | 整数或 `null` | 秒 | ≥ 0 | `null` | `null` = 缺时间，算不出差 | `syslog-case.js:31`、`53` |
-| 匹配覆盖 `coverage.returned` / `coverage.total` | 整数 | 条 | ≥ 0 | — | — | `syslog-case.js:32`、`54` |
+| 匹配时间差 `gap_seconds` | 整数或 `null` | 秒 | ≥ 0 | `null` | `null` = 缺时间，算不出差 | `syslog-case.js:50`、`80` |
+| 匹配覆盖 `coverage.returned` / `coverage.total` | 整数 | 条 | ≥ 0 | — | — | `syslog-case.js:51`、`81` |
 | 会话窗口 `window` | 数组 | 条 | 单个会话最多留 200 条 | 空数组 | — | `triage-monitor.js:306`、`306` |
 | 会话窗口跨度 `window_seconds` | 整数 | 秒 | 600 | 600 | — | `triage-monitor.js:316` |
 | 历史结论 `history` | 数组 | 条 | 最多 50 条 | 空数组 | — | `triage-monitor.js:314` |
-| 材料单文件读取上限 | 整数 | 字符 | 25000 | — | 超出只返回错误、不返回内容 | `syslog-case.js:144` |
+| 材料单文件读取上限 | 整数 | 字符 | 25000 | — | 超出只返回错误、不返回内容 | `syslog-case.js:172` |
 | 并发上限 `concurrency` | 整数 | 个 | ≥ 1 | 2 | — | `triage-monitor.js:20` |
 | 轮询间隔 `intervalMs` | 整数 | 毫秒 | ≥ 1 | 30000 | — | `triage-monitor.js:20` |
 | 案件列表分页 `count` | 整数 | 条 | 1–50 | 20 | 越界回 400「分页参数无效」 | `server.js:316-319` |
@@ -759,12 +759,12 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | 轮询页大小 | 整数 | 条 | 50 | 50 | — | `triage-monitor.js:201` |
 | 轮询页数上限 | 整数 | 页 | 20 | 20 | — | `triage-monitor.js:200` |
 | 步骤留痕上限 | 整数 | 条 | 80 | 80 | 超出丢最早一条 | `triage-monitor.js:382` |
-| 案件材料文件数 | 整数 | 个 | 5（传入 wiki 时 6） | — | — | `syslog-case.js:73-78`、`80-83` |
+| 案件材料文件数 | 整数 | 个 | 5（传入 wiki 时 6） | — | — | `syslog-case.js:101-106`、`80-83` |
 | 指纹长度 | 整数 | 字符 | 16 | — | — | `syslog-input.js:100` |
-| 案例摘要长度 | 整数 | 字符 | 8 | — | — | `syslog-case.js:68` |
+| 案例摘要长度 | 整数 | 字符 | 8 | — | — | `syslog-case.js:96` |
 | 同秒判定阈值 | 整数 | 秒 | 0（严格相等） | — | — | `triage-monitor.js:258` |
 | 出现次数归并窗口 | 整数 | 秒 | 300 | — | — | `triage-monitor.js:276` |
-| 牧云事件匹配时间窗 | 整数 | 秒 | 300（前后各 5 分钟） | — | — | `syslog-case.js:45` |
+| 牧云事件匹配时间窗 | 整数 | 秒 | 300（前后各 5 分钟） | — | — | `syslog-case.js:69` |
 
 ## 10 行为承诺与不变量
 
@@ -775,7 +775,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | `R-TRIAGE-01` | 同秒重复投递合并到同一条记录，重复次数累加 | 同秒两条投递生成两条记录 | `triage-monitor.js:258-274` | 同一告警被研判多次 |
 | `R-TRIAGE-02` | 记录状态沿 `queued → running → done\|failed` 迁移；两条例外：手动重试 `enqueue(..., { retry: true })` 把 `done` / `failed` 记录放回 `queued`，进程重启把 `running` 改回 `queued` | 非重试路径上出现 `done → queued`，或重启后仍有 `running` 卡住 | `triage-monitor.js:62-63`、`triage-monitor.js:176-183`、`triage-monitor.js:341`、`triage-monitor.js:403`、`triage-monitor.js:417` | 队列里出现悬空记录，任务不跑 |
 | `R-TRIAGE-03` | 案件材料在研判开始前就写好 | 研判进行中读不到 `03-研判事实.md` | `triage-monitor.js:374-378` 早于 `triage-monitor.js:385` | 模型拿不到材料 |
-| `R-TRIAGE-04` | 状态文件与结果文件都用「临时文件 + rename」替换，临时文件带 `wx` 标志 | 读到写了一半的状态文件 | `triage-monitor.js:86-88`、`syslog-case.js:113-118`、`135-137` | 读到半截 JSON |
+| `R-TRIAGE-04` | 状态文件与结果文件都用「临时文件 + rename」替换，临时文件带 `wx` 标志 | 读到写了一半的状态文件 | `triage-monitor.js:86-88`、`syslog-case.js:141-146`、`163-165` | 读到半截 JSON |
 | `R-TRIAGE-05` | 暂停期间收到的 syslog 不入队 | 暂停后队列里多出记录 | `triage-monitor.js:249` | 恢复后突然跑一批积压 |
 | `R-TRIAGE-06` | 从暂停恢复时，暂停期间积压的 `queued` 记录被删除，不补跑 | 恢复后积压任务被自动执行 | `triage-monitor.js:155-162` | 恢复即触发一批旧告警 |
 | `R-TRIAGE-07` | 牧云部分事件类型读取失败时游标不推进 | 部分失败后游标仍前移 | `triage-monitor.js:202`、`212` | 中间那批告警被静默跳过 |
@@ -787,7 +787,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 
 | 不保证 | 依据 |
 | --- | --- |
-| 不保证每条告警都匹配到牧云事件；匹配失败是正常分支 | `syslog-case.js:19-55` |
+| 不保证每条告警都匹配到牧云事件；匹配失败是正常分支 | `syslog-case.js:27-83` |
 | 不保证同一告警只研判一次；不同秒的重复投递会生成新记录 | `triage-monitor.js:276-280` |
 | 不保证 `cases()` 能列出研判记录；它只列有原始报文的记录 | `triage-monitor.js:117` |
 | 不保证结论正确；结论由 `investigator` 产出，本模块只搬运 | `triage-monitor.js:385-389` |
@@ -806,15 +806,15 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | 状态文件不是合法 JSON | `JSON.parse` 抛错（`triage-monitor.js:57`），`start()` 失败 | 进程起不来 | 能，修好文件即可 | 无 |
 | 牧云部分事件类型读取失败 | `lastError` =「部分牧云事件类型读取失败，暂缓推进自动研判游标」 | 游标不动，队列不动（`triage-monitor.js:202`、`212`） | 能，下一轮自动重试 | 延迟处理 |
 | 一轮新增超过 20 页 | `lastError` =「新增告警超过本轮扫描上限，请检查自动研判积压」 | 游标不推进（`triage-monitor.js:223`） | 能，下一轮重来 | 积压 |
-| 牧云事件详情读取失败 | 匹配返回未匹配，原因写明「牧云事件 ID 详情读取失败：…」（`syslog-case.js:33-35`） | 走未匹配分支 | — | 结论按未匹配口径给 |
-| 牧云事件列表查询失败 | 匹配返回未匹配，原因写明「牧云事件查询失败：…」（`syslog-case.js:55`） | 同上 | — | 同上 |
-| 牧云事件与 syslog 主机对不上 | 匹配返回未匹配，原因写明「牧云事件 ID 对应的主机与 syslog 不一致」（`syslog-case.js:26-29`） | 同上 | — | 同上 |
+| 牧云事件详情读取失败 | 匹配返回未匹配，原因写明「牧云事件 ID 详情读取失败：…」（`syslog-case.js:52-55`） | 走未匹配分支 | — | 结论按未匹配口径给 |
+| 牧云事件列表查询失败 | 匹配返回未匹配，原因写明「牧云事件查询失败：…」（`syslog-case.js:82-83`） | 同上 | — | 同上 |
+| 牧云事件与 syslog 主机对不上 | 匹配返回未匹配，原因写明「牧云事件 ID 对应的主机与 syslog 不一致」（`syslog-case.js:37-48`） | 同上 | — | 同上 |
 | 研判抛错 | 记录置 `failed`，`detail` 截断到 250 字符（`triage-monitor.js:416-417`） | 队列记录保留，可再入队 | 能，用 `enqueue(..., { retry: true })` | 无 |
 | 进度落盘失败 | `onProgress` 里失败：`lastError` =「研判进度保存失败：…」（`triage-monitor.js:383`）；`drain()` 里 run 的兜底失败：`lastError` =「研判状态保存失败：…」（`triage-monitor.js:345`） | 研判继续 | — | 记录里的阶段可能滞后 |
 | 案件目录写不出来 | `run()` 抛错，记录转 `failed`（`triage-monitor.js:374-378`、`390-391`） | 记录保留 | 能 | 无 |
-| 回写重复次数时 `result.json` 不存在 | 直接返回，两个文件都不动（`syslog-case.js:126`） | 重复次数没更新 | — | 无 |
-| 读材料超过 25000 字符 | 返回 `{ name, error }`，不给内容（`syslog-case.js:144`） | — | 能，改读摘要文件 | 用 `03-研判事实.md` |
-| 读材料文件名不在清单里 | 抛「研判材料文件不在当前告警目录」（`syslog-case.js:142`） | — | 不能，除非换个在清单里的名字 | 无 |
+| 回写重复次数时 `result.json` 不存在 | 直接返回，两个文件都不动（`syslog-case.js:154`） | 重复次数没更新 | — | 无 |
+| 读材料超过 25000 字符 | 返回 `{ name, error }`，不给内容（`syslog-case.js:172`） | — | 能，改读摘要文件 | 用 `03-研判事实.md` |
+| 读材料文件名不在清单里 | 抛「研判材料文件不在当前告警目录」（`syslog-case.js:170`） | — | 不能，除非换个在清单里的名字 | 无 |
 
 ## 12 资源与容量
 
@@ -829,7 +829,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | 会话清理阈值 | 与当前事件相差超过 1200 秒的会话被删 | `triage-monitor.js:332-333` | 代码常量 |
 | 附在上下文里的历史结论条数 | 50 | `triage-monitor.js:314` | 代码常量 |
 | 记录里的步骤留痕 | 80 条，超出丢最早一条 | `triage-monitor.js:382` | 代码常量 |
-| 材料单文件可读上限 | 25000 字符 | `syslog-case.js:144` | 代码常量 |
+| 材料单文件可读上限 | 25000 字符 | `syslog-case.js:172` | 代码常量 |
 | 去重指纹长度 | 16 字符 | `syslog-input.js:100` | 实测（§4.1） |
 | 落盘频率 | 阶段变更时写快照，写链串行；并非每个阶段都单独落一次——例如「关联事件」在写完案件目录后一起落盘 | `triage-monitor.js:84`、`triage-monitor.js:359`、`triage-monitor.js:377`、`triage-monitor.js:383`、`triage-monitor.js:418` | 代码结构 |
 | 单条告警端到端延迟 | **未测量** | — | 本卡没有牧云与模型凭据，没跑过端到端 |
@@ -847,7 +847,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 
 **限制**
 
-- 牧云事件匹配只查同主机同类事件的**首批 50 条**，更早或更晚的同类事件匹配不到（`syslog-case.js:39`、`54`）
+- 牧云事件匹配只查同主机同类事件的**首批 50 条**，更早或更晚的同类事件匹配不到（`syslog-case.js:61`、`81`）
 - 同一指纹超过 5 分钟就是新记录（`triage-monitor.js:276`）
 - 案件材料在研判前写好，研判结果不在材料里（`triage-monitor.js:374-378`、`373`）
 - 暂停期间积压的任务不补跑（`triage-monitor.js:156-157` 的注释）
@@ -856,7 +856,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 
 - 键值对解析先把已识别的带引号字段遮住，再解析裸字段——否则命令里的变量会被当成告警字段（遮住与裸字段解析的实现在 `syslog-input.js:24-27`，理由写在 `syslog-input.js:22-23` 的注释里）
 - 事件时间显式给偏移量，而不是用接收服务器的本地时区（`syslog-input.js:66-67`）
-- 优先按 `event_id` 精确读取；旧载荷没有 ID 时才退回「同类同主机的首批事件时间匹配」（`syslog-case.js:14`）
+- 优先按 `event_id` 精确读取；旧载荷没有 ID 时才退回「同类同主机的首批事件时间匹配」（`syslog-case.js:22`）
 - 指纹分类型选字段：可疑命令只看命令与文件路径，蜜罐只看三端地址（`syslog-input.js:95-98`）——🟡 推断目的是让「同一件事的重复投递」指纹相同、不同告警指纹不同，依据是同秒折叠正是靠指纹相同才发生（`triage-monitor.js:258`）
 - 恢复时以按钮点击时刻作新游标，并保留点击所在那一秒——牧云事件时间精确到秒，保留这一秒是为了不漏掉同秒稍后产生的告警（`triage-monitor.js:156-158` 的注释）
 
@@ -864,7 +864,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 
 - 结构化数据后面跟自由文本时，末尾那个带引号的字段会被静默丢掉（§3.3，实测）
 - 轮询新发现的告警是**倒序入队**（`triage-monitor.js:230`），先入队的后跑
-- 案件目录的时间戳与随机后缀每次都不同，只有摘要那 8 位在同一份输入下稳定（`syslog-case.js:66-69`）
+- 案件目录的时间戳与随机后缀每次都不同，只有摘要那 8 位在同一份输入下稳定（`syslog-case.js:94-97`）
 
 ## 14 没查到的
 

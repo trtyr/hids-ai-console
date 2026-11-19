@@ -35,11 +35,11 @@
    - **syslog 推送**：UDP 监听，默认 `127.0.0.1:15514`（`server.js:367-368`、`syslog-input.js:104`）。报文按 RFC5424 解析，正文支持结构化数据、JSON、键值对三种形态（`syslog-input.js:42-57`）。
    - **轮询**：`TriageMonitor.poll()` 定期拉事件列表（`triage-monitor.js:164`）。哪种生效由 `HIDS_TRIAGE_INPUT_MODE` 决定，默认 `syslog`（`server.js:40`）。
 2. **去重与排队**。指纹相同、落在同一秒的重复投递合并为一条并累加次数（`triage-monitor.js:232-249`）；队列状态落盘，重启后未完成任务回到 `queued` 继续跑（`triage-monitor.js:56-57`）。
-3. **关联牧云事件**。优先按 syslog 里的 `event_id` 精确回查并核对主机身份，回查不到才按主机与时间窗口匹配（`syslog-case.js:15-56`）。匹配不上时走「未匹配」分支，结论强制为存疑（`investigation-agent.js:558-593`）。
+3. **关联牧云事件**。优先按 syslog 里的 `event_id` 精确回查并核对主机身份，回查不到才按主机与时间窗口匹配（`syslog-case.js:23-84`）。匹配不上时走「未匹配」分支，结论强制为存疑（`investigation-agent.js:558-593`）。
 4. **规则预筛**（仅常规研判）。规则引擎按主机、字段条件与有效期评估当前事件，命中则作为「误报候选」交给 AI 复核，而不是直接下结论（`triage-rules.js:258-305`、`server.js:117-129`）。
 5. **取证**。研判智能体自主选择工具查询，最多 6 轮对话、8 次工具调用（`investigation-agent.js:378`、`investigation-agent.js:396`）。每次调用产出一条带证据编号的记录（`agent-tools.js:57-68`）。
 6. **出结论**。模型输出 JSON，结论被映射到三态（`investigation-agent.js:63-73`），随后进入独立复核、引用校验、多级降级三道关卡（第 6 节）。
-7. **落盘**。结论写进研判记录库（`investigation-store.js:14-23`）；syslog 触发的案件还会生成一份可读的案件目录，含原始告警、字段表、研判事实、上下文与结果（`syslog-case.js:64-119`）。
+7. **落盘**。结论写进研判记录库（`investigation-store.js:14-23`）；syslog 触发的案件还会生成一份可读的案件目录，含原始告警、字段表、研判事实、上下文与结果（`syslog-case.js:92-147`）。
 8. **交付**。给客户看的 `report` 被限制在 300 字符以内（`triage-output.js:1`、`triage-output.js:47-50`、`triage-output.js:64`），并且必须与三态结论、已核实事实、数据缺口三者一致，否则会被重写（`triage-output.js:35-66`）。
 
 **贯穿全程的一条纪律**：本后端不下指令。它只产出建议——每份研判记录都带 `auto_action: false`（`investigation-agent.js:555`），意思是「未执行任何处置动作」。隔离、封禁、加白一类动作不在本仓范围内。
@@ -56,11 +56,11 @@
 
 ### 3.2 维护 API（`maintenance-server.js`）
 
-`node maintenance-server.js` 启动，监听地址写死为 `127.0.0.1`，端口取 `HIDS_MAINTENANCE_PORT`，默认 `18081`（`maintenance-server.js:167-168`）。加 `--preview` 参数进入只读预览模式，此时不允许上传或替换（`maintenance-server.js:107`）。
+`node maintenance-server.js` 启动，监听地址写死为 `127.0.0.1`，端口取 `HIDS_MAINTENANCE_PORT`，默认 `18081`（`maintenance-server.js:175-176`）。加 `--preview` 参数进入只读预览模式，此时不允许上传或替换（`maintenance-server.js:108`）。启动成功往 stdout 打一行 `maintenance.listening`；旧的中文启动文案 `HIDS maintenance（只读预览）: http://127.0.0.1:<port>` 留在该行的 `message` 字段里，按子串 grep 它的部署脚本与就绪探测照旧能用（`maintenance-server.js:165-177`）。
 
 ### 3.3 策略包制作（`package-policy.js`）
 
-一个命令行脚本，两个用法（`package-policy.js:7-36`）：
+一个命令行脚本，两个用法（`package-policy.js:15-58`）：
 
 - `node package-policy.js --init-keys <内部密钥目录>`——生成 Ed25519 签名密钥对与 32 字节加密密钥，私钥留在内部不随包交付。
 - `node package-policy.js <公开更新说明.json> <输出.hids-policy>`——读取当前提示词快照、打成加密签名包。
@@ -103,7 +103,7 @@
 
 ### 3.6 日志（`log.js`）
 
-全后端只有一个日志落点：`log.js`。`server.js`、`triage-monitor.js`、`syslog-input.js` 都 `import { log } from './log.js'`，这三份文件里不再有自己的 `console.log`。
+全后端只有一个日志落点：`log.js`。`server.js`、`triage-monitor.js`、`syslog-input.js`、`maintenance-server.js`、`package-policy.js`、`syslog-case.js` 都 `import { log } from './log.js'`，这六份文件里不再有自己的打印（P003-T023 收掉前三份，P003-T027 收掉后三份）。
 
 `log(event, fields = {}, level = 'info')` 往 stdout 写**一行一条 JSON**，键顺序固定：
 
@@ -131,13 +131,26 @@
 | `syslog.received` / `syslog.collapsed` | 收下一条 / 重复投递合并到已有记录 | `alert_id` `msgid` `event_type` `occurrence` / `alert_id` `repeat_count` |
 | `syslog.parse_failed` / `syslog.skipped` | 报文解析失败 / 无对应事件类型（`reason=no_agent_for_msgid`）或队列已暂停（`reason=paused`） | `error` `bytes` / `reason` `msgid` |
 | `syslog.receiver_error` / `syslog.handler_failed` / `syslog.accept_failed` | socket 错误 / 收包回调抛错 / 收包链抛错 | `error` |
+| `syslog.match_failed` | syslog 报文没对上牧云事件（`syslog-case.js` 的 `matchSyslogEvent` 每条失败分支都从这里出） | `rule` `msgid` `event_type` `reason`，加差在哪：`mismatch` / `missing` / `candidates` `nearest_gap_seconds` `window_seconds` |
 | `triage.enqueued` | 进入研判队列 | `alert_id` `source`（`manual` / `retry` / `poll`） |
 | `triage.done` / `triage.failed` | 研判完成 / 失败 | `alert_id` `verdict` `attempts` `duration_ms` / `alert_id` `attempts` `error` |
 | `triage.persist_failed` / `triage.poll_failed` | 状态落盘失败 / 轮询失败 | `alert_id` `error` / `error` |
 | `maintenance.result` | 误报维护收尾（两侧都落定） | `alert_id` `status` `rule` `wiki` `rule_error` `wiki_error` |
+| `maintenance.listening` | 维护端 `server.listen` 成功 | `host` `port` `preview` `message`（旧的中文启动文案） |
+| `policy.keys_created` / `policy.package_built` | `package-policy.js` 生成密钥 / 做成升级包 | `directory` `files` / `output` `version` `sequence` `target`，两条都带 `message`（旧的中文提示文案） |
+| `policy.usage` | `package-policy.js` 参数不对，打印用法后退出码 1 | `message`（`level=error`） |
 | `log.serialize_failed` | 日志字段序列化不出来，兜底一条 | `level=error` |
 
 `cloudwalker.call_failed` 的 `op` 取值：`status` / `alerts` / `alert`（告警详情）/ `tools`（牧云 API 工具列表）/ `mcp_tools` / `call_tool` / `list_events`（syslog 事件匹配）。
+
+`syslog.match_failed` 的 `rule` 取值与各自的「差在哪」字段（`syslog-case.js:7-12`）：
+
+| `rule` | 哪条规则没命中 | 差在哪 |
+| --- | --- | --- |
+| `msgid_map` | `syslog-input.js:10-17` 的 MsgId → 事件类型映射表 | 表里没有这个 `msgid` |
+| `payload` | 前置字段齐不齐 | `missing`：缺 `host_ip` 或 `event_time` |
+| `event_id` | 按 syslog `event_id` 精确读取牧云事件 | `mismatch.{event_id,host_ip,host_id}`：只列真对不上的项，每项 `{wanted, returned}` |
+| `time_window` | 同主机 ±5 分钟时间窗 | `window_seconds`、`candidates`、`nearest_gap_seconds`（最近一条差多远）；查询本身失败时带 `reason` |
 日志只上 stdout，不落文件、不轮转；采集交给部署端（本卡不引入日志依赖）。
 
 ## 4. 模块分层与依赖
@@ -329,7 +342,7 @@ P003-T019 之前的版本把这里算成「本文件所在目录的上一级」+
 | `.data/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:41` |
 | `.data/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:42` |
 | `.data/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:47`、`triage-monitor.js:69-71` |
-| `.data/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:51`、`syslog-case.js:64-87` |
+| `.data/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:51`、`syslog-case.js:92-115` |
 | `.data/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:52`、`triage-monitor.js:282` |
 | `.data/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:53`、`triage-monitor.js:284` |
 | `.data/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:54` |
@@ -342,18 +355,18 @@ P003-T019 之前的版本把这里算成「本文件所在目录的上一级」+
 
 ### 8.3 案件目录长什么样
 
-syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间戳>-<摘要>-<随机后缀>/`（`syslog-case.js:66-70`）。目录里先是研判材料：
+syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间戳>-<摘要>-<随机后缀>/`（`syslog-case.js:94-98`）。目录里先是研判材料：
 
 | 文件 | 内容 | 证据 |
 | --- | --- | --- |
-| `00-这是什么.md` | 入口，说明先看哪份文件 | `syslog-case.js:74` |
-| `01-原始告警.txt` | syslog 原始报文 | `syslog-case.js:75` |
-| `02-告警字段.md` | 字段表 | `syslog-case.js:76` |
-| `03-研判事实.md` | 主机、时间、来源、命令、牧云匹配情况与 API 补充事件 | `syslog-case.js:77` |
-| `04-上下文.md` | 同会话时间窗、基线、情报、历史结论 | `syslog-case.js:78` |
-| `03b-判据索引.md` | 本次可用判据编号（传入 wiki 时才有） | `syslog-case.js:80-83` |
+| `00-这是什么.md` | 入口，说明先看哪份文件 | `syslog-case.js:102` |
+| `01-原始告警.txt` | syslog 原始报文 | `syslog-case.js:103` |
+| `02-告警字段.md` | 字段表 | `syslog-case.js:104` |
+| `03-研判事实.md` | 主机、时间、来源、命令、牧云匹配情况与 API 补充事件 | `syslog-case.js:105` |
+| `04-上下文.md` | 同会话时间窗、基线、情报、历史结论 | `syslog-case.js:106` |
+| `03b-判据索引.md` | 本次可用判据编号（传入 wiki 时才有） | `syslog-case.js:108-111` |
 
-研判结束后追加 `05-研判结果.md` 与 `result.json`（`syslog-case.js:112`）。模型在常规研判里可以用 `read_case_file` 工具读这些文件，但文件内容被当作**数据**而不是指令（工具描述写在 `investigation-agent.js:101-103`）。
+研判结束后追加 `05-研判结果.md` 与 `result.json`（`syslog-case.js:140`）。模型在常规研判里可以用 `read_case_file` 工具读这些文件，但文件内容被当作**数据**而不是指令（工具描述写在 `investigation-agent.js:101-103`）。
 
 ### 8.4 写入习惯
 
@@ -390,18 +403,18 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 维护端是独立进程，边界比业务端严（`maintenance-server.js`）：
 
-- 只接受回环来源，非回环直接 403（`maintenance-server.js:55`）；预览模式还要求监听地址本身也是回环（`maintenance-server.js:56`）。
-- 写操作要带 `x-hids-maintenance: 1` 头，`Sec-Fetch-Site` 只能是 `same-origin` 或 `none`，`Origin` 头存在时必须与 `Host` 同源（`maintenance-server.js:28-39`、`maintenance-server.js:67`）。
-- 登录失败计数：同一来源 60 秒内失败 10 次就锁 1 分钟（`maintenance-server.js:45-49`、`maintenance-server.js:74`）。
-- 会话是 8 小时的 HttpOnly + SameSite=Strict Cookie，同时最多保留 100 个（`maintenance-server.js:12-13`、`maintenance-server.js:65`、`maintenance-server.js:87`）。
-- 账号角色分 `updater` 与 `viewer`；只有 `updater` 能上传与替换（`maintenance-server.js:107-108`、`maintenance-server.js:148-149`）。非预览模式下 `HIDS_MAINTENANCE_USER` 与 `HIDS_MAINTENANCE_PASSWORD` 必须都配（`maintenance-server.js:146-147`）。
+- 只接受回环来源，非回环直接 403（`maintenance-server.js:56`）；预览模式还要求监听地址本身也是回环（`maintenance-server.js:57`）。
+- 写操作要带 `x-hids-maintenance: 1` 头，`Sec-Fetch-Site` 只能是 `same-origin` 或 `none`，`Origin` 头存在时必须与 `Host` 同源（`maintenance-server.js:29-40`、`maintenance-server.js:68`）。
+- 登录失败计数：同一来源 60 秒内失败 10 次就锁 1 分钟（`maintenance-server.js:46-50`、`maintenance-server.js:75`）。
+- 会话是 8 小时的 HttpOnly + SameSite=Strict Cookie，同时最多保留 100 个（`maintenance-server.js:13-14`、`maintenance-server.js:66`、`maintenance-server.js:88`）。
+- 账号角色分 `updater` 与 `viewer`；只有 `updater` 能上传与替换（`maintenance-server.js:108-109`、`maintenance-server.js:149-150`）。非预览模式下 `HIDS_MAINTENANCE_USER` 与 `HIDS_MAINTENANCE_PASSWORD` 必须都配（`maintenance-server.js:147-148`）。
 
 ### 9.5 升级包的密码学边界
 
 `.hids-policy` 包是「AES-256-GCM 加密 + Ed25519 签名」的双层信封（`update-store.js:28-40`）：
 
-- 加密密钥必须 32 字节（`update-store.js:29`、`maintenance-server.js:154`）。
-- 签名私钥必须是 Ed25519（`package-policy.js:30`），验签公钥同样要求 Ed25519（`maintenance-server.js:158`）。
+- 加密密钥必须 32 字节（`update-store.js:29`、`maintenance-server.js:155`）。
+- 签名私钥必须是 Ed25519（`package-policy.js:39`），验签公钥同样要求 Ed25519（`maintenance-server.js:159`）。
 - 包大小上限 2 MB（`update-store.js:5`、`update-store.js:42`）。
 - 包的 `target` 必须与本环境的 `HIDS_UPDATE_TARGET` 一致（`update-store.js:75`）。
 - 发布序号必须大于当前已装序号，且同一个版本号不能重复应用（`update-store.js:95-97`）。
@@ -443,15 +456,15 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 | 变量 | 缺省 | 作用 | 读取位置 |
 | --- | --- | --- | --- |
-| `HIDS_MAINTENANCE_USER` | 无 | 维护账号；非预览模式下必填 | `maintenance-server.js:146` |
-| `HIDS_MAINTENANCE_PASSWORD` | 无 | 维护密码；非预览模式下必填 | `maintenance-server.js:146` |
-| `HIDS_MAINTENANCE_ROLE` | `updater` | 账号角色，只能是 `updater` 或 `viewer` | `maintenance-server.js:148-149` |
-| `HIDS_MAINTENANCE_PORT` | `18081` | 维护 API 端口（监听地址写死回环） | `maintenance-server.js:167` |
-| `HIDS_UPDATE_KEY_FILE` | 无 | 32 字节对称加密密钥文件 | `maintenance-server.js:152`、`package-policy.js:21` |
-| `HIDS_UPDATE_PUBLIC_KEY_FILE` | 无 | Ed25519 验签公钥 | `maintenance-server.js:156` |
-| `HIDS_UPDATE_PRIVATE_KEY_FILE` | 无 | Ed25519 签名私钥（只在制作包时用） | `package-policy.js:21` |
-| `HIDS_UPDATE_STORE_DIR` | `<提示词覆盖目录>/update-packages` | 已上传升级包的存放目录 | `maintenance-server.js:160`、`update-store.js:62` |
-| `HIDS_UPDATE_TARGET` | 无 | 目标环境标识，包与环境的匹配依据 | `maintenance-server.js:160`、`package-policy.js:21` |
+| `HIDS_MAINTENANCE_USER` | 无 | 维护账号；非预览模式下必填 | `maintenance-server.js:147` |
+| `HIDS_MAINTENANCE_PASSWORD` | 无 | 维护密码；非预览模式下必填 | `maintenance-server.js:147` |
+| `HIDS_MAINTENANCE_ROLE` | `updater` | 账号角色，只能是 `updater` 或 `viewer` | `maintenance-server.js:149-150` |
+| `HIDS_MAINTENANCE_PORT` | `18081` | 维护 API 端口（监听地址写死回环） | `maintenance-server.js:175` |
+| `HIDS_UPDATE_KEY_FILE` | 无 | 32 字节对称加密密钥文件 | `maintenance-server.js:153`、`package-policy.js:30` |
+| `HIDS_UPDATE_PUBLIC_KEY_FILE` | 无 | Ed25519 验签公钥 | `maintenance-server.js:157` |
+| `HIDS_UPDATE_PRIVATE_KEY_FILE` | 无 | Ed25519 签名私钥（只在制作包时用） | `package-policy.js:30` |
+| `HIDS_UPDATE_STORE_DIR` | `<提示词覆盖目录>/update-packages` | 已上传升级包的存放目录 | `maintenance-server.js:161`、`update-store.js:62` |
+| `HIDS_UPDATE_TARGET` | 无 | 目标环境标识，包与环境的匹配依据 | `maintenance-server.js:161`、`package-policy.js:30` |
 
 `.env.example` 已列全上表与 §10.2、前端（`web/serve.js`）用到的 32 个键（P003-T025）：键名与代码一一对应，两个方向都要齐（代码读的必须列、列出来的必须真有人读），改键名得同时改代码与本表。其中五项必填在文件注释里点名标出。
 
