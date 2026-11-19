@@ -10,7 +10,7 @@ updated: 2026-11-17
 
 模块名 `evidence-view`。覆盖文件一个：`evidence-view.js`（模块划分与页面归属见 [docs/modules/_breakdown.json](_breakdown.json) 的 `evidence-view` 条目）。
 
-这篇讲这个模块把一次工具调用的原始返回压成什么形状、投影出来的事实怎么标出处、上下文超限时怎么裁。关键断言标 `文件:行号`，行号对应当前提交 `35530d8`；代码改动后请重新核对。
+这篇讲这个模块把一次工具调用的原始返回压成什么形状、投影出来的事实怎么标出处、上下文超限时怎么裁。关键断言标 `文件:行号`，行号对应当前提交 `35530d8`；P003-T039 新增/改写的段落（页内标「P003-T039」「复审 BUG1」的地方，含 §3 公开面、§4.4 的展示裁剪）行号对 P003-T039 复审修复提交 `241c0da`；代码改动后请重新核对。
 
 原始返回怎么取回来、引用怎么被校验，都不在本篇：前者属 evidence-tools 模块，后者属 investigation-agent 模块；页面归属同样见 `_breakdown.json`。
 
@@ -46,22 +46,31 @@ updated: 2026-11-17
 
 ## 3 公开面
 
-本模块导出两个函数（`grep -n '^export' evidence-view.js` 输出两行，命令见 §10.2）：
+本模块导出五个符号（`grep -n '^export' evidence-view.js` 输出五行，命令见 §10.2）：
 
 | 导出 | 种类 | 用途 | 定义处 |
 | --- | --- | --- | --- |
-| `projectEvidence` | 函数 | 把 `(工具名, 原始返回)` 投成视图 | `evidence-view.js:155` |
-| `boundEvidenceView` | 函数 | 把视图裁到字符预算内 | `evidence-view.js:234` |
+| `projectEvidence(tool, result)` | 函数 | 把 `(工具名, 原始返回)` 投成视图 | `evidence-view.js:164` |
+| `boundEvidenceView(view, maxChars)` | 函数 | 把视图裁到字符预算内 | `evidence-view.js:244` |
+| `agentDisplayLimits` | 冻结对象 | 模型侧展示上限：`timeline: 8`、`commands: 4`（P003-T039） | `evidence-view.js:272` |
+| `compactEvidenceView(view, limits)` | 函数 | 只裁嵌套序列展示行，计数一律保留（P003-T039） | `evidence-view.js:302` |
+| `boundSyslogView(view, maxChars=3000)` | 函数 | `syslog:1` 载荷视图的长度上限（P003-T039） | `evidence-view.js:321` |
 
-业务代码里的调用点有三处（本模块自带测试另有引用，见 `evidence-view.test.js:3`）：
+业务代码里的调用点（本模块自带测试另有引用，见 `evidence-view.test.js:3`）：
 
-| 调用点 | 传入的 `maxChars` | 依据 |
+| 调用点 | 传入的口径 | 依据 |
 | --- | --- | --- |
-| 取证会话生成记录里的 `view` | 用默认值 12000 | `agent-tools.js:65` |
-| 结论证据列表 | `focused` 为真且不是第一条 → 3000；其余 → 4000 | `investigation-agent.js:139` |
-| 必查项视图 | 3000 | `investigation-agent.js:264` |
+| 取证会话生成记录里的 `view` | `projectEvidence(...)` 后按默认值 12000 裁；**不套 `compactEvidenceView`**（`record.view` 保持完整投影） | `agent-tools.js:65` |
+| 工具结果消息（模型看到的那份） | 先 `compactEvidenceView`（8/4 行），超 20000 字改回一条错误说明 | `investigation-agent.js:273-281` |
+| 结论轮 / 复核轮证据 | `compactEvidenceView` 后 `boundEvidenceView(..., 4000)`；记录超过 5 条时只给前 5 条完整视图 | `investigation-agent.js:317-332` |
+| `syslog:1` 记录视图 | `boundSyslogView`（默认 3000 字） | `investigation-agent.js:445` |
 
-后两处传进去的是 `record.view`，即已经被取证会话按 12000 裁过一次的视图（`investigation-agent.js:139`、`investigation-agent.js:264`、`agent-tools.js:65`）。
+`record.view` 与模型侧视图分开是有意的（P003-T039）：知识经验复用判定要看「时间线是否完整」，
+依据是 `record.view.related_sequences.timeline.shown_count === total_in_record`，
+所以裁剪只发生在模型侧副本上，不改 `record.view`。
+
+`boundEvidenceView` 的既有调用点里，`focused` 参数已随 P003-T039 的结论轮口径一起删掉（那条分支从来没被调用过），
+现在结论轮与复核轮共用同一份 `conclusionEvidence()`。
 
 ## 4 关键路径
 
@@ -80,6 +89,13 @@ updated: 2026-11-17
 
 1. **取字段**。按字段表逐个友好名找候选原始键（`evidence-view.js:3-40`、`evidence-view.js:63-70`）。候选键是点号路径，逐段下钻（`evidence-view.js:51-56`）。
 2. **丢弃四类值**：取不到、`null`、空串、对象或数组（`evidence-view.js:57`）。
+
+**`host_id` 的候选键里没有裸 `id`**（P003-T035 改）。字段表里 `host_id` 只认 `host_view.host_id`、`host_view.id`、`host_id`
+（`evidence-view.js:9`）；裸 `id` 在事件行里是**事件 ID**，拿它当主机 ID 会让必查项按错的主机去查
+（`required-evidence.js:71`），再把空页写成「已查当前页但未返回记录」——等于把「查错机器」报成「那台机器没事」。
+主机资产视图是例外：`list_host_assets` / `get_host_info_detail` 的行里裸 `id` 就是主机 ID，`projectEvidence` 给这两件工具
+打开 `bareHostId` 开关，`get_process_asset` 的 `host_info` 段按 `kind === 'host'` 也开着（`evidence-view.js:50`、
+`evidence-view.js:66-79`、`evidence-view.js:80-81`、`evidence-view.js:165`）。
 3. **丢弃超长文本**：末段键名属于命令类的（`cmdline` / `command` / `shell_cmdline` / `process_cmdline`）上限 3000 字符，其余上限 500 字符（`evidence-view.js:58-59`）。超限的整条丢弃，不是截断。
 4. **丢弃零时间哨兵**：数值小于 `-60000000000` 的时间戳丢掉（`evidence-view.js:60`）。
 5. **产出事实**：`{value, pointer}`，pointer 由前缀加上实际走过的段拼成（`evidence-view.js:61`）。
@@ -141,6 +157,23 @@ timeline 另带五个统计（`evidence-view.js:144-150`）：`nonempty_request_
 裁剪只动展示行：原始返回不在这个视图里，引用校验仍拿原始返回核对（`evidence-view.js:233`）。第 6 步的文案明确要求「不能引用本次省略的字段」（`evidence-view.js:255`）。
 
 预聚合计数不随裁剪重算：`counts_on_returned_page` 描述的是裁剪前的整页计数（`evidence-view.js:195` 对 `rows`，`evidence-view.js:239-242` 只删 `items`）。
+
+**模型侧还有一层展示裁剪（P003-T039，`evidence-view.js:272-373`）**，与上面的字符预算正交：
+
+- `compactEvidenceView(view, limits = agentDisplayLimits)`：把 `related_sequences.timeline` 收到 8 行、`commands` 收到 4 行。
+  `timeline` 先按「有响应长度 > 带 HTTP 请求行/载荷类型 > 有请求字节 > 其余」挑行，再按原下标回排（`evidence-view.js:283-300`），
+  关键行不会被裁掉；`commands` 保留头 2 条 + 尾 2 条。两个序列的 `total_in_record`、`shown_count`、
+  `nonempty_request_count`、`nonzero_response_count`、`response_payload_available`、`timestamp_valid_count` 全部保留，
+  `http_request_lines` 按留下的行重算——**裁的是展示行，不是计数**。
+- `boundSyslogView(view, maxChars = 3000)`（`evidence-view.js:321-373`）：`syslog:1` 是原始键值载荷，没有数组可裁。
+  预算量的是「最终要发出去的那个对象」（含 `omitted_fields` / `truncated_fields` 记账字段，`evidence-view.js:338`），超限时按三段收缩：
+  1. 整条省略超 600 字的长字段，字段名记进 `omitted_fields`（碎片没有引用价值）；
+  2. 逐个把中等长度的字段截成「前 150 字…（截断，原 N 字）」记进 `truncated_fields`，**每个字段只截一次、只截截断后确实更短的字段**；
+  3. 仍超限就继续整条省略（最长优先，含已截断的碎片），字段名并进 `omitted_fields`。
+
+  每段每步都真删/真缩短内容，所以循环一定收敛（复审 BUG1：旧写在「总量超限且没有单条长字段」时反复截同一字段、长度不再下降，5 秒挂死）。
+  三段走完仍超限（例如字段名比内容还长、或载荷字段极多）就降级成不带 `payload` 的回包：`{msgid, truncated_for_context: true, omitted_fields: <全部字段名>, note}`。
+  无论走哪段都置 `truncated_for_context: true`。**短值尽量原样保留**——模型要拿它填 `claims.citations` 的 `value`，截断一个能给的值等于让它引用失败，所以短字段最后才丢、且是整条省略而不是截断。
 
 ## 5 值语义
 
@@ -206,7 +239,7 @@ timeline 另带五个统计（`evidence-view.js:144-150`）：`nonempty_request_
 | 运行时 | Node 全局 `Buffer` | 把 `response_digest` 按 base64 解码 | `evidence-view.js:114`、`evidence-view.js:130` |
 | 运行时 | Node 全局 `structuredClone` | 裁剪前深拷贝视图，避免改到调用方的对象 | `evidence-view.js:236` |
 | 上游 | evidence-tools 模块 | 取证会话生成记录里的 `view` | `agent-tools.js:4`、`agent-tools.js:65` |
-| 上游 | investigation-agent 模块 | 结论证据与必查项视图的裁剪 | `investigation-agent.js:4`、`investigation-agent.js:139`、`investigation-agent.js:264` |
+| 上游 | investigation-agent 模块 | 结论证据与必查项视图的裁剪 | `investigation-agent.js:4`、`investigation-agent.js:139`、`investigation-agent.js:266` |
 
 本模块不访问网络、文件与数据库。
 
@@ -284,7 +317,7 @@ timeline 另带五个统计（`evidence-view.js:144-150`）：`nonempty_request_
 | 主机风险 `nonzero_groups` 展示上限 | 3 | `evidence-view.js:172-173` |
 | `response_digest` 解码长度上限 | 4096 字符 | `evidence-view.js:128` |
 | 默认上下文预算 | 12000 字符 | `evidence-view.js:234` |
-| 调用点实际预算 | 3000 / 4000 / 12000 | `investigation-agent.js:139`、`investigation-agent.js:264`、`agent-tools.js:65` |
+| 调用点实际预算 | 3000 / 4000 / 12000 | `investigation-agent.js:139`、`investigation-agent.js:266`、`agent-tools.js:65` |
 | 结论消息总量上限（上游约束） | 20000 字符 | `investigation-agent.js:126-127` |
 
 ### 10.2 实测与静态核查
@@ -483,6 +516,9 @@ node --test evidence-view.test.js
 - **裁剪后计数不重算**，`counts_on_returned_page` 仍是裁剪前的整页计数（`evidence-view.js:239-242`）。
 - **指针转义在当前字段表下不会触发**。`pointer()` 把 `~` 转成 `~0`、`/` 转成 `~1`（`evidence-view.js:49`），而 104 个候选键与嵌套字段名里没有这两个字符（实测见 §10.2）。
 - **视图被裁两次**。取证会话先按 12000 裁一次（`agent-tools.js:65`），结论证据再按 3000 / 4000 裁一次（`investigation-agent.js:139`）。
+- **`host_id` 没有兜底之后，缺 `host_id` 的事件行就拿不到主机身份**（P003-T035）。这不是回归：事件行只有裸 `id` 时，
+  下游必查项会落成 `missing_identifier`（「无法发起限定范围查询」），而不是拿事件 ID 去查另一台机器。`host_ip` 仍保留裸 `ip` 兜底，
+  这一条没跟着改——它是否同样会指向别的实体，本卡没有核实。
 
 ### 11.4 被排除的方案
 
@@ -501,5 +537,5 @@ node --test evidence-view.test.js
 3. **`get_host_risk_overview` 的 `Data` / `data` 双写与 `emergency_vuln` 的真实键名没实测**。代码两种行键都试，哪个是数组用哪个（`evidence-view.js:166-167`）。
 4. **时间戳单位按 Unix 秒推定**，未与牧云核对（`evidence-view.js:60`）。
 5. **为什么丢弃超长字段而不是截断、为什么用静态字段表而不是通用裁剪，没查到**（见 §11.4）。
-6. **12000 / 4000 / 3000 三个预算的取值理由没查到**。代码里只有数值（`evidence-view.js:234`、`investigation-agent.js:139`、`investigation-agent.js:264`）。
+6. **12000 / 4000 / 3000 三个预算的取值理由没查到**。代码里只有数值（`evidence-view.js:234`、`investigation-agent.js:139`、`investigation-agent.js:266`）。
 7. **`investigation-agent` 侧怎么消费这些字段没在本页考证**。属 investigation-agent 模块页的范围。

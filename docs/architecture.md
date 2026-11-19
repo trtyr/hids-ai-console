@@ -201,12 +201,15 @@
 只有常规研判才有的东西：
 
 - **Wiki 判据目录**（`investigation-agent.js:247-256`）：加载本类与通用的 active 判据页，另给模型 `wiki_page` / `wiki_search` 两个工具。
-- **必查项清单**（`investigation-agent.js:258-260`）：由 `required-evidence.js` 按告警类型生成最低取证清单并执行，缺项进 `missing_evidence`。
 - **客户报告契约**（`investigation-agent.js:56`、`investigation-agent.js:357`）：额外要求模型输出 ≤300 字的 `report` 与 `recommended_actions`。
 - **通用 SOP**（`investigation-agent.js:355`）与**场景 SOP**（`prompts.sop[card.id]`）。
 - **规则预筛**：`server.js:117-129` 只在 `mode === 'triage'` 时先跑 `monitor.ruleEngine.evaluate`，把结果作为 `rule_evaluation` 附加到结论上。
 
-深度研判走的是「单告警深查」提示词（`investigation-agent.js:354`），不带判据目录、不带必查项、不生成客户报告。
+深度研判走的是「单告警深查」提示词（`investigation-agent.js:354`），不带判据目录、不生成客户报告。
+
+**必查项不再是模式差别**（P003-T035）：`requiredEvidencePlan` + `collectRequiredEvidence` 两种模式都跑
+（`investigation-agent.js:399`），状态机与缺口口径一致，缺口都并进 `missing_evidence`（`investigation-agent.js:796`）；
+差别只剩客户报告——`finalizeTriageOutput` 与 `appendEvidenceReport` 仍只给常规研判（`investigation-agent.js:797-801`）。
 
 ### 5.3 模式怎么选
 
@@ -260,9 +263,17 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 ### 6.6 必查项不是可选的
 
-常规研判还有一层「必查项」清单（`required-evidence.js`）。清单按告警类型生成（`required-evidence.js:36-89`），例如同主机关联事件、同主机命令会话、相关来源的网络连接、同来源同类告警。每项都有 `scope` 说明（多为「当前返回页；不能代表全部历史」）和五种状态：`records_returned`、`empty_page`、`source_unavailable`、`missing_identifier`、`query_failed`（`required-evidence.js:92-129`）。
+两种研判模式都有一层「必查项」清单（`required-evidence.js`，P003-T035 起 deep 也跑）。清单按告警类型生成
+（`required-evidence.js:69-119`），例如同主机关联事件、同主机命令会话、相关来源的网络连接、同来源同类告警。每项都有 `scope` 说明
+（多为「当前返回页；不能代表全部历史」）和五种状态：`records_returned`、`empty_page`、`source_unavailable`、
+`missing_identifier`、`query_failed`（`required-evidence.js:121-165`）。
 
-这五种状态刻意不互相混同——「查了没查到」和「没有这个数据源」和「查询失败」是三件事。空页与失败都会进 `missing_evidence`（`required-evidence.js:131-139`），并以「必查项：…」的措辞追加到客户报告尾部（`required-evidence.js:154-165`）。
+这五种状态刻意不互相混同——「查了没查到」和「没有这个数据源」和「查询失败」是三件事。空页与失败都会进 `missing_evidence`
+（`required-evidence.js:167-176`），常规研判还会以「必查项：…」的措辞追加到客户报告尾部（`required-evidence.js:192-205`）。
+
+**动态数据源的两项**（P003-T035）：`authorization_record` 与 `web_request_or_file_access_log` 能不能查，按本次 MCP 目录判定；
+目录里没有就标 `catalog_absent`——状态仍是 `source_unavailable`，但**不算缺口、不进客户报告**（`required-evidence.js:60-66`、
+`required-evidence.js:167-189`）。生产上这两件工具不在 `agent-tools.js` 的白名单里，所以恒为「牧云暂无此数据源」。
 
 ## 7. 提示词与判据从哪里来
 
@@ -446,7 +457,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
 | `HIDS_CASES_DIR` | 仓内 `.data/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:51` |
-| `HIDS_TRIAGE_CONCURRENCY` | `2` | 自动研判同时跑几条；非法值回落 2。**装配处不覆盖**：`poll` 与 `syslog` 两种输入模式都按它生效，`summary().concurrency` 报规范化后的生效值。P003-T037，改完要重启进程 | `triage-monitor.js:30`、`triage-monitor.js:76-77`、`server.js:51-53` |
+| `HIDS_TRIAGE_CONCURRENCY` | `2` | 自动研判同时跑几条；env 里的非法值（0 / 负数 / 小数 / 非数 / 空串）回落 2。**装配处不覆盖**：`poll` 与 `syslog` 两种输入模式都按它生效，`summary().concurrency` 报规范化后的生效值。构造参数显式传数字 0 是「只排队不执行」（测试与停机维护用，P003-T036 × P003-T037 合并后的约定）。P003-T037，改完要重启进程 | `triage-monitor.js:30`、`triage-monitor.js:35`、`triage-monitor.js:94-95`、`server.js:51-53` |
 | `HIDS_TRIAGE_QUEUE_MAX` | `1000` | 自动研判队列上限（排队 + 在跑）；满了拒收并计入 `summary().dropped`。P003-T037，改完要重启进程 | `triage-monitor.js:31`、`triage-monitor.js:78` |
 | `HIDS_STATUS_TTL_MS` | `45000` | `/api/status` 探活缓存窗口，落 30~60 秒；`0` 关闭缓存。P003-T037 | `cloudwalker.js:110` |
 | `HIDS_PROBE_TTL_MS` | `5000` | 详情失败后同类列表探活的复用窗口。P003-T037 | `cloudwalker.js:111` |

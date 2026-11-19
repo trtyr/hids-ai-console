@@ -29,8 +29,41 @@ function scopedValue(tool, key, value) {
   return (Array.isArray(type) ? type.includes('array') : type === 'array') ? [value] : value;
 }
 
-function check(id, label, tool, args, scope, source, reason = '') {
-  return { id, label, tool, args, scope, source, reason };
+function check(id, label, tool, args, scope, source, reason = '', catalogAbsent = false) {
+  return { id, label, tool, args, scope, source, reason, ...(catalogAbsent ? { catalog_absent: true } : {}) };
+}
+
+// A5：这两项的工具有没有，按本次 MCP 目录动态判定。目录里没有不是告警的缺口，是平台暂不提供数据源；
+// 标 catalog_absent 而不新增状态——source_unavailable 仍是「没有可用数据源」这一档。
+const dynamicChecks = {
+  authorization: { id: 'authorization', label: '操作授权与测试工单', tool: 'authorization_record',
+    scope: '需核对执行人、目标主机、批准范围和时间窗' },
+  file_invocation: { id: 'file_invocation', label: '文件调用或对应 Web 请求', tool: 'web_request_or_file_access_log',
+    scope: '仅检测到可疑文件不能证明文件已被请求或执行' }
+};
+// 能当动态查询参数的告警事实：只拿当前告警自己有的值，不猜、不发全库查询。
+const dynamicFactKeys = ['host_id', 'host_ip', 'user_name', 'process_name', 'command_line', 'file_path', 'observed_at'];
+
+function dynamicArgs(tool, facts) {
+  const properties = tool?.inputSchema?.properties || {};
+  const args = {};
+  for (const key of dynamicFactKeys) {
+    const value = facts[key]?.value;
+    if (value === undefined || value === null || value === '') continue;
+    if (!Object.hasOwn(properties, key)) continue;
+    args[key] = scopedValue(tool, key, value);
+  }
+  if (Object.hasOwn(properties, 'count')) args.count = 20;
+  return (tool?.inputSchema?.required || []).every(key => args[key] !== undefined) ? args : null;
+}
+
+function dynamicCheck(spec, tools, facts) {
+  const tool = tools.get(spec.tool);
+  if (!tool) return check(spec.id, spec.label, spec.tool, null, spec.scope, false,
+    `牧云暂无此数据源：本次 MCP 目录未提供 ${spec.tool}`, true);
+  const args = dynamicArgs(tool, facts);
+  return check(spec.id, spec.label, spec.tool, args, spec.scope, true, args ? ''
+    : `牧云提供 ${spec.tool}，但本条告警缺少该工具必需字段，无法发起限定范围查询`);
 }
 
 export function requiredEvidencePlan(type, original, catalog) {
@@ -77,28 +110,26 @@ export function requiredEvidencePlan(type, original, catalog) {
       supports(tools.get(name), ['source_ip', 'count'])));
   }
   if (type === 'suspicious_operation' || type === 'elevation_process') {
-    plan.push(check('authorization', '操作授权与测试工单', 'authorization_record', null,
-      '需核对执行人、目标主机、批准范围和时间窗', false,
-      '当前只读取证工具未接入工单或授权记录'));
+    plan.push(dynamicCheck(dynamicChecks.authorization, tools, facts));
   }
   if (type === 'webshell') {
-    plan.push(check('file_invocation', '文件调用或对应 Web 请求', 'web_request_or_file_access_log', null,
-      '仅检测到可疑文件不能证明文件已被请求或执行', false,
-      '当前只读取证工具未接入对应 Web 请求或文件访问日志'));
+    plan.push(dynamicCheck(dynamicChecks.file_invocation, tools, facts));
   }
   return plan;
 }
 
 export async function collectRequiredEvidence(plan, session, onProgress = () => {}, trace = []) {
-  const checks = [];
-  for (const item of plan) {
+  // A7：必查项互相独立，一次并发跑完（Promise.allSettled）。
+  // 逐项 status 语义不变；trace 在 settle 后按 plan 序推，与完成先后无关。
+  const settled = await Promise.allSettled(plan.map(async item => {
     const entry = { id: item.id, label: item.label, tool: item.tool, scope: item.scope };
     if (!item.source) {
       entry.status = 'source_unavailable';
+      if (item.catalog_absent) entry.catalog_absent = true;
       entry.reason = item.reason || `牧云 MCP 未提供可按本条告警限定范围的 ${item.tool} 查询`;
     } else if (!item.args) {
       entry.status = 'missing_identifier';
-      entry.reason = '原始事件缺少此项查询所需的主机或来源标识';
+      entry.reason = item.reason || '原始事件缺少此项查询所需的主机或来源标识';
     } else {
       entry.args = item.args;
       onProgress('收集研判事实', `正在查询${item.label}`);
@@ -114,22 +145,28 @@ export async function collectRequiredEvidence(plan, session, onProgress = () => 
           entry.total_reported = record.view.total_reported_by_platform?.value ?? null;
           entry.platform_total_consistent = record.view.platform_total_consistent;
           if (record.view.query_coverage?.partial) entry.reason = '接口报告部分类型查询失败';
-          trace.push({ kind: 'tool', name: item.tool, evidence_id: record.evidenceId,
-            args: item.args, note: `必查项：${item.label}；${item.scope}` });
         }
       } catch (error) {
         entry.status = 'query_failed';
         entry.reason = String(error.message || error).slice(0, 180);
       }
     }
-    checks.push(entry);
+    return entry;
+  }));
+  const checks = settled.map((outcome, index) => outcome.status === 'fulfilled' ? outcome.value
+    : { id: plan[index].id, label: plan[index].label, tool: plan[index].tool, scope: plan[index].scope,
+      status: 'query_failed', reason: `必查项执行异常：${String(outcome.reason?.message || outcome.reason).slice(0, 180)}` });
+  for (const entry of checks) {
+    if (entry.evidence_id) trace.push({ kind: 'tool', name: entry.tool, evidence_id: entry.evidence_id,
+      args: entry.args, note: `必查项：${entry.label}；${entry.scope}` });
     trace.push({ kind: 'evidence_check', ...entry });
   }
   return checks;
 }
 
 export function requiredEvidenceGaps(checks) {
-  return checks.filter(item => item.status !== 'records_returned' || item.reason).map(item => {
+  // catalog_absent 项是「平台暂不提供这个数据源」，不是本条告警的证据缺口。
+  return checks.filter(item => !item.catalog_absent && (item.status !== 'records_returned' || item.reason)).map(item => {
     if (item.status === 'records_returned') return `${item.label}：${item.reason}；${item.scope}`;
     if (item.status === 'empty_page') return `${item.label}：已查当前页但未返回记录；${item.scope}`;
     if (item.status === 'source_unavailable') return `${item.label}：当前没有可用数据源；${item.reason}`;
@@ -139,6 +176,7 @@ export function requiredEvidenceGaps(checks) {
 }
 
 export function requiredEvidenceReport(checks) {
+  const visible = checks.filter(item => !item.catalog_absent);
   const groups = [
     ['empty_page', labels => `已查${labels}的限定范围当前页，未返回记录`],
     ['source_unavailable', labels => `${labels}没有可用数据源`],
@@ -146,7 +184,7 @@ export function requiredEvidenceReport(checks) {
     ['query_failed', labels => `${labels}查询失败`]
   ];
   return groups.map(([status, describe]) => {
-    const labels = checks.filter(item => item.status === status).map(item => item.label);
+    const labels = visible.filter(item => item.status === status).map(item => item.label);
     return labels.length ? describe(labels.join('、')) : '';
   }).filter(Boolean).join('；');
 }

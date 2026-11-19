@@ -54,7 +54,13 @@ updated: 2026-11-17
 
 ## 3 对外能力
 
-三个文件合计导出 4 个符号（命令见 §10.2）：`WikiStore`（`wiki-store.js:29`）、`WikiWorkbench`（`wiki-workbench.js:65`）、`replayProposalHash`（`wiki-replay.js:15`）、`runWikiReplay`（`wiki-replay.js:79`）。
+三个文件合计导出 7 个符号（命令见 §10.2）：`WikiStore`（`wiki-store.js:29`）、`WikiWorkbench`（`wiki-workbench.js:65`）、`replayProposalHash`（`wiki-replay.js:15`）、`runWikiReplay`（`wiki-replay.js:79`），以及 P003-T039 新增的三个纯文本函数 `pageBody`（`wiki-store.js:347`）、`pageSummary`（`wiki-store.js:392`）、`pageExcerpts`（`wiki-store.js:400`）。
+
+**给模型的判据形态**（P003-T039）：研判侧不再把整页正文塞进上下文。
+常驻页只给「编号 + 标题 + 要点摘要」（`pageSummary`：正文里第一段有内容的段落，去掉标题行与 blockquote 前缀，压空白后截 200 字），
+正文要读时走 `wiki_page`，返回「摘要 + 命中段」（`pageExcerpts`：给了关键词就取含关键词的段，没给就按判定用语
+`判定/结论/误报/威胁/必查/要求/限制/边界/适用` 打分取前 3 段，每段截 600 字；判据页常写成编号清单，所以切段按「标题行 / 编号项 / 空行」三档）。
+这几个函数只做文本切分，不碰 `agentPage()` 的返回字段——`content` 仍然是整页，老调用方（`server.js`、`syslog-case.js`）不受影响。
 
 **`WikiStore` 的公开方法**（16 个）：
 
@@ -103,12 +109,12 @@ updated: 2026-11-17
 
 研判侧读判据走的是 `agentIndex()` → `agentPage()` 两步：
 
-1. **按告警类型定分类**。`classForEvent` 把 13 个告警类型映射到 12 个判据目录（`wiki-store.js:12-17`；`suspicious_operation` 与 `command_whitelist` 都落在 `suspicious-command`）；映射不到的类型直接抛「Wiki 没有 `<类型>` 对应的判据分类」（`wiki-store.js:100`）。
-2. **筛出可用判据**。只取 `status: active` 且路径在 `common/` 或本类目录下的页（`wiki-store.js:101-102`）；一页都没有时抛「Wiki 分类 `<类>` 没有可用判据」（`wiki-store.js:103`）。
-3. **读正文**。`agentPage()` 在上一步的目录里找编号，找不到抛「当前场景不可读取 Wiki 判据 `<编号>`」（`wiki-store.js:111`）；读到的正文去掉 frontmatter 并截到 9000 字（`wiki-store.js:114`）。
-4. **检索**。`agentSearch()` 先过一道参数检查：关键词长度不在 2 到 80 字之间直接抛「Wiki 检索词需为 2 到 80 字」；命中片段取关键词前后各 80 / 120 字，最多 8 条。
+1. **按告警类型定分类**。`classForEvent` 把 13 个告警类型映射到 12 个判据目录（`wiki-store.js:12-17`；`suspicious_operation` 与 `command_whitelist` 都落在 `suspicious-command`）；映射不到的类型直接抛「Wiki 没有 `<类型>` 对应的判据分类」（`wiki-store.js:134`）。
+2. **筛出可用判据**。只取 `status: active` 且路径在 `common/` 或本类目录下的页（`wiki-store.js:135-136`）；一页都没有时抛「Wiki 分类 `<类>` 没有可用判据」（`wiki-store.js:137`）。
+3. **读正文**。`agentPage()` 在上一步的目录里找编号，找不到抛「当前场景不可读取 Wiki 判据 `<编号>`」（`wiki-store.js:145`）；读到的正文去掉 frontmatter 并截到 9000 字（`wiki-store.js:148`）。
+4. **检索**。`agentSearch()` 先过一道参数检查：关键词长度不在 2 到 80 字之间直接抛「Wiki 检索词需为 2 到 80 字」（`wiki-store.js:160`）；命中片段取关键词前后各 80 / 120 字，最多 8 条（`wiki-store.js:163-167`）。
 
-**目录索引的 mtime 缓存（P003-T037）。** `agentIndex()` 的数据源只有 `list()`（`wiki-store.js:98-105`），
+**目录索引的 mtime 缓存（P003-T037）。** `agentIndex()` 的数据源只有 `list()`（`wiki-store.js:132-138`），
 它每次先算一个签名：顶层每个判据目录下、路径符合判据页格式的文件，逐个 `stat` 取 `mtimeMs` 与 `size`，
 拼成排序后的字符串（`wiki-store.js:67-88`）。签名与上次相同就直接返回上次解析好的行（浅拷贝，
 调用方排序/改数组改不到缓存），不再逐文件 `readFile` 与解析 frontmatter（`wiki-store.js:90-93`）；
@@ -116,6 +122,19 @@ updated: 2026-11-17
 一次研判里 `agentIndex` → `agentPage` → `agentContextPages` 会反复要目录，这里就是它们共用的那一份。
 缓存失效的判据是「文件 mtime 或大小变了」——维护流水线写页面后 mtime 自然变化，不需要额外清缓存；
 **代价**：同一毫秒内改写且字节数不变的页面，要等下一次 mtime 变化才会被看到（§4.1 的代价，不是 bug）。
+5. **给模型的那一份怎么切**（P003-T039）。`agentIndex()` 与 `agentContextPages()` 的返回值形状没变，但研判侧只取
+   `{id, title, pageSummary(content)}` 当常驻页；`wiki_page` 的返回是 `{id, title, summary, hits[], note}`，
+   `hits` 来自 `pageExcerpts(page.content)`（给了 `keyword` 参数就按关键词命中）。三者都是纯函数，可用下面这条命令复跑：
+
+```bash
+node --input-type=module -e '
+import { readFile } from "node:fs/promises";
+import { pageSummary, pageExcerpts } from "./wiki-store.js";
+const page = await readFile("wiki/honeypot/HP-10.md", "utf8");
+console.log("摘要:", pageSummary(page));
+console.log("命中段:", pageExcerpts(page).map(hit => hit.text.slice(0, 40)));
+'
+```
 
 下面这条命令可以复跑这条路径（输出见 §10.2）：
 

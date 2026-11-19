@@ -4,14 +4,15 @@ import { AgentToolbox } from './agent-tools.js';
 import { InvestigationAgent, boundedToolArgs } from './investigation-agent.js';
 import { KnowledgeStore } from './knowledge-store.js';
 import { KnowledgeWorkbench, knowledgeFields } from './knowledge-workbench.js';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RuleStore } from './rule-store.js';
 import { InvestigationStore } from './investigation-store.js';
 import { ChatModelClient } from './model-client.js';
+import { TriageMonitor } from './triage-monitor.js';
 
-test('常规研判将必查空页与不可用来源写入结果，深度模式保持原有取证路径', async () => {
+test('常规研判把必查空页与不可用来源写入结果，deep 采同一套必查项', async () => {
   const calls = [];
   const toolbox = new AgentToolbox({
     listTools: async () => [
@@ -38,10 +39,21 @@ test('常规研判将必查空页与不可用来源写入结果，深度模式�
   assert.match(triage.verdict.missing_evidence.join('；'), /当前页.*未返回记录.*没有可用数据源/);
   assert.match(triage.verdict.report, /当前页，未返回记录.*没有可用数据源/);
   assert.equal(triage.validation.ok, true);
+  // A5：牧云目录里没有 authorization_record，就是「牧云暂无此数据源」，不进缺口也不进报告。
+  const authorization = triage.required_evidence.find(item => item.id === 'authorization');
+  assert.equal(authorization.catalog_absent, true);
+  assert.match(authorization.reason, /牧云暂无此数据源/);
+  assert.doesNotMatch(triage.verdict.missing_evidence.join('；'), /操作授权与测试工单/);
+  assert.doesNotMatch(triage.verdict.report, /操作授权与测试工单/);
   calls.length = 0;
   const deep = await agent.run('suspicious_operation:7', { mode: 'deep' });
-  assert.deepEqual(calls.map(item => item.name), ['get_suspicious_operation_event']);
-  assert.deepEqual(deep.required_evidence, []);
+  // A6：deep 与 triage 采同一套必查项——有 host_id 就查同主机关联事件，缺工具的命令会话仍是缺口。
+  assert.deepEqual(calls.map(item => item.name), ['get_suspicious_operation_event', 'list_host_events']);
+  assert.deepEqual(deep.required_evidence.map(item => item.status),
+    ['empty_page', 'source_unavailable', 'source_unavailable']);
+  assert.match(deep.verdict.missing_evidence.join('；'), /当前页.*未返回记录.*没有可用数据源/);
+  // 客户报告只属于常规研判。
+  assert.equal(deep.verdict.report, undefined);
 });
 
 test('published customer experience avoids a full repeat investigation when current behavior is verified', async t => {
@@ -84,8 +96,11 @@ test('published customer experience avoids a full repeat investigation when curr
   assert.equal(result.verdict.verdict, 'false_positive');
   assert.equal(result.knowledge_reuse.case_id, created.id);
   assert.equal(result.validation.ok, true);
-  assert.equal(result.required_evidence.find(item => item.id === 'authorization').status, 'source_unavailable');
-  assert.match(result.verdict.report, /操作授权与测试工单没有可用数据源/);
+  const authorization = result.required_evidence.find(item => item.id === 'authorization');
+  // A5：目录里没有 authorization_record 就是「牧云暂无此数据源」，不计缺口、不进客户报告。
+  assert.equal(authorization.status, 'source_unavailable');
+  assert.equal(authorization.catalog_absent, true);
+  assert.doesNotMatch(result.verdict.report, /操作授权与测试工单/);
   // 捷径也属「常规研判且知识库在位」：rego / wiki 与主路径同口径（P003-T012 复审打回 major）。
   assert.deepEqual(result.verdict.rego, { status: 'not_applicable', rule_ids: [] });
   assert.deepEqual(result.verdict.wiki,
@@ -582,24 +597,36 @@ test('deep 模式下结论工具忽略 wiki 字段，不因未查知识库被拒
 
 // --- P003-T022：模型没交卷时留下它回了什么 ------------------------------------------------
 
-// 队列侧只留 250 字进 record.detail（triage-monitor.js:471）；失败消息必须整条落得进去。
+// 队列侧只留 250 字进 record.detail（triage-monitor.js:529）；降级结论文案必须整条落得进去。
 const detailBudget = 250;
 
 const validConclusion = () => ({ content: JSON.stringify({ verdict: '存疑', confidence: '低', summary: '证据不足，需人工核查',
   claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }], missing_data: ['授权记录'] }) });
 
-test('A1 六轮都没给出 JSON 时，失败消息带末次回包字数、开头与退回原因', async () => {
+test('A1 六轮都没给出 JSON 时出存疑降级结论，末次回包与退回原因留在里面', async () => {
   const prose = '我先梳理一下这条告警：主机 10.0.0.5 上以 root 执行了 id，需要核对授权与前后会话。';
   const model = { model: 'fake', complete: async () => ({ content: prose }) };
-  await assert.rejects(new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7', { mode: 'triage' }),
-    error => {
-      assert.match(error.message, /模型未在调查轮数内给出有效 JSON 结论/);
-      assert.match(error.message, /调查 6 轮、已查询 0 项证据后仍没有可用结论/);
-      assert.match(error.message, new RegExp(`末次回包 ${prose.length} 字：「我先梳理一下这条告警`));
-      assert.match(error.message, /退回 6 次：输出解析失败：/);
-      assert.equal([...error.message].length <= detailBudget, true);
-      return true;
-    });
+  const result = await new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7', { mode: 'triage' });
+  assert.equal(result.verdict.verdict, 'uncertain');
+  assert.equal(result.verdict.verdict_label, '存疑');
+  assert.equal(result.verdict.confidence, '低');
+  const reason = result.verdict.missing_evidence[0];
+  assert.match(reason, /模型未在调查轮数内给出有效 JSON 结论/);
+  assert.match(reason, /调查 6 轮、已查询 0 项证据后仍没有可用结论/);
+  assert.match(reason, new RegExp(`末次回包 ${prose.length} 字：「我先梳理一下这条告警`));
+  assert.match(reason, /退回 6 次：输出解析失败：/);
+  assert.equal([...reason].length <= detailBudget, true);
+  // 上限可查：轮数、工具上限、解析失败次数都落在 trace 里，和代码常量同源。
+  const degraded = result.trace.find(item => item.kind === 'degraded_conclusion');
+  assert.deepEqual({ turns: degraded.turns, calls: degraded.calls, parse_failures: degraded.parse_failures,
+    max_turns: degraded.max_turns, max_tool_calls: degraded.max_tool_calls, conclusion_retries: degraded.conclusion_retries },
+    { turns: 6, calls: 0, parse_failures: 6, max_turns: 6, max_tool_calls: 8, conclusion_retries: 2 });
+  // 缺口清单也在：必查项里没有可用数据源的那项不因降级而消失。
+  assert.match(result.verdict.missing_evidence.join('；'), /同主机命令会话/);
+  assert.match(result.verdict.report, /建议判定为存疑/);
+  assert.equal(Array.from(result.verdict.report).length <= 300, true);
+  // 降级不调独立复核：只有 6 次调查轮。
+  assert.equal(result.review.assessment, 'unavailable');
 });
 
 test('A1 模型没有返回可用消息时，失败消息带 model-client 挂上的回包摘要', async () => {
@@ -616,7 +643,7 @@ test('A1 模型没有返回可用消息时，失败消息带 model-client 挂上
   });
 });
 
-test('A1 结论连续被退回时，失败消息写退回次数与原因', async t => {
+test('A1 结论连续被退回时，降级结论写退回次数与原因', async t => {
   // 有知识库但一直没查：前五轮 submit_conclusion 都被退回，末轮没工具只能交文本又解析不了。
   let turns = 0;
   const model = { model: 'fake', complete: async (_messages, tools) => {
@@ -626,16 +653,22 @@ test('A1 结论连续被退回时，失败消息写退回次数与原因', async
         function: { name: 'submit_conclusion', arguments: JSON.stringify({ verdict: '存疑', summary: '直接交结论' }) } }] }
       : { content: '结论：存疑。' };
   } };
-  await assert.rejects(new InvestigationAgent(suspiciousToolbox(), model, undefined, wikiStore(), await tempRuleStore(t))
-    .run('suspicious_operation:7', { mode: 'triage' }), error => {
-    assert.match(error.message, /退回 6 次：结论被退回：.*没有调用知识库工具.*→ 输出解析失败：/);
-    assert.match(error.message, /末次回包 6 字：「结论：存疑。」/);
-    assert.equal([...error.message].length <= detailBudget, true);
-    return true;
-  });
+  const result = await new InvestigationAgent(suspiciousToolbox(), model, undefined, wikiStore(), await tempRuleStore(t))
+    .run('suspicious_operation:7', { mode: 'triage' });
+  const reason = result.verdict.missing_evidence[0];
+  assert.match(reason, /退回 6 次：结论被退回：.*没有调用知识库工具.*→ 输出解析失败：/);
+  assert.match(reason, /末次回包 6 字：「结论：存疑。」/);
+  assert.equal([...reason].length <= detailBudget, true);
+  assert.equal(result.verdict.verdict, 'uncertain');
+  const degraded = result.trace.find(item => item.kind === 'degraded_conclusion');
+  assert.equal(degraded.conclusion_rejections, 5);
+  assert.equal(degraded.parse_failures, 1);
+  // 降级结论没有采纳页，且写明为什么没采纳。
+  assert.equal(result.verdict.wiki.adopted.length, 0);
+  assert.match(result.verdict.wiki.reason, /降级结论/);
 });
 
-test('A2 同一个研判实例失败后能再跑，两次失败的摘要各是各的', async () => {
+test('A2 同一个研判实例连出两次降级结论，摘要各是各的', async () => {
   const replies = Array.from({ length: 12 }, (_, index) => `第${index < 6 ? '一' : '二'}次瞎聊，第 ${index + 1} 条回包`);
   let modelCalls = 0;
   const model = { model: 'fake', complete: async () => {
@@ -643,30 +676,28 @@ test('A2 同一个研判实例失败后能再跑，两次失败的摘要各是�
     return modelCalls > replies.length ? validConclusion() : { content: replies[modelCalls - 1] };
   } };
   const agent = new InvestigationAgent(suspiciousToolbox(), model);
-  await assert.rejects(agent.run('suspicious_operation:7', { mode: 'triage' }),
-    error => { assert.match(error.message, /末次回包 \d+ 字：「第一次瞎聊，第 6 条回包」/); return true; });
-  await assert.rejects(agent.run('suspicious_operation:7', { mode: 'triage' }),
-    error => {
-      assert.match(error.message, /末次回包 \d+ 字：「第二次瞎聊，第 12 条回包」/);
-      assert.equal(/第一次瞎聊/.test(error.message), false);
-      return true;
-    });
+  const first = await agent.run('suspicious_operation:7', { mode: 'triage' });
+  assert.match(first.verdict.missing_evidence[0], /末次回包 \d+ 字：「第一次瞎聊，第 6 条回包」/);
+  const second = await agent.run('suspicious_operation:7', { mode: 'triage' });
+  assert.match(second.verdict.missing_evidence[0], /末次回包 \d+ 字：「第二次瞎聊，第 12 条回包」/);
+  assert.equal(/第一次瞎聊/.test(second.verdict.missing_evidence[0]), false);
   const third = await agent.run('suspicious_operation:7', { mode: 'triage' });
-  // 13 次是第三次研判的第一轮拿到结论，14 次是随后的独立复核。
+  // 第三次：第一轮拿到结论 + 一次独立复核 = 14 次；两次降级都不调复核。
   assert.equal(modelCalls, 14);
   assert.equal(third.verdict.verdict, 'uncertain');
+  assert.equal(third.trace.some(item => item.kind === 'degraded_conclusion'), false);
 });
 
-test('A3 模型没交卷的这次失败不覆盖已经写成的结论', async t => {
+test('A3 模型调用失败（真异常）不写降级结论，也不覆盖已写成的结论', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-unsubmitted-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const history = new InvestigationStore(directory);
   const written = await history.save({ alert_id: 'suspicious_operation:7', mode: 'triage',
     verdict: { verdict: 'threat', verdict_label: '真实威胁', summary: '已写成的结论' }, evidence: [] });
-  const model = { model: 'fake', complete: async () => ({ content: '好的，我来分析这条告警。' }) };
+  const model = { model: 'fake', complete: async () => { throw new Error('模型接口 HTTP 502: 网关错误'); } };
   await assert.rejects(new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7', { mode: 'triage' }),
-    /模型未在调查轮数内给出有效 JSON 结论/);
-  // 失败走的是抛错，不是写一条降级结论：盘上仍只有那一条，内容一字不差。
+    /模型调用失败/);
+  // 接口报错仍走抛错，不写降级结论：盘上仍只有那一条，内容一字不差。
   assert.deepEqual(await readdir(directory), [path.basename(history.file('suspicious_operation:7', 'triage'))]);
   assert.deepEqual(await history.latest('suspicious_operation:7', 'triage'), written);
 });
@@ -751,4 +782,174 @@ test('A2 复用已取详情不豁免取证上限：次数用尽与超 2MB 照抛
   hugeContext.match.event = { id: 7, blob: 'x'.repeat(2_000_001) };
   await assert.rejects(huge.run('suspicious_operation:7', { mode: 'triage', streamContext: hugeContext }),
     /工具结果超出本次调查的单次取证上限/);
+});
+
+// --- P003-T035：降级存疑、复核口径、证据缺口不撒谎 ---------------------------------------
+
+test('A2 独立复核不可用时，非高危告警的真实威胁也降为存疑', async () => {
+  // suspicious_operation 不在 highRisk 里：改前这条会顶着「真实威胁」出门。
+  let calls = 0;
+  const model = { model: 'fake', complete: async () => {
+    if (calls++ === 0) return { content: JSON.stringify({ verdict: '确认威胁', confidence: '高',
+      summary: '主机上出现反弹命令', claims: [{ text: '执行命令', citations: [
+        { evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }] }) };
+    throw new Error('review timeout');
+  } };
+  const result = await new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7', { mode: 'triage' });
+  assert.equal(calls, 2);
+  assert.equal(result.review.assessment, 'unavailable');
+  assert.equal(result.verdict.verdict, 'uncertain');
+  assert.equal(result.verdict.confidence, '低');
+  assert.match(result.verdict.summary, /独立复核未完成，暂按存疑处理/);
+  assert.match(result.verdict.missing_evidence.join('；'), /独立复核未完成，真实威胁结论待复核/);
+  assert.equal(result.trace.some(item => item.kind === 'review_unavailable'), true);
+});
+
+test('A2 复核要求修订但修订请求失败：降级并写明，不静默沿用草稿', async () => {
+  let calls = 0;
+  const model = { model: 'fake', complete: async () => {
+    calls++;
+    if (calls === 1) return { content: JSON.stringify({ verdict: '真实威胁', confidence: '高',
+      summary: '判为真实威胁', claims: [{ text: '执行命令', citations: [
+        { evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }] }) };
+    if (calls === 2) return { content: JSON.stringify({ assessment: 'needs_revision',
+      concerns: ['同主机共现不等于同一攻击链'], missing_evidence: [] }) };
+    throw new Error('修订请求超时');
+  } };
+  const result = await new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7', { mode: 'triage' });
+  assert.equal(calls, 3);
+  assert.equal(result.verdict.verdict, 'uncertain');
+  assert.match(result.verdict.summary, /独立复核要求修订，修订请求失败，暂按存疑处理/);
+  assert.match(result.verdict.missing_evidence.join('；'), /修订请求失败：修订请求超时/);
+  const failed = result.trace.find(item => item.kind === 'revision_failed');
+  assert.match(failed.error, /修订请求超时/);
+});
+
+test('A3 无效 JSON 同轮带错误反馈，退回上限按轮数封顶且落 trace', async () => {
+  const requests = [];
+  const model = { model: 'fake', complete: async messages => {
+    requests.push(messages.map(item => `${item.role}:${String(item.content ?? '').slice(0, 40)}`));
+    return { content: '结论：存疑。' };
+  } };
+  const result = await new InvestigationAgent(suspiciousToolbox(), model).run('suspicious_operation:7', { mode: 'triage' });
+  // 上限：一共 6 轮，不多试。
+  assert.equal(requests.length, 6);
+  const errors = result.trace.filter(item => item.kind === 'parse_error');
+  assert.deepEqual(errors.map(item => item.turn), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(errors.map(item => item.attempt), [1, 2, 3, 4, 5, 6]);
+  // 同轮反馈：第二轮请求里既有第一轮的原文，也有一条带解析错误的 user 消息。
+  assert.equal(requests[1].some(item => item.startsWith('assistant:结论：存疑')), true);
+  assert.equal(requests[1].some(item => item.startsWith('user:输出解析失败：')), true);
+  assert.equal(result.verdict.verdict, 'uncertain');
+});
+
+test('A7 一轮多个工具调用并发执行，tool 消息按 tool_call_id 原序回填', async () => {
+  // 事件详情不带主机标识：必查项只记缺标识、不发查询，本用例里所有取证都来自模型那一批。
+  let batchPhase = false;
+  let batchInflight = 0;
+  let batchPeak = 0;
+  const batchOrder = [];
+  const toolbox = new AgentToolbox({
+    listTools: async () => [
+      { name: 'get_suspicious_operation_event', inputSchema: { type: 'object', properties: { id: {} }, required: ['id'] } },
+      { name: 'list_full_commands_by_host', inputSchema: { type: 'object', properties: { host_id: {}, count: {} } } },
+      { name: 'list_host_events', inputSchema: { type: 'object', properties: { host_id: {}, count: {} } } }
+    ],
+    callTool: async name => {
+      if (name === 'get_suspicious_operation_event') return { event_id: 7, cmdline: 'id' };
+      if (batchPhase) { batchInflight++; batchPeak = Math.max(batchPeak, batchInflight); }
+      // 第一个工具故意慢：完成顺序与声明顺序相反，回填仍按 tool_call_id。
+      await new Promise(resolve => setTimeout(resolve, name === 'list_full_commands_by_host' ? 15 : 1));
+      if (batchPhase) { batchInflight--; batchOrder.push(name); }
+      return name === 'list_full_commands_by_host'
+        ? { total: 1, events: [{ host_id: 41, cmdline: 'id', started_at: 1 }] }
+        : { total: 0, events: [], queried_types: ['suspicious_operation'], totals_by_type: { suspicious_operation: 0 },
+          errors: {}, partial: false, query_scope: '各事件类型只取当前页' };
+    }
+  });
+  const requests = [];
+  let calls = 0;
+  const model = { model: 'fake', complete: async messages => {
+    requests.push(messages);
+    if (calls++ > 0) return { content: JSON.stringify({ verdict: '存疑', confidence: '低', summary: '需核对命令授权',
+      claims: [{ text: '命令记录', citations: [{ evidence_id: 'cw:2', pointer: '/total', value: 1 }] }], missing_data: [] }) };
+    batchPhase = true;
+    return { tool_calls: [
+      { id: 'call-a', type: 'function', function: { name: 'list_full_commands_by_host', arguments: '{"host_id":41}' } },
+      { id: 'call-b', type: 'function', function: { name: 'list_host_events', arguments: '{"host_id":41}' } }
+    ] };
+  } };
+  const result = await new InvestigationAgent(toolbox, model).run('suspicious_operation:7', { mode: 'triage' });
+  assert.equal(batchPeak, 2);
+  assert.deepEqual(batchOrder, ['list_host_events', 'list_full_commands_by_host']);
+  const toolMessages = requests[1].filter(item => item.role === 'tool');
+  assert.deepEqual(toolMessages.map(item => item.tool_call_id), ['call-a', 'call-b']);
+  assert.match(toolMessages[0].content, /cw:2/);
+  assert.match(toolMessages[1].content, /cw:3/);
+  assert.equal(result.verdict.verdict, 'uncertain');
+});
+
+test('A8 降级路径五个互不依赖的加载并发拉齐', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-degraded-parallel-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(path.join(directory, '03-研判事实.md'), '# 研判事实\n来源 192.0.2.2\n');
+  let inflight = 0;
+  let peak = 0;
+  const load = async value => {
+    inflight++; peak = Math.max(peak, inflight);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    inflight--; return value;
+  };
+  const agent = new InvestigationAgent(suspiciousToolbox(), { model: 'fake',
+    complete: async () => ({ content: JSON.stringify({ summary: '牧云没有匹配到事件', analysis: '只有 syslog 字段',
+      missing_data: ['缺少事件详情'], recommended_actions: ['核对告警时间'] }) }) },
+  { load: async () => load({ prompts: { triage: 'T' }, sop: {}, version: 'v1', revision: 'r1' }) },
+  { agentIndex: async () => load({ category: 'honeypot', pages: [{ id: 'HP-10', title: '蜜罐判定' }] }),
+    agentContextPages: async () => load([{ id: 'HP-10', title: '蜜罐判定' }]) },
+  { evaluate: async () => load({ matched: [] }) });
+  const result = await agent.runUnmatchedSyslog({ raw: 'raw', context: {}, parsed: {
+    msgid: 'cloudwalker-honeypot', payload: { host_ip: '10.0.0.5', source_ip: '192.0.2.2' } } },
+  { type: 'honeypot', matched: false, reason: '牧云 API 没有匹配到对应事件' }, { case_dir: directory, files: ['03-研判事实.md'] });
+  // 四个替身加载（提示词 / wiki 索引 / wiki 页 / Rego 求值）同时在途：串行时峰值只会是 1。
+  assert.equal(peak, 4);
+  assert.equal(result.verdict.verdict, 'uncertain');
+  assert.equal(result.mode, 'triage');
+});
+
+test('A1 轮数用尽时案件目录照常写出 05-研判结果.md（存疑 + 缺口清单）', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-degraded-case-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const toolbox = new AgentToolbox({
+    listTools: async () => [
+      { name: 'get_honeypot_event', inputSchema: { type: 'object', properties: { id: {} }, required: ['id'] } },
+      { name: 'list_honeypot_events', inputSchema: { type: 'object', properties: { source_ip: {}, count: {} } } }
+    ],
+    callTool: async name => name === 'get_honeypot_event'
+      ? { event_id: 7, host_id: 41, source_ip: '192.0.2.2', host_view: { host_ip: '10.0.0.5' } }
+      : { total: 0, events: [] }
+  });
+  // 模型只回正文，6 轮都不给 JSON → 降级结论。
+  const model = { model: 'fake', complete: async () => ({ content: '我先梳理这条蜜罐告警。' }) };
+  const monitor = new TriageMonitor({ service: {}, investigator: new InvestigationAgent(toolbox, model),
+    history: new InvestigationStore(path.join(directory, 'investigations')), inputMode: 'syslog', concurrency: 1,
+    eventToolbox: { listEvents: async () => ({ total: 1, events: [
+      { id: 7, started_at: Math.floor(new Date('2026-11-03T08:00:00Z').getTime() / 1000) }] }) },
+    wiki: { agentIndex: async () => ({ category: 'honeypot', pages: [] }), agentContextPages: async () => [] },
+    casesDirectory: path.join(directory, 'cases'), file: path.join(directory, 'state.json') });
+  await monitor.start();
+  const accepted = await monitor.acceptSyslog('<134>1 2026-11-03T08:00:00Z host app 1 cloudwalker-honeypot '
+    + 'host_ip="10.0.0.5" host_id="41" event_create_time="2026-11-03 08:00:00" source_ip="192.0.2.2" target_port="80"');
+  for (let n = 0; n < 400 && monitor.status(accepted.alert_id)?.status !== 'done'; n++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  const status = monitor.status(accepted.alert_id);
+  assert.equal(status.status, 'done', status.detail);
+  assert.equal(status.verdict_label, '存疑');
+  const result = await monitor.history.latest(status.result_alert_id, 'triage');
+  assert.equal(result.verdict.verdict, 'uncertain');
+  assert.equal(result.trace.some(item => item.kind === 'degraded_conclusion'), true);
+  assert.match(result.verdict.missing_evidence.join('；'), /仍没有可用结论/);
+  const file = await readFile(path.join(status.case_dir, '05-研判结果.md'), 'utf8');
+  assert.match(file, /结论：存疑/);
+  assert.match(file, /缺口|缺少|暂缺|缺证/);
+  await monitor.writeChain;
 });

@@ -43,7 +43,9 @@ test('new alerts enter triage once and the cursor survives restart', async t => 
   assert.equal(calls.length, 1);
 });
 
-test('resume after restart skips paused backlog and only investigates later alerts', async t => {
+// A2（P003-T036）改写了这条契约：暂停不再「跳过积压 + 清空队列 + 把游标推到点击时刻」，
+// 而是保留游标与队列，恢复后暂停期间进来的告警照常补跑（原来那套会让暂停期间的告警永久漏掉）。
+test('resume after restart keeps the cursor and the paused backlog instead of skipping it', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-control-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   let rows = [{ id: 'honeypot:1', createdAt: '2026-11-03T08:00:00.000Z' }];
@@ -55,24 +57,31 @@ test('resume after restart skips paused backlog and only investigates later aler
       verdict: { verdict: 'undetermined', summary: '待复核', claims: [] }, validation: { ok: true } }; } } };
   const monitor = new TriageMonitor(options);
   await monitor.load(); await monitor.poll();
+  const cursor = monitor.watermark;
+  assert.equal(cursor, '2026-11-03T08:00:00.000Z');
   assert.equal((await monitor.setEnabled(false)).enabled, false);
+  // 暂停期间到达两条：轮询不跑，队列也不动
   rows = [{ id: 'honeypot:2', createdAt: new Date(Date.now() - 1000).toISOString() }, ...rows];
   await monitor.poll();
   assert.equal(monitor.status('honeypot:2'), null);
   await monitor.enqueue('honeypot:manual');
   assert.equal(monitor.status('honeypot:manual').status, 'queued');
+  // 重启还是暂停：队列、游标都从盘上原样回来
   const resumed = new TriageMonitor(options);
   await resumed.load();
   assert.equal(resumed.summary().enabled, false);
+  assert.equal(resumed.watermark, cursor);
+  assert.equal(resumed.status('honeypot:manual').status, 'queued');
+  // 恢复：不删 queued、不把游标推到点击时刻；排队中的照常跑，暂停期间新增的告警下一轮轮询补上
   await resumed.setEnabled(true);
-  assert.equal(resumed.status('honeypot:2'), null);
-  assert.equal(resumed.status('honeypot:manual'), null);
-  assert.deepEqual(calls, []);
-  rows = [{ id: 'honeypot:3', createdAt: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString() }, ...rows];
+  for (let n = 0; n < 50 && resumed.status('honeypot:manual')?.status !== 'done'; n++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(resumed.status('honeypot:manual').status, 'done');
   await resumed.poll();
-  for (let n = 0; n < 50 && resumed.status('honeypot:3')?.status !== 'done'; n++) await new Promise(resolve => setTimeout(resolve, 5));
-  assert.equal(resumed.status('honeypot:3').status, 'done');
-  assert.deepEqual(calls, ['honeypot:3']);
+  for (let n = 0; n < 50 && resumed.status('honeypot:2')?.status !== 'done'; n++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(resumed.status('honeypot:2').status, 'done');
+  assert.deepEqual(calls.sort(), ['honeypot:2', 'honeypot:manual']);
   await assert.rejects(() => resumed.setEnabled('false'), /布尔值/);
 });
 
@@ -294,7 +303,8 @@ test('summary() 出结论分布、类型分布，since 只算该时刻起进入�
 
 test('syslog 模式的 summary 给出最后一条到达时刻，重启后不丢，失败投递不算', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-received-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  // 后台合并写与 teardown 抢跑：rm 撞上并发写入会 ENOTEMPTY，交给 Node 自带重试（与 integration.test.js 同一处理）
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 20 }));
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-03T08:00:00.000Z') });
   const options = { service: {}, inputMode: 'syslog', concurrency: 1,
     history: new InvestigationStore(path.join(directory, 'results')), file: path.join(directory, 'queue.json'),
@@ -335,7 +345,9 @@ test('syslog 模式的 summary 给出最后一条到达时刻，重启后不丢�
   assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
   await monitor.setEnabled(false);
   t.mock.timers.tick(5000);
-  assert.deepEqual(await monitor.acceptSyslog(line), { skipped: 'paused' });
+  // A2（P003-T036）：暂停期间不丢，报文进缓冲区等恢复回灌
+  assert.deepEqual(await monitor.acceptSyslog(line), { buffered: true, buffered_count: 1 });
+  assert.equal(monitor.summary().paused.received, 1);
   assert.equal(monitor.summary().last_received_at, '2026-11-03T08:00:07.000Z');
 
   // 持久化：重启后仍是同一个最后到达时刻，而不是退回 null
@@ -694,31 +706,43 @@ test('A5 并发与队列上限可由配置查，队列到上限拒收并计丢�
   assert.equal(byEnv.queueLimit, 5);
   assert.deepEqual([byEnv.summary().concurrency, byEnv.summary().queue_limit, byEnv.summary().dropped], [3, 5, 0]);
 
-  // 显式构造参数走同一条规范化：合法值原样保留，非法值回落默认（0 / 负数 / 非数）。
+  // 显式构造参数：合法值原样保留，非法值回落默认（负数 / 小数 / 非数 / 空串 / 字符串 '0'）。
   // 回归（复审 blocker）：构造尾部曾有一行 `this.concurrency = concurrency` 把规范化结果覆盖回原值，
-  // 显式传 0 时 drain 条件 active < 0 恒假，队列永不执行——这两段断言就是防它再回来。
+  // 显式传非法值时 drain 条件 active < 非法值 恒假，队列永不执行——下面这两段断言就是防它再回来。
   // 先清掉 env，回落目标才是硬默认 2 / 1000（否则测的是 env）。
   delete process.env.HIDS_TRIAGE_CONCURRENCY;
   delete process.env.HIDS_TRIAGE_QUEUE_MAX;
   assert.equal(new TriageMonitor({ file: path.join(directory, 'explicit.json'), concurrency: 4,
     service: {}, investigator: {}, history: {} }).summary().concurrency, 4, '显式合法值原样生效');
-  for (const bad of [0, -5, 'abc', null, 1.5]) {
+  for (const bad of [-5, 'abc', null, 1.5, '', '0']) {
     const explicit = new TriageMonitor({ file: path.join(directory, 'explicit-bad.json'), concurrency: bad,
       queueLimit: bad, service: {}, investigator: {}, history: {} });
     assert.deepEqual([explicit.concurrency, explicit.summary().concurrency, explicit.queueLimit], [2, 2, 1000],
       `显式非法参数 ${JSON.stringify(bad)}`);
   }
 
-  // 行为面：显式 concurrency:0 不能把队列卡死，入队的记录必须真的跑起来（复审用 node -e 复现的那条路径）。
+  // 行为面一：显式数字 0 是合法值——不起 worker、只排队（P003-T036 的测试与停机维护需要「入队但不跑」）。
+  const idle = [];
+  const paused = new TriageMonitor({ service: {}, file: path.join(directory, 'idle.json'), concurrency: 0,
+    history: new InvestigationStore(path.join(directory, 'idle-results')),
+    investigator: { run: async id => { idle.push(id); return { alert_id: id, mode: 'triage',
+      verdict: { verdict: 'uncertain', summary: '待复核', claims: [] }, validation: { ok: true } }; } } });
+  await paused.load();
+  await paused.enqueue('honeypot:2');
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(idle, [], 'concurrency:0 不跑研判');
+  assert.equal(paused.status('honeypot:2').status, 'queued', '记录稳定停在 queued');
+
+  // 行为面二：非法值回落默认后队列照常执行，不被 `active < 非法值` 卡死（复审用 node -e 复现的那条路径）。
   const stuck = [];
-  const rescued = new TriageMonitor({ service: {}, file: path.join(directory, 'stuck.json'), concurrency: 0,
+  const rescued = new TriageMonitor({ service: {}, file: path.join(directory, 'stuck.json'), concurrency: -1,
     history: new InvestigationStore(path.join(directory, 'results')),
     investigator: { run: async id => { stuck.push(id); return { alert_id: id, mode: 'triage',
       verdict: { verdict: 'uncertain', summary: '待复核', claims: [] }, validation: { ok: true } }; } } });
   await rescued.load();
   await rescued.enqueue('honeypot:1');
   await awaitRecord(rescued, () => stuck.length === 1);
-  assert.deepEqual(stuck, ['honeypot:1'], 'concurrency:0 回落默认后队列照常执行');
+  assert.deepEqual(stuck, ['honeypot:1'], '非法 concurrency 回落默认后队列照常执行');
   assert.equal(rescued.status('honeypot:1').status, 'done');
 
   // env 路径：非法值同样回落默认，不把队列卡死（0 / 负数 / 非数 / 空串）。

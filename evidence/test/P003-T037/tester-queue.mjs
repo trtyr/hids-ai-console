@@ -30,10 +30,12 @@ const mk = (opts) => new TriageMonitor({
 });
 
 console.log('== A5 配置面：concurrency / queueLimit 非法值回落 ==');
-for (const [given, want] of [[3, 3], [0, 2], [-5, 2], [1.5, 2], ['abc', 2], [null, 2], ['', 2], ['4', 4]]) {
+for (const [given, want] of [[3, 3], [-5, 2], [1.5, 2], ['abc', 2], [null, 2], ['', 2], ['4', 4], ['0', 2]]) {
   const m = mk({ concurrency: given });
   eq(m.summary().concurrency, want, `concurrency=${JSON.stringify(given)} -> ${want}`);
 }
+// 显式数字 0 是合法值（合并 P003-T036 后的约定）：不起 worker、只排队；env 里的 0 仍按非法配置回落（下面 A5 行为面）。
+eq(mk({ concurrency: 0 }).summary().concurrency, 0, 'concurrency=0 -> 0（只排队不执行）');
 for (const [given, want] of [[5, 5], [0, 1000], [-1, 1000], [1.5, 1000], ['x', 1000], [null, 1000]]) {
   const m = mk({ queueLimit: given });
   eq(m.summary().queue_limit, want, `queueLimit=${JSON.stringify(given)} -> ${want}`);
@@ -56,15 +58,25 @@ eq(mk({}).summary().concurrency, 3, 'env 生效');
 eq(mk({ concurrency: 5 }).summary().concurrency, 5, '显式参数优先于 env');
 delete process.env.HIDS_TRIAGE_CONCURRENCY;
 
-console.log('== A5 行为面：concurrency=0 不得把队列卡死 ==');
+console.log('== A5 行为面：显式 concurrency=0 只排队；非法值回落默认后照常执行 ==');
 {
   let calls = 0;
   const m = mk({ concurrency: 0, file: `${ROOT}/c0/state.json`, investigator: { async run(id) { calls += 1; return { alert_id: id, verdict: { verdict: 'uncertain' } }; } } });
   await m.enqueue('honeypot:1');
+  await new Promise(resolve => setTimeout(resolve, 60));
+  eq(m.status('honeypot:1')?.status, 'queued', 'concurrency=0：记录稳定停在 queued');
+  eq(calls, 0, 'concurrency=0：不调研判');
+  eq(m.summary().concurrency, 0, 'concurrency=0：summary 原样回显 0');
+}
+{
+  // 非法值（-1）回落默认 2 → 队列必须真的跑起来，不能被 `active < 非法值` 卡死。
+  let calls = 0;
+  const m = mk({ concurrency: -1, file: `${ROOT}/cneg/state.json`, investigator: { async run(id) { calls += 1; return { alert_id: id, verdict: { verdict: 'uncertain' } }; } } });
+  await m.enqueue('honeypot:1');
   const done = await until(async () => m.status('honeypot:1')?.status === 'done');
-  ok(done, 'concurrency=0：入队后跑成 done（未卡死）', `status=${m.status('honeypot:1')?.status}`);
-  eq(m.summary().concurrency, 2, 'concurrency=0 回落 2 后 summary 可读');
-  eq(calls, 1, 'concurrency=0：研判执行 1 次');
+  ok(done, 'concurrency=-1 回落默认：入队后跑成 done（未卡死）', `status=${m.status('honeypot:1')?.status}`);
+  eq(m.summary().concurrency, 2, 'concurrency=-1 回落 2 后 summary 可读');
+  eq(calls, 1, 'concurrency=-1：研判执行 1 次');
 }
 
 console.log('== A5 队列上限：手动 enqueue 429 + dropped 计数 ==');
