@@ -9,12 +9,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtemp } from 'node:fs/promises';
 import net from 'node:net';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from '../../../server.js';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
+// 真进程的数据根：全部指到 tmp，一个字节都不许写进仓库或真实全局根（P003-T034 A2）。
+// 本文件的真进程 helper 拿不到 `t`，所以用「每个 helper 自己建一个 tmp 数据根 + 进程退出时兜底清理」。
+const dataRoots = [];
+process.once('exit', () => { for (const directory of dataRoots) { try { rmSync(directory, { recursive: true, force: true }); } catch {} } });
+const newDataRoot = () => { const directory = mkdtempSync(path.join(tmpdir(), 'hids-config-contract-data-')); dataRoots.push(directory); return directory; };
 
 // 契约里的固定清单（openapi.yaml / http-api.md §3.5 / architecture.md §3.5 三处同口径）
 const REQUIRED = ['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN', 'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL'];
@@ -116,7 +125,8 @@ const baseEnv = (port, extra = {}) => ({
 // 起一个会自己退出的真进程（闸门拒绝启动 / 装配抛错都是这一类），收齐 stdout+stderr。
 function runToExit(env, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, ['server.js'], { cwd: ROOT,
+      env: { ...env, HIDS_DATA_DIR: newDataRoot() }, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
@@ -131,7 +141,10 @@ function runToExit(env, timeoutMs = 10000) {
 
 // 起一个真进程并等它开始接 HTTP；退出用 SIGKILL 兜底（不指望优雅关闭）。
 async function startReal(t, env) {
-  const child = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const dataDirectory = await mkdtemp(path.join(tmpdir(), 'hids-config-contract-data-'));
+  t.after(() => rmSync(dataDirectory, { recursive: true, force: true }));
+  const child = spawn(process.execPath, ['server.js'], { cwd: ROOT,
+    env: { ...env, HIDS_DATA_DIR: dataDirectory }, stdio: ['ignore', 'pipe', 'pipe'] });
   const seen = { stdout: '', stderr: '' };
   child.stdout.on('data', chunk => { seen.stdout += chunk; });
   child.stderr.on('data', chunk => { seen.stderr += chunk; });

@@ -39,13 +39,13 @@
 
 | 件 | 位置 | 缺配置时的结果 |
 | --- | --- | --- |
-| 运行态目录 `runtime`（9 条路径） | `server.js:27`、`server.js:876-889` | 不依赖环境变量，恒为仓内 `.data/` 下 |
+| 运行态目录 `runtime`（9 条路径） | `server.js:29`、`server.js:1005-1018` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
 | 监听地址与端口 | `server.js:28-29` | `HIDS_HOST` 缺省 `127.0.0.1`，`HIDS_PORT` 缺省 `8080` |
 | 牧云网关 `gateway` 与 API 工具箱 `apiToolbox` | `server.js:30-34` | 牧云地址或 Token 缺一个 → 两者为 `null` |
 | 模型 `model` 与两个研判器 | `server.js:35-40` | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项 → `model` 为 `null`，两个研判器也是 `null` |
-| 研判记录、规则集、研判队列、判据工作台、溯源白板 | `server.js:41-54`、`server.js:95-97` | 队列要 `gateway` 与研判器、白板要 MCP 工具箱与模型，缺任一则该件为 `null` |
+| 研判记录、规则集、研判队列、判据工作台、溯源白板 | `server.js:46-59`、`server.js:126` | 队列要 `gateway` 与研判器、白板要 MCP 工具箱与模型，缺任一则该件为 `null` |
 
-运行态路径的默认值全出自导出的 `runtimePaths(directory = moduleDirectory)`（`server.js:876-889`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，全部落在仓内 `.data/` 下。整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
+运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1005-1018`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
 
 **`createServer` 是依赖注入点**（`server.js:257-261`）：14 个参数都带默认值，默认指向模块级单例。测试与探针靠传替身换掉 `service`、`investigator`、`history`、`monitor`、`wiki`、`wikiAgent` 这些件。其中 `monitor` 与 `boardService` 的默认值写成「`service` 是不是模块级 `gateway`」的条件式——换了 `service`，就不再挂默认的研判队列与溯源白板。
 
@@ -267,7 +267,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 ### 3.6 写配置（`POST /api/config`，P003-T029）
 
-**是什么**：不重启进程改牧云与模型的五项，改完立刻生效、落盘、重启仍生效，且不回显。实现：路由两行（`server.js:646-650`），行为全在新文件 `config-store.js`（`createConfigStore`，`config-store.js:76`）。OpenAPI 契约见 `openapi.yaml` 的 `writeConfig`。
+**是什么**：不重启进程改牧云与模型的五项，改完立刻生效、落盘、重启仍生效，且不回显。实现：路由两行（`server.js:646-650`），行为全在新文件 `config-store.js`（`createConfigStore`，`config-store.js:88`）。OpenAPI 契约见 `openapi.yaml` 的 `writeConfig`。
 
 **可写的只有五个键**（`WRITABLE_CONFIG_KEYS`，`config-store.js:22`）：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。表外键一律 400，包括看起来很顺手的 `HIDS_PORT`：`HIDS_HOST` / `HIDS_PORT` / `HIDS_TRIAGE_INPUT_MODE` 改起来必须重启进程；Basic 口令与两个管理员令牌是鉴权凭据本身，写进来等于自己给自己开门。
 
@@ -277,8 +277,8 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 {"LLM_MODEL":"qwen2.5-72b-instruct"}
 ```
 
-- **值的形状**用模块级装配处同一套构造器判（`config-store.js:35` → `rpc-client.js:4-5`、`model-client.js:22-24`）：`CLOUDWALKER_URL` / `LLM_BASE_URL` 必须 `http(s)://` 开头；`CLOUDWALKER_API_TOKEN` 至少 6 位；`LLM_API_KEY`、`LLM_MODEL` 非空。校验对象是**合并后的生效值**（只改 `LLM_MODEL` 也要三项齐——进程里这三项本来就被启动闸门保证齐全）。
-- **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只增不减，要清掉改过的值就手工删 `.data/config-overrides.json` 后重启。
+- **值的形状**用模块级装配处同一套构造器判（`config-store.js:47` → `rpc-client.js:4-5`、`model-client.js:22-24`）：`CLOUDWALKER_URL` / `LLM_BASE_URL` 必须 `http(s)://` 开头；`CLOUDWALKER_API_TOKEN` 至少 6 位；`LLM_API_KEY`、`LLM_MODEL` 非空。校验对象是**合并后的生效值**（只改 `LLM_MODEL` 也要三项齐——进程里这三项本来就被启动闸门保证齐全）。
+- **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只增不减，要清掉改过的值就手工删数据根下的 `config-overrides.json`（`~/.local/share/hids-ai-console/config-overrides.json`，或 `HIDS_DATA_DIR` 指的目录）后重启。
 
 **响应**：`200`，`Cache-Control: no-store`：
 
@@ -297,7 +297,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 1. **立刻反映**：`GET /api/config` 下一次请求就报新值——store 把覆盖层写进 `env`，而 GET 读的就是 `configSummary(config.env)`。
 2. **运行中生效**：进程内活着的客户端对象**原地换值**（`applyLiveConfig`，`server.js:65-84`：`gateway.rpc.baseUrl/token`、`agentToolbox.client.url/token`（并把 `initialized` 置 false，新服务端要重新 initialize MCP 会话）、`model.url/apiKey/model`），后续牧云 / 模型调用立刻走新地址与新凭据。不重建对象是因为 `createServer` 的 `service` / `toolbox` / `investigator` / `monitor` 都是值捕获，重建等于换了一批引用，路由手里还是旧的。
-3. **持久化**：值落到仓内 `.data/config-overrides.json`（`.gitignore:10` 已忽略；同目录临时文件 + `rename`，权限 0600），文件里**只有改过的键**。进程启动时 store 在建模块级客户端**之前**同步读回它（`server.js:32`），所以重启后改过的值仍生效，**没改过的键继续读环境变量**。文件坏了（不是合法 JSON、不是对象）不当场死：当空处理并落一条 `config.load_failed`（`level: error`，字段 `file` / `error`），进程照常起来、按环境变量生效。
+3. **持久化**：值落到**数据根**下的 `config-overrides.json`（`~/.local/share/hids-ai-console/config-overrides.json`，或 `HIDS_DATA_DIR` 指的目录；同目录临时文件 + `rename`，权限 0600），文件里**只有改过的键**。进程启动时 store 在建模块级客户端**之前**同步读回它（`server.js:32`），所以重启后改过的值仍生效，**没改过的键继续读环境变量**。文件坏了（不是合法 JSON、不是对象）不当场死：当空处理并落一条 `config.load_failed`（`level: error`，字段 `file` / `error`），进程照常起来、按环境变量生效。
 
 **鉴权（A3）**：和其它业务路由一样过 Basic 认证闸门（§4，`server.js:413` / `server.js:421`），闸门在 URL 解析之前。**没配 `HIDS_BASIC_AUTH_PASSWORD` 时闸门放行，写接口也放行**——那是一个合法部署（单机探针、内网只读演示），不是推荐部署：任一能访问到端口的人都能把牧云地址指到自己的服务器再把模型密钥送出去。要挡住写就把 Basic 认证配上（配了就回 401，见 A3 用例）。这一点不是本节的推论，是写进 `openapi.yaml` `writeConfig.description` 的契约。
 
@@ -330,7 +330,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 - 不在运行中**新建**原本为空的客户端：启动闸门要求五项必填齐全，进程里 `gateway` / `model` 恒存在；`applyLiveConfig` 只换值不建对象（进程内注入空客户的测试路径不会因为一次写就跑起来）。
 - 不写前端：本卡不动 `web/**`，配置页要不要加输入框是另一张卡。
-- 不新增环境变量：覆盖层路径固定由 `runtimePaths()` 的 `.data/` 推出，`.env.example` 不变。
+- 不动数据根：覆盖层路径固定由 `runtimePaths().data` 推出，根怎么算不归这条接口管（P003-T034 起由 `HIDS_DATA_DIR` / 全局默认决定，见 §2）。`HIDS_DATA_DIR` 改起来必须重启进程，它不在可写五项里。
 - 不改 `GET /api/config` 的响应形状（§3.5 契约照旧）。
 
 **可重放证据**（`evidence/test/P003-T029/config-write.test.js`，10 条）：
@@ -517,7 +517,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 | --- | --- | --- | --- | --- |
 | 调用方传错 | 4xx：400 参数/正文、403 权限、404 不存在、405 方法、409 状态冲突、410 已下线、422 无法溯源 | `caller_error` | 路由自己判出来走 `callerError`（`server.js:364`）；异常自带 4xx `status`（各模块判过的档位，如 `wiki-store.js` 的 400/404/409、`trace-board.js` 的 422）也算这一类 | 校验原话，如「分页参数无效」「告警 ID 无效」 |
 | 没配置 | 503 | `not_configured` | 路由开头判依赖在不在，走 `configError`（`server.js:365`） | 点名缺哪个变量/组件，如「未配置 CLOUDWALKER_URL 和 CLOUDWALKER_API_TOKEN」 |
-| 上游失败 | 502 | `upstream_error` | `viaCloudwalker` 在异常上打的 `failure: 'upstream'` 标（`server.js:431-437`）；**随部署的只读规则数据**（`rules/` 的 Rego、`.data/triage-rules.json`）读/解析失败也归这类 | 上游那句摘要原话：牧云 `/rpc <code>: <message>`、`connect ECONNREFUSED <ip>:<port>`、`模型接口 HTTP <status>: <message>`、`规则库读取失败：rules/<文件>:<行> …` |
+| 上游失败 | 502 | `upstream_error` | `viaCloudwalker` 在异常上打的 `failure: 'upstream'` 标（`server.js:431-437`）；**随部署的只读规则数据**（`rules/` 的 Rego、数据根下的 `triage-rules.json`）读/解析失败也归这类 | 上游那句摘要原话：牧云 `/rpc <code>: <message>`、`connect ECONNREFUSED <ip>:<port>`、`模型接口 HTTP <status>: <message>`、`规则库读取失败：rules/<文件>:<行> …` |
 | 本程序失败 | 500 | `internal_error` | 其余没被认领的异常：路由里调本地存储/自己代码的 catch 用 `causeError(res, cause, 'internal')`，外层 catch 的缺省类也是它（`server.js:945-951`） | 恒为「服务器内部错误」；异常原文与堆栈只进 `http.failed` 日志 |
 
 判定顺序（`failureKindOf`，`server.js:370-374`）：异常上有 `failure` 标记 → 按标记；否则异常带 4xx `status` → `caller`；

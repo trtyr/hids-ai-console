@@ -131,7 +131,8 @@ paths:
         写成功之后：
         - `GET /api/config` 立刻报新值（不用重启进程）；
         - 后续牧云 / 模型调用立刻走新地址与新凭据（进程内客户端原地换值，不新建进程）；
-        - 值落盘到 `.data/config-overrides.json`（同目录临时文件 + `rename`，权限 0600，只存改过的键），
+        - 值落盘到**数据根**下的 `config-overrides.json`（`HIDS_DATA_DIR` 指到哪就落哪，没设就是
+          `~/.local/share/hids-ai-console/config-overrides.json`；同目录临时文件 + `rename`，权限 0600，只存改过的键），
           **重启进程后仍然生效**；没被改过的键继续读环境变量。
         部分更新：只改正文里出现的键。表外的键一律 400——`HIDS_HOST`、`HIDS_PORT`、`HIDS_TRIAGE_INPUT_MODE`
         改起来必须重启进程；Basic 口令与两个管理员令牌是鉴权凭据本身，不通过这条接口改。

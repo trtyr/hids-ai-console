@@ -8,7 +8,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,8 +58,11 @@ async function freePort() {
 
 // 起真进程，收集 stdout / stderr，等到条件成立或进程退出或超时。
 async function runServer(t, env, until) {
+  // HIDS_DATA_DIR 指到 tmp：真进程不许往仓库或真实全局根写运行态（P003-T034 A2）。
+  const dataDirectory = await mkdtemp(path.join(tmpdir(), 'hids-config-check-data-'));
+  t.after(() => rm(dataDirectory, { recursive: true, force: true }));
   const child = spawn(process.execPath, ['server.js'], { cwd: ROOT,
-    env: { PATH: process.env.PATH, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    env: { PATH: process.env.PATH, ...env, HIDS_DATA_DIR: dataDirectory }, stdio: ['ignore', 'pipe', 'pipe'] });
   const seen = { stdout: '', stderr: '' };
   child.stdout.on('data', chunk => { seen.stdout += chunk; });
   child.stderr.on('data', chunk => { seen.stderr += chunk; });

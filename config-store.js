@@ -1,7 +1,7 @@
 // 可写配置（P003-T029）：牧云与模型的五项能在运行中改，写盘后重启仍生效，响应与日志都不回显原文。
 //
 // 三层关系，别在别处再写一套：
-//   1) 覆盖层文件（`<仓库>/.data/config-overrides.json`）只存「改过的键」，没改过的键继续读环境变量；
+//   1) 覆盖层文件（`<数据根>/config-overrides.json`，数据根见下面 dataRoot()）只存「改过的键」，没改过的键继续读环境变量；
 //   2) `createConfigStore()` 建的时候**同步**读覆盖层并盖进 env——「重启后仍生效」就是这一步，
 //      所以它必须在 server.js 的模块级装配之前建：那批 `const gateway = … process.env …` 才看得到改过的值；
 //   3) `update()` **先落盘再改内存与 env**：写盘失败就什么都不变（内存里改成功、盘上没改，重启就打回原形）。
@@ -11,8 +11,8 @@
 // 校验对象是「合并后的生效值」：只改 LLM_MODEL 也要三项齐全——进程里这三项本来就由启动闸门保证齐全。
 import { readFileSync } from 'node:fs';
 import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { log } from './log.js';
 import { RpcClient } from './rpc-client.js';
 import { ChatModelClient } from './model-client.js';
@@ -22,8 +22,20 @@ import { ChatModelClient } from './model-client.js';
 export const WRITABLE_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN',
   'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL']);
 
-export function defaultConfigFile(directory = path.dirname(fileURLToPath(import.meta.url))) {
-  return path.join(directory, '.data', 'config-overrides.json');
+// 运行态数据根的唯一定义（P003-T034）：`HIDS_DATA_DIR` 指向哪就落哪，没设就落机器全局的
+// `~/.local/share/hids-ai-console/`。**仓库里一个字都不写**——测试与探针注入 tmp 目录，别让它们写真实全局根。
+// 放在本模块而不是 server.js：`server.js` 已经 import 本模块（`server.js:26`），反向 import 会成环；
+// 而且 prompt-store / wiki-store 也要这个根，它们同样不该为了一个路径去 import server。
+// env / home 可注入：单测用字面量，不碰真实 process.env 与真实 HOME。
+// 空串与纯空白算「没设」（与 `server.js:56` 的 HIDS_CASES_DIR 同一个口径）；相对路径按当前工作目录绝对化。
+export function dataRoot({ env = process.env, home = homedir() } = {}) {
+  const configured = typeof env.HIDS_DATA_DIR === 'string' ? env.HIDS_DATA_DIR.trim() : '';
+  if (configured) return path.resolve(configured);
+  return path.join(home, '.local', 'share', 'hids-ai-console');
+}
+
+export function defaultConfigFile(root = dataRoot()) {
+  return path.join(root, 'config-overrides.json');
 }
 
 // 调用方传错一律带 status（与 readJSON 同一个口径，外层据此回 400 而不去猜文案）。
@@ -62,7 +74,7 @@ function readOverrides(file, journal) {
 }
 
 // 原子写：同目录 tmp + rename（跨设备不会发生在同一个目录里）。文件里是机密原文，权限收到 0600。
-// 失败（写或 rename 抛）时删掉 tmp 再原样抛：失败路径不在 .data/ 里留垃圾，调用方看到的错误不变。
+// 失败（写或 rename 抛）时删掉 tmp 再原样抛：失败路径不在数据根里留垃圾，调用方看到的错误不变。
 async function writeOverrides(file, overrides) {
   await mkdir(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.tmp`;
@@ -72,7 +84,7 @@ async function writeOverrides(file, overrides) {
   } catch (cause) { await unlink(temporary).catch(() => {}); throw cause; }
 }
 
-// env / file / journal 都可注入：单测用字面量 env 与 tmp 目录，不碰真实 process.env 与仓内 .data/。
+// env / file / journal 都可注入：单测用字面量 env 与 tmp 目录，不碰真实 process.env 与仓内、也不碰真实全局根。
 export function createConfigStore({ file = defaultConfigFile(), env = process.env, journal = log } = {}) {
   let overrides = readOverrides(file, journal);
   const apply = () => { for (const [key, value] of Object.entries(overrides)) env[key] = value; };

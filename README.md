@@ -11,4 +11,4 @@ node --env-file=.env.local server.js
 npm test                 # 后端单测（node --test --test-timeout=60000 --test-force-exit *.test.js）
 ```
 
-运行中的案件和配置在被 Git 忽略的 `.data/`。Wiki 与提示词在 `wiki/`、`prompts/`。
+运行中的案件、研判记录与配置落在机器全局的数据根：`HIDS_DATA_DIR` 指到哪就落哪，没设就是 `~/.local/share/hids-ai-console/`（仓库里不写任何运行态）。Wiki 与提示词在 `wiki/`、`prompts/`。

@@ -23,10 +23,10 @@ import { TraceBoardService } from './trace-board.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
 import { RuleStore, isRuleId } from './rule-store.js';
-import { createConfigStore } from './config-store.js';
+import { createConfigStore, dataRoot } from './config-store.js';
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
-const runtime = runtimePaths(moduleDirectory); // 运行态一律落在仓库内 .data/（`.gitignore:10` 已忽略）；规则与旧目录说明见文件末尾 runtimePaths()
+const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
 // 可写配置的覆盖层（P003-T029）：**必须在下面这批模块级装配之前建**——它把改过的键盖进 process.env，
 // 装配才看得到；「重启进程后改过的值仍生效」全靠这一行。没改过的键继续读环境变量。
 const configStore = createConfigStore({ file: path.join(runtime.data, 'config-overrides.json') });
@@ -993,12 +993,17 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   });
 }
 
-// 运行态路径的唯一真源（P003-T019）：全部落在仓库内 .data/，不经过仓库的上一级。
-// 别改成「本文件所在目录的上一级」：部署时上一级是别人的目录，写出去的案卷/基线没人知道该去哪找。
-// 旧版指的是 `<上一级>/backend/.data/`，那些目录里的既有数据不自动搬，要接着用就人工搬进仓内 .data/。
+// 运行态路径的唯一真源（P003-T019 立、P003-T034 搬到数据根）：全部落在数据根下，**仓库里一个字都不写**。
+// `server.js` 模块级装配那一行（`server.js:29`）就是 `runtimePaths()` 的缺省调用：根由 `dataRoot()` 定，
+// 设了 `HIDS_DATA_DIR` 就用它，没设就是 `~/.local/share/hids-ai-console/`。
+// 数据根本身由 `dataRoot()`（`config-store.js`）定义：`HIDS_DATA_DIR` 指向哪就落哪，没设就是
+// `~/.local/share/hids-ai-console/`——两个文件共用一份规则，别在这里另拼一套。
+// 别改回「本文件所在目录」或「本文件所在目录的上一级」：部署时仓库目录是只读的，写出去的案卷/基线没人知道该去哪找。
+// 旧位不自动搬（P003-T034 A4）：仓内 `.data/` 与更早的 `<上一级>/backend/.data/` 里的既有数据进程不读也不写，
+// 要接着用就人工搬进数据根（迁移是运维的手工活，代码里没有任何 rename / copy）。
 // 定义在这个位置（模块末尾）而不在顶部，是为了不挪动上面所有 `path:line` 引用的行号。
-export function runtimePaths(directory = moduleDirectory) {
-  const data = path.join(directory, '.data');
+export function runtimePaths(root = dataRoot()) {
+  const data = root;
   return {
     data,
     investigations: path.join(data, 'investigations'),

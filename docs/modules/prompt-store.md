@@ -35,8 +35,8 @@
 
 | 项 | 取值 | 出处 |
 | --- | --- | --- |
-| 覆盖文件默认路径 | `<本模块所在目录>/.data/prompt-overrides.json` | `prompt-store.js:17` |
-| 覆盖文件环境变量 | `HIDS_PROMPT_STORE_FILE`，配了就用它 | `prompt-store.js:17` |
+| 覆盖文件默认路径 | `<数据根>/prompt-overrides.json`（数据根＝`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`；**不在仓库内**） | `prompt-store.js:20` |
+| 覆盖文件环境变量 | `HIDS_PROMPT_STORE_FILE`，配了就用它 | `prompt-store.js:20` |
 | 构造参数 | `new PromptStore(filename)`，给了就用给的 | `prompt-store.js:26` |
 | 判据目录环境变量 | `HIDS_WIKI_DIR`，缺省 `<本模块所在目录>/wiki` | `prompt-store.js:9` |
 | 提示词目录 | `<本模块所在目录>/prompts`（写死，不可配） | `prompt-store.js:7` |

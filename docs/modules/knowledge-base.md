@@ -275,7 +275,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 | 下游 | 模型服务 `model.complete()` | 两处调用：维护会话一轮一次；回放每条样本两次。两处的工具参数都是空数组，第三参都是 `'none'` | `wiki-workbench.js:175`、`wiki-replay.js:64` |
 | 下游 | 事件类型表 `eventTypes` | 校验客户经验的 `scenario_id` 是不是已知场景 | `wiki-workbench.js:4`、`wiki-workbench.js:198` |
 | 下游 | 维护会话目录 | 会话 JSON 落在这里；回放时又把它当样本库扫 | `wiki-workbench.js:79-82`、`wiki-replay.js:21` |
-| 下游 | 历史版本目录 | `<判据库目录的上一级>/.data/wiki-history/`，存每次修订前的旧版 | `wiki-store.js:171`、`wiki-store.js:275` |
+| 下游 | 历史版本目录 | 数据根下的 `wiki-history/`（判据库目录被 `HIDS_WIKI_DIR` 换掉时改落它同级 `.data/wiki-history/`），存每次修订前的旧版 | `wiki-store.js:11-13`、`wiki-store.js:182`、`wiki-store.js:286` |
 | 外部库 | `node:crypto` | `createHash`（三个文件都用）与 `randomUUID`（只有前两个文件用） | `wiki-store.js:1`、`wiki-workbench.js:1`、`wiki-replay.js:5` |
 | 外部库 | `node:fs/promises` | 读写文件、建目录、改名、追加日志 | `wiki-store.js:2`、`wiki-workbench.js:2`、`wiki-replay.js:2` |
 | 外部库 | `node:path` / `node:url` | 拼路径、定位模块所在目录 | `wiki-store.js:3-4`、`wiki-replay.js:3` |
@@ -286,7 +286,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 | 数据 | 放在哪 | 生命周期 | 依据 |
 | --- | --- | --- | --- |
 | 判据页 Markdown | 判据库目录下 | 长期；人工与工作台共同维护 | `wiki-store.js:6` |
-| 页面历史版本 | `<判据库目录的上一级>/.data/wiki-history/<编号>-<revision>.md` | 长期保留，不清理 | `wiki-store.js:171-174`、`wiki-store.js:277-279` |
+| 页面历史版本 | `<数据根>/wiki-history/<编号>-<revision>.md`（判据库目录被换掉时在它同级 `.data/wiki-history/`） | 长期保留，不清理 | `wiki-store.js:182-185`、`wiki-store.js:286-289` |
 | 变更日志 `log.md` | 判据库目录根 | 追加写，一条变更一段 | `wiki-store.js:180-181`、`wiki-store.js:292-293`、`wiki-store.js:323-324` |
 | 证据页 | 判据库目录下的 `_evidence/` | 随引用它的判据页长期存在 | `wiki-workbench.js:37`、`wiki-workbench.js:51` |
 | 客户经验目录页 | 判据库目录下的 `customer-experience/index.md` | 追加写，一页一行 | `wiki-store.js:319-322` |

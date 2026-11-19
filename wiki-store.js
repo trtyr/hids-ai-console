@@ -2,8 +2,15 @@ import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { dataRoot } from './config-store.js';
 
 const defaultDirectory = process.env.HIDS_WIKI_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), 'wiki');
+// 历史版本目录（P003-T034）：判据库用内置的 `wiki/` 时，备份落**数据根**下的 `wiki-history/`——仓库里一个字都不写；
+// 判据库目录被外部注入（`HIDS_WIKI_DIR`、测试的 tmp 目录）时，历史仍旧跟着判据库目录走（同级 `.data/wiki-history/`），
+// 因为判据库搬到别处部署，它的备份该跟它走，不该散在机器全局，也不该让单测往真实全局根写。
+const historyDirectoryFor = directory => directory === defaultDirectory
+  ? path.join(dataRoot(), 'wiki-history')
+  : path.join(path.dirname(directory), '.data', 'wiki-history');
 const idPattern = /^[A-Z]{2,3}-\d+[a-z]?$/;
 const pagePattern = /^(?:common|webshell|memwebshell|rasp|revshell|suspicious-command|cmdaudit|malware|bruteforce|honeypot|elevation|abnormal-login|net|customer-experience)\/[A-Z]{2,3}-\d+[a-z]?\.md$/;
 const wikiDirectories = new Set(['common', 'webshell', 'memwebshell', 'rasp', 'revshell',
@@ -27,7 +34,11 @@ function metadata(filename, source) {
 }
 
 export class WikiStore {
-  constructor(directory = defaultDirectory) { this.directory = directory; this.pending = Promise.resolve(); }
+  constructor(directory = defaultDirectory, { historyDirectory = historyDirectoryFor(directory) } = {}) {
+    this.directory = directory;
+    this.historyDirectory = historyDirectory;
+    this.pending = Promise.resolve();
+  }
 
   file(filename) {
     const parts = String(filename || '').split('/');
@@ -168,7 +179,7 @@ export class WikiStore {
         throw Object.assign(new Error('页面 ID 必须保持一致，状态须为 active、draft 或 deprecated'), { status: 400 });
       if (!/^evidence:\s*\[[^\]]+\]/m.test(content) && !/^source:\s*.+/m.test(content))
         throw Object.assign(new Error('判据需要 evidence 或 source 出处'), { status: 400 });
-      const historyDir = path.join(path.dirname(this.directory), '.data', 'wiki-history');
+      const historyDir = this.historyDirectory;
       await mkdir(historyDir, { recursive: true, mode: 0o700 });
       await writeFile(path.join(historyDir, `${previous.id}-${previous.revision}.md`), previous.content,
         { encoding: 'utf8', mode: 0o600, flag: 'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
@@ -272,7 +283,7 @@ export class WikiStore {
       const changed = [];
       try {
         for (const item of prepared) {
-          const historyDir = path.join(path.dirname(this.directory), '.data', 'wiki-history');
+          const historyDir = this.historyDirectory;
           await mkdir(historyDir, { recursive: true, mode: 0o700 });
           const backup = path.join(historyDir, `${item.previous.id}-${item.previous.revision}.md`);
           await writeFile(backup, item.previous.content, { encoding: 'utf8', mode: 0o600, flag: 'wx' })

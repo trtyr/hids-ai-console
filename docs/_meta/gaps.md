@@ -14,7 +14,9 @@ P003-T019 之前，`server.js` 把运行态根目录算成「本文件所在目�
 .../hids-ai-console/hids-ai-console/backend/.data/  205M（工作树跑出来的；其中 triage-monitor.json 单个 81401959 B）
 ```
 
-P003-T019 起运行态改到仓库内 `.data/`（`server.js:27` 取目录、`server.js:805-818` 的 `runtimePaths()` 给清单，`.gitignore:10` 已忽略）。**旧目录里的数据没有迁移**：进程不读也不写它们，里面的研判记录、案卷、`triage-monitor.json`、基线要接着用得人工搬进仓内 `.data/`。同理，改完后第一次启动时 `triage-monitor.json` 不存在，游标/队列/去重表是空的。
+P003-T019 把运行态从「上一级 + `backend/.data/`」挪到仓库内 `.data/`；**P003-T034 又把它挪出仓库**：现在的唯一落点是数据根（`HIDS_DATA_DIR` 指到哪就落哪，没设就是 `~/.local/share/hids-ai-console/`；`server.js:1005-1018` 的 `runtimePaths()` 给清单，根由 `config-store.js:31-35` 的 `dataRoot()` 算）。
+
+**两批旧目录里的数据都没有迁移**（A4：迁移是运维的手工活）：进程不读也不写它们，里面的研判记录、案卷、`triage-monitor.json`、基线要接着用得人工搬进数据根。同理，搬到新根之后第一次启动时 `triage-monitor.json` 不存在，游标/队列/去重表是空的。
 
 同一段老布局也曾写在测试里。`maintenance-startup.test.js` 原来把 `root` 算成「本文件的上一级」（旧布局下正好推出 `<仓>/backend/maintenance-server.js`），
 P003-T019 把运行态改回仓内、`maintenance-server.js` 挪到仓根之后，这个测试没跟着改，于是成了测试集里唯一的必红项。
@@ -22,7 +24,7 @@ P003-T019 把运行态改回仓内、`maintenance-server.js` 挪到仓根之后�
 P003-T028 已把它改到真实路径（`maintenance-startup.test.js:12-14`：`root` 取本文件所在目录，spawn `<临时目录>/current/maintenance-server.js --preview`），
 symlink 部署场景不变，单文件约 60ms 跑绿。**所以这条不再是缺口**，留在这里只作为「测试与部署布局漂移」的先例。
 测试命令与依赖安装口径见第八节。
-`README.md:14` 写的是「运行中的案件和配置在被 Git 忽略的 `.data/`」——P003-T019 之前这句与代码对不上（.gitignore 忽略的仓内 `.data/` 只存提示词覆盖文件），**现在对上了**。
+`README.md:14` 已按 P003-T034 改口径：「运行中的案件、研判记录与配置落在机器全局的数据根（`HIDS_DATA_DIR` / `~/.local/share/hids-ai-console`），仓库里不写任何运行态」。
 
 ## 二、一套模块只被测试引用，没接进业务进程
 

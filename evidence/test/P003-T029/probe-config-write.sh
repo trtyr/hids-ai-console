@@ -9,7 +9,9 @@
 set -u
 cd "$(dirname "$0")/../../.." || exit 1
 ROOT=$(pwd)
-OVERRIDE="$ROOT/.data/config-overrides.json"
+# 数据根指到 tmp（P003-T034 A2）：探针一个字节都不许写进仓库或真实全局根 ~/.local/share/hids-ai-console。
+DATA=$(mktemp -d)
+OVERRIDE="$DATA/config-overrides.json"
 freeport() { python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()'; }
 PORT=$(freeport)
 STUBPORT=$(freeport)
@@ -22,7 +24,7 @@ FAIL=0
 ok() { echo "PASS $*"; }
 bad() { echo "FAIL $*"; FAIL=1; }
 
-cleanup() { rm -f "$OVERRIDE"; kill "${PID:-}" "${STUBPID:-}" 2>/dev/null; }
+cleanup() { rm -rf "$DATA"; kill "${PID:-}" "${STUBPID:-}" 2>/dev/null; }
 trap cleanup EXIT
 
 start_stub() {
@@ -51,7 +53,7 @@ PY
 }
 
 start_app() {
-  env -i PATH="$PATH" HOME="$HOME" \
+  env -i PATH="$PATH" HOME="$HOME" HIDS_DATA_DIR="$DATA" \
   HIDS_HOST=127.0.0.1 HIDS_PORT="$PORT" HIDS_TRIAGE_INPUT_MODE=poll \
   CLOUDWALKER_URL=http://127.0.0.1:1 CLOUDWALKER_API_TOKEN=fake-token-123456 \
   LLM_BASE_URL=http://127.0.0.1:1/v1 LLM_API_KEY=fake-key-abcdef LLM_MODEL=env-model \

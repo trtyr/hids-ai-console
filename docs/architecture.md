@@ -259,7 +259,7 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` 是仓库内文件；其余 12 个场景的 SOP 实际来自 `wiki/` 下的判据页，映射表在 `prompt-store.js:10-16`（例如 `webshell` → `webshell/WS-13.md`）。
 
-`PromptStore.load()`（`prompt-store.js:33-48`）把这三块拼起来，并叠加 `.data/prompt-overrides.json` 里的本地覆盖（`prompt-store.js:17`、`prompt-store.js:38-44`）。拼完算出一个 `revision`：对 `prompts + scenarios + sop + release` 做 SHA-256 取前 16 位（`prompt-store.js:21-23`、`prompt-store.js:45`）。这个 revision 是整套提示词的版本指纹，写进每份研判记录的 `prompt_version`（形如 `版本号+revision+系统提示摘要`，见 `investigation-agent.js:551`）。
+`PromptStore.load()`（`prompt-store.js:33-48`）把这三块拼起来，并叠加数据根下 `prompt-overrides.json` 里的本地覆盖（`prompt-store.js:20`、`prompt-store.js:38-44`）。拼完算出一个 `revision`：对 `prompts + scenarios + sop + release` 做 SHA-256 取前 16 位（`prompt-store.js:21-23`、`prompt-store.js:45`）。这个 revision 是整套提示词的版本指纹，写进每份研判记录的 `prompt_version`（形如 `版本号+revision+系统提示摘要`，见 `investigation-agent.js:551`）。
 
 可改的地方与限制：
 
@@ -279,7 +279,7 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 - 修订时 `id` 不得变，状态只能是 `active` / `draft` / `deprecated`（`wiki-store.js:160-161`）。
 - 正文里必须有 `evidence:` 或 `source:` 之一，否则拒绝（`wiki-store.js:162-163`）。
 - 发布前检查会核编号重复、编号与路径不符、缺 `title` / `applies_to` / `status` / `updated`、引用了不存在的判据或证据页、退役缺 `deprecated_reason`（`wiki-store.js:181-224`）。
-- 每次修订前把上一版存进 `<wiki 目录的父目录>/.data/wiki-history/`（`wiki-store.js:164-167`），并在 `wiki/log.md` 追加一条记录（`wiki-store.js:173-174`）。
+- 每次修订前把上一版存进 `<数据根>/wiki-history/`（判据库目录被换掉时改存它同级 `.data/wiki-history/`，见 §8.1；`wiki-store.js:182-185`），并在 `wiki/log.md` 追加一条记录（`wiki-store.js:191`）。
 
 `health()`（`wiki-store.js:129-151`）是给运维看的一致性体检：重复编号、缺来源、失效引用、缺证据页各报一条。
 
@@ -304,39 +304,49 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 
 ### 8.1 运行态目录的解析规则
 
-`server.js:26` 拿到本文件所在目录，`server.js:27` 用它算出模块级常量 `runtime`；具体路径清单由导出的 `runtimePaths(directory = moduleDirectory)`（`server.js:805-818`）给出：
+`server.js:29` 取模块级常量 `runtime`；具体路径清单由导出的 `runtimePaths(root = dataRoot())`（`server.js:1005-1018`）给出。
+数据根 `dataRoot()` **只有一处定义**（`config-store.js:31-35`）：`server.js` 与 `prompt-store.js`、`wiki-store.js` 共用这一份，别在别处另拼一套。
 
 ```js
-const data = path.join(directory, '.data');
+const configured = typeof env.HIDS_DATA_DIR === 'string' ? env.HIDS_DATA_DIR.trim() : '';
+if (configured) return path.resolve(configured);                  // 设了就用它
+return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就是机器全局位置
 ```
 
-`server.js` 里定义的运行态路径一律取自 `runtime.*`（`server.js:41-54`、`server.js:96`），**不再经过仓库的上一级**。也就是说，运行态数据落在仓库内的 `.data/`（被 `.gitignore:10` 忽略，不进 git），在本工作树里解析到：
+- 设了 `HIDS_DATA_DIR` 就用它；相对路径按当前工作目录绝对化（进程换了工作目录不该换落点）。
+- 空串与纯空白算「没设」（与 `HIDS_CASES_DIR` 同一个口径）。
+- 没设就落 `~/.local/share/hids-ai-console/`——本机是 `/home/trtyr/.local/share/hids-ai-console/`。
+- **不读** `XDG_DATA_HOME`：卡面只点名 `HIDS_DATA_DIR` 与 `~/.local/share/hids-ai-console`，多一个开关就是多一条没人维护的路径。
 
-```
-/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T019/.data/
-```
+`server.js` 里定义的运行态路径一律取自 `runtime.*`（`server.js:32`、`server.js:46-59`、`server.js:126`），
+**仓库里一个字都不写**：部署时仓库目录往往只读，运行态落进去没人知道该去哪找。九条具名路径的子结构与 P003-T019 时仓内
+`.data/` 逐字一致（见 8.2），换的只是「根在哪」。
 
-P003-T019 之前的版本把这里算成「本文件所在目录的上一级」+ `backend/.data/`，即落到仓库外（工作树是 `.../hids-ai-console/hids-ai-console/backend/.data/`，主仓是 `/home/trtyr/code/backend/.data/`）。**那些旧目录下的数据不自动搬**：进程不会读也不会写它们，要接着用里面的研判记录/基线得人工搬进仓内 `.data/`。
+**旧位不自动搬**（P003-T034 A4）：P003-T019 之前的 `<上一级>/backend/.data/` 与 P003-T019 的仓内 `.data/` 里的既有数据，
+进程**不读也不写**；要接着用里面的研判记录 / 基线 / 案卷，只能人工搬进数据根——代码里没有任何 `rename` / `copy` / 迁移脚本。
 
-仓内 `.data/` 同一目录下还住着提示词覆盖文件与升级包（`prompt-store.js:17`、`update-store.js:62`），判据页历史版本在 `<wiki 目录的上一级>/.data/wiki-history/`（`wiki-store.js:164`）。
+数据根下还住着提示词覆盖文件与升级包（`prompt-store.js:20`、`update-store.js:62` 从覆盖文件所在目录推出），
+判据页历史版本落 `<数据根>/wiki-history/`（`wiki-store.js:11-13`、`wiki-store.js:37-41`）。
 
 ### 8.2 目录与文件清单
 
-下表路径均相对于仓库内的 `.data/`（第 8.1 节）。默认值由 `runtimePaths()`（`server.js:805-818`）给出，`server.js:41-54`、`server.js:96` 把这些默认值交给各构件。
+下表路径均相对于**数据根**（第 8.1 节：`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console/`）。
+前九条的默认值由 `runtimePaths()`（`server.js:1005-1018`）给出，`server.js:32`、`server.js:46-59`、`server.js:126` 把它们交给各构件。
 
 | 路径 | 存什么 | 谁写 | 证据 |
 | --- | --- | --- | --- |
-| `.data/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:41` |
-| `.data/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:42` |
-| `.data/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:47`、`triage-monitor.js:69-71` |
-| `.data/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:51`、`syslog-case.js:64-87` |
-| `.data/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:52`、`triage-monitor.js:282` |
-| `.data/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:53`、`triage-monitor.js:284` |
-| `.data/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:54` |
-| `.data/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:96` |
-| `.data/prompt-overrides.json` | 提示词与 SOP 的本地覆盖 | `PromptStore` | `prompt-store.js:17` |
-| `<提示词覆盖文件所在目录>/update-packages/` | 已上传的升级包 | `UpdateStore` | `update-store.js:62` |
-| `<wiki 目录的上一级>/.data/wiki-history/` | 判据页历史版本 | `WikiStore` | `wiki-store.js:164` |
+| `<数据根>/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:46` |
+| `<数据根>/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:47` |
+| `<数据根>/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:52`、`triage-monitor.js:69-71` |
+| `<数据根>/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:56`、`syslog-case.js:64-87` |
+| `<数据根>/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:57`、`triage-monitor.js:282` |
+| `<数据根>/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:58`、`triage-monitor.js:284` |
+| `<数据根>/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:59` |
+| `<数据根>/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:126` |
+| `<数据根>/config-overrides.json` | 可写配置的覆盖层（只存改过的五项） | `createConfigStore` | `server.js:32`、`config-store.js:37` |
+| `<数据根>/prompt-overrides.json` | 提示词与 SOP 的本地覆盖（`HIDS_PROMPT_STORE_FILE` 可换掉） | `PromptStore` | `prompt-store.js:20` |
+| `<数据根>/update-packages/` | 已上传的升级包（`HIDS_UPDATE_STORE_DIR` 可换掉；默认跟着覆盖文件所在目录走） | `UpdateStore` | `update-store.js:62` |
+| `<数据根>/wiki-history/` | 判据页历史版本（判据库目录被 `HIDS_WIKI_DIR` 换掉时改落 `<判据库目录的上一级>/.data/wiki-history/`） | `WikiStore` | `wiki-store.js:11-13`、`wiki-store.js:182`、`wiki-store.js:286` |
 
 `.gitignore` 里还忽略了 `*.hids-policy`（`.gitignore:9`）与 `*.pem`、`*.key`（`.gitignore:7-8`），即签名私钥与加密密钥不进仓。
 
@@ -430,13 +440,14 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_SYSLOG_HOST` | `127.0.0.1` | syslog UDP 监听地址 | `server.js:367` |
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
-| `HIDS_CASES_DIR` | 仓内 `.data/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:51` |
+| `HIDS_DATA_DIR` | `~/.local/share/hids-ai-console` | 运行态数据根：下面九条具名路径 + 覆盖层 / 提示词覆盖 / 升级包 / 判据历史的根（§8.1） | `config-store.js:31` |
+| `HIDS_CASES_DIR` | `<数据根>/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:56` |
 | `HIDS_BASIC_AUTH_USER` | 无 | Basic 认证用户名 | `server.js:113` |
 | `HIDS_BASIC_AUTH_PASSWORD` | 无 | Basic 认证密码；不配则不启用认证 | `server.js:113`、`server.js:59` |
 | `HIDS_PROMPT_ADMIN_TOKEN` | 无 | 知识库写操作令牌（请求头 `x-prompt-admin-token`） | `server.js:114` |
 | `HIDS_RULE_ADMIN_TOKEN` | 无 | 规则写操作令牌（请求头 `x-rule-admin-token`） | `server.js:116` |
 | `HIDS_WIKI_DIR` | 仓内 `wiki/` | 判据库目录 | `wiki-store.js:6`、`prompt-store.js:9` |
-| `HIDS_PROMPT_STORE_FILE` | 仓内 `.data/prompt-overrides.json` | 提示词覆盖文件 | `prompt-store.js:17` |
+| `HIDS_PROMPT_STORE_FILE` | `<数据根>/prompt-overrides.json` | 提示词覆盖文件 | `prompt-store.js:20` |
 | `HIDS_MAINTENANCE_ENTRY_URL` | 无 | 被读进 `createServer` 的参数，但路由里没有任何地方使用它 | `server.js:115` |
 
 ### 10.2 维护 API 与策略包
@@ -453,7 +464,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_UPDATE_STORE_DIR` | `<提示词覆盖目录>/update-packages` | 已上传升级包的存放目录 | `maintenance-server.js:160`、`update-store.js:62` |
 | `HIDS_UPDATE_TARGET` | 无 | 目标环境标识，包与环境的匹配依据 | `maintenance-server.js:160`、`package-policy.js:21` |
 
-`.env.example` 已列全上表与 §10.2、前端（`web/serve.js`）用到的 32 个键（P003-T025）：键名与代码一一对应，两个方向都要齐（代码读的必须列、列出来的必须真有人读），改键名得同时改代码与本表。其中五项必填在文件注释里点名标出。
+`.env.example` 已列全上表与 §10.2、前端（`web/serve.js`）用到的 33 个键（P003-T025 立、P003-T034 加 `HIDS_DATA_DIR`）：键名与代码一一对应，两个方向都要齐（代码读的必须列、列出来的必须真有人读），改键名得同时改代码与本表。其中五项必填在文件注释里点名标出。
 
 ## 11. 怎么验证
 

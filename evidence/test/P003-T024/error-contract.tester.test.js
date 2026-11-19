@@ -368,7 +368,8 @@ test('e2e 真进程：node server.js 配了牧云但与上游不通时，502/404
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t024-e2e-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const child = spawn(process.execPath, ['server.js'], { cwd: ROOT,
-    env: { PATH: process.env.PATH, HIDS_HOST: '127.0.0.1', HIDS_PORT: String(port),
+    // HIDS_DATA_DIR 指到这条用例自己的 tmp 目录：真进程一个字节都不许写进仓库或真实全局根（P003-T034 A2）。
+    env: { PATH: process.env.PATH, HIDS_DATA_DIR: directory, HIDS_HOST: '127.0.0.1', HIDS_PORT: String(port),
       CLOUDWALKER_URL: 'http://127.0.0.1:1', CLOUDWALKER_API_TOKEN: 'fake-token-123456',
       LLM_BASE_URL: 'http://127.0.0.1:1/v1', LLM_API_KEY: 'fake-key-abcdef', LLM_MODEL: 'fake-model',
       // 五项齐后研判队列会起 syslog 接收器：端口设 0 让它自己挑，别抢 15514。
