@@ -1,5 +1,5 @@
-# 文档锚点全量核验 · 0d3609a · 扫描 19 份文档
-# 锚点 3888 处：PASS=3856  MOVED=32  UNVERIFIED=0  其他=0
+# 文档锚点全量核验 · 4e65742 · 扫描 19 份文档
+# 锚点 3889 处：PASS=3857  MOVED=32  UNVERIFIED=0  其他=0
 
 ## 按文档（total / PASS / MOVED / UNVERIFIED）
 docs/_meta/gaps.md	25	25	0	0
@@ -10,7 +10,7 @@ docs/modules/evidence-view.md	235	228	7	0
 docs/modules/experience-draft.md	203	202	1	0
 docs/modules/http-api.md	214	214	0	0
 docs/modules/investigation-agent.md	384	371	13	0
-docs/modules/knowledge-base.md	412	412	0	0
+docs/modules/knowledge-base.md	413	413	0	0
 docs/modules/maintenance-service.md	197	197	0	0
 docs/modules/model-client.md	137	136	1	0
 docs/modules/prompt-store.md	159	156	3	0
