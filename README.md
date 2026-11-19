@@ -8,7 +8,7 @@
 
 ```bash
 node --env-file=.env.local server.js
-npm test
+npm test                 # 后端单测（node --test *.test.js）
 ```
 
 运行中的案件和配置在被 Git 忽略的 `.data/`。Wiki 与提示词在 `wiki/`、`prompts/`。

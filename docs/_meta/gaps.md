@@ -3,7 +3,7 @@
 这份文件记录写文档时**查不清、查不动、或前后对不上**的地方。每条都带证据。
 只描述现状，不给改法——改法是评审的活。
 
-最后更新：架构篇（P001-T001）；旧运行态目录一条由 P003-T019 改写。
+最后更新：架构篇（P001-T001）；旧运行态目录一条由 P003-T019 改写；第一节末段与第八节由 P003-T028 改写（测试基线）。
 
 ## 一、旧运行态目录还在盘上，不自动搬
 
@@ -16,21 +16,12 @@ P003-T019 之前，`server.js` 把运行态根目录算成「本文件所在目�
 
 P003-T019 起运行态改到仓库内 `.data/`（`server.js:27` 取目录、`server.js:805-818` 的 `runtimePaths()` 给清单，`.gitignore:10` 已忽略）。**旧目录里的数据没有迁移**：进程不读也不写它们，里面的研判记录、案卷、`triage-monitor.json`、基线要接着用得人工搬进仓内 `.data/`。同理，改完后第一次启动时 `triage-monitor.json` 不存在，游标/队列/去重表是空的。
 
-同一段老布局也写在测试里。`maintenance-startup.test.js:12-14` 拼的是 `<上一级>/backend/maintenance-server.js`，
-在本仓目录名下拼出的是 `.../current/backend/maintenance-server.js`。**它与运行态目录已经不是同一件事了**（运行态已改回仓内），
-但那个测试自身还没跟着改，所以仍是测试集里唯一的失败项：
+同一段老布局也曾写在测试里。`maintenance-startup.test.js` 原来把 `root` 算成「本文件的上一级」（旧布局下正好推出 `<仓>/backend/maintenance-server.js`），
+P003-T019 把运行态改回仓内、`maintenance-server.js` 挪到仓根之后，这个测试没跟着改，于是成了测试集里唯一的必红项。
 
-**实测**（命令 `node --test *.test.js`，退出码 1）：
-
-```
-ℹ tests 190
-ℹ pass 189
-ℹ fail 1
-
-✖ maintenance CLI starts when the deployment current path is a symlink
-  Error: Cannot find module '/tmp/hids-maintenance-startup-jisyLi/current/backend/maintenance-server.js'
-```
-
+P003-T028 已把它改到真实路径（`maintenance-startup.test.js:12-14`：`root` 取本文件所在目录，spawn `<临时目录>/current/maintenance-server.js --preview`），
+symlink 部署场景不变，单文件约 60ms 跑绿。**所以这条不再是缺口**，留在这里只作为「测试与部署布局漂移」的先例。
+测试命令与依赖安装口径见第八节。
 `README.md:14` 写的是「运行中的案件和配置在被 Git 忽略的 `.data/`」——P003-T019 之前这句与代码对不上（.gitignore 忽略的仓内 `.data/` 只存提示词覆盖文件），**现在对上了**。
 
 ## 二、一套模块只被测试引用，没接进业务进程
@@ -101,3 +92,27 @@ $ grep -n "knowledge" server.js
 - 上面第一节到第四节四条，代码改动时需回头核对架构篇第 8.1、4、13 节的对应段落。
 - 第六节那五条仍然没查到。没有牧云凭据、没有生产部署，补不了。
 - 各模块页里的局部未决留在各自页面，不升成全局缺口。
+
+## 八、测试怎么跑：命令口径与范围
+
+P003-T028 之前根 `package.json` 的 `test` 是裸 `node --test`。无参时它从仓根递归扫「测试命名约定 + `test/` 目录」，把三类东西一起吞进来：
+
+- 仓根 21 个后端单测（`*.test.js`）——这才是单测基线；
+- `evidence/test/**` 21 个历史验证件，其中 6 个要 spawn `server.js` 并等 20s 超时（缺 `LLM_*` 配置就启动失败）——`timeout 180 npm test` 到点被杀、没有汇总行，看着就是「挂起」；
+- `web/test/**` 浏览器测试——它们的 DOM 环境来自 jsdom，而 `web/node_modules` 不在 git 里，没装时每个文件都以 `ERR_MODULE_NOT_FOUND: Cannot find package 'jsdom'` 失败。
+
+现在的口径（`package.json:8-10`）：
+
+| 命令 | 跑什么 | 实测 |
+| --- | --- | --- |
+| `npm test` | `node --test *.test.js`，只跑仓根后端单测 | 198 条全绿，约 2s，退出码 0 |
+| `npm run test:web` | `npm --prefix web test`，跑 `web/test/**` | 447 条全绿，约 5.8s，退出码 0 |
+| `npm run test:all` | 上面两段串跑 | 198 + 447 全绿，约 6.3s，退出码 0 |
+
+退出码：任一用例失败 → 1（实跑注入一条必红用例验证过），全绿 → 0。
+
+**前置条件**：`npm run test:web` / `npm run test:all` 需要先 `npm install --prefix web`（`web/package.json:14` 已声明 `jsdom ^31.0.1`，锁文件 `web/package-lock.json` 已提交）。不装也能跑 `npm test`——它零外部依赖。
+
+**范围边界**：`evidence/test/**` 是逐卡验证件，不是单测基线，命令里不扫它们；要复跑旧卡片按该卡 test-report 里的原始命令单独跑。`maintenance-startup.test.js` 的修复见第一节末段。
+
+证据：`evidence/test/P003-T028/`（改前红/挂起日志、改后三条命令日志、退出码探针）。

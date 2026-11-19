@@ -1,0 +1,9 @@
+# 改前
+timeout 180 npm test                     -> 124（到点被杀，无汇总行）
+node --test *.test.js                    -> 1（198 条，maintenance-startup 唯一红）
+node --test web/test/app.test.js         -> 1（ERR_MODULE_NOT_FOUND: jsdom）
+# 改后
+npm test                                 -> 0（198/198）
+npm test（注入一条必红用例后，探针已删） -> 1（199 条，fail 1）
+npm run test:web                         -> 0（447/447）
+npm run test:all                         -> 0（198 + 447）

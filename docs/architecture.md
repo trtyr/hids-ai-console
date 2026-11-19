@@ -460,7 +460,8 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 ### 11.1 跑测试
 
 ```bash
-npm test                # 等价于 node --test（package.json:8）
+npm test                # 后端单测：node --test *.test.js（package.json:8）
+npm run test:web        # web 单测：npm --prefix web test（需先 npm install --prefix web）
 node --test triage-rules.test.js   # 只跑一个文件
 ```
 
@@ -489,16 +490,15 @@ node --test triage-rules.test.js   # 只跑一个文件
 | `wiki-current.test.js` | 当前生效判据与提示词是否一致（只读） |
 | `wiki.test.js` | 判据库读写、维护会话、发布与回放 |
 
-**本卡实测结果**（命令：`node --test *.test.js`，21 个后端测试文件 198 条，输出中 1 条失败）：
+**本卡实测结果**（命令：`node --test *.test.js`，198 条全绿，P003-T028 起）：
 
 ```
 ℹ tests 198
-ℹ pass 197
-ℹ fail 1
+ℹ pass 198
+ℹ fail 0
 ```
 
-唯一失败的仍是 `maintenance-startup.test.js`。原因是它自己把部署路径写死成 `<当前目录的上一级>/backend/maintenance-server.js`（`maintenance-startup.test.js:12-14`）。
-**这条与第 8.1 节的运行态目录已经是两回事了**：P003-T019 把运行态位置改回仓库内 `.data/`（`server.js:27`），但那个测试仍然按「仓库名为 `backend`」的老布局拼路径，所以本仓目录名下依旧 `Cannot find module '.../current/backend/maintenance-server.js'`。改前改后同样红，已记入 [docs/_meta/gaps.md](_meta/gaps.md)。
+`maintenance-startup.test.js` 的路径已在这张卡修好：它现在按本文件所在目录拼 `<临时目录>/current/maintenance-server.js`（`maintenance-startup.test.js:12-14`），symlink 部署场景不变。它与运行态目录的关系、以及为什么之前会红，见 [docs/_meta/gaps.md](_meta/gaps.md) 第一节末段。
 
 ### 11.2 手工冒烟
 
@@ -557,7 +557,7 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 
 写这份文档时碰到的几处「读代码读不出来的东西」，全部记在 [docs/_meta/gaps.md](_meta/gaps.md)。这里只列个引子：
 
-1. **`maintenance-startup.test.js` 按老布局写死路径**。它拼 `<当前目录的上一级>/backend/maintenance-server.js`（`maintenance-startup.test.js:12-14`），本仓目录名不是 `backend`，所以它是 `node --test` 里唯一的失败项（第 11.1 节）。P003-T019 已把运行态目录改回仓库内 `.data/`（第 8.1 节），这条测试自身还没跟着改。
+1. **`evidence/test/**` 的验证件不属于单测基线**（P003-T028）：`npm test` 只扫仓根 `*.test.js`，不再递归吞 `evidence/test/**`——那批件里有 6 个要 spawn `server.js` 并等 20s 超时，缺 `LLM_*` 配置时必失败。复跑旧卡要按该卡 test-report 的原始命令单独跑；口径见 [docs/_meta/gaps.md](_meta/gaps.md) 第八节。
 2. **候选经验整理台未接线**。`knowledge-store.js` 与 `knowledge-workbench.js` 只被测试文件引用（第 4 节末）。
 3. **`createServer` 有两个没被路由使用的参数**：`maintenanceEntry`（`server.js:115`）与 `knowledge`（`server.js:112`）。
 4. **接口契约有两套真源**：`openapi.yaml` 与 `server.js` 的路由各自独立（第 11.3 节）。

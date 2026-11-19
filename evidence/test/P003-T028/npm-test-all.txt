@@ -1,0 +1,959 @@
+
+> test:all
+> npm test && npm run test:web
+
+
+> test
+> node --test *.test.js
+
+{"time":"2026-11-19T09:40:09.430Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/api/session","status":401}
+{"time":"2026-11-19T09:40:09.434Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":401,"duration_ms":5}
+{"time":"2026-11-19T09:40:09.445Z","level":"warn","event":"http.unauthorized","method":"POST","path":"/api/agent/prompts/upload","status":401}
+{"time":"2026-11-19T09:40:09.446Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/prompts/upload","status":401,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.452Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.459Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/","status":401}
+{"time":"2026-11-19T09:40:09.459Z","level":"info","event":"http.request","method":"GET","path":"/","status":401,"duration_ms":0}
+✔ remote access password protects API reads and writes (58.113559ms)
+{"time":"2026-11-19T09:40:09.483Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/status","status":200,"duration_ms":6}
+{"time":"2026-11-19T09:40:09.495Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/prompts","status":200,"duration_ms":7}
+{"time":"2026-11-19T09:40:09.503Z","level":"info","event":"http.request","method":"GET","path":"/backend/prompts/triage.md","status":404,"duration_ms":2}
+{"time":"2026-11-19T09:40:09.509Z","level":"info","event":"http.request","method":"PUT","path":"/api/agent/prompts","status":405,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.515Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/prompts/upload","status":410,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.527Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":200,"duration_ms":3}
+{"time":"2026-11-19T09:40:09.531Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/investigations/revshell%3A7","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.536Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/investigations/revshell%3A8","status":404,"duration_ms":2}
+{"time":"2026-11-19T09:40:09.537Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/investigations/not-an-id","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.541Z","level":"error","event":"http.failed","method":"POST","path":"/api/agent/investigations","status":400,"error":"请求正文不是 JSON"}
+{"time":"2026-11-19T09:40:09.542Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":400,"duration_ms":2}
+✔ investigation API accepts one typed alert and returns the Agent result (81.398598ms)
+{"time":"2026-11-19T09:40:09.558Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":200,"duration_ms":3}
+✔ streaming investigation reports progress and persists its result (14.466964ms)
+{"time":"2026-11-19T09:40:09.567Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":2}
+{"time":"2026-11-19T09:40:09.570Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/honeypot%3A7","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.572Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A7","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.574Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A7","status":202,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.577Z","level":"info","event":"http.request","method":"PUT","path":"/api/agent/triage/control","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.580Z","level":"info","event":"http.request","method":"PUT","path":"/api/agent/triage/control","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.581Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/bad-id","status":400,"duration_ms":0}
+✔ alert API exposes automatic triage state separately from deep investigation (21.864609ms)
+{"time":"2026-11-19T09:40:09.589Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.593Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.595Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.597Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.599Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.601Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.604Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.606Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.610Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.612Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.613Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.615Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.617Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.618Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.620Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.622Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.623Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.624Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.625Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.626Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.627Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.628Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.629Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+✔ 研判记录列表可按结论 / 类型 / 主机 / 时间筛，total 是过滤后条数，非法值回 400 (48.565507ms)
+{"time":"2026-11-19T09:40:09.635Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Arevshell%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e41","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.637Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Arevshell%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e41","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.639Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Awebshell%3Adddddddddddddddd%3A1763403600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e44","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.640Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Arevshell%3Axyz","status":400,"duration_ms":0}
+✔ syslog 形态的 alert_id 直接打开研判记录，不要求先有牧云事件号 (9.498814ms)
+{"time":"2026-11-19T09:40:09.643Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":202,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.645Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.646Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards/honeypot%3A7","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.647Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards/honeypot%3A8","status":404,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.648Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards/bad-id","status":400,"duration_ms":0}
+✔ trace board API starts and restores an alert board (7.505619ms)
+{"time":"2026-11-19T09:40:09.651Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.652Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.653Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.654Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.654Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+✔ 总览接口出结论分布 / 类型分布，带 since 只算该时刻后入队的记录，非法时间回 400 (6.511429ms)
+{"time":"2026-11-19T09:40:09.659Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.661Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+✔ 总览接口在 syslog 模式透出最后一条到达时刻，poll 模式不给这个键 (7.307339ms)
+{"time":"2026-11-19T09:40:09.664Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.666Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.666Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.667Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.668Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.668Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.669Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":0}
+✔ 白板列表把状态/类型/主机/时间筛选交给服务层，非法值回 400 且不调服务层 (7.338489ms)
+{"time":"2026-11-19T09:40:09.672Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.673Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":202,"duration_ms":0}
+✔ POST 白板：已有返回 200，新建返回 202，syslog 形态告警 ID 也收 (3.962577ms)
+✔ A4 分析证据从研判记录的案卷读原始报文，status() 的 input 一律不碰 (3.412159ms)
+✔ A4 研判记录还没落盘时用 status() 公开的 case_dir 定位案卷；都没有就回 null (1.603623ms)
+{"time":"2026-11-19T09:40:09.684Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":202,"duration_ms":3}
+✔ A4 真接线：POST syslog 告警起板走注入的 monitor/history，不查牧云事件详情 (9.754015ms)
+{"time":"2026-11-19T09:40:09.691Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":502,"duration_ms":0}
+✔ POST 白板：服务层未分类异常回 502 (2.930814ms)
+✔ A4 真 status() 剥掉 input 后仍能从研判记录复用原始报文 (3.343156ms)
+{"time":"2026-11-19T09:40:09.702Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":2}
+{"time":"2026-11-19T09:40:09.707Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.709Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.710Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"updated","rule":"updated","wiki":"updated","rule_error":null,"wiki_error":null}
+{"time":"2026-11-19T09:40:09.710Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.711Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+✔ A1 误报入口先把结论落成误报再回 202，维护者没跑完也已经是误报 (17.776457ms)
+{"time":"2026-11-19T09:40:09.716Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.717Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.718Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.719Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e40/false-positive","status":404,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.720Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/bad-id/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.721Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A9/false-positive","status":409,"duration_ms":1}
+✔ A1 误报入口的入参校验：理由必填，案件要存在且已完成 (8.835673ms)
+✔ A2 规则维护者只加一条或改一条 Rego，校验不过就不落盘 (12.779952ms)
+{"time":"2026-11-19T09:40:09.737Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.737Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"updated","rule":"updated","wiki":"updated","rule_error":null,"wiki_error":null}
+✔ A3 两个维护者都不是跑研判的那个 Agent，各自改自己的东西 (3.778336ms)
+{"time":"2026-11-19T09:40:09.741Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.741Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"failed","rule":"failed","wiki":"updated","rule_error":"模型接口 HTTP 500: 上游不可用","wiki_error":null}
+{"time":"2026-11-19T09:40:09.742Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+✔ A4 维护失败只改 maintenance，误报结论不变；一边成一败总态算失败 (4.51069ms)
+{"time":"2026-11-19T09:40:09.746Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.746Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"failed","rule":"updated","wiki":"failed","rule_error":null,"wiki_error":"知识维护端未配置"}
+✔ A4 记录停在 updating 但本进程没有在跑的维护时，重新登记会重起一轮 (4.244037ms)
+✔ agent sees read-only MCP tools and cannot invoke whitelist operations (9.286358ms)
+✔ 常规研判保留事件 API 身份校验，并接入只读 MCP 命令和连接证据 (1.957717ms)
+✔ tool result becomes cited evidence and output values are checked (4.596456ms)
+✔ parallel evidence calls get distinct identifiers (5.395787ms)
+{"time":"2026-11-19T09:40:09.474Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/tools","status":200,"duration_ms":5}
+{"time":"2026-11-19T09:40:09.489Z","level":"info","event":"http.request","method":"GET","path":"/backend/agent-tools.js","status":404,"duration_ms":1}
+✔ backend exposes the imported tool catalog without exposing credentials (51.787768ms)
+✔ routine triage reads typed Cloudwalker API evidence and applies scenario SOP (22.072665ms)
+✔ API evidence adapter rejects other event identities and unsupported filters (2.304269ms)
+{"time":"2026-11-19T09:40:09.454Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/common%2FGEN-99.md","status":404,"duration_ms":5}
+{"time":"2026-11-19T09:40:09.476Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/common%2FGEN-99.md","status":404,"duration_ms":3}
+{"time":"2026-11-19T09:40:09.488Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/common%2FGEN-01.md","status":200,"duration_ms":7}
+✔ 知识库 404 正文只给相对路径，不带服务器目录 (82.709236ms)
+{"time":"2026-11-19T09:40:09.503Z","level":"info","event":"syslog.listening","bind":"udp://127.0.0.1:15514"}
+{"time":"2026-11-19T09:40:09.504Z","level":"error","event":"syslog.bind_failed","error":"bind EADDRINUSE 127.0.0.1:15514"}
+{"time":"2026-11-19T09:40:09.512Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+✔ syslog 绑定失败时队列状态带出接收器状态 (16.16159ms)
+✔ 轮询模式的队列状态形状不变，不多出 syslog 键 (4.651001ms)
+{"time":"2026-11-19T09:40:09.524Z","level":"error","event":"cloudwalker.call_failed","op":"status","alert_id":null,"error":"connect ECONNREFUSED 10.0.0.1:443"}
+{"time":"2026-11-19T09:40:09.525Z","level":"info","event":"http.request","method":"GET","path":"/api/status","status":502,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.530Z","level":"info","event":"http.request","method":"GET","path":"/api/status","status":200,"duration_ms":1}
+✔ /api/status 连不上牧云是 502，正文带 configured/connected/reason (10.893333ms)
+{"time":"2026-11-19T09:40:09.536Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/api/session","status":401}
+{"time":"2026-11-19T09:40:09.536Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":401,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.540Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/api/status","status":401}
+{"time":"2026-11-19T09:40:09.541Z","level":"info","event":"http.request","method":"GET","path":"/api/status","status":401,"duration_ms":1}
+✔ 业务认证失败的 401 是纯文本正文且声明 text/plain (11.216279ms)
+{"time":"2026-11-19T09:40:09.551Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.556Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.559Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.562Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.568Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.570Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.572Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.574Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.577Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.579Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":200,"duration_ms":1}
+✔ 规则校验接口先判正文形状，再读 config.rules (37.181679ms)
+✔ detail view uses readable facts and keeps raw JSON pointers (4.469274ms)
+✔ honeypot HTTP request is readable while its citation still verifies the raw digest (3.015391ms)
+✔ honeypot view keeps every request in a multi-step probe and marks TLS-format payload (0.902837ms)
+✔ long honeypot timeline exposes late HTTP requests and response coverage (1.765305ms)
+✔ privilege escalation view exposes the event UID change and parent process identity (0.634437ms)
+✔ list view aggregates returned page only and citations still verify against raw (1.31029ms)
+✔ list view flags a platform total smaller than its returned page (0.728862ms)
+✔ internal network definitions remain visible with source pointers (0.256736ms)
+✔ wrapped detail preserves its original result path (0.810576ms)
+✔ process asset view keeps decision fields and omits unrelated host attributes (0.751002ms)
+✔ firewall view includes both endpoints and returned-page connection counts (0.610551ms)
+✔ port asset view identifies listening port and process without host custom attributes (1.199242ms)
+✔ process detail separates process and executable file safety (2.082663ms)
+✔ oversized list view keeps citable rows within the model budget (1.6398ms)
+✔ RPC forwards API token in cookie and uses source method contract (8.746067ms)
+✔ event list preserves partial failures and typed IDs (22.275065ms)
+✔ merged pages contain distinct events in global time order (3.893434ms)
+✔ merged pagination refills an event type after its first batch (5.997259ms)
+✔ network audit uses its source API data field (1.258886ms)
+✔ detail rejects mismatched event IDs (0.482603ms)
+✔ outbound reverse shell directions follow source API fields (0.280901ms)
+{"time":"2026-11-19T09:40:09.524Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/revshell:1","status":200,"duration_ms":5}
+{"time":"2026-11-19T09:40:09.538Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/revshell%3A1","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.550Z","level":"info","event":"http.request","method":"GET","path":"/backend/server.js","status":404,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.557Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+✔ HTTP API exposes typed alert and does not serve backend source (81.990082ms)
+✔ type 下推只查该类，total 等于该类总数 (8.629851ms)
+✔ level / q / from / to 合并后过滤再切页，total 为过滤后条数 (10.027792ms)
+✔ 扫描窗口上限之外置 truncated，total 只含窗口内匹配 (69.341571ms)
+✔ sort=level 按等级降序、同级按时间降序；默认按时间 (3.51315ms)
+{"time":"2026-11-19T09:40:09.662Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.664Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+✔ HTTP /api/alerts 把筛选参数下推给网关 (13.574115ms)
+{"time":"2026-11-19T09:40:09.669Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.671Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.673Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.675Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.677Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.678Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.679Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+✔ HTTP /api/alerts 拒绝非法筛选参数 (14.260234ms)
+{"time":"2026-11-19T09:40:09.683Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.685Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.686Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.687Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.688Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+✔ triage_status / verdict 挂完 triage 后过滤并跨页统计 (9.599386ms)
+{"time":"2026-11-19T09:40:09.693Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+✔ 不带筛选参数时仍只挂 triage，不改 total 与分页 (4.95467ms)
+{"time":"2026-11-19T09:40:09.697Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:404","error":"牧云 WebShell 事件 #404 不存在或已不可见"}
+{"time":"2026-11-19T09:40:09.698Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:404","status":404,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.700Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:404","error":"牧云 WebShell 事件 #404 不存在或已不可见"}
+{"time":"2026-11-19T09:40:09.700Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:404","status":404,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.703Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:404","error":"牧云 WebShell 事件 #404 不存在或已不可见"}
+{"time":"2026-11-19T09:40:09.703Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:404","status":404,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.705Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:404","error":"牧云 WebShell 事件 #404 不存在或已不可见"}
+{"time":"2026-11-19T09:40:09.705Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:404","status":404,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.708Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:1","error":"fetch failed"}
+{"time":"2026-11-19T09:40:09.708Z","level":"error","event":"http.failed","method":"GET","path":"/api/alerts/webshell:1","status":502,"error":"fetch failed"}
+{"time":"2026-11-19T09:40:09.709Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:1","status":502,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.711Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:1","status":200,"duration_ms":0}
+✔ HTTP 详情语义：未知事件 ID 回 404，只有牧云不可达才 502 (18.229447ms)
+{"time":"2026-11-19T09:40:09.716Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:1","error":"牧云详情事件 ID 与请求不符"}
+{"time":"2026-11-19T09:40:09.716Z","level":"error","event":"http.failed","method":"GET","path":"/api/alerts/webshell:1","status":502,"error":"牧云详情事件 ID 与请求不符"}
+{"time":"2026-11-19T09:40:09.717Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:1","status":502,"duration_ms":1}
+✔ HTTP 详情：上游回了别的事件仍是 502，不说成 404 (4.832449ms)
+{"time":"2026-11-19T09:40:09.719Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.721Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.722Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+✔ /api/alerts 顶层 triage_configured 区分「没记录」与「没配研判」 (5.168245ms)
+{"time":"2026-11-19T09:40:09.725Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:0","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.726Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:abc","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.727Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.727Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/1.5","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.728Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/nope:1","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.729Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:3","status":200,"duration_ms":0}
+✔ HTTP 详情：告警 ID 格式不对或类型不在枚举 → 400，不浪费一次牧云调用 (6.68708ms)
+{"time":"2026-11-19T09:40:09.733Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/webshell:1","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.736Z","level":"info","event":"triage.enqueued","alert_id":"webshell:1","source":"manual"}
+{"time":"2026-11-19T09:40:09.738Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/webshell:1","status":202,"duration_ms":2}
+{"time":"2026-11-19T09:40:09.739Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.740Z","level":"info","event":"triage.done","alert_id":"webshell:1","verdict":null,"attempts":1,"duration_ms":3}
+✔ TriageCase 三处都带 evidence[]：未入队详情、入队 202、告警列表挂的 triage (11.413719ms)
+✔ 常规研判将必查空页与不可用来源写入结果，深度模式保持原有取证路径 (32.662119ms)
+✔ published customer experience avoids a full repeat investigation when current behavior is verified (14.6093ms)
+✔ knowledge claims without a current behavior citation continue to full investigation (9.498186ms)
+✔ legacy unsuccessful attack experience is preserved but presented as uncertain (9.167907ms)
+✔ final model timeout retries with the same collected evidence (6.157894ms)
+✔ tool selection timeout retries with the same evidence and tool options (5.238855ms)
+✔ document scene prompt is routed to its alert type with three-state verdict (8.065395ms)
+✔ high-risk confirmation is reduced when independent review times out (4.98987ms)
+✔ loopback honeypot probe without responses cannot confirm host compromise (5.391457ms)
+✔ unresolved independent review keeps a revised high-risk verdict below confirmation (4.01433ms)
+✔ Agent list requests are bounded and scalar MCP filters become arrays (1.563603ms)
+✔ Agent chooses a read-only tool, then cites and verifies its result (3.687612ms)
+✔ fabricated citations force human review (5.68919ms)
+✔ high-risk false positive requires independent positive benign evidence (4.255491ms)
+✔ A1 套上的 Rego 连整段正文进分析上下文，没命中就写明没有 (11.784506ms)
+✔ A2 有知识库时先交结论被退回；采纳页写进结果 (5.660765ms)
+✔ A2 查过判据不采纳时，结果里写原因；没写原因被退回 (4.169726ms)
+✔ A3 结论经 submit_conclusion 写出：501 字被退，500 字原样收下 (4.582278ms)
+✔ deep 模式下结论工具忽略 wiki 字段，不因未查知识库被拒 (3.898113ms)
+✔ A1 六轮都没给出 JSON 时，失败消息带末次回包字数、开头与退回原因 (5.050563ms)
+✔ A1 模型没有返回可用消息时，失败消息带 model-client 挂上的回包摘要 (4.829865ms)
+✔ A1 结论连续被退回时，失败消息写退回次数与原因 (7.923827ms)
+✔ A2 同一个研判实例失败后能再跑，两次失败的摘要各是各的 (9.453697ms)
+✔ A3 模型没交卷的这次失败不覆盖已经写成的结论 (8.63914ms)
+✔ model-client 抛「没有返回可用消息」时把不可用回包的摘要挂到 error 上 (41.565678ms)
+✔ conversation keeps incomplete experience and resumes until ready for review (20.339837ms)
+✔ failed model turn still preserves customer input for later supplement (9.677259ms)
+✔ customer can defer a missing item, answer another, and later fill the deferred item (15.523243ms)
+{"time":"2026-11-19T09:40:09.507Z","level":"info","event":"http.request","method":"POST","path":"/api/knowledge/cases","status":404,"duration_ms":5}
+✔ retired knowledge API cannot create another source of truth (39.54245ms)
+✔ login issues an HttpOnly session; logout revokes it and rejects cross-site requests (137.828636ms)
+✔ viewer can log in but cannot upload or apply even by forging its client role (28.002667ms)
+✔ expired and fabricated session cookies do not authorize maintenance (13.095844ms)
+✔ login failures are rate limited; read-only preview never grants a write session (33.047503ms)
+✔ maintenance CLI starts when the deployment current path is a symlink (128.38751ms)
+✔ 白板 page 回本页摘要与切页前总数，按更新时间倒序 (32.963973ms)
+✔ 白板 page 在没有目录、坏文件时不抛，只数有效白板 (3.825409ms)
+{"time":"2026-11-19T09:40:09.512Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":3}
+{"time":"2026-11-19T09:40:09.528Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":1}
+✔ HTTP 白板列表把 count / offset 交给服务层并回 total (40.489845ms)
+{"time":"2026-11-19T09:40:09.543Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.548Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.552Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.555Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.559Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.562Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":1}
+✔ HTTP 白板列表分页参数不合法回 400，且不调服务层 (33.00036ms)
+{"time":"2026-11-19T09:40:09.572Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":503,"duration_ms":1}
+✔ HTTP 白板列表没配白板服务时 503 先于分页校验 (10.678921ms)
+{"time":"2026-11-19T09:40:09.582Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+✔ HTTP 知识库列表不带 count 时照旧回全部，并给出 total (10.450401ms)
+{"time":"2026-11-19T09:40:09.592Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.595Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.600Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+✔ HTTP 知识库列表按 count / offset 切页，total 是切页前条数 (15.892911ms)
+{"time":"2026-11-19T09:40:09.606Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.609Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":0}
+✔ HTTP 知识库列表 q 先过滤（保留 50 条上限）再切页，total 是过滤后条数 (8.614137ms)
+{"time":"2026-11-19T09:40:09.614Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.616Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.618Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.619Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.620Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.621Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+✔ HTTP 知识库列表分页参数不合法回 400 (11.845058ms)
+{"time":"2026-11-19T09:40:09.627Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.629Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/api/session","status":401}
+{"time":"2026-11-19T09:40:09.629Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":401,"duration_ms":0}
+✔ 配置了 Basic 账号时 /api/session 回 user 与 operator 角色 (7.40379ms)
+{"time":"2026-11-19T09:40:09.633Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":200,"duration_ms":0}
+✔ 配了密码没配账号名时 /api/session 与鉴权口径一致，落回 admin (4.282589ms)
+{"time":"2026-11-19T09:40:09.637Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":200,"duration_ms":0}
+✔ 未配置 Basic 密码时 /api/session 回 authenticated 但 user / role 为 null (3.442121ms)
+✔ 可疑命令按主机先查关联事件和命令会话，并分别记录空页与缺少数据源 (5.181514ms)
+✔ 网络告警只按已知来源查询连接，成功与接口失败分别保留 (0.555726ms)
+✔ 没有主机身份时不会对全库发起无筛选查询 (0.330698ms)
+✔ 命令会话使用牧云提供的带主机过滤工具，WebShell 标记尚未接入的调用日志 (0.279015ms)
+✔ 适配牧云 MCP 数组筛选字段和不支持 types 的主机事件接口 (0.41318ms)
+✔ A1 一条规则一份 Rego：能列出名字，能按 id 逐字读回原文 (21.681415ms)
+✔ A1 列表按 id 排序；没有规则文件时明确返回空列表 (5.633526ms)
+✔ A1 按 id 读不到：不存在或格式不对都回 null，不读目录外的文件 (4.145002ms)
+✔ A1 规则 id 由 package 决定：重复 id 装载即报错并点名两份文件 (9.375126ms)
+✔ A1 规则目录不存在时报错，不静默当成空规则库 (1.798479ms)
+✔ A2 规则没写的字段不限制：只写 type 的规则对任意用户、命令、对端都成立 (3.099271ms)
+✔ A2 七个字段（主机/对端/命令/用户/路径/类型/来源 IP）都能被规则取值 (4.111269ms)
+✔ A2 比较是严格相等；contains / startswith / endswith 只对字符串成立 (4.894328ms)
+✔ A2 字面量支持字符串、数字、true / false / null (3.715828ms)
+✔ A2 事实缺字段按 Rego 的 undefined 处理：引用它的条件不成立，not 才成立 (3.497784ms)
+✔ A3 命中时返回规则名字与 Rego 正文；没有命中时 matched 是空数组 (3.626711ms)
+✔ A3 空规则库求值：明确返回空结果而不是 null 或报错 (1.922587ms)
+✔ A3 事实必须是 JSON 对象：null / 数组 / 标量都拒绝 (2.039083ms)
+✔ 子集外的 Rego 在装载时报错，消息带 rules/<文件>:<行> (9.516903ms)
+{"time":"2026-11-19T09:40:09.590Z","level":"info","event":"http.request","method":"GET","path":"/api/rules","status":200,"duration_ms":4}
+{"time":"2026-11-19T09:40:09.605Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/ssh_bruteforce","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.614Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/no_such_rule","status":404,"duration_ms":4}
+{"time":"2026-11-19T09:40:09.616Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/Bad-Id","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.621Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/evaluate","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.624Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/evaluate","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.626Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/evaluate","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.628Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/evaluate","status":400,"duration_ms":1}
+✔ HTTP 列规则 / 按 id 读原文 / 求值：命中给正文，没命中给空 (70.259563ms)
+✔ 牧云的三种 syslog 载荷保留同一组字段及未转义的内层引号 (2.363006ms)
+✔ 真实牧云键值对载荷保留未加引号的事件身份，并按显式时区解析事件时间 (1.814822ms)
+{"time":"2026-11-19T09:40:09.440Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:1ccd01bd-6fe4-48dd-b9d7-1c5a2a1cee7c","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T09:40:09.446Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:1ccd01bd-6fe4-48dd-b9d7-1c5a2a1cee7c","repeat_count":2}
+{"time":"2026-11-19T09:40:09.451Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:1ccd01bd-6fe4-48dd-b9d7-1c5a2a1cee7c","verdict":"uncertain","attempts":1,"duration_ms":8}
+{"time":"2026-11-19T09:40:09.452Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692801:1df0b2ef-526e-4d15-b0b1-ffd2d84c117a","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":2}
+{"time":"2026-11-19T09:40:09.457Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692801:1df0b2ef-526e-4d15-b0b1-ffd2d84c117a","verdict":"uncertain","attempts":1,"duration_ms":4}
+✔ syslog 逐条研判保留材料、三态结果，并区分重复投递与跨秒行为 (34.913029ms)
+{"time":"2026-11-19T09:40:09.467Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:7e8b565c-dbe5-4820-8d48-b7b36e836bd5","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T09:40:09.471Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:7e8b565c-dbe5-4820-8d48-b7b36e836bd5","verdict":"uncertain","attempts":1,"duration_ms":3}
+✔ 没有可关联事件 ID 时仍逐条归档存疑结论 (16.915316ms)
+{"time":"2026-11-19T09:40:09.484Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:5cdd8462-913c-4a51-8aeb-c7e85c45e0bd","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-19T09:40:09.487Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:5cdd8462-913c-4a51-8aeb-c7e85c45e0bd","attempts":1,"error":"model timeout"}
+{"time":"2026-11-19T09:40:09.491Z","level":"info","event":"triage.enqueued","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:5cdd8462-913c-4a51-8aeb-c7e85c45e0bd","source":"retry"}
+{"time":"2026-11-19T09:40:09.494Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:5cdd8462-913c-4a51-8aeb-c7e85c45e0bd","verdict":"uncertain","attempts":2,"duration_ms":3}
+✔ 失败的 syslog 案件能保留原始报文并按同一任务重试 (17.958324ms)
+✔ concurrent board reads always see a complete saved snapshot (111.909609ms)
+✔ incomplete model action is recorded and retried without ending the investigation (7.207537ms)
+✔ AI investigation grows a persisted board and rejects unsupported links (11.320062ms)
+✔ IP start discovers touched hosts as program leads without claiming an AI path (8.354957ms)
+✔ asset investigation gives newly discovered external IPs the same ids as evidence edges (29.361915ms)
+✔ A1 已有溯源直接返回那条，不再查一遍告警详情 (2.93228ms)
+✔ A1 没有溯源时从告警新建，created 为真并标出告警起点 (5.054403ms)
+✔ A2 列表给出类型/主机/告警时间/状态/链长/断点/更新时间，能筛能分页 (8.091306ms)
+✔ A3 详情是 hops/links/gaps/discovery，线从更晚指向更早 (2.555767ms)
+✔ A3 两端时间相同时按离告警的远近定方向：从告警一侧指向原因一侧 (2.42237ms)
+✔ A4 告警分析已取到的证据直接引用，不为同一份再查一遍 (6.589373ms)
+✔ A4 syslog 告警没有分析证据时明确拒绝，不猜 (1.680728ms)
+{"time":"2026-11-19T09:40:09.510Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"poll"}
+{"time":"2026-11-19T09:40:09.514Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":"undetermined","attempts":1,"duration_ms":2}
+✔ new alerts enter triage once and the cursor survives restart (31.300706ms)
+{"time":"2026-11-19T09:40:09.535Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:manual","source":"manual"}
+{"time":"2026-11-19T09:40:09.537Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:3","source":"poll"}
+{"time":"2026-11-19T09:40:09.539Z","level":"info","event":"triage.done","alert_id":"honeypot:3","verdict":"undetermined","attempts":1,"duration_ms":1}
+✔ resume after restart skips paused backlog and only investigates later alerts (23.647094ms)
+{"time":"2026-11-19T09:40:09.556Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:7","source":"manual"}
+{"time":"2026-11-19T09:40:09.557Z","level":"info","event":"triage.done","alert_id":"honeypot:7","verdict":"threat","attempts":1,"duration_ms":1}
+✔ 研判完成后 TriageCase 带 evidence 条目，只外露四个字段 (13.215551ms)
+✔ 旧队列记录缺 evidence 时从研判记录就地补齐 (8.190341ms)
+{"time":"2026-11-19T09:40:09.578Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:8","source":"manual"}
+{"time":"2026-11-19T09:40:09.579Z","level":"error","event":"triage.failed","alert_id":"honeypot:8","attempts":1,"error":"模型不可达"}
+{"time":"2026-11-19T09:40:09.587Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:9","source":"manual"}
+✔ 排队中与研判失败的 TriageCase 也带空的 evidence[] (16.004866ms)
+✔ cases() 按结论 / 类型 / 主机 / 时间筛，total 是过滤后条数 (2.305177ms)
+✔ cases({ sort: "verdict" }) 把 threat 排前面，同档保持时间倒序，无结论排最后 (1.69693ms)
+✔ 列表的重复次数沿用例记录上的 repeat_count，不另造计数 (0.336424ms)
+✔ summary() 出结论分布、类型分布，since 只算该时刻起进入队列的记录 (0.69464ms)
+{"time":"2026-11-03T08:00:00.000Z","level":"info","event":"syslog.listening","bind":"udp://127.0.0.1:15514"}
+{"time":"2026-11-03T08:00:00.000Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:7e032382-4f5f-4e88-a595-568f8f9a52d3","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-03T08:00:07.000Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:7e032382-4f5f-4e88-a595-568f8f9a52d3","repeat_count":2}
+{"time":"2026-11-03T08:00:12.000Z","level":"warn","event":"syslog.parse_failed","error":"不是合法的 RFC5424 syslog 行","bytes":14}
+{"time":"2026-11-03T08:00:17.000Z","level":"warn","event":"syslog.skipped","reason":"no_agent_for_msgid","msgid":"cloudwalker-unknown-msgid"}
+{"time":"2026-11-03T08:00:22.000Z","level":"warn","event":"syslog.skipped","reason":"paused"}
+{"time":"2026-11-03T08:00:22.000Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:7e032382-4f5f-4e88-a595-568f8f9a52d3","attempts":1,"error":"this.investigator.runUnmatchedSyslog is not a function"}
+✔ syslog 模式的 summary 给出最后一条到达时刻，重启后不丢，失败投递不算 (14.163994ms)
+✔ type_counts 不因 MsgId 撞上对象原型键名而冒出垃圾键 (0.570043ms)
+{"time":"2026-11-19T09:40:09.611Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"manual"}
+{"time":"2026-11-19T09:40:09.613Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.618Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"retry"}
+{"time":"2026-11-19T09:40:09.624Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"false_positive","attempts":2,"duration_ms":1}
+✔ A1 已标误报的记录重跑不覆盖结论三件，报告与证据照常刷新 (20.481684ms)
+{"time":"2026-11-19T09:40:09.632Z","level":"info","event":"triage.done","alert_id":"honeypot:12","verdict":"false_positive","attempts":1,"duration_ms":1}
+✔ A1 记录上已是 false_positive 时直接跑 run() 也不覆盖结论 (3.388762ms)
+{"time":"2026-11-19T09:40:09.635Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:13","source":"manual"}
+{"time":"2026-11-19T09:40:09.636Z","level":"info","event":"triage.done","alert_id":"honeypot:13","verdict":"false_positive","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.640Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:13","source":"retry"}
+{"time":"2026-11-19T09:40:09.641Z","level":"info","event":"triage.done","alert_id":"honeypot:13","verdict":"threat","attempts":2,"duration_ms":0}
+✔ A1 钉子：AI 自己判出的误报不算人工登记，重跑仍按这次研判覆盖 (15.522544ms)
+{"time":"2026-11-19T09:40:09.650Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:14","source":"manual"}
+{"time":"2026-11-19T09:40:09.652Z","level":"info","event":"triage.done","alert_id":"honeypot:14","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.656Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:14","source":"retry"}
+{"time":"2026-11-19T09:40:09.657Z","level":"info","event":"triage.done","alert_id":"honeypot:14","verdict":"threat","attempts":2,"duration_ms":0}
+✔ A2 没标误报的记录重跑仍按现在的方式写回 (13.169805ms)
+✔ customer judgment stays within 300 characters after a long model response (4.755832ms)
+✔ downgraded false positive report and contradictory action are replaced (0.793255ms)
+✔ customer report keeps a complete model sentence when only the verdict label is missing (0.561941ms)
+✔ fallback report omits overlong claims instead of clipping a command midword (0.367504ms)
+{"time":"2026-11-19T09:40:09.593Z","level":"info","event":"syslog.received","alert_id":"syslog:network_audit:a47344db76f17275:1794297600:7de244fd-092c-437a-8a8a-33f61ca7ee23","msgid":"cloudwalker-abnormal-network","event_type":"network_audit","occurrence":1}
+{"time":"2026-11-19T09:40:09.605Z","level":"info","event":"triage.done","alert_id":"syslog:network_audit:a47344db76f17275:1794297600:7de244fd-092c-437a-8a8a-33f61ca7ee23","verdict":"uncertain","attempts":1,"duration_ms":10}
+✔ 精确命中经审批网络规则后仍读取 Wiki 并交由 AI 复核 (33.971501ms)
+✔ 字段不符、等级高、观察模式或配置损坏时的规则状态可追溯 (7.946666ms)
+{"time":"2026-11-19T09:40:09.627Z","level":"info","event":"syslog.received","alert_id":"syslog:network_audit:a47344db76f17275:1794297600:c47d9186-5c42-44db-b813-791b28e6541b","msgid":"cloudwalker-abnormal-network","event_type":"network_audit","occurrence":1}
+{"time":"2026-11-19T09:40:09.631Z","level":"info","event":"triage.done","alert_id":"syslog:network_audit:a47344db76f17275:1794297600:c47d9186-5c42-44db-b813-791b28e6541b","verdict":"uncertain","attempts":1,"duration_ms":4}
+✔ 规则未命中时自动队列继续读取 Wiki 并调用 AI (11.425593ms)
+{"time":"2026-11-19T09:40:09.663Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":200,"duration_ms":5}
+{"time":"2026-11-19T09:40:09.673Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":200,"duration_ms":1}
+✔ 直接调用 triage API 也先运行规则，deep 模式继续独立流程 (41.9343ms)
+✔ 异常登录与暴力破解按各自的牧云字段匹配 (8.645356ms)
+✔ 规则字段按牧云场景校验，缺失或空值不能触发自动误报 (10.191499ms)
+✔ 其余八类牧云入侵告警按详情字段命中并形成 AI 复核候选 (13.436459ms)
+{"time":"2026-11-19T09:40:09.689Z","level":"info","event":"http.request","method":"GET","path":"/api/updates","status":200,"duration_ms":6}
+{"time":"2026-11-19T09:40:09.702Z","level":"info","event":"http.request","method":"GET","path":"/api/maintenance/overview","status":404,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.704Z","level":"info","event":"http.request","method":"GET","path":"/maintenance.html","status":404,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.706Z","level":"info","event":"http.request","method":"GET","path":"/backend/prompts/triage.md","status":404,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.711Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/prompts/upload","status":410,"duration_ms":1}
+✔ customer has version metadata only and legacy prompt upload is closed (60.038311ms)
+✔ maintenance login is independent; upload stages before explicit apply without returning plaintext (63.676057ms)
+✔ tampered, wrong-customer, incomplete and knowledge-incompatible packages never stage (14.43379ms)
+✔ apply rechecks compatibility and monotonic release sequence; encrypted package survives restart (34.510186ms)
+✔ preview is read-only and no credentials or update keys are required (7.352317ms)
+✔ current scene prompts and agent indexes use reviewed criteria (245.429815ms)
+{"time":"2026-11-19T09:40:09.914Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":2}
+{"time":"2026-11-19T09:40:09.926Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":2}
+{"time":"2026-11-19T09:40:09.928Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.930Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/sessions","status":403,"duration_ms":1}
+✔ console Basic account saves a wiki page and gets the new revision back (34.373856ms)
+{"time":"2026-11-19T09:40:09.938Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.939Z","level":"warn","event":"http.unauthorized","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":401}
+{"time":"2026-11-19T09:40:09.940Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":401,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.941Z","level":"warn","event":"http.unauthorized","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":401}
+{"time":"2026-11-19T09:40:09.941Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":401,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.942Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":409,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.943Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.945Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/..%2Fserver.js","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.946Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2F..%2F..%2Fserver.js","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.947Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/%2Fetc%2Fpasswd","status":400,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.948Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-09.md","status":404,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.948Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/","status":400,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.949Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":0}
+✔ wiki write answers 401 without the console account, 409 on a stale revision, 400 on paths outside the wiki (18.303758ms)
+✔ a wiki write that fails halfway leaves no partial page and no temporary files (4.163161ms)
+✔ wiki search stays in the current alert class and page revisions protect edits (25.458494ms)
+✔ customer experience remains outside triage until conversation and human publication (9.428275ms)
+✔ wiki maintenance reads the criterion and its cited evidence before proposing a change (4.086615ms)
+✔ case feedback stays pending until reviewed and publishes evidence with the revised criteria (18.241041ms)
+✔ case feedback with missing data fails the maintenance turn and leaves the reason behind (5.524225ms)
+✔ case feedback that is a criterion gap but has no draft says what is missing (4.442106ms)
+✔ a broken model turn on a feedback session fails with its cause while plain sessions keep the record (5.942783ms)
+✔ new external source is published only after original text review (8.564201ms)
+{"time":"2026-11-19T09:40:09.760Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":4}
+{"time":"2026-11-19T09:40:09.768Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":1}
+{"time":"2026-11-19T09:40:09.772Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/sessions","status":403,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.777Z","level":"info","event":"http.request","method":"POST","path":"/api/wiki/sessions","status":403,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.779Z","level":"info","event":"http.request","method":"GET","path":"/backend/wiki/honeypot/HP-01.md","status":404,"duration_ms":0}
+{"time":"2026-11-19T09:40:09.781Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+✔ wiki pages are readable but maintenance requires the administrator token and backend files stay private (43.153446ms)
+✔ triage reads a Wiki criterion while current alert facts come from the API toolbox (12.819412ms)
+ℹ tests 198
+ℹ suites 0
+ℹ pass 198
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 674.792361
+
+> test:web
+> npm --prefix web test
+
+
+> test
+> node --test
+
+✔ getAlert：GET /api/alerts/{编码后的 ID}，带 Basic 头，回 alert + detail (2.418319ms)
+✔ getAlert：detail 不是对象（文档只写「自由 object」）时给空对象，不把 null 传下去 (1.198194ms)
+✔ getAlert：回包没有 alert.id → invalid（不把半截数据画出去） (1.250506ms)
+✔ getAlert：400（事件类型/ID 无效）→ invalid_id，页面据此显示「没有这条告警」 (0.521993ms)
+✔ 失败归一：401→unauthorized、503→unavailable、502→http（带状态码）、fetch 抛→network、非 JSON→invalid (1.535178ms)
+✔ 没有凭据时不发请求，直接 unauthorized（同 session adapter 口径） (0.446425ms)
+✔ getTriageRecord：GET /api/agent/triage/{ID}，status 是字符串才算数 (1.502074ms)
+✔ enqueueTriage：POST 同一路径，202 回 TriageCase (0.455923ms)
+✔ getInvestigation：默认查 mode=triage，404 当「没有」（返回 null 不抛），真回包原样带出 (0.764202ms)
+✔ getInvestigation：回包 mode 或 verdict 缺失 → invalid；502 仍然抛错 (0.590088ms)
+✔ getRule：GET /api/rules/{id}，回 id/name/file/rego；404 → null（规则可能已被维护者删掉） (0.475968ms)
+✔ getTraceBoard：GET /api/trace/boards/{ID}，404 → null，nodes 不是数组 → invalid (0.344386ms)
+✔ listAlerts：请求 GET /api/alerts?count&offset，带 Basic 头，回包按约定取五个字段 (9.770916ms)
+✔ listAlerts：筛选与排序参数逐字进查询串（server.js:129-152 的名字） (0.930074ms)
+✔ listAlerts：空串 / 未传的筛选不发（不把 type= 当滤条件发给服务端） (1.747425ms)
+✔ listAlerts：truncated 透传（扫描窗口 500 条上限，页面靠它提示总数只含窗口） (0.613345ms)
+✔ listAlerts：不给分页参数时用接口默认 count=20 offset=0 (0.530094ms)
+✔ listAlerts：partial 为真时把 errors 原样带出（页面的「部分类型失败」提示就靠它） (0.560755ms)
+✔ listAlerts：回包缺 alerts 数组或 total 不是整数 → invalid（不把半截数据画出去） (4.520678ms)
+✔ 失败归一：401→unauthorized、503→unavailable、其它非 2xx→http（带状态码） (4.376665ms)
+✔ 失败归一：fetch 抛 → network；没有凭据 → 一条请求都不发 (0.627103ms)
+✔ 失败归一：2xx 但正文不是 JSON → invalid (0.718595ms)
+✔ fetchTriageSummary：GET /api/agent/triage/status，回 TriageSummary；缺 enabled/counts → invalid (0.476596ms)
+✔ setTriageEnabled：PUT /api/agent/triage/control，正文只有 { enabled }（文档 additionalProperties: false） (0.336844ms)
+✔ enqueueTriage：POST /api/agent/triage/{id}，ID 里的冒号要编码；202 也算成功 (0.251498ms)
+✔ enqueueTriage：回包没有 status → invalid；404 → http（syslog 案件原文不存在那一条） (0.343479ms)
+✔ 登录成功进壳：总览只渲染一次，hash 落在 #/overview (371.073755ms)
+✔ listCases：GET /api/agent/triage/cases，分页与筛选逐字进查询串 (3.878558ms)
+✔ listCases：空串 / 未传的筛选不发（不把 type= 当滤条件发给服务端）；默认 count=20 offset=0 (0.528698ms)
+✔ listCases：回包缺 cases 数组或 total 不是整数 → invalid（不把半截数据画出去） (1.562905ms)
+✔ getCase：GET /api/agent/triage/{编码后的 ID}；未入队也是 200（status=not_queued） (0.715732ms)
+✔ enqueueCase：POST 同一路径，202 也算成功 (1.807908ms)
+✔ reportFalsePositive：正文只有理由（who 省略由服务端取账号），202 回 FalsePositiveRecord (0.761339ms)
+✔ reportFalsePositive：理由长度自己先拦（10–4000 字），一条请求都不发 (0.466469ms)
+✔ reportFalsePositive：who 给了才发（服务端也能省略） (2.269419ms)
+✔ fetchQueueStatus / setQueueEnabled：队列状态归一，PUT 正文只有 { enabled } (3.092356ms)
+✔ 失败归一：401→unauthorized、503→unavailable、400→invalid_id、404→not_found、409→conflict，正文原话进 message (1.639032ms)
+✔ 失败归一：fetch 抛 → network；没有凭据 → 一条请求都不发；2xx 非 JSON → invalid (0.612926ms)
+✔ base64：ASCII 与 UTF-8 中文都按 RFC 7617 的 UTF-8 字节编码 (1.367768ms)
+✔ 没有凭据时 authorizationHeader 为 null（别发一个空 Basic） (0.308698ms)
+✔ set → get → authorizationHeader；clear 之后全部清空 (0.783827ms)
+✔ test/dom.js (672.605984ms)
+✔ listPages：字段逐字照接口，Authorization 用 Basic (4.475979ms)
+✔ listPages：只有 path 是必需字段，其余缺就是 null（不补默认状态/标题） (0.636043ms)
+✔ listPages：path 缺失 / pages 不是数组 / 非 JSON → invalid (2.8887ms)
+✔ listPages：401 / 5xx / 连不上 → unauthorized / http / network（状态码带上） (2.516027ms)
+✔ listPages：没有凭据 → unauthorized，且不发请求 (0.424006ms)
+✔ updatePage：PUT 路径与正文逐字照契约（content + expected_revision），回包用新 revision (0.838443ms)
+✔ updatePage：409 归 conflict（不丢编辑内容的提示靠它），错误正文是服务端原话 (1.075484ms)
+✔ updatePage：400 带服务端原话（正文不合规时不能只剩「服务返回 400」） (0.450405ms)
+✔ updatePage：401 / 连不上 / 200 但不是 JSON → unauthorized / network / invalid (0.805129ms)
+✔ updatePage：正文为空 / revision 不是 16 位十六进制 → invalid，一条请求都不发 (1.342207ms)
+✔ getPage：斜杠按 %2F 编码，回包七个字段 + content 原样 (0.405707ms)
+✔ getPage：没有 content 视为 invalid（不拿空字符串冒充正文） (0.265676ms)
+✔ getPage：404 → http 且 status=404；空路径 → invalid 不发请求 (0.756519ms)
+✔ saveDraft / loadDrafts：落进 storage，键是页面路径，savedAt 可控 (0.645821ms)
+✔ saveDraft：storage 写不进去 → persisted=false（不假装已落盘），返回值里仍带这份草稿 (0.266793ms)
+✔ loadDrafts：storage 里是坏 JSON → 当作没有草稿，不抛 (0.196323ms)
+✔ stripFrontMatter：去掉 --- 头，没有头就原样，未闭合也原样 (1.258328ms)
+✔ splitBody：首段当摘要，## 切分节，line 是标题在传入文本里的行号 (0.869732ms)
+✔ wordCount 去空白；categoryOf 取首段目录，根文档为空串 (0.321549ms)
+✔ resolvePagePath：同目录 / ../ / 越界 (0.514031ms)
+✔ findPage：编号 / 路径 / 去 .md 路径 / 相对链接都能找到，找不到给 null (0.427288ms)
+✔ renderMarkdown：段落 / 粗体 / 行内码 / 列表 / 有序 / 引用 / 标题 (1.471902ms)
+✔ renderMarkdown：管道表格渲染成 table（真正文里 99 个文件有表） (0.838862ms)
+✔ renderMarkdown：围栏代码块原样保留、内部不再解析 markdown (0.331885ms)
+✔ renderMarkdown：接口给的文字一律转义，注入标签不生效 (0.507326ms)
+✔ renderMarkdown：内链——有对应条目给 data-kpath，没有的标 is-missing 且不给链接 (0.734031ms)
+✔ renderMarkdown：没有 resolve 时一律按未建页处理（不猜链接） (0.253314ms)
+✔ renderMarkdown：列表项的缩进续行接回上一条，不断成新段 (0.345574ms)
+✔ formatClock：本机时分秒，非法输入给「—」 (0.456412ms)
+✔ 默认态：账号框自动获得焦点，按钮可用、文案「登录」，无错误横幅 (234.813611ms)
+✔ 校验：账号失焦且为空 → 红字提示 + aria-invalid；填上就清掉 (38.032694ms)
+✔ 空表单提交：不发请求，焦点落在第一个缺的字段 (41.275069ms)
+✔ 加载态：按钮禁用、转圈可见、文案「正在登录…」，成功后回调 onSuccess (25.588049ms)
+✔ 禁用：登录中再点提交不会发第二次请求 (37.510072ms)
+✔ 401：横幅报「登录失败 / 账号或密码不正确」，清空密码、焦点回密码框、按钮恢复 (44.368892ms)
+✔ 连不上服务 → 警示色横幅「无法连接」，不是「账号或密码不正确」 (44.139604ms)
+✔ 服务异常（500）→ 横幅带状态码，用户知道不是自己输错了 (49.050274ms)
+✔ 超长输入：200 字账号原样提交，不被截断也不崩 (23.555183ms)
+✔ 密码显示/隐藏：按钮带 aria-pressed 与可访问名，切换输入框类型 (32.025797ms)
+✔ bannerFor：四种错误各有可区分的文案（不把技术细节甩给用户） (14.435186ms)
+✔ 格 1「加载中」：挂载即出「正在读取告警…」，刷新禁用、业务区不出现；取到后撤掉 (345.609953ms)
+✔ 格 2「空态（未研判）」：结论「待研判」，缺口/依据/证据/关联实体整块隐藏，不编数据 (98.254967ms)
+✔ 格 3「部分失败（partial）」：研判记录读不到时页面主体照常，状态写「读取失败」、入队禁用 (91.329868ms)
+✔ 格 3b「牧云读不到不算整页失败」：告警本体 502 → 研判记录照常显示，题干说明没有原始事件 (51.250899ms)
+✔ 格 4「错误」：研判记录与牧云事件都读不到 → 整页错误块 + 重试，重试后恢复 (73.962332ms)
+✔ 格 4b「400」：ID 或事件类型无效 → 未找到块，正文不渲染，给返回链接 (28.316882ms)
+✔ 格 4c「没有 ID」：params 为空 → 未找到块说「链接里没有告警 ID」，不发请求 (25.905478ms)
+✔ 格 5「超长内容」：200 字标题与长报告原样渲染，不截断、不加省略号 (53.566063ms)
+✔ 研判失败且没有旧结论时：结论位写「待研判」+「研判失败，暂无结论。」 (52.013634ms)
+✔ 研判失败但上一次研判结果还在：照画旧结论，不写「暂无结论」 (43.602316ms)
+✔ 格 6「禁用」：研判中入队按钮禁用并写「已在队列中」，对应状态行标 is-queued (27.893436ms)
+✔ 头部：等级/类型/标题/资产/IP/时间/事件ID/主机ID 全部来自 alert 真字段 (43.420868ms)
+✔ 概况条六格：事实/来源/依据/缺口/状态/模式，缺口取 missing_evidence 条数 (22.257464ms)
+✔ 结论：标签取 verdict_label（三值），摘要与报告来自研判结果/研判记录 (25.64518ms)
+✔ 结论依据：claims 的 text 原样，引用数按 citations 的 evidence_id 去重，不编「已证实」 (41.595849ms)
+✔ 结论依据：有引用与零引用用两个状态类，零引用不借强调色（is-plain 走次要文字色） (28.531505ms)
+✔ 所需证据：五值 status 照实写，不压成「已具备/缺失」；reason 进 title (40.002353ms)
+✔ 研判步骤：只有 stage / detail / at（真键），没有工具名与耗时列 (25.628138ms)
+✔ 证据来源：按 evidence[] 逐条渲染，按 tool 分组折叠（组名 + 条数），不编稿上的分类 (32.28365ms)
+✔ 证据来源：优先用研判记录里的 evidence[]（TriageCase），其次才是研判结果 (28.548965ms)
+✔ 证据链对账：claim 的 citation 与条目对得上时不出告警文案 (20.858407ms)
+✔ 证据链对账：citation 引用的 evidence_id 不在条目里时，标红并给出缺失条数 (21.598234ms)
+✔ 核验与复核：只画 validation / review 的真键，没有复核人/复核时间 (25.463383ms)
+✔ 校验未通过时：依据格写明未通过，核验区给错误条数 (19.235508ms)
+✔ 关联实体：节点取 TraceBoard.nodes 的 kind / label，未登记的 kind 原样显示 (25.247155ms)
+✔ 原始事件：details 默认收起；展开后按 detail 的实际 key 分组 + 原始 JSON (19.012645ms)
+✔ 入队：点「加入研判队列」发 POST，回包状态上位，按钮转禁用并播报 (32.0332ms)
+✔ 入队失败：播报失败原因，按钮恢复可点（不乐观改状态） (21.120661ms)
+✔ 复制：成功后播报「已复制 <ID>」，剪贴板不可用时给手动选择提示 (23.912211ms)
+✔ 刷新：重新发一轮取数请求并播报；深度溯源是带编码 ID 的真链接 (30.061445ms)
+✔ page 契约：id / title / navLabel 不变，render 从 params[0] 取 ID 并解码 (18.806614ms)
+✔ A3 短结果：研判摘要与报告整段在页面上（summary 是 500 字内的结论摘要） (28.595968ms)
+✔ A3 短结果：研判结果读不到时，退回研判记录上的 summary（不把结论空着） (19.034575ms)
+✔ A3 命中的规则：规则名 + 整份 Rego 原文（GET /api/rules/{id}） (22.314106ms)
+✔ A3 没有套上：规则评估结果 none → 详情写「没有套上」，不发规则请求 (26.858739ms)
+✔ A3 规则原文读不到（404）：仍写命中哪条，并说明规则库里已没有这条 (16.802732ms)
+✔ A3 用过的 wiki：采纳页逐条列出，没采纳时写原因；查阅数进 meta (32.335751ms)
+✔ A3 证据：研判记录的 evidence[] 逐条列出（tool 分组 + evidence_id） (16.692244ms)
+✔ A3 推送 ID 对不上牧云事件号：详情照样打开这条研判，标题用类型 + 主机，不去牧云认 ID (16.963646ms)
+✔ formatTime / formatClock：本地时区补齐，空值与非法值给「—」 (5.383286ms)
+✔ verdictLabelOf：只认三值枚举，其它一律 null（不拿 alert.verdict 占位值） (5.248073ms)
+✔ claimsOf / requiredEvidenceOf / entityOf / stepsOf / missingEvidenceOf：空输入不抛、坏元素过滤掉 (6.93327ms)
+✔ 格 1「加载中」：先出「正在读取告警…」+ aria-busy，刷新禁用；取到数据后撤掉 (331.598213ms)
+✔ 格 2「空」：total 0 时表内一行提示，翻页与全选都禁用 (137.642719ms)
+✔ 格 3「部分失败」：partial 为真时出提示条，逐条列失败的类型与原因 (108.106409ms)
+✔ 格 4「错误」：503 出提示块（区分「没配好」），重试按钮再取一次 (55.346593ms)
+✔ 格 4b「错误」：连不上与 401 的文案互不相同 (87.831665ms)
+✔ 格 5「超长内容」：标题与 ID 原样进 textContent/title（截断交给 CSS），不丢字 (46.15473ms)
+✔ 格 6「禁用」：队列暂停时开关变「恢复」；排队中/研判中的抽屉按钮禁用并显示当前状态 (123.702985ms)
+✔ 表格：十列齐全，每格取接口字段；空值显示「—」；不拿 alert.verdict 当结论 (57.542329ms)
+✔ A1/A2 正向钉：筛选条与排序按钮都在（P003-T007 后端已支持真参数），队列条仍不做「查看失败」 (47.130551ms)
+✔ 分页：请求只带 count/offset；下一页 +20；每页 50 回到第一页；页数按 total 算 (64.058997ms)
+✔ 分页：总页数缩水时游标拉回最后一页并重拉一次（页脚与行区不许打架） (57.733065ms)
+✔ 筛选条：稿上的五个控件都在（搜索 + 类型/等级/结论/研判状态 + 时间范围），各有可访问名 (34.485462ms)
+✔ 筛选：选类型回第一页重取，请求带 type，结果计数与清除按钮出现 (39.167054ms)
+✔ 筛选：四个下拉都映射成接口枚举（等级四档、状态含未研判、结论含待研判） (97.894587ms)
+✔ 筛选：搜索框回车/失焦才发请求；空值不发 q (38.782159ms)
+✔ 筛选：时间范围只算 from（to 不传），取数时按当前时刻算 (28.980793ms)
+✔ 清除筛选：控件全复位、排序回 time、焦点回搜索框、重取无参数的那一页 (34.096307ms)
+✔ 排序：点等级走 sort=level，aria-sort 跟着换；同一列再点不发请求（接口没有方向参数） (43.578291ms)
+✔ 格 2「空态」：筛选无匹配时给「没有匹配的告警」+ 清除筛选，不写成「暂无告警」 (25.887529ms)
+✔ 格 3「partial」：truncated 真时提示只统计了扫描窗口，假时不出现 (38.068801ms)
+✔ 格 6「disabled」：加载中筛选控件与刷新都禁用 (19.798288ms)
+✔ 可访问名：队列条是可命名分组，行内复选框点名到告警 ID，全选框说明范围 (18.341332ms)
+✔ 选择：勾行出现批量条；全选只作用于当前页；「重新研判所选」逐条 POST，跳过排队中/研判中 (35.689524ms)
+✔ 选择：全选后取消全选只清当前页的选中项 (21.974259ms)
+✔ 抽屉：点标题打开，字段取接口；Esc 关闭且焦点回该行标题；详情链接指向告警详情路由 (30.207902ms)
+✔ 抽屉：没有步骤与结论时不渲染步骤区块，结论写「尚未产生研判结论」 (26.146918ms)
+✔ 抽屉：研判失败且没有结论时，结论区写「研判失败」而不是「研判中」 (23.334136ms)
+✔ 抽屉「缺失证据」：done 态有值就显示（文案取接口数组，逐项不丢） (24.678369ms)
+✔ 抽屉「缺失证据」：未研判与空数组都 hidden（不画空行） (24.399563ms)
+✔ 抽屉「缺失证据」：done 但数组为空时 hidden (23.78922ms)
+✔ 抽屉底部按钮：未研判→加入队列（POST），失败→重试，完成→重新研判 (27.575938ms)
+✔ 队列条：计数与输入模式来自 /api/agent/triage/status；点开关 PUT control 并换文案 (19.935526ms)
+✔ 队列条：状态接口挂了只降级这一条，列表照常显示，不拿 0 充数 (15.674169ms)
+✔ 复制告警 ID：环境不支持剪贴板时降级为提示，不抛异常 (23.781817ms)
+✔ formatTime：ISO 转本地 YYYY-MM-DD HH:MM:SS；空值/非法值给「—」 (4.342512ms)
+✔ triageStatusOf / verdictOf：只认接口的枚举，别的一律回落 (3.839238ms)
+✔ 默认态：一行一条研判记录，列照 D020（类型/主机/时间/结论/重复/命中规则/维护/状态） (327.863597ms)
+✔ 格 1「加载」：首屏骨架 + aria-busy + 刷新/筛选禁用 + 读屏说明 (72.223496ms)
+✔ 格 2「空」：没有记录与筛选无匹配两套空态；清除筛选回第一页重取 (149.93078ms)
+✔ 格 3「部分失败」：队列状态读不到 → 队列条说实话，列表照常（A4） (59.842896ms)
+✔ 格 4「错误」：列表 503 → 整页错误块与重试；重试成功后恢复 (55.607799ms)
+✔ 格 5「超长内容」：主机/命令/规则 id 全文进 DOM 与 title，视觉截断靠 CSS (66.409081ms)
+✔ 格 6「禁用」：未完成与已误报的行不能登记误报，按钮说清原因 (45.684909ms)
+✔ A2 误报：点开理由表单 → 提交 → 这一行立刻变误报，理由与维护状态都留在页面上 (63.364147ms)
+✔ A2 误报 409：研判还没结束时如实报错，行不变 (55.913983ms)
+✔ 筛选与排序全部下推给接口（结论/类型/主机/时间/sort） (83.858403ms)
+✔ 表格包裹层：类名与样式表对得上，横向滚动落在包裹层上（页面本身不横滚） (35.568838ms)
+✔ 主机筛选：逐键输入各发一轮，回车不再发第二遍（复审 findings 2） (49.08715ms)
+✔ 主机逐键取数时不清表、不禁用输入框（否则打到一半输入框失焦） (35.833466ms)
+✔ 主机逐键取数：先发的旧响应晚到也不许盖掉新结果 (38.475067ms)
+✔ 分页与每页条数：offset 跟着页码走，每页 50 回第一页 (34.464859ms)
+✔ 每行都能进详情与深度溯源：链接带编码后的案件 ID (27.832115ms)
+✔ 可访问性：表格有 caption 与 th scope，队列条是带名字的 group，读屏有 aria-live (24.084299ms)
+✔ 纯函数：事件时间、类型名、重复次数、维护文案都不编数据 (10.630101ms)
+✔ loading：读目录时 aria-busy、表格一行说明、刷新与搜索禁用 (274.388258ms)
+✔ 列表：行数/标题/分类/编号/状态逐条来自接口，计数 N / M 条 + 共 N 条 (48.616072ms)
+✔ 列表：字段缺失就显示「—」，不拿稿上的 status 顶替（A1 不编字段） (63.408007ms)
+✔ 列表：分类下拉的选项来自真实目录名，不出现稿上的「通用口径／案件复盘」 (54.299325ms)
+✔ empty（筛选无结果）：空态 + 清除筛选；点清除回到全部条目 (108.709488ms)
+✔ empty（目录为空）：接口回 pages: [] → 「知识库还没有条目」 (52.561748ms)
+✔ error：目录 5xx → 整页 notice 带状态码与重试；重试成功后列表回来 (47.613013ms)
+✔ error：401 → 文案是登录失效，不甩服务端正文 (45.181493ms)
+✔ partial：目录读到了、单条正文 404 → 条目页局部报错且列表可回 (70.134897ms)
+✔ partial：条目重试成功后就地渲染正文 (53.723485ms)
+✔ long-content：200 条目录 + 超长标题不截断文本、超长正文整段渲染 (116.48176ms)
+✔ 条目：标题/面包屑/头信息/条目信息/相关条目/接口字段都来自接口 (48.300739ms)
+✔ 条目：正文去掉 --- 头部，表格/代码块/列表都渲染出来 (30.074155ms)
+✔ 目录与小节编辑：点了不抛错，编辑小节落到对应行 (36.028392ms)
+✔ disabled：刚进编辑页签时保存/撤销禁用，改一个字后启用 (45.166687ms)
+✔ 保存到服务器：PUT 带整篇正文 + expected_revision，成功后按钮禁用、状态回「已保存到服务器」 (55.508205ms)
+✔ 保存到服务器：409 版本过期 → 正文留着、给「刷新正文」入口，不假装保存成功 (32.77177ms)
+✔ 保存到服务器：400 服务端原话要显示出来（正文不合规时不是「服务返回 400」） (32.635719ms)
+✔ 撤销修改：退回上次保存的基线，保存按钮重新禁用 (31.299798ms)
+✔ 离开未保存：点面包屑先确认；放弃修改回列表，保存并离开落草稿再回列表 (35.081556ms)
+✔ 保存并离开：PUT 成功后才回列表；保存失败就留在页面上 (34.520034ms)
+✔ 保存并离开：PUT 失败（409）时不离开，正文留在页面上 (27.588439ms)
+✔ 内链：指向已建条目就跳过去，未建页的红虚线不跳 (33.527731ms)
+✔ 复制路径：写进剪贴板并提示 (28.724825ms)
+✔ 刷新：重新拉一次目录；有未保存修改时提示保留 (31.796299ms)
+✔ 分类筛选：选一个分类只剩该目录的条目，面包屑里的分类也能筛回来 (33.726917ms)
+✔ 可访问性：表格有 caption，搜索/分类有 label，页面有一处 role=status 播报 (18.296285ms)
+✔ 没有凭据时：目录请求不发，页面报登录失效 (15.759934ms)
+✔ 表格包裹层的类名与样式表对得上（审查打回过的死选择器，防回归） (27.906077ms)
+✔ Esc 关闭确认弹窗：pendingNav 清掉，焦点回到原控件 (25.193167ms)
+✔ 脏态点侧栏导航：先拦下并弹确认，取消不导航，放弃修改才跳走 (26.742035ms)
+✔ 脏态点侧栏导航选「保存并离开」：草稿先落盘再跳 (31.626795ms)
+✔ 脏态点「退出登录」：同样先弹确认，放行后才真的退出 (21.041461ms)
+✔ 没脏标记时侧栏导航照常放行，一个都不拦 (21.141124ms)
+✔ 脏态浏览器后退：拦在同一条 URL 上并弹确认（守卫条目在 history 里） (22.048919ms)
+✔ 脏态关页面/刷新会被 beforeunload 拦一次，保存草稿后不再拦 (25.021288ms)
+✔ 页面被换掉后旧守卫不再拦导航（监听器自净） (25.911833ms)
+✔ loading：首屏先画骨架——数值「—」、刷新/统计范围禁用转圈、aria-busy、读屏报「正在读取数据」 (241.727885ms)
+✔ 默认态：结论分布、类型分布、构成条、队列（最后推送 + Syslog 接收）、运行状态、进度全来自研判聚合 (79.288766ms)
+✔ 轮询模式：这一格回到「最近轮询」，值取 last_poll_at；没有 syslog 键时 Syslog 接收显示「—」 (69.132327ms)
+✔ 统计范围：选近 24 小时 → 聚合接口带 since，进度条说「窗口内」；全部时间不发 since (70.962723ms)
+✔ 空态：没有类型统计与计数时给一行「暂无告警数据」，不画假行假数字 (49.661454ms)
+✔ Syslog 绑定失败三态：未在听 + 原因原样进这一格 (36.802233ms)
+✔ 研判聚合挂掉：那几块「—」，运行状态照常，顶部说明哪一项没读到（不冒充整页失败） (37.501483ms)
+✔ error：六路全挂 → 整页错误提示 + 全部「—」+ 刷新可点重试 (45.528464ms)
+✔ error：凭据失效（401）说人话「登录已失效」，不冒充网络问题 (26.768923ms)
+✔ long-content：200 字最近错误与 16 位版本号全文在 DOM 与 title 里，只靠 CSS 截断视觉 (40.829483ms)
+✔ disabled：刷新在途禁用；暂停按钮请求在途禁用，回包后同步状态文案 (48.325253ms)
+✔ 暂停失败：提示失败、状态保持、按钮恢复可点（不假装成功） (56.408877ms)
+✔ 刷新：点一下重新取六路，更新时间跟着换，读屏播报 (45.660953ms)
+✔ 切页作废旧响应：第二次 render 的页面不会被第一次的晚到数据覆盖 (43.7193ms)
+✔ 可访问性：表格有 caption 与 th scope，结论分布/进度是带名字的 region，status 有 aria-live (25.673395ms)
+✔ 本页只留两个动作：刷新 + 队列暂停/恢复，没有行级操作（稿 §5） (35.900584ms)
+✔ A2：原文逐字进 <pre>——含注释、空行、缩进，一个字节不裁剪 (228.767673ms)
+✔ A2：不是 JSON 视图——页面上没有 JSON 文本域，也没有表单 (54.217751ms)
+✔ A2：上面是名字和这句话在放行什么，下面是原文（顺序照 D017） (48.6211ms)
+✔ A3：整页没有可编辑控件（input / textarea / select / contenteditable 全无，原文不可改） (22.94526ms)
+✔ id 与文件名照接口显示；返回列表是去 `#/rules` 的真链接 (27.045355ms)
+✔ description 为 null：写「这条规则没写一句话说明」，不编一句话 (25.513808ms)
+✔ id 里的特殊字符会编码（页面不能拼裸串） (27.11338ms)
+✔ 格 1 loading：原文区标 aria-busy、标题写正在读取、刷新禁用 (28.426743ms)
+✔ 格 2 empty（404）：写「规则库里已没有这条」，给回列表的出口，不摆读不出来的重试 (28.314858ms)
+✔ 格 3 partial：刷新失败时挂提示，原文一个字都不清 (32.654507ms)
+✔ 格 4 error：首次就 502——整块失败写服务端原话（带 rules/<文件>:<行>），重试成功后出原文 (37.79293ms)
+✔ 格 4 error：401 文案是「登录已失效」 (19.4722ms)
+✔ 格 5 long-content：200 行的 Rego 全文进 DOM（不在数据层截断，长了由样式在块内滚） (23.973112ms)
+✔ 格 6 disabled：请求在飞时刷新禁用且转圈，读完恢复 (19.906612ms)
+✔ describeRegoRuleError：四类 kind 各说各的，http 用服务端原话 (9.006365ms)
+✔ pretty / pathLabel / describeRulesError：给界面看的形状 (146.447173ms)
+✔ page.render：内容区只留一个根节点，编辑面板有可访问名；页在隐藏路由（不进侧栏） (167.803477ms)
+✔ 加载中：表单区说明在读取，按钮全禁用，区域标 aria-busy (42.671822ms)
+✔ 空配置 {}：表单写空对象说明，revision 与可写照接口，未保存标记隐藏 (56.019303ms)
+✔ 空配置也能进 JSON 视图：textarea 是 {}，行号 1 行 (49.993898ms)
+✔ 表单按 config 递归生成：三个键、布尔勾选框、数组折叠头、嵌套对象折叠头 (89.942405ms)
+✔ 只读（writable=false）：徽标只读、JSON 只读、表单控件禁用、保存禁用 (66.654922ms)
+✔ 只读时点删除无效：模型不变 (51.807323ms)
+✔ 改值 → 未保存标记出现、撤销可用；填令牌后保存才可用 (51.493527ms)
+✔ 字段名重复 / 为空被拒绝并记日志，原名保留 (40.14504ms)
+✔ 添加字段 / 添加一项 / 上移下移 / 删除项 都只改本地模型 (92.879644ms)
+✔ 布尔勾选框切换会写回模型并同步 true/false 文案 (35.722768ms)
+✔ JSON 视图：改文本即时解析，语法错误就地提示并挡住切回表单 (42.225328ms)
+✔ JSON 视图里 config 不是对象：切到表单后提示，且校验被拒 (41.649278ms)
+✔ 校验通过：条目数取接口 count，结果条标 ok (34.079057ms)
+✔ 校验失败（400）：显示服务端原话，条目数回到 — (24.95054ms)
+✔ 保存成功：用接口返回的 revision，未保存标记消失，body 带 expected_revision (30.492434ms)
+✔ 保存失败（403）：提示原话、编辑与未保存标记都保留 (25.812519ms)
+✔ 保存冲突（409）：文案带「刷新」，不丢编辑 (30.363019ms)
+✔ 读取失败：整块提示 + 重试；重试成功后提示消失 (25.69365ms)
+✔ 读取失败 401：文案是「重新登录」，不是服务端纯文本正文 (14.822037ms)
+✔ 刷新：丢弃未保存修改，重新读接口，结果条一并清掉 (33.485756ms)
+✔ 已有数据时刷新失败：不清屏、不丢编辑，只在结果条与日志报错 (22.969355ms)
+✔ 撤销修改：模型回到上次保存的快照 (28.475562ms)
+✔ 复制 JSON：剪贴板拿到格式化文本；不支持时记一条错误日志 (40.248824ms)
+✔ 超长内容：深嵌套与长字符串照原样进控件，JSON 行号跟着行数走 (30.37992ms)
+✔ 可访问性：值控件有可访问名，日志是 live region，编辑视图是按钮组 (16.878231ms)
+✔ A1：进去先是表——五列表头依次是 名字 / 一句话 / 效果 / 开没开 / 从哪来，没有编辑器 (233.440744ms)
+✔ A1：五列逐格对字段——名字 / 一句话 / 效果「放行」 / 开没开「开」 / 从哪来「未标注」 (44.698612ms)
+✔ 三列展示默认值有口径说明（title 挂着为什么，不让「开」「未标注」变成没头没尾的字） (43.333497ms)
+✔ A2：名字是去原文页的真链接（`#/rules/<id>`），整行点击也跳过去 (26.785755ms)
+✔ A2：行里的文件名留在 title（表上不占一列，信息不丢） (19.503908ms)
+✔ A3：列表页没有任何可编辑控件（input / textarea / select / contenteditable 全无） (25.496068ms)
+✔ 服务端哪天多给 effect / enabled / source / updated_at，页面也不认（三列是展示默认，不是接口字段） (19.45914ms)
+✔ 格 1 loading：表里写正在读取、区域标 aria-busy、刷新禁用、共 N 条是「—」 (19.931266ms)
+✔ 格 1 loading：读完之后刷新可用、aria-busy 摘掉 (41.120999ms)
+✔ 格 2 empty：200 + {count: 0, rules: []} 写「规则库还没有规则」，共 0 条，不摆失败块 (32.544646ms)
+✔ 格 3 partial：刷新失败但表里还有规则——挂提示、保留上一次的行 (32.017695ms)
+✔ 格 4 error：首次就 502——整块失败写服务端原话（带 rules/<文件>:<行>），重试成功后换成表 (37.737405ms)
+✔ 格 4 error：401 文案是「登录已失效」，不是服务端纯文本 (13.774769ms)
+✔ 格 5 long-content：超长名字 / 一句话全文进 DOM（od-truncate 只视觉截断，title 留全文） (17.52014ms)
+✔ 格 6 disabled：请求在飞时刷新禁用且转圈，读完恢复 (17.130636ms)
+✔ describeRegoRulesError：四类 kind 各说各的，http 用服务端原话，未知错误不漏 (9.891182ms)
+✔ page.render：`#/rules` 出列表，`#/rules/<id>` 出原文（路由只认第一段，参数原样交回来） (29.951794ms)
+✔ alertHopOf：取 kind=alert 的那一跳；没有标记就退回第一跳（后端保证它在最前） (141.875721ms)
+✔ A3 方向：告警在右（x=0），原因每往左一列 -190px；同列两跳竖着分开 (17.081957ms)
+✔ hopDepths：沿 links 走（无向），连不上线的跳放到最左一列（不假装它在中间） (13.882255ms)
+✔ A4 重放顺序：按 discovery 的 step 排，接口没给到的补在后面，未知 id 丢掉 (19.477578ms)
+✔ A4 可见性：告警那跳永远在；线要等自己的那一步、且两端都出现 (15.960308ms)
+✔ 位置存储：按白板分开存，坏数据与写不进去都不抛 (27.800129ms)
+✔ A3：告警钉在右边，原因往左——三跳的横坐标是 0 / -190 / -380 (217.494195ms)
+✔ A3：点可拖——拖动改这个点的位置，松手把位置写进存储（相对告警点） (95.925555ms)
+✔ A3：位置记住——下次打开按存下来的位置画，不弹回自动排的位置 (85.784342ms)
+✔ A3：告警那一跳钉死，拖不动（D016「钉死在右边」） (48.773633ms)
+✔ A3：不能自己加点或加线——图上的点/线数只由接口决定，页面上没有新建入口 (78.860919ms)
+✔ A5：没有对话输入框——整页没有一个 input / textarea (52.466973ms)
+✔ A4 进行中：新的一跳自己往左长出来，页面上没有重放按钮 (57.334342ms)
+✔ A4 完成后自动按 discovery 重放：一步一跳，线晚于两端；跳到最新一次给全 (75.231135ms)
+✔ A4 暂停 / 继续：暂停后「继续」还能按（不是死按钮），按了接着往前走，播完才禁 (49.569473ms)
+✔ A4 断点不点开也看得见：断点写在图上的那一跳旁边，不用点检查器 (43.733547ms)
+✔ A4 整链缺口（hop_id 为 null）：放在最左一列，也一样不点开就看得见 (33.431ms)
+✔ 失败 / 中断：停在已经长出来的地方，顶上写原因，链不清空 (27.210041ms)
+✔ 点一个点：检查器写种类 / 机器 / 发生时间 / 证据；再点一次收起 (43.650646ms)
+✔ 点一条线（含键盘 Enter）：检查器写关系那一句与撑着这条线的证据 (38.149119ms)
+✔ 点画布空白处：收起检查器（D016「点别处……旁边收起」） (40.406524ms)
+✔ 格 1 加载中：画布写「正在读取白板…」，刷新禁用 (29.98001ms)
+✔ 格 2 空态：进行中但还没有跳，画布说「任务在跑，新的一跳会自己长出来」 (28.367447ms)
+✔ 格 3 部分失败：已有白板时刷新失败只挂提示，链还在 (49.208953ms)
+✔ 格 4 错误：首屏读不到白板就给整块错误 + 重试 (41.651512ms)
+✔ 格 5 超长内容：标签、机器、断点原因全文进 DOM（不截断数据） (26.080779ms)
+✔ 格 6 禁用：没有跳时不启动重放、不占定时器；跳到最新播完就禁用 (23.845512ms)
+✔ A2：打开已有白板——GET 一次就画出来，不发 POST (20.165024ms)
+✔ A2：这条还没有白板——404 后自动创建（POST），回 202 就画 (23.826655ms)
+(node:4134516) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ A2：创建被拒（422 没有可用资产）——把服务端原话显示出来，不假装有白板 (20.390611ms)
+✔ 没有目标（直接开 #/trace-board）：说清楚从哪儿进来，不擅自请求 (23.153597ms)
+✔ page 契约：id / title / navLabel，参数是编码过的告警 ID（冒号要还原） (20.807353ms)
+✔ A1：进去先是列表——有七列表格，没有画布（白板是另一页） (278.135515ms)
+✔ A1：点一行进这一条——行里的链接带白板路由，整行点击也跳过去 (72.447686ms)
+✔ 七列逐格对字段：类型中文 + 短标识（title 留全 ID）/ 主机 / 时间 / 状态中文 / 链长 / 断点 / 更新时间 (67.455581ms)
+✔ alertCell：类型名走 eventTypeLabel，未知类型原样显示（不吞数据） (9.075507ms)
+✔ 格 1 加载中：表格 aria-busy、刷新与四个筛选禁用、行里写「正在读取溯源…」 (32.272266ms)
+✔ 格 2 空态：没有白板时写「暂无溯源」并指出去哪儿起（告警列表的「溯源」） (28.404953ms)
+✔ 格 3 部分失败：已有数据时刷新失败只挂一条提示，表格保留上一次的结果 (35.924958ms)
+✔ 格 4 错误：首屏失败给整块错误 + 重试；重试成功后表格出来 (37.945532ms)
+✔ 格 5 超长内容：主机与 ID 全文进 DOM（CSS 负责省略），不截断数据 (35.480768ms)
+✔ 格 6 禁用：首页的「上一页」禁用；最后一页的「下一页」禁用；空表时都禁用 (41.821017ms)
+✔ 筛选下推：状态 / 类型 / 主机 / 时间各发对应的查询参数，并把 offset 退回第一页 (52.558605ms)
+✔ 筛选生效时显示「筛选后 N 条」；没有筛选时不显示 (31.996184ms)
+✔ 分页：下一页 offset=20；每页 50 改 count 并回第一页 (41.799436ms)
+✔ 筛选后空表：写「没有匹配的溯源」并给「清除筛选」 (26.465255ms)
+✔ A5 的反面证据：列表页的输入框只有「按主机筛选」，没有对话输入框 (19.553984ms)
+✔ 两个请求都是 GET，路径逐字，带 Basic / Accept / credentials:omit / cache:no-store (4.216799ms)
+✔ 没有凭据：不发请求，直接 unauthorized (1.266849ms)
+✔ baseUrl 前缀照传 (0.76909ms)
+✔ 列表：count / rules 四字段原样归一，description 可为 null (0.540221ms)
+✔ 空规则库是 200 + {count: 0, rules: []}，不是 404（openapi.yaml:630） (1.915183ms)
+✔ 列表项**不许**带 effect / enabled / source：接口没有这三列，adapter 不补默认值 (0.836836ms)
+✔ 服务端多给键也不转发（additionalProperties: false，页面只认四样） (0.8705ms)
+✔ 列表回包缺 count / rules：invalid (0.58457ms)
+✔ 列表条目缺 id / name：invalid（不把半截数据画上表） (0.549999ms)
+✔ 原文：逐字返回 rego（含注释与空行），不裁剪、不 strip (0.436228ms)
+✔ 404：返回 null，不抛（详情页要能写「规则库里已没有这条」） (0.252825ms)
+✔ 502 规则库装载失败：抛 http，message 是服务端原话（带 rules/<文件>:<行>） (0.404589ms)
+✔ 回包缺 id / rego：invalid (0.315333ms)
+✔ 空 id 不发请求，直接 null (0.203797ms)
+✔ id 里的特殊字符会被编码（页面把它们原样拼进路径） (1.592727ms)
+✔ 401：unauthorized，按状态码判，不解析纯文本正文 (0.510679ms)
+✔ 2xx 但不是 JSON：invalid (0.337263ms)
+✔ 连不上：network (0.29913ms)
+✔ 侧栏六个入口，顺序与文案照设计稿 + P003-T015 的演示入口（牧云现查标成演示） (2.407284ms)
+✔ 九张页面各有一个模块文件，告警详情 / 溯源白板 / 程序门禁不在侧栏但可路由 (0.585199ms)
+✔ A1：规则进去先是列表——`#/rules` 落在规则页、params 为空，`#/rules/<id>` 把 id 原样交给它 (0.456762ms)
+✔ A1：溯源进去先是列表——`#/trace` 落在列表页，`#/trace-board/<ID>` 才是这一条的白板 (0.425822ms)
+✔ hashFor 与 routeFromHash 往返一致（每个入口都点得回去） (0.46591ms)
+✔ 告警详情带参数：第二段起原样交给页面 (0.238648ms)
+✔ 空 hash / 只有 #/ → 总览 (0.355212ms)
+✔ 未知 hash → 回落到总览，不抛错、不空白 (0.224469ms)
+✔ 三个请求都带 Basic / Accept / credentials:omit / cache:no-store (4.368564ms)
+✔ 没有凭据：不发请求，直接 unauthorized (1.227738ms)
+✔ GET：只取 config / revision / writable，多给的 origin / error 原样带回 (0.972678ms)
+✔ GET：配置取自示例文件时 revision 为 null，写不进去（接口事实） (0.407732ms)
+✔ GET：缺 config / 缺 writable / 回包不是 JSON → invalid (2.602979ms)
+✔ 401：按状态码处理，不解析正文（401 正文是纯文本） (1.366233ms)
+✔ 403 / 409 / 503 / 400：kind 分开，正文 { error } 原话进 message (1.363788ms)
+✔ 错误体不是 JSON 时退回状态码文案，不把 HTML 甩到界面上 (0.744925ms)
+✔ fetch 抛异常 → network (0.535891ms)
+✔ validate：POST body 只有 { config }，count 原样回 (0.723974ms)
+✔ validate：回包缺 count 或 valid !== true → invalid (0.308558ms)
+✔ save：body 是 { config, expected_revision }，令牌走 X-Rule-Admin-Token (0.277199ms)
+✔ save：成功后用返回的 config / revision，不自己造版本号 (0.24626ms)
+✔ save：回包没有 revision → invalid（不拿旧 revision 顶替） (0.706932ms)
+✔ 无令牌时不伪造头：服务端会回 403/503，前端照实抛 (0.250939ms)
+✔ parsePathname：正常路径解码，畸形百分号编码返回 null（不抛 URIError） (1.475394ms)
+✔ GET / 返回登录页（200 + text/html） (54.114944ms)
+✔ 静态资源带正确 MIME；不存在的文件 404 (32.719319ms)
+✔ 回归：GET /%zz 回 400，且服务还活着（下一条请求照常 200） (22.231833ms)
+✔ 交接件不发布：/_handoff/* 一律 404（含设计稿副本、zip、设计期契约快照） (16.864471ms)
+✔ 越界路径回 403（%2f 编码的 ../ 也挡住） (13.326808ms)
+✔ /api/* 反代：把 Authorization 头原样带给后端，回包原样回给浏览器 (14.875395ms)
+✔ /api/* 反代：后端连不上回 502（页面据此显示「服务异常」而不是「密码错」） (8.218347ms)
+✔ 200 且 authenticated=true → 解析为已认证，身份字段缺了就落 null (4.616988ms)
+✔ 401 → unauthorized（账号或密码不对），不当成网络错误 (0.887821ms)
+✔ 500 → http，且带上状态码（界面要显示「服务返回异常」） (0.328673ms)
+✔ 连不上（fetch 抛）→ network (0.441815ms)
+✔ 200 但不是 JSON → invalid（不把 HTML 当成已认证） (0.361498ms)
+✔ 200 但 authenticated 不是 true → invalid（不靠 200 就放行） (0.311911ms)
+✔ 200 带回 user/role 时逐字透传（壳的账号区只认这两个键） (0.470311ms)
+✔ 服务端没配密码（user/role 都是 null）→ 原样回 null，不补默认账号 (0.415066ms)
+✔ user/role 不是字符串（脏回包）→ 当没有，不把对象/数字当账号名 (0.847313ms)
+(node:4134621) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ 侧栏六个入口：可访问名与 href 一一对应（总览/告警/牧云现查（演示）/深度溯源/规则/知识库） (170.172ms)
+✔ setRoute：只有当前项带 aria-current="page"，顶栏标题跟着换 (32.675459ms)
+✔ A5：会话报回账号名与角色时，侧栏底部显示账号区（头像 + 名字 + 角色） (21.01094ms)
+✔ A5：没有身份（服务端未配密码 → user=null）时账号区不渲染，不编名字 (19.52954ms)
+✔ A5：role 是机器值，未知值原样显示（不编中文）；role 缺失时不画角色行 (52.960401ms)
+✔ 退出登录：点一下回调一次 (18.304037ms)
+✔ 每页渲染：六个页面都能渲染出一个根节点，不抛错 (225.645286ms)
+✔ 主题切换按钮被移进顶栏（同一个节点，不额外造一个） (13.583264ms)
+✔ 六个只读源：路径与 Authorization 头逐个对上，一条牧云现查都不发（A1） (3.265562ms)
+✔ 成功：六源归一成 ok:true，结论分布 / 类型分布 / 最后推送 / syslog 三态都带出来 (1.132405ms)
+✔ since：带上统计范围时只给聚合接口加 ?since=（编码后），其它源不变 (1.123186ms)
+✔ 字段照文档：type_counts 里的非整数丢掉、结论四键缺了就 invalid、null 字段归 null (2.607729ms)
+✔ /api/status 的 502 是「配置在、连不上」：照样当成功源读，reason 留着 (0.712101ms)
+✔ 单源失败不拖累别源：该源 ok:false，其余照常，failed 列出名字 (2.320961ms)
+✔ 研判聚合挂掉不影响运行状态那几行（反之亦然） (0.48805ms)
+✔ 任一路 401 → 整体 unauthorized（凭据失效不是「部分数据缺失」） (0.79605ms)
+✔ 六路全挂 → 抛第一个错误（页面据此走整页错误态） (0.476177ms)
+✔ 没有凭据就不发请求：直接 unauthorized (0.33845ms)
+✔ 单源回包缺必填字段 → 该源 ok:false / invalid，不把 undefined 画到屏幕上 (0.638767ms)
+✔ 回包不是 JSON → invalid（不冒 SyntaxError 到页面） (0.656297ms)
+✔ 暂停 / 恢复：PUT /api/agent/triage/control，正文只有 enabled，回包归一成 TriageSummary (0.416323ms)
+✔ 暂停失败：503 → http 错误带状态码；401 → unauthorized；enabled 非布尔值直接拒 (0.284812ms)
+✔ formatClock：本机时刻 HH:MM:SS；拿不到时间给「—」 (0.126482ms)
+✔ formatDateTime：ISO → 本机 YYYY-MM-DD HH:mm:ss；空「—」；解析不了原样返回 (0.305206ms)
+✔ 状态四词照 D015：进行中 / 已完成 / 失败 / 中断；枚举外的原值照显示，空值给「—」 (1.457165ms)
+✔ 状态色点类：running / done / failed 各一档，interrupted 走默认 (4.237751ms)
+✔ 种类六词照 D016：告警 / 主机 / 进程 / 文件 / 账号 / 请求；未知种类原样 (0.286209ms)
+✔ 事件类型中文名与后端 eventTypes 对齐；未知类型原样；空值给 null 由调用方兜底 (0.193948ms)
+✔ 时间：坏值给「—」/ 空串，不编时间 (0.477573ms)
+✔ 短标识：短的原样，长的留首尾（完整 ID 由 title / href 保留） (0.277269ms)
+✔ 错误归一：六种 kind 各一句人能读的话，http 带状态码 (0.237599ms)
+✔ 请求都带 Authorization / Accept，且不带 cookie（credentials: omit） (2.482294ms)
+✔ 没有内存凭据：不发请求，直接抛 unauthorized (0.940131ms)
+✔ baseUrl 前缀拼在 /api 之前 (0.864912ms)
+✔ listTraceBoards：不传查询 → 路径没有问号，回 boards 与 total (0.976799ms)
+✔ listTraceBoards：六个查询参数逐字下推（状态逗号分隔，同 server.js:333 的 paramList） (1.33229ms)
+✔ listTraceBoards：空状态数组 / 空串筛选都不占参数位 (0.733052ms)
+✔ listTraceBoards：total 缺失或不是非负整数时退回本页条数（不编总数） (1.097624ms)
+✔ listTraceBoards：200 但没有 boards 数组 → invalid (1.953107ms)
+✔ listTraceBoards：200 不是 JSON → invalid (0.381123ms)
+✔ getTraceBoard：冒号编码进路径（openapi.yaml:557），并返回整块白板 (0.444399ms)
+✔ getTraceBoard：IPv4 原样进路径，ip: 前缀编码 (0.239416ms)
+✔ getTraceBoard：缺 hops / links / discovery 任一个 → invalid（不拿默认值糊过去） (1.166487ms)
+✔ getTraceBoard：gaps 缺失归一成空数组（旧白板没有这一项也不当故障） (0.301086ms)
+✔ getTraceBoard：404 → notfound（正常的「还没有白板」，不是故障） (0.204914ms)
+✔ startTraceBoard：POST /api/trace/boards，正文 { target }，202 回白板 (0.734729ms)
+✔ startTraceBoard：已有白板回 200 也照收（server.js:508-512 的 created:false） (0.219441ms)
+✔ startTraceBoard：400 把服务端原话带出来（server.js:507 / :57） (0.306952ms)
+✔ startTraceBoard：422 该告警没有可用资产也走 http，带状态码与原文 (0.410666ms)
+✔ 401 → unauthorized；503 → unavailable（带服务端说明）；5xx → http；连接抛 → network (1.26189ms)
+✔ 503 没有错误体时用兜底文案（不是空字符串） (0.256666ms)
+✔ 5xx 且正文不是 JSON：仍归 http，消息带状态码 (0.25045ms)
+ℹ tests 447
+ℹ suites 0
+ℹ pass 447
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5086.139892

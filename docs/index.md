@@ -29,7 +29,7 @@
 
 ```bash
 # 需要 Node.js 20 及以上
-npm test                    # 跑全部测试
+npm test                    # 跑后端单测（web 单测：npm run test:web）
 node --test triage-rules.test.js   # 只跑一个文件
 node server.js              # 起业务 API，默认 127.0.0.1:8080
 ```
