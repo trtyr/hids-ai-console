@@ -1,5 +1,6 @@
 import dgram from 'node:dgram';
 import { createHash } from 'node:crypto';
+import { log } from './log.js';
 
 // 牧云 SysLog 数据格式 2.0：RFC5424 行首，正文有结构化数据、JSON、键值对三种形态。
 const pair = /([^\s=]+)="(.*?)"(?=\s+[^\s=]+=|\s*$)/gs;
@@ -108,8 +109,8 @@ export class SyslogReceiver {
   async start() {
     const socket = dgram.createSocket('udp4');
     socket.on('message', data => void Promise.resolve(this.onLine(data.toString('utf8'))).catch(error =>
-      console.error(`syslog 处理失败：${error.message}`)));
-    socket.on('error', error => console.error(`syslog 接收错误：${error.message}`));
+      log('syslog.handler_failed', { error: error.message }, 'error')));
+    socket.on('error', error => log('syslog.receiver_error', { error: error.message }, 'error'));
     await new Promise((resolve, reject) => {
       socket.once('error', reject);
       socket.bind(this.port, this.host, () => { socket.off('error', reject); resolve(); });

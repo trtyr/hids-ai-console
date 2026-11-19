@@ -14,6 +14,7 @@ import { InvestigationAgent } from './investigation-agent.js';
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
 import { TriageMonitor } from './triage-monitor.js';
+import { log } from './log.js';
 import { SyslogReceiver, parseSyslog } from './syslog-input.js';
 import { eventTypeFor } from './syslog-input.js';
 import { WikiStore } from './wiki-store.js';
@@ -376,6 +377,15 @@ function configured(res) {
   error(res, 503, '未配置 CLOUDWALKER_URL 和 CLOUDWALKER_API_TOKEN');
   return false;
 }
+// 牧云调用一律经这里：失败时留一条 cloudwalker.call_failed（op 说明哪次调用，告警相关的带 alert_id），
+// 然后原样抛出——日志是旁路，状态码、响应体与失败处置一个字节都不动。
+async function viaCloudwalker(op, alertId, job) {
+  try { return await job(); }
+  catch (cause) {
+    log('cloudwalker.call_failed', { op, alert_id: alertId ?? null, error: String(cause?.message || cause) }, 'error');
+    throw cause;
+  }
+}
 function validAlertId(value) {
   const match = String(value || '').match(/^([a-z_]+):([1-9][0-9]*)$/);
   return Boolean(match && Object.hasOwn(eventTypes, match[1]) && Number.isSafeInteger(Number(match[2])));
@@ -481,7 +491,7 @@ async function triageFilteredAlerts(service, monitor, query, { statuses, verdict
   let scanned = 0;
   let truncated = false;
   for (;;) {
-    const page = await service.alerts({ ...query, count: 50, offset: pageOffset });
+    const page = await viaCloudwalker('alerts', null, () => service.alerts({ ...query, count: 50, offset: pageOffset }));
     envelope ??= page;
     const rows = page.alerts || [];
     if (!rows.length) break;
@@ -529,7 +539,15 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   // 拿那个当日志会把这个案件永久锁死在 updating。
   const runningMaintenance = new Set();
   return http.createServer(async (req, res) => {
-    if (!hasAccess(req, access)) return requireAccess(res);
+    const startedAt = Date.now();
+    // 只记方法与路径（query 一律不记：可能带令牌），请求头一个字段都不碰——Authorization / Cookie 不进日志（A4）。
+    const route = String(req.url || '').split('?')[0];
+    res.on('finish', () => log('http.request', { method: req.method, path: route, status: res.statusCode,
+      duration_ms: Date.now() - startedAt }));
+    if (!hasAccess(req, access)) {
+      log('http.unauthorized', { method: req.method, path: route, status: 401 }, 'warn');
+      return requireAccess(res);
+    }
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     try {
       if (url.pathname === '/api/session' && req.method === 'GET') {
@@ -542,17 +560,17 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname === '/api/updates' && req.method === 'GET') return json(res, 200, await new UpdateStore(prompts).overview());
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
-        try { return json(res, 200, { configured: true, ...(await service.status()) }); }
+        try { return json(res, 200, { configured: true, ...(await viaCloudwalker('status', null, () => service.status())) }); }
         catch (e) { return json(res, 502, { configured: true, connected: false, reason: e.message }); }
       }
       if (url.pathname === '/api/agent/tools' && req.method === 'GET') {
         if (!toolbox) return error(res, 503, '牧云 API 未配置');
-        const tools = await toolbox.listTools();
+        const tools = await viaCloudwalker('tools', null, () => toolbox.listTools());
         return json(res, 200, { provider: 'cloudwalker-api', readOnly: true, count: tools.length, tools });
       }
       if (url.pathname === '/api/trace/tools' && req.method === 'GET') {
         if (!agentToolbox) return error(res, 503, '牧云 MCP 未配置');
-        const tools = await agentToolbox.listTools();
+        const tools = await viaCloudwalker('mcp_tools', null, () => agentToolbox.listTools());
         return json(res, 200, { provider: 'cloudwalker-mcp', readOnly: true, count: tools.length, tools });
       }
       if (url.pathname === '/api/agent/status' && req.method === 'GET') {
@@ -698,7 +716,12 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         void maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMaintainer }).catch(cause => {
           record.maintenance.status = 'failed';
           record.maintenance.error = String(cause?.message || cause).slice(0, 300);
-        }).finally(() => runningMaintenance.delete(alertId));
+        }).finally(() => { runningMaintenance.delete(alertId);
+          // 误报维护的结局只从这里出来：两侧各自的状态与原因都带上，别让人去翻 .data/triage-monitor.json。
+          log('maintenance.result', { alert_id: alertId, status: record.maintenance.status,
+            rule: record.maintenance.rule?.status ?? null, wiki: record.maintenance.wiki?.status ?? null,
+            rule_error: record.maintenance.rule?.error ?? null, wiki_error: record.maintenance.wiki?.error ?? null });
+        });
         return json(res, 202, falsePositiveView(record));
       }
       if (url.pathname.startsWith('/api/agent/triage/')) {
@@ -835,7 +858,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const triageFiltered = filters.statuses.length > 0 || filters.verdicts.length > 0;
         const result = triageFiltered
           ? await triageFilteredAlerts(service, monitor, filters.query, { statuses: filters.statuses, verdicts: filters.verdicts, count, offset })
-          : await service.alerts({ count, offset, ...filters.query });
+          : await viaCloudwalker('alerts', null, () => service.alerts({ count, offset, ...filters.query }));
         // 没配研判时 triage 键仍在、值为 null：前端靠这个布尔分辨「没记录」与「没配」两种空。
         if (!triageFiltered) result.alerts = result.alerts.map(alert => ({ ...alert, triage: monitor ? monitor.status(alert.id) : null }));
         result.triage_configured = Boolean(monitor);
@@ -852,7 +875,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         if (!service) return configured(res);
         const [type, id] = detailPath[1].split(':');
         let result;
-        try { result = await service.alert(type, Number(id)); }
+        try { result = await viaCloudwalker('alert', detailPath[1], () => service.alert(type, Number(id))); }
         catch (cause) {
           // 404 = 牧云可达但这条事件读不到（cloudwalker.js 标 status）；其余（不可达、上游自相矛盾）落到外层 502。
           if (cause?.status === 404) return error(res, 404, cause.message);
@@ -864,6 +887,10 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname.startsWith('/api/')) return error(res, 404, '接口不存在');
       return error(res, 404, '接口不存在');
     } catch (e) {
+      // 走到这里的是没被各路由自己接住的失败（主要是牧云调用、模型调用）：留一条带原因的日志，
+      // 状态码与正文照旧；字段里的凭据由 log.js 的脱敏闸处理。
+      log('http.failed', { method: req.method, path: route, status: /请求正文/.test(e.message || '') ? 400 : 502,
+        error: e.message || '牧云请求失败' }, 'error');
       error(res, /请求正文/.test(e.message || '') ? 400 : 502, e.message || '牧云请求失败');
     }
   });
@@ -889,15 +916,13 @@ export function runtimePaths(directory = moduleDirectory) {
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  createServer().listen(port, host, () => console.log(`HIDS API: http://${host}:${port}`));
+  createServer().listen(port, host, () => log('server.started', { host, port }));
   if (triageMonitor) void triageMonitor.start().then(async () => {
     if (triageInputMode === 'syslog') {
       const receiver = new SyslogReceiver({ host: process.env.HIDS_SYSLOG_HOST || '127.0.0.1',
         port: Number(process.env.HIDS_SYSLOG_PORT || 15514), onLine: line => triageMonitor.acceptSyslog(line) });
-      // 绑定失败（端口被占 / 权限不足）只打日志会让队列静默收不到消息：状态记进 summary()。
-      const { listening, bind, error } = await triageMonitor.attachSyslog(receiver);
-      if (listening) console.log(`牧云 syslog 接收：${bind}`);
-      else console.error(`牧云 syslog 接收启动失败：${error}`);
+      // 绑定失败（端口被占 / 权限不足）只打日志会让队列静默收不到消息：状态记进 summary()，日志由 monitor 记。
+      await triageMonitor.attachSyslog(receiver);
     }
-  }).catch(error => console.error(`自动研判启动失败：${error.message}`));
+  }).catch(error => log('server.start_failed', { what: 'triage', error: error.message }, 'error'));
 }

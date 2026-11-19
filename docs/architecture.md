@@ -83,6 +83,45 @@
 
 `/api/status` 是例外：它不 503，而是返回 `{configured:false, connected:false, reason:'请设置牧云地址和 API Token'}`（`server.js:136-139`），供前端判断「是没配还是连不上」。
 
+### 3.6 日志（`log.js`）
+
+全后端只有一个日志落点：`log.js`。`server.js`、`triage-monitor.js`、`syslog-input.js` 都 `import { log } from './log.js'`，这三份文件里不再有自己的 `console.log`。
+
+`log(event, fields = {}, level = 'info')` 往 stdout 写**一行一条 JSON**，键顺序固定：
+
+```text
+{"time":"2026-11-19T09:12:03.114Z","level":"info","event":"http.request","method":"GET","path":"/api/status","status":200,"duration_ms":3}
+```
+
+- `time` 是调用时刻的 ISO-8601 UTC 字符串，`level` 取 `info | warn | error`，`event` 是下表的事件名。**字段里的 `event` / `time` / `level` 覆盖不了这三个键**（`log.js:39-46`、`log.js:49-56`）。
+- 能对上告警的事件带 `alert_id`：syslog 告警是 `syslog:<type>:<指纹>:<秒>:<uuid>`，牧云事件是 `<type>:<id>`（如 `honeypot:7`）。
+- **脱敏（A4）**：键名命中 `authorization | cookie | token | password | secret | api_key` 的值一律写成 `[redacted]`，递归进对象与数组、4 层封顶（`log.js:9`、`log.js:24-37`）；字符串值里的 `Basic …` / `Bearer …` / `token=…` 再擦一遍（`log.js:10-12`、`log.js:17-22`）。`server.js:544-545` 只取 `req.method` 与去掉 query 的路径，请求头一个字段都不进日志。
+- 字段取值抛错（getter 抛、循环引用）或写入器抛错（管道断开）都不抛给业务：前者落一条 `log.serialize_failed`，后者静默丢弃（`log.js:52-54`）。
+- **单测注入缝**：`useJournal(createJournal({ write, now }))` 换成内存 journal，不碰真实 stdout 与真实时钟（`log.js:48`、`log.js:62`）。
+
+事件名表（加事件先补这张表，再加调用）：
+
+| 事件 | 何时写 | 关键字段 |
+| --- | --- | --- |
+| `server.started` | 业务 API 监听成功 | `host` `port` |
+| `server.start_failed` | 自动研判 / syslog 接收器启动失败 | `what` `error` |
+| `http.request` | 每个请求收尾（`res` 的 `finish` 事件） | `method` `path`（无 query）`status` `duration_ms` |
+| `http.unauthorized` | Basic 认证失败（401） | `method` `path` `status` |
+| `http.failed` | 路由没接住的失败（多为牧云 / 模型调用） | `method` `path` `status` `error` |
+| `cloudwalker.call_failed` | 牧云调用失败 | `op` `alert_id` `error` |
+| `syslog.listening` / `syslog.bind_failed` | UDP 接收器绑定成功 / 失败 | `bind` / `error` |
+| `syslog.received` / `syslog.collapsed` | 收下一条 / 重复投递合并到已有记录 | `alert_id` `msgid` `event_type` `occurrence` / `alert_id` `repeat_count` |
+| `syslog.parse_failed` / `syslog.skipped` | 报文解析失败 / 无对应事件类型（`reason=no_agent_for_msgid`）或队列已暂停（`reason=paused`） | `error` `bytes` / `reason` `msgid` |
+| `syslog.receiver_error` / `syslog.handler_failed` / `syslog.accept_failed` | socket 错误 / 收包回调抛错 / 收包链抛错 | `error` |
+| `triage.enqueued` | 进入研判队列 | `alert_id` `source`（`manual` / `retry` / `poll`） |
+| `triage.done` / `triage.failed` | 研判完成 / 失败 | `alert_id` `verdict` `attempts` `duration_ms` / `alert_id` `attempts` `error` |
+| `triage.persist_failed` / `triage.poll_failed` | 状态落盘失败 / 轮询失败 | `alert_id` `error` / `error` |
+| `maintenance.result` | 误报维护收尾（两侧都落定） | `alert_id` `status` `rule` `wiki` `rule_error` `wiki_error` |
+| `log.serialize_failed` | 日志字段序列化不出来，兜底一条 | `level=error` |
+
+`cloudwalker.call_failed` 的 `op` 取值：`status` / `alerts` / `alert`（告警详情）/ `tools`（牧云 API 工具列表）/ `mcp_tools` / `call_tool` / `list_events`（syslog 事件匹配）。
+日志只上 stdout，不落文件、不轮转；采集交给部署端（本卡不引入日志依赖）。
+
 ## 4. 模块分层与依赖
 
 按依赖方向分成下面七组。下层不 import 上层，上层可以组装下层；「存储」是并列的另一支——它不被编排层依赖，也不依赖编排层。
@@ -432,11 +471,11 @@ node --test triage-rules.test.js   # 只跑一个文件
 | `wiki-current.test.js` | 当前生效判据与提示词是否一致（只读） |
 | `wiki.test.js` | 判据库读写、维护会话、发布与回放 |
 
-**本卡实测结果**（命令：`node --test *.test.js`，21 个后端测试文件 190 条，201 条输出中 1 条失败）：
+**本卡实测结果**（命令：`node --test *.test.js`，21 个后端测试文件 198 条，输出中 1 条失败）：
 
 ```
-ℹ tests 190
-ℹ pass 189
+ℹ tests 198
+ℹ pass 197
 ℹ fail 1
 ```
 
@@ -467,7 +506,7 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 
 `/api/status` 不返回 503，而是用 `configured` 与 `connected` 两个字段区分「没配」和「连不上」（`server.js:136-139`）。`/api/agent/status` 同理，会列出缺哪个环境变量（`server.js:141-144`）。
 
-启动后若 `HIDS_TRIAGE_INPUT_MODE` 为 `syslog`，还会打印一行 `牧云 syslog 接收：udp://...`（`server.js:369-370`）；未配牧云时这行不出现，因为自动研判器整个不启用。
+启动日志是一行 JSON：`{"time":…,"event":"server.started","host":…,"port":…}`（见 3.6）。`HIDS_TRIAGE_INPUT_MODE` 为 `syslog` 时还会多一行 `syslog.listening`（`bind` 形如 `udp://…`）或 `syslog.bind_failed`（`error` 写明端口被占 / 权限不足）；未配牧云时这两行都不出现，因为自动研判器整个不启用。
 
 ### 11.3 接口契约
 
