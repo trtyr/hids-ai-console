@@ -10,7 +10,7 @@ updated: 2026-11-17
 
 模块名 `evidence-tools`。覆盖文件三个：`mcp-client.js`、`agent-tools.js`、`api-tools.js`（模块划分与页面归属见 [docs/modules/_breakdown.json](_breakdown.json) 的 `evidence-tools` 条目）。
 
-这篇讲这模块对外给出什么、拿到什么、失败时是什么样。关键断言标 `文件:行号`，行号对应当前提交 `35530d8`；代码改动后请重新核对。
+这篇讲这模块对外给出什么、拿到什么、失败时是什么样。关键断言标 `文件:行号`，行号对应当前提交 `35530d8`；P003-T039 的 §2 关系句与 §4.4 行号对 P003-T039 复审修复提交 `241c0da`；代码改动后请重新核对。
 
 取证结果怎么投影成模型看到的上下文、结论怎么被引用校验消费，都不在本篇：前者属 evidence-view 模块，后者属 investigation-agent 模块，页面归属同样见 `_breakdown.json`。
 
@@ -120,12 +120,13 @@ MCP 客户端自己的公开面是 `request(method, params)`、`initialize()`、
 模型上下文里的那份是可裁的副本。从 P003-T039 起，编排层（`investigation-agent.js`）把历史里的工具结果只留最近 2 条全文，
 更早的换成计数摘要，模型要引用其中字段时调用 `read_evidence`：
 
-1. **折叠**。每条 tool 消息入历史时按 `evidence_id` 记一份全文（`investigation-agent.js` 的 `evidenceFullText`），
+1. **折叠**。每条 tool 消息入历史时按 `evidence_id` 记一份全文（`investigation-agent.js` 的 `evidenceFullText`；
+   同一查询重发回来的 `already_queried` 指针虽然也带 `evidence_id`，但不注册——注册会覆写原文，见 `investigation-agent.js:725-732`），
    一轮批次结束后，除最近 `historyFullResults = 2` 条外都换成 `{evidence_id, tool, args, folded: true, summary, note}`
-   （`foldedToolMessage()`，`investigation-agent.js:288-302`），trace 记一条 `history_folded`。
+   （`foldedToolMessage()`，`investigation-agent.js:290-304`），trace 记一条 `history_folded`。
 2. **取回**。`read_evidence({evidence_id})` 命中 `evidenceFullText` 就原样返回那条完整视图；
    不在历史里但在 `session.records` 里（例如平台自己发的必查项、`syslog:1`）就用 `toolMessage(record)` 现拼一份
-   （`investigation-agent.js:613-625`）。
+   （`investigation-agent.js:615-627`）。
 3. **不计取证预算**。这一步不发牧云查询、不占 `maxToolCalls`，也不产生新证据；取不到时回
    `{"error":"本次调查没有证据 <编号>；可用编号见之前工具结果的 evidence_id"}`。
 4. **证据编号的来源**。编号由会话分配（`cw:<n>`），平台自己发的必查项也占号——所以模型第一批真实取证从 `cw:3`、`cw:4` 起很常见，
