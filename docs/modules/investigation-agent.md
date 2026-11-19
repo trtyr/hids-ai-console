@@ -167,37 +167,76 @@
 
 ### 3.2 工具轮次与调用上限
 
-调查是一个固定上限的循环 `for (let turn = 0; turn < 6; turn++)`（`investigation-agent.js:378`），最多 6 轮。
+调查是一个固定上限的循环 `for (let turn = 0; turn < 6; turn++)`（`investigation-agent.js:520`），最多 6 轮。
 每轮开头决定这一轮能不能调工具：
 
 ```js
-const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-agent.js:379
+const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-agent.js:521
 ```
 
 - 第 6 轮（`turn === 5`）强制 `'none'`；
 - 工具调用计数已达 8（`calls >= 8`）也强制 `'none'`；
 - 其余轮次是 `'auto'`。
 
-`'none'` 轮不带工具，提示词换成 `finalMessages()`，写明「请根据以下已查询证据直接输出完整 JSON 结论。不得再请求工具；没有足够证据时 verdict 必须为『存疑』」（`investigation-agent.js:368-374`、`investigation-agent.js:382-383`）。
-模型在这一轮仍然请求工具，抛「模型超出调查轮数仍请求工具」（`investigation-agent.js:390-391`）。
+`'none'` 轮不带工具，提示词换成 `finalMessages()`，写明「请根据以下已查询证据直接输出完整 JSON 结论。不得再请求工具；没有足够证据时 verdict 必须为『存疑』」（`investigation-agent.js:506-512`、`investigation-agent.js:521-525`）。
+模型在这一轮仍然请求工具，抛「模型超出调查轮数仍请求工具」，并附带这一轮回包的形状（`investigation-agent.js:535`，见 §3.2.1）。
 
-**8 次调用上限**是这样执行的：每收到一个工具调用请求，先把计数器加一，加一后的值超过 8 就不执行，回一条错误「工具调用已达到 8 次上限，请基于已有证据给出待复核结论」（`investigation-agent.js:396`）。
+**8 次调用上限**是这样执行的：每收到一个工具调用请求，先把计数器加一，加一后的值超过 8 就不执行，回一条错误「工具调用已达到 8 次上限，请基于已有证据给出待复核结论」（`investigation-agent.js:564`）。
 被上限挡下的请求不产生证据记录。
 
-**重复查询不重复取证**：同名且同参数的调用会被识别出来，回一条 `already_queried` 并指出已有证据编号，不新调工具（`investigation-agent.js:414-421`）。
+**重复查询不重复取证**：同名且同参数的调用会被识别出来，回一条 `already_queried` 并指出已有证据编号，不新调工具（`investigation-agent.js:586-592`）。
 
-**参数收窄**在 `boundedToolArgs()`（`investigation-agent.js:177-204`）里做：
+**参数收窄**在 `boundedToolArgs()`（`investigation-agent.js:287-314`）里做：
 
-- `list_` 前缀、且 schema 里有 `count` 的工具，`count` 被夹到上限——`list_process_assets` 上限 50，其余上限 5，缺省也是 5（`investigation-agent.js:180-182`）。
-- 一批 filters 键会被强制包成数组（`investigation-agent.js:184-192`）。
-- `list_port_assets` 的端口筛选值会转成 `10010~10010` 这种区间写法，不合规的值抛「端口筛选值必须是端口数字或数字范围」（`investigation-agent.js:193-197`）。
-- `list_process_assets` 的 `port_num` 传了非字符串，抛「进程资产 port_num 是开放端口数量的字符串范围，不是监听端口号」（`investigation-agent.js:199-201`）。
+- `list_` 前缀、且 schema 里有 `count` 的工具，`count` 被夹到上限——`list_process_assets` 上限 50，其余上限 5，缺省也是 5（`investigation-agent.js:290-293`）。
+- 一批 filters 键会被强制包成数组（`investigation-agent.js:294-302`）。
+- `list_port_assets` 的端口筛选值会转成 `10010~10010` 这种区间写法，不合规的值抛「端口筛选值必须是端口数字或数字范围」（`investigation-agent.js:303-308`）。
+- `list_process_assets` 的 `port_num` 传了非字符串，抛「进程资产 port_num 是开放端口数量的字符串范围，不是监听端口号」（`investigation-agent.js:309-311`）。
 
 另外三处与「量」有关的约束：
 
-- 每轮发给模型的工具集按告警类型裁过，不是整份目录（`relevantTools()`，`investigation-agent.js:107-122`）。
-- 单条工具结果超过 20000 字符就不给模型看内容，只回一句「结果超出模型上下文……不能引用其字段」（`investigation-agent.js:124-129`）。
-- 模型调用报错时，只有报错信息含 `timeout` 或「超时」才原样重试一次，其它错误直接抛出（`investigation-agent.js:385-389`）。
+- 每轮发给模型的工具集按告警类型裁过，不是整份目录（`relevantTools()`，`investigation-agent.js:217-232`）。
+- 单条工具结果超过 20000 字符就不给模型看内容，只回一句「结果超出模型上下文……不能引用其字段」（`investigation-agent.js:234-239`）。
+- 模型调用报错时，只有报错信息含 `timeout` 或「超时」才原样重试一次；重试再失败或其它错误，一律包成带轮次、已查证据数与回包摘要的失败消息抛出（`investigation-agent.js:526-531`、`investigation-agent.js:57-64`，见 §3.2.1）。
+
+### 3.2.1 模型没交卷时，失败记录里留下什么（P003-T022）
+
+六轮调查用完仍没有 `draft` 时，抛出的不再是「模型未在调查轮数内给出有效 JSON 结论」这一句（旧口径），
+而是把模型最后回了什么、为什么退回一起带上（`investigation-agent.js:629`、`investigation-agent.js:34-55`）。
+这条消息是运维在队列记录 `detail` 里唯一能看到的东西：`triage-monitor.js:471` 把它截到 250 字写进 `record.detail`，
+所以整条消息按 240 字预算拼（`investigation-agent.js:34`）。
+
+消息形状（四段，用「；」隔开）：
+
+| 段 | 内容 | 出处 |
+| --- | --- | --- |
+| 轮数与取证量 | `调查 N 轮、已查询 M 项证据后仍没有可用结论` | `investigation-agent.js:52` |
+| 末次回包 | `末次回包 K 字：「正文开头 50 字」`；正文为空时是 `末次回包没有正文`；这一轮点了工具再加 `末次工具调用：<名字>` | `investigation-agent.js:42-49`、`investigation-agent.js:533` |
+| 退回次数与原因 | `退回 N 次：<倒数第二个不同原因> → <最后一个原因>`，原因分三类：`输出解析失败：…`（`investigation-agent.js:612`）、`结论被退回：…`（结论工具 `submit_conclusion` 被 `conclusionProblem` 拒，`investigation-agent.js:547`）、`结论没查知识库被退回`（`investigation-agent.js:621`） | `investigation-agent.js:51-55` |
+| 原文 | `flatten()` 把换行压成空格、超出预算截断并补 `…` | `investigation-agent.js:36-39` |
+
+实测（假 model 每轮都只回散文，告警 `suspicious_operation:7`）：
+
+```text
+模型未在调查轮数内给出有效 JSON 结论（调查 6 轮、已查询 0 项证据后仍没有可用结论；末次回包 50 字：「我先梳理一下这条告警：主机 10.0.0.5 上以 root 执行了 id，需要核对授权与前后会话。」；退回 6 次：输出解析失败：Unexpected token '我', "我先梳理一下这条告警…）
+```
+
+**模型调用本身失败时**（HTTP 错、超时重试后再失败、回包没有可用 message）：消息换成
+`模型调用失败（第 N 轮、已查询 M 项证据）：<回包摘要>（调用报错：<原报错 60 字>）`（`investigation-agent.js:57-64`），
+原错误挂在 `cause` 上。`模型没有返回可用消息` 这一句是 `model-client.js` 抛的，抛出时把不可用回包的摘要挂到
+`error.reply_excerpt`（`model-client.js:40-43`、`model-client.js:1-12`），所以这份摘要能传到队列记录里：
+
+| 回包情形 | `reply_excerpt` |
+| --- | --- |
+| 有 `choices[0]` 但没有 `message` | `回包没有 choices[0].message（finish_reason=stop，keys=choices）` |
+| 有 `message` 但正文空、也没有 `tool_calls` | `回包 message 正文 0 字、工具调用 0 次（finish_reason=length）` |
+
+正文非空（哪怕只是空格）就是可用消息，`model-client` 不抛错；那种回包由研判循环自己判断，解析不了就落到上一段的
+`输出解析失败`。摘要里不含请求头、密钥与整段正文。
+
+**失败仍然只是抛错**：没有写一条降级结论、也没有碰研判记录库（`investigation-agent.js` 不持有 `InvestigationStore`），
+所以已经写成的结论不会被这次失败盖掉；同一个 `InvestigationAgent` 实例的失败状态只活在这次调用的局部变量里
+（`investigation-agent.js:516-517`），下一次研判从零开始。
 
 ### 3.3 独立复核
 
@@ -603,6 +642,45 @@ console.log(system.includes('package hids.rules.honeypot_probe'), JSON.stringify
 ```
 
 预期输出：`true {"status":"matched","rule_ids":["honeypot_probe"]}`——仓内 `rules/honeypot_probe.rego` 的 `type`/`peer`/`user` 三个条件都被这次 syslog 事实满足。
+
+### 5.6 失败记录摘要（P003-T022，可照着写测试）
+
+只跑本卡新增的 6 条：
+
+```bash
+node --test investigation-agent.test.js 2>&1 | grep -E "A1 |A2 |A3 |model-client"
+```
+
+预期 10 行 `✔`：P003-T012 的 4 条（Rego / 必调知识库 / 未采纳原因 / 501 字退回）加本卡 6 条——A1 三条（六轮都没给 JSON /
+模型没有返回可用消息 / 结论连续被退回）、A2 一条（同一实例失败后能再跑）、A3 一条（失败不覆盖已经写成的结论）、
+model-client 一条（`reply_excerpt` 形状与「不带密钥」）。
+
+每条用例的断言口径（照抄可改）：
+
+| 用例 | 断言 |
+| --- | --- |
+| 六轮都没给 JSON（假 model 每轮回同一段散文） | 消息含 `调查 6 轮、已查询 0 项证据后仍没有可用结论`、`末次回包 <正文长度> 字：「<开头>`、`退回 6 次：输出解析失败：`；整条 `[...message].length <= 250` |
+| 模型没有返回可用消息 | 消息含 `模型调用失败（第 1 轮、已查询 0 项证据）：` + 假 `reply_excerpt`，且 `error.cause.message === '模型没有返回可用消息'` |
+| 结论连续被退回（有知识库但没查，前五轮 `submit_conclusion` 被拒，末轮只能发文本） | 消息含 `退回 6 次：结论被退回：…没有调用知识库工具…→ 输出解析失败：`、`末次回包 6 字：「结论：存疑。」` |
+| 同一实例失败后能再跑 | 两次 `run` 各抛一次，第二次的摘要只含第二次的回包开头；第三次 `run` 正常出结论 |
+| 失败不覆盖已写成的结论 | 预存一条 `InvestigationStore` 记录 → `run` 抛错 → 目录里仍只有一个文件、`latest()` 与预存对象 `deepEqual` |
+| model-client 摘要 | `error.message === '模型没有返回可用消息'`；`reply_excerpt` 含 `正文 0 字、工具调用 0 次（finish_reason=length）`、不含 `apiKey`；正文非空时**不抛错** |
+
+手工看一条真实消息（假 model，不碰网络）：
+
+```bash
+node --input-type=module -e "
+import { InvestigationAgent } from './investigation-agent.js';
+import { AgentToolbox } from './agent-tools.js';
+const toolbox = new AgentToolbox({ listTools: async () => [{ name: 'get_suspicious_operation_event', inputSchema: { type: 'object', properties: { id: {} }, required: ['id'] } }], callTool: async () => ({ id: 7, cmdline: 'id' }) });
+const model = { model: 'fake', complete: async () => ({ content: '我先梳理一下这条告警：需要核对授权。' }) };
+try { await new InvestigationAgent(toolbox, model).run('suspicious_operation:7', { mode: 'triage' }); }
+catch (error) { console.log([...error.message].length, error.message); }
+"
+```
+
+预期输出以 `模型未在调查轮数内给出有效 JSON 结论（调查 6 轮…` 开头，末尾是 `退回 6 次：输出解析失败：…`。
+
 
 ## 6. 已知边界与未决
 
