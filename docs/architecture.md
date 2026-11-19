@@ -388,9 +388,10 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 - 没设就落 `~/.local/share/hids-ai-console/`——本机是 `/home/trtyr/.local/share/hids-ai-console/`。
 - **不读** `XDG_DATA_HOME`：卡面只点名 `HIDS_DATA_DIR` 与 `~/.local/share/hids-ai-console`，多一个开关就是多一条没人维护的路径。
 
-`server.js` 里定义的运行态路径一律取自 `runtime.*`（`server.js:31`、`server.js:52-63`、`server.js:129-130`），
-**仓库里一个字都不写**：部署时仓库目录往往只读，运行态落进去没人知道该去哪找。九条具名路径的子结构与 P003-T019 时仓内
-`.data/` 逐字一致（见 8.2），换的只是「根在哪」。
+`server.js` 里定义的运行态路径一律取自 `runtime.*`（`server.js:28`、`server.js:59-69`、`server.js:137-138`），
+**仓库里一个字都不写**：部署时仓库目录往往只读，运行态落进去没人知道该去哪找。七条具名路径的子结构与 P003-T019 时仓内
+`.data/` 逐字一致（见 8.2），换的只是「根在哪」。（P003-T043 从九条砍到七条：`baseline.json` 与 `intel.json` 两个具名路径已删，
+研判背景改走判据库 `common/GEN-13.md` 与规则层。）
 
 **旧位不自动搬**（P003-T034 A4）：P003-T019 之前的 `<上一级>/backend/.data/` 与 P003-T019 的仓内 `.data/` 里的既有数据，
 进程**不读也不写**；要接着用里面的研判记录 / 基线 / 案卷，只能人工搬进数据根——代码里没有任何 `rename` / `copy` / 迁移脚本。
@@ -409,18 +410,18 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 ### 8.2 目录与文件清单
 
 下表路径均相对于**数据根**（第 8.1 节：`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console/`）。
-前九条的默认值由 `runtimePaths()`（`server.js:1293-1306`）给出，`server.js:31`、`server.js:52-63`、`server.js:129-130` 把它们交给各构件。
+前七条的默认值由 `runtimePaths()`（`server.js:1359-1370`）给出，`server.js:59-69`、`server.js:137-138` 把它们交给各构件。
+P003-T043 起**不再有** `<数据根>/baseline.json` 与 `<数据根>/intel.json`：研判背景不再由监视器读文件，环境基线只在判据库里
+（`common/GEN-13.md`，模型按需 `wiki_page` 读），白名单命令的硬判定归规则层（`rules/*.rego`、`triage-rules.json`）。
 
 | 路径 | 存什么 | 谁写 | 证据 |
 | --- | --- | --- | --- |
-| `<数据根>/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:51` |
-| `<数据根>/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:52` |
-| `<数据根>/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:54`、`triage-monitor.js:240` |
-| `<数据根>/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:59`、`syslog-case.js:92` |
-| `<数据根>/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:61`、`triage-monitor.js:913` |
-| `<数据根>/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:61`、`triage-monitor.js:851` |
-| `<数据根>/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:62` |
-| `<数据根>/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:128` |
+| `<数据根>/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:59` |
+| `<数据根>/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:60` |
+| `<数据根>/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:62-63` |
+| `<数据根>/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:68`、`syslog-case.js:92` |
+| `<数据根>/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:69` |
+| `<数据根>/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:138` |
 | `<数据根>/config-overrides.json` | 可写配置的覆盖层（只存改过的五项） | `createConfigStore` | `server.js:31`、`config-store.js:37` |
 | `<数据根>/prompt-overrides.json` | 提示词与 SOP 的本地覆盖（`HIDS_PROMPT_STORE_FILE` 可换掉） | `PromptStore` | `prompt-store.js:17` |
 | `<数据根>/update-packages/` | 已上传的升级包（`HIDS_UPDATE_STORE_DIR` 可换掉；默认跟着覆盖文件所在目录走） | `UpdateStore` | `update-store.js:62` |
@@ -442,7 +443,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `01-原始告警.txt` | syslog 原始报文 | `syslog-case.js:103` |
 | `02-告警字段.md` | 字段表 | `syslog-case.js:104` |
 | `03-研判事实.md` | 主机、时间、来源、命令、牧云匹配情况与 API 补充事件 | `syslog-case.js:105` |
-| `04-上下文.md` | 同会话时间窗、基线、情报、历史结论 | `syslog-case.js:106` |
+| `04-上下文.md` | 同会话时间窗、出现/投递次数、历史结论（**不含**研判背景：P003-T043 已砍） | `syslog-case.js:106` |
 | `03b-判据索引.md` | 本次可用判据编号（传入 wiki 时才有） | `syslog-case.js:108-111` |
 
 研判结束后追加 `05-研判结果.md` 与 `result.json`（`syslog-case.js:140`）。模型在常规研判里可以用 `read_case_file` 工具读这些文件，但文件内容被当作**数据**而不是指令（工具描述写在 `investigation-agent.js:101-103`）。
@@ -529,7 +530,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_SYSLOG_HOST` | `127.0.0.1` | syslog UDP 监听地址 | `server.js:367` |
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
-| `HIDS_DATA_DIR` | `~/.local/share/hids-ai-console` | 运行态数据根：下面九条具名路径 + 覆盖层 / 提示词覆盖 / 升级包 / 判据与规则两本库及其历史与维护会话的根（§8.1、§8.2） | `config-store.js:31` |
+| `HIDS_DATA_DIR` | `~/.local/share/hids-ai-console` | 运行态数据根：下面七条具名路径 + 覆盖层 / 提示词覆盖 / 升级包 / 判据与规则两本库及其历史与维护会话的根（§8.1、§8.2） | `config-store.js:33` |
 | `HIDS_CASES_DIR` | `<数据根>/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:59` |
 | `HIDS_TRIAGE_CONCURRENCY` | `2` | 自动研判同时跑几条；env 里的非法值（0 / 负数 / 小数 / 非数 / 空串）回落 2。**装配处不覆盖**：`poll` 与 `syslog` 两种输入模式都按它生效，`summary().concurrency` 报规范化后的生效值。构造参数显式传数字 0 是「只排队不执行」（测试与停机维护用，P003-T036 × P003-T037 合并后的约定）。P003-T037，改完要重启进程 | `triage-monitor.js:30`、`triage-monitor.js:35`、`triage-monitor.js:109`、`server.js:51-58` |
 | `HIDS_TRIAGE_QUEUE_MAX` | `1000` | 自动研判队列上限（排队 + 在跑）；满了拒收并计入 `summary().dropped`。P003-T037，改完要重启进程 | `triage-monitor.js:31`、`triage-monitor.js:92` |

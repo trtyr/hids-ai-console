@@ -40,13 +40,13 @@ P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inven
 
 | 件 | 位置 | 缺配置时的结果 |
 | --- | --- | --- |
-| 运行态目录 `runtime`（9 条路径） | `server.js:28`、`server.js:1293-1306` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
+| 运行态目录 `runtime`（7 条路径） | `server.js:28`、`server.js:1359-1370` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
 | 监听地址与端口 | `server.js:28-29` | `HIDS_HOST` 缺省 `127.0.0.1`，`HIDS_PORT` 缺省 `8080` |
 | 牧云网关 `gateway` 与 API 工具箱 `apiToolbox` | `server.js:30-34` | 牧云地址或 Token 缺一个 → 两者为 `null` |
 | 模型五个角色实例 `models` 与两个研判器 | `server.js:40-42`、`server.js:50-53` | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项 → `models` 为 `null`（五个角色都不建），两个研判器也是 `null`。P003-T042：研判=`models.triage`、独立复核=`models.review`、规则维护者=`models.rule_maintainer`、wiki 维护者=`models.wiki_maintainer`、溯源白板=`models.trace_board`；新键不设时逐键回退主判（§3.5 的 `model.roles`） |
 | 研判记录、规则集、研判队列、判据工作台、溯源白板 | `server.js:46-59`、`server.js:126` | 队列要 `gateway` 与研判器、白板要 MCP 工具箱与模型，缺任一则该件为 `null` |
 
-运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1293-1306`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
+运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1359-1370`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `wikiSessions` / `traceBoards` 七条，根由 `dataRoot()`（`config-store.js:33`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** P003-T043 砍掉了原来的 `baseline` / `intel` 两键（研判背景改走判据库 `common/GEN-13.md` 与规则层，见 [triage-pipeline.md](triage-pipeline.md) §6.2）。整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
 
 **`createServer` 是依赖注入点**（`server.js:815-820`）：18 个参数都带默认值，默认指向模块级单例。测试与探针靠传替身换掉 `service`、`investigator`、`history`、`monitor`、`wiki`、`wikiAgent` 这些件。其中 `monitor` 与 `boardService` 的默认值写成「`service` 是不是模块级 `gateway`」的条件式——换了 `service`，就不再挂默认的研判队列与溯源白板。
 

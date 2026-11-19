@@ -103,7 +103,7 @@ export async function writeSyslogCase({ directory, raw, parsed, context, match, 
     '01-原始告警.txt': raw,
     '02-告警字段.md': `# 告警字段\n\n消息时间：${parsed.ts}；载荷格式：${parsed.payload_format}\n\n| 字段 | 值 |\n| --- | --- |\n${fields}\n`,
     '03-研判事实.md': `# 研判事实\n\n- syslog 消息类型：${parsed.msgid}\n- 主机 IP：${parsed.payload.host_ip || '未提供'}\n- 事件时间：${parsed.payload.event_create_time || parsed.payload.event_start_time || parsed.ts}\n- 来源：${parsed.payload.source_ip || parsed.payload.login_ip || '未提供'}\n- 命令：${parsed.payload.process_command_line || '未提供'}\n- 文件路径：${parsed.payload.file_path || '未提供'}\n- API 对应事件：${match?.matched ? match.alert_id : '未匹配'}\n- 匹配情况：${match?.matched ? match.coverage?.exact_event_id ? `按 syslog event_id 精确读取牧云事件；时间差 ${match.gap_seconds ?? '未知'} 秒` : `时间差 ${match.gap_seconds} 秒；只查询首批 ${match.coverage.returned}/${match.coverage.total} 条` : match?.reason || '未查询'}\n\n## 牧云 API 补充的当前页事件\n\n\`\`\`json\n${JSON.stringify(match?.event || {}, null, 2)}\n\`\`\`\n`,
-    '04-上下文.md': `# 上下文\n\n会话：${sessionKey(parsed)}\n本条出现次数：${context.occurrence_count || 1}\n本条投递次数：${context.delivery_count || 1}\n同会话时间窗：前后各 5 分钟，当前已收到 ${context.window?.length || 0} 条。\n\n\`\`\`json\n${JSON.stringify({ window: context.window || [], baseline: context.baseline || {}, intel: context.intel || {}, history: context.history || [] }, null, 2)}\n\`\`\`\n`
+    '04-上下文.md': `# 上下文\n\n会话：${sessionKey(parsed)}\n本条出现次数：${context.occurrence_count || 1}\n本条投递次数：${context.delivery_count || 1}\n同会话时间窗：前后各 5 分钟，当前已收到 ${context.window?.length || 0} 条。\n\n\`\`\`json\n${JSON.stringify({ window: context.window || [], history: context.history || [] }, null, 2)}\n\`\`\`\n`
   };
   if (wiki) {
     const index = await wiki.agentIndex(type);

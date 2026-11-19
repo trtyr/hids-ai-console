@@ -92,7 +92,9 @@ export class TriageMonitor {
   constructor({ service, investigator, history, file, intervalMs = 30000, concurrency = envConcurrency(),
     queueLimit = envQueueLimit(), maxBackoffMs = null,
     inputMode = 'poll', eventToolbox = null, wiki = null, casesDirectory = null,
-    baselineFile = null, intelFile = null, ruleEngine = null,
+    // 研判背景不在这里注入（P003-T043 A1）：原 baseline.json / intel.json 两处外部文件已砍，环境基线只在判据库里
+    // （`wiki/common/GEN-13.md`，模型按 `wiki_page` 按需读），白名单命令的硬判定归规则层。别再往这里挂文件路径。
+    ruleEngine = null,
     // A1 失败重排：第 n 次失败后等 min(retryBaseMs * 2^(n-1), retryMaxMs)，attempts 到 retryMaxAttempts 进死信。
     retryBaseMs = 1000, retryMaxMs = 60000, retryMaxAttempts = 3,
     // A4 合并写窗口：热路径标脏，写盘最多 1 次 / persistIntervalMs。
@@ -118,8 +120,6 @@ export class TriageMonitor {
     this.eventToolbox = eventToolbox;
     this.wiki = wiki;
     this.casesDirectory = casesDirectory;
-    this.baselineFile = baselineFile;
-    this.intelFile = intelFile;
     this.ruleEngine = ruleEngine;
     this.dedupe = new Map();
     this.windows = new Map();
@@ -896,13 +896,6 @@ export class TriageMonitor {
     return { alert_id: alertId, status: 'queued' };
   }
 
-  async readContextFile(filename, fallback) {
-    if (!filename) return fallback;
-    try { const data = JSON.parse(await readFile(filename, 'utf8'));
-      return data && typeof data === 'object' && !Array.isArray(data) ? data : fallback;
-    } catch (error) { if (error.code === 'ENOENT') return fallback; throw error; }
-  }
-
   async contextFor(record) {
     const parsed = record.input.parsed;
     const seconds = eventSeconds(parsed);
@@ -910,9 +903,6 @@ export class TriageMonitor {
     const sourceIp = parsed.payload.source_ip || parsed.payload.login_ip;
     const window = (this.windows.get(session) || []).filter(item => seconds == null ||
       item.at == null || Math.abs(seconds - item.at) <= 300).slice(-200);
-    const baseline = await this.readContextFile(this.baselineFile,
-      { test_tool_paths: [], authorized_operators: [], whitelist_commands: [], known_source_countries: ['CN'], asset: {} });
-    const cachedIntel = await this.readContextFile(this.intelFile, { by_ip: {} });
     const history = [...this.records.values()].filter(item => item.status === 'done' && item.input &&
       (item.session_key === session || sourceIp && (item.input.parsed.payload.source_ip || item.input.parsed.payload.login_ip) === sourceIp ||
         parsed.payload.user_name && item.input.parsed.payload.user_name === parsed.payload.user_name ||
@@ -920,8 +910,7 @@ export class TriageMonitor {
       .slice(-50).map(item => ({ at: item.updated_at, conclusion: item.verdict,
         alert_id: item.matched_alert_id || item.alert_id }));
     return { session_key: session, window, window_seconds: 600,
-      occurrence_count: record.occurrence_count || 1, delivery_count: record.repeat_count || 1,
-      baseline, intel: { by_ip: sourceIp && cachedIntel.by_ip?.[sourceIp] ? { [sourceIp]: cachedIntel.by_ip[sourceIp] } : {} }, history };
+      occurrence_count: record.occurrence_count || 1, delivery_count: record.repeat_count || 1, history };
   }
 
   rememberWindow(record) {

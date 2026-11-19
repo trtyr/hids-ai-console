@@ -63,10 +63,9 @@ const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, i
   history: investigationStore, file: runtime.triageMonitor,
   inputMode: triageInputMode,
   eventToolbox: apiToolbox, wiki: wikiStore,
+  // 研判背景不走注入（P003-T043 A1）：环境基线在判据库（`wiki/common/GEN-13.md`），白名单硬判定归规则层。
   ruleEngine: triageRuleEngine,
-  casesDirectory: process.env.HIDS_CASES_DIR || runtime.cases,
-  baselineFile: runtime.baseline,
-  intelFile: runtime.intel }) : null;
+  casesDirectory: process.env.HIDS_CASES_DIR || runtime.cases }) : null;
 const wikiWorkbench = new WikiWorkbench(wikiStore, models?.wiki_maintainer ?? null, promptStore, runtime.wikiSessions);
 
 // 写配置之后的生效（P003-T029 A1）：活着的客户端对象**原地换值**，后续调用立刻走新地址与新凭据。
@@ -1365,8 +1364,6 @@ export function runtimePaths(root = dataRoot()) {
     triageRules: path.join(data, 'triage-rules.json'),
     triageMonitor: path.join(data, 'triage-monitor.json'),
     cases: path.join(data, 'cases'),
-    baseline: path.join(data, 'baseline.json'),
-    intel: path.join(data, 'intel.json'),
     wikiSessions: path.join(data, 'wiki-sessions'),
     traceBoards: path.join(data, 'trace-boards')
   };

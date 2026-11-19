@@ -177,7 +177,7 @@ test('A1 真进程不设 HIDS_DATA_DIR：覆盖层落 <HOME>/.local/share/hids-a
   assert.equal(existsSync(path.join(repository, '.data')), false, '跑测试时仓库里出现了 .data/');
 });
 
-test('A1 九条具名路径的结构与文档表一致，且默认根不在仓库内', async () => {
+test('A1 七条具名路径的结构与文档表一致，且默认根不在仓库内', async () => {
   const { runtimePaths } = await import(pathToFileURL(path.join(repository, 'server.js')).href);
   const { dataRoot } = await import(pathToFileURL(path.join(repository, 'config-store.js')).href);
 
@@ -188,12 +188,11 @@ test('A1 九条具名路径的结构与文档表一致，且默认根不在仓�
     triageRules: path.join(root, 'triage-rules.json'),
     triageMonitor: path.join(root, 'triage-monitor.json'),
     cases: path.join(root, 'cases'),
-    baseline: path.join(root, 'baseline.json'),
-    intel: path.join(root, 'intel.json'),
     wikiSessions: path.join(root, 'wiki-sessions'),
     traceBoards: path.join(root, 'trace-boards')
   };
-  assert.deepEqual(runtimePaths(root), expected, 'runtimePaths 的九条具名路径结构与文档表不符');
+  // P003-T043 A1：原九条里的 `baseline`/`intel` 两键已砍（研判背景走判据库与规则层），余七条。
+  assert.deepEqual(runtimePaths(root), expected, 'runtimePaths 的七条具名路径结构与文档表不符');
 
   // architecture.md §8.1 的解析代码块：不设 → <home>/.local/share/hids-ai-console；不读 XDG_DATA_HOME
   assert.equal(dataRoot({ env: {}, home: '/home/someone' }), '/home/someone/.local/share/hids-ai-console');
