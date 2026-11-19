@@ -821,6 +821,20 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/JsonObject' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: 上一轮知识整理仍在进行（同一会话的重入被挡）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: |
+            维护者判定这条反馈不归判据库管（data_gap / prompt_gap / source_gap / case_specific / needs_info），
+            或者判据缺口但草案没成形，本回合没有改判据。正文 error 是失败原因原文：诊断（如 `data_gap·数据缺口`）、
+            `rationale` 摘录与后续责任方，整条不超过 300 字，调用方原封写进 `maintenance.wiki.error`。
+            会话记录仍会落盘（诊断、`follow_up`、原始输入、失败消息都在），拿 sessionId 读 `GET /api/wiki/sessions/{sessionId}` 可查。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /api/wiki/sessions/{sessionId}/replay:
     post:
       tags: [知识库]
