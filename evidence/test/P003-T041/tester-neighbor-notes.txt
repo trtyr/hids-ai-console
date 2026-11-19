@@ -1,0 +1,108 @@
+{"time":"2026-11-19T17:44:08.042Z","level":"info","event":"http.request","method":"GET","path":"/api/rules","status":200,"duration_ms":4}
+{"time":"2026-11-19T17:44:08.055Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":2}
+{"time":"2026-11-19T17:44:08.058Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.094Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"updated","rule":"updated","wiki":"updated","rule_error":null,"wiki_error":null}
+{"time":"2026-11-19T17:44:08.101Z","level":"info","event":"http.request","method":"GET","path":"/api/rules","status":200,"duration_ms":1}
+✔ A1 POST 回 202 时结论已落盘、维护仍在 updating；GET 同读；维护收尾后三态可读 (119.556029ms)
+{"time":"2026-11-19T17:44:08.127Z","level":"info","event":"http.request","method":"GET","path":"/api/rules","status":200,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.130Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.155Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"updated","rule":"updated","wiki":"updated","rule_error":null,"wiki_error":null}
+{"time":"2026-11-19T17:44:08.172Z","level":"info","event":"http.request","method":"GET","path":"/api/rules","status":200,"duration_ms":1}
+✔ A2 新增一条规则：目录里只多一个文件，既有三份逐字节不变 (68.086596ms)
+{"time":"2026-11-19T17:44:08.203Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.231Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"updated","rule":"updated","wiki":"updated","rule_error":null,"wiki_error":null}
+✔ A3 wiki 维护目标取分析时引用过的页（HP-11），不是本场景第一页（HP-10） (70.646134ms)
+{"time":"2026-11-19T17:44:08.267Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.288Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"failed","rule":"failed","wiki":"updated","rule_error":"rules/honeypot_probe.rego:8: 不支持的表达式：input.host =~ \"10\\..*\"","wiki_error":null}
+{"time":"2026-11-19T17:44:08.310Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+✔ A4 规则维护失败（子集外语法）：原文件一字不动、不留临时文件、误报结论不回滚 (69.476505ms)
+{"time":"2026-11-19T17:44:08.334Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.357Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"failed","rule":"failed","wiki":"updated","rule_error":"规则维护者没有给出可落盘的修订：缺授权记录，找当班主管确认（验收用）","wiki_error":null}
+✔ A4 规则维护者抛错、wiki 正常：总态 failed，wiki 的页与 revision 照常可见 (63.309881ms)
+{"time":"2026-11-19T17:44:08.397Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.422Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"updated","rule":"updated","wiki":"updated","rule_error":null,"wiki_error":null}
+✔ A4 记录停在 updating 但本进程没在跑：重新登记会重起一轮并收尾 (61.585154ms)
+{"time":"2026-11-19T17:44:08.462Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.463Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.464Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.465Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.466Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.466Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.467Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.468Z","level":"error","event":"http.failed","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"error":"请求正文不是 JSON"}
+{"time":"2026-11-19T17:44:08.468Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.469Z","level":"error","event":"http.failed","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"error":"请求正文不是 JSON"}
+{"time":"2026-11-19T17:44:08.469Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.470Z","level":"error","event":"http.failed","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"error":"请求正文过大"}
+{"time":"2026-11-19T17:44:08.470Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.472Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A9999888877776666%3A1763373900%3A33333333-3333-4333-8333-333333333333/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.473Z","level":"error","event":"http.failed","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A9999888877776666%3A1763373900%3A33333333-3333-4333-8333-333333333333/false-positive","status":400,"error":"请求正文过大"}
+{"time":"2026-11-19T17:44:08.473Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A9999888877776666%3A1763373900%3A33333333-3333-4333-8333-333333333333/false-positive","status":400,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.474Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/bad-id/false-positive","status":400,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.475Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763379999%3A11111111-1111-4111-8111-111111111111/false-positive","status":404,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.475Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Afedcba9876543210%3A1763373700%3A7a2c7b5f-5e4b-4c9f-bb5f-3a7f2c6d8e91/false-positive","status":409,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.476Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Afedcba9876543210%3A1763373700%3A7a2c7b5f-5e4b-4c9f-bb5f-3a7f2c6d8e91","status":200,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.477Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.479Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaabbbbccccdddd%3A1763373800%3A22222222-2222-4222-8222-222222222222/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.492Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:aaaabbbbccccdddd:1763373800:22222222-2222-4222-8222-222222222222","status":"failed","rule":"updated","wiki":"failed","rule_error":null,"wiki_error":"输入必须为 1 到 4000 字"}
+{"time":"2026-11-19T17:44:08.515Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:9999888877776666:1763373900:33333333-3333-4333-8333-333333333333","status":"updated","rule":"updated","wiki":"updated","rule_error":null,"wiki_error":null}
+{"time":"2026-11-19T17:44:08.520Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"failed","rule":"updated","wiki":"failed","rule_error":null,"wiki_error":"判据 HP-10 已更新，请重新整理草案"}
+✔ A1 入参边界：400/404/409 每条都断言 {error} 形状且不改原记录 (121.918964ms)
+{"time":"2026-11-19T17:44:08.584Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":0}
+⚠ 边界（待定口径）who 101 字：按 openapi maxLength=100 应为 400 (23.989385ms) # openapi maxLength 100 vs http-api 未写上限；实测 202 截断，待群主定口径
+{"time":"2026-11-19T17:44:08.591Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":503,"duration_ms":0}
+✔ 503 研判队列未配置：错误体是 {error:string}（monitor 显式 null，不吃环境） (2.602002ms)
+{"time":"2026-11-19T17:44:08.025Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":4}
+{"time":"2026-11-19T17:44:08.086Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"failed","rule":"failed","wiki":"updated","rule_error":"规则修订放宽了原有限制条件，拒绝落盘：startswith(input.path, \"/tmp/\")","wiki_error":null}
+{"time":"2026-11-19T17:44:08.119Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.121Z","level":"info","event":"http.request","method":"GET","path":"/api/rules","status":200,"duration_ms":0}
+✔ POST false-positive + 放宽的规则候选：maintenance.rule.status=failed，规则目录一字不动，误报结论不回滚 (139.99064ms)
+{"time":"2026-11-19T17:44:08.140Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.171Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"updated","rule":"updated","wiki":"updated","rule_error":null,"wiki_error":null}
+✔ POST false-positive + 收紧的规则候选：maintenance.rule.status=updated 并真的写盘（方向不是「一律拒绝」） (55.680295ms)
+{"time":"2026-11-19T17:44:08.198Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.200Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":1}
+{"time":"2026-11-19T17:44:08.201Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaabbbbccccdddd%3A1763373800%3A22222222-2222-4222-8222-222222222222/false-positive","status":404,"duration_ms":0}
+{"time":"2026-11-19T17:44:08.202Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Afedcba9876543210%3A1763373700%3A7a2c7b5f-5e4b-4c9f-bb5f-3a7f2c6d8e91/false-positive","status":409,"duration_ms":0}
+✔ 入参边界：400 / 404 / 409 各自断言 {error:string} 形状，记录不动 (21.211804ms)
+✔ A1 前缀从 /tmp/ 收成 /tmp：判放宽，拒绝落盘，目录一字不变 (9.797456ms)
+✔ A1 后缀从 .jsp 收成 .js：判放宽，拒绝落盘 (2.248466ms)
+✔ A1 删掉主机非空条件：判放宽，拒绝落盘 (1.869717ms)
+✔ A1 现存的现场测试排除被删掉：判放宽，拒绝落盘 (1.761952ms)
+✔ A1 取反方向：not startswith 的针收窄算放宽，拉长算收紧 (3.918298ms)
+✔ A1 比较值被换掉（== "webshell" → == "web_shell"）：判放宽，拒绝落盘 (1.884664ms)
+✔ A3 现场测试那份候选正文（前缀 /tmp + hids-live-test 排除）原样重放：拒绝落盘 (1.988517ms)
+✔ A2 前缀从放宽的 /tmp 收回 /tmp/（其它条件原样保留）：收紧，放行并落盘 (2.297494ms)
+✔ A2 撤销现存排除由人工完成，维护者删它会被拒 (1.777876ms)
+✔ A2 仓库里的 rules/webshell_drop.rego 是原版：前缀 /tmp/、没有 hids-live-test 排除 (1.897654ms)
+✔ 收紧放行：原条件全留、再加一条排除 (2.410498ms)
+✔ 前缀加长算收紧（/tmp/ → /tmp/shell）：放行 (2.157184ms)
+✔ 新增一条规则没有原条件可放宽：放行 (3.071194ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 1
+ℹ duration_ms 696.117382
+
+✖ failing tests:
+
+test at evidence/test/P003-T013/acceptance.test.js:648:1
+⚠ 边界（待定口径）who 101 字：按 openapi maxLength=100 应为 400 (23.989385ms) # openapi maxLength 100 vs http-api 未写上限；实测 202 截断，待群主定口径
+  AssertionError [ERR_ASSERTION]: openapi.yaml:389 maxLength=100，实测 202：{"alert_id":"syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","verdict":{"verdict":"false_positive","verdict_label":"误报","source":"human"},"feedback":{"reason":"运维的蜜罐探针，不是攻击，来源已核对授权扫描清单","who":"wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww","recorded_at":"2026-11-19T17:44:08.584Z"},"maintenance":{"status":"updating","updated_at":"2026-11-19T17:44:08.584Z","rule":{"status":"updating","at":"2026-11-19T17:44:08.584Z"},"wiki":{"status":"updating","at":"2026-11-19T17:44:08.584Z"}}}
+  
+  202 !== 400
+  
+      at TestContext.<anonymous> (file:///home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T041/evidence/test/P003-T013/acceptance.test.js:652:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 202,
+    expected: 400,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

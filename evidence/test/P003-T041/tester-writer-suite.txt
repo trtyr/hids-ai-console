@@ -1,0 +1,51 @@
+{"time":"2026-11-19T17:44:02.751Z","level":"info","event":"http.request","method":"GET","path":"/api/rules","status":200,"duration_ms":4}
+{"time":"2026-11-19T17:44:02.762Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/honeypot_probe","status":200,"duration_ms":1}
+{"time":"2026-11-19T17:44:02.770Z","level":"info","event":"http.request","method":"PUT","path":"/api/rules/honeypot_probe","status":403,"duration_ms":1}
+{"time":"2026-11-19T17:44:02.779Z","level":"info","event":"http.request","method":"PUT","path":"/api/rules/honeypot_probe","status":200,"duration_ms":5}
+{"time":"2026-11-19T17:44:02.784Z","level":"info","event":"http.request","method":"PUT","path":"/api/rules/honeypot_probe","status":409,"duration_ms":2}
+{"time":"2026-11-19T17:44:02.786Z","level":"info","event":"http.request","method":"PUT","path":"/api/rules/honeypot_probe","status":400,"duration_ms":0}
+{"time":"2026-11-19T17:44:02.790Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/honeypot_probe/history","status":200,"duration_ms":1}
+{"time":"2026-11-19T17:44:02.796Z","level":"info","event":"http.request","method":"PUT","path":"/api/rules/honeypot_probe","status":400,"duration_ms":1}
+{"time":"2026-11-19T17:44:02.803Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/honeypot_probe/rollback","status":200,"duration_ms":3}
+{"time":"2026-11-19T17:44:02.808Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/honeypot_probe","status":200,"duration_ms":1}
+{"time":"2026-11-19T17:44:02.813Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/honeypot_probe/history","status":200,"duration_ms":3}
+{"time":"2026-11-19T17:44:02.816Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/honeypot_probe/rollback","status":404,"duration_ms":1}
+✔ A5 规则维护接口：列表 / 读 / 改 / 历史 / 回滚，写操作要规则管理员令牌 (93.27292ms)
+{"time":"2026-11-19T17:44:02.835Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/honeypot_probe","status":200,"duration_ms":1}
+{"time":"2026-11-19T17:44:02.847Z","level":"info","event":"http.request","method":"PUT","path":"/api/rules/honeypot_probe","status":200,"duration_ms":3}
+{"time":"2026-11-19T17:44:02.848Z","level":"info","event":"http.request","method":"PUT","path":"/api/rules/honeypot_probe","status":409,"duration_ms":3}
+{"time":"2026-11-19T17:44:02.850Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/honeypot_probe","status":200,"duration_ms":1}
+{"time":"2026-11-19T17:44:02.853Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/honeypot_probe/history","status":200,"duration_ms":1}
+✔ A5 并发 PUT 同一条规则：同一个 expected_revision 只成一个，另一个 409，不许后写盖前写 (37.478784ms)
+{"time":"2026-11-19T17:44:02.870Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/sessions","status":200,"duration_ms":1}
+{"time":"2026-11-19T17:44:02.874Z","level":"info","event":"http.request","method":"PUT","path":"/api/rules/honeypot_probe","status":503,"duration_ms":1}
+✔ A5 没配规则管理员令牌时写接口 503；`sessions` 路由不被 /api/rules/{id} 抢走 (15.523731ms)
+✔ A4 维护者改一条规则：草案 / 校验结果 / 终态都落进 rule-sessions，写盘走的是同一个 RuleStore (11.054387ms)
+✔ A4 维护失败也留痕：校验没过 → 会话终态 failed，带原因，库里一个字没变 (7.32012ms)
+✔ A8 替身全链：维护者改一条 → 外置库变更 → 历史有副本 → 回滚生效；仓内 rules/ 一个字节没动 (110.540305ms)
+✔ A8 判据库同一条口径：数据根无库时种子一次，二次启动不重种，仓内 wiki/ 不被写 (121.019689ms)
+{"time":"2026-11-19T17:44:03.132Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":1}
+{"time":"2026-11-19T17:44:03.137Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":3}
+✔ A6 知识库页面写入落外置库并留历史，接口形状不变（沿用 pages 读写） (12.116181ms)
+✔ A1 缺省库落数据根：rules/、rules-history/、rule-sessions/ 三条路径跟着 HIDS_DATA_DIR 走 (5.310022ms)
+✔ A1 注入的目录不读仓库：显式传目录时种子源为空，目录不存在就照旧报「规则目录不存在」 (1.619127ms)
+✔ A2 数据根无库时从仓库 rules/ 初始化一次；有库之后二次启动不重复初始化 (11.520297ms)
+✔ A2 种子只在目录不存在时发生：目录已存在（哪怕空）就一个字不写 (2.732675ms)
+✔ A2 seedLibrary 并发认领：同一目标被同时初始化两次，只有一个返回 true (1.868111ms)
+✔ A3 每次改规则旧版落 <id>-<rev>.rego：能列历史、按 rev 读原文、回滚生效 (4.383301ms)
+✔ A3 正文一字未改不刷历史、不写盘；历史里没有的 rev 回滚直接报错 (1.965749ms)
+✔ A3 校验不过一个字都不落：语法错、package 与 id 不一致都拒写，也不留历史 (5.893755ms)
+✔ A4 维护会话留痕：一份一份落盘、按 updated_at 倒序列摘要、列表不带规则正文 (8.760873ms)
+✔ A4 会话目录不存在时列表回空数组，不抛错（第一次维护之前） (0.697434ms)
+✔ A3 备注落进历史条目：note 存在 <id>-<rev>.json，history() 逐条回读；同版再归档保留首次备注 (4.555668ms)
+✔ A3 没有备注的归档与旧历史副本都回 note:null，不让一条坏备注拖垮整页历史 (2.437036ms)
+✔ A5 并发改同一条规则：同版本的两个写入只成一个，另一个 409，先写的不会被后写的盖掉 (3.471524ms)
+✔ A1 注入目录的历史跟目录走：同级 `.data/rules-history`，不往真实数据根写 (3.718203ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 513.836812
