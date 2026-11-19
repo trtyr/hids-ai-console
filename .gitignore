@@ -9,3 +9,4 @@ node_modules/
 *.hids-policy
 .data/
 var/
+.pi-child-claim.json
