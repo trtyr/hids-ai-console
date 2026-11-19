@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dataRoot } from './config-store.js';
 
 const defaults = path.dirname(fileURLToPath(import.meta.url));
 const promptDir = path.join(defaults, 'prompts');
@@ -15,9 +14,7 @@ const wikiSop = {
   honeypot: 'honeypot/HP-10.md', elevation_process: 'elevation/LP-10.md',
   abnormal_login: 'abnormal-login/AL-11.md', network_audit: 'net/NA-09.md'
 };
-// 提示词覆盖文件落在**数据根**下（P003-T034）：`HIDS_PROMPT_STORE_FILE` 优先，否则 `<数据根>/prompt-overrides.json`。
-// 不是仓内 `.data/`——仓库运行时不写任何东西；数据根见 config-store.js 的 dataRoot()。
-const defaultOverrideFile = process.env.HIDS_PROMPT_STORE_FILE || path.join(dataRoot(), 'prompt-overrides.json');
+const defaultOverrideFile = process.env.HIDS_PROMPT_STORE_FILE || path.join(dataRoot(), 'prompt-overrides.json'); // 数据根，见文件末尾
 const coreFiles = { triage: 'triage.md', deep: 'deep-investigation.md', trace: 'trace-board.md', knowledge: 'knowledge-maintenance.md', knowledge_reuse: 'knowledge-reuse.md', cross: 'cross-scenario.md', rule: 'rule-maintenance.md' };
 const coreNames = { triage: '通用系统提示词', deep: '单告警深查', trace: '溯源白板', knowledge: '知识库维护', knowledge_reuse: '知识经验复用', cross: '跨场景关联', rule: 'Rego 规则维护' };
 
@@ -119,3 +116,11 @@ export class PromptStore {
     return job;
   }
 }
+
+// ── 覆盖文件落点（P003-T034）────────────────────────────────────────────────
+// `HIDS_PROMPT_STORE_FILE` 优先，否则**数据根**下的 `prompt-overrides.json`（数据根＝`HIDS_DATA_DIR`，
+// 没设就是 `~/.local/share/hids-ai-console`；定义在 config-store.js 的 dataRoot()）——**不是仓内 `.data/`**，
+// 仓库运行时不写任何东西。
+// import 放文件末尾（ESM 会提升，模块顶层就能用）是为了不挪动上面所有 `prompt-store.js:NNN` 引用的行号；
+// `server.js` 末尾的 runtimePaths() 是同一个理由。
+import { dataRoot } from './config-store.js';

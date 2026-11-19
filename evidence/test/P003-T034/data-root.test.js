@@ -69,13 +69,35 @@ test('A3 升级包目录跟着提示词覆盖文件所在目录走 → 数据根
   assert.equal(new UpdateStore(new PromptStore(), { directory: '/tmp/pkgs' }).directory, '/tmp/pkgs');
 });
 
-test('A3 判据历史：内置 wiki/ 的备份落数据根下 wiki-history/；外部注入的判据库目录仍跟它同级', () => {
+test('A3 判据历史：内置 wiki/ 的备份落数据根下 wiki-history/；构造参数注入的判据库目录仍跟它同级', () => {
   assert.equal(new WikiStore().historyDirectory, path.join(dataRoot(), 'wiki-history'));
-  // 注入目录（HIDS_WIKI_DIR、单测的 tmp 目录）保持 P003-T019 之前的口径：备份在判据库目录同级 .data/wiki-history/。
+  // 注入目录（单测的 tmp 目录、构造参数）保持 P003-T019 之前的口径：备份在判据库目录同级 .data/wiki-history/。
   // 这一条同时是 A2 的钉子：单测传 tmp 判据库时不会往真实全局根写备份。
   assert.equal(new WikiStore(path.join('/tmp/some', 'wiki')).historyDirectory,
     path.join('/tmp/some', '.data', 'wiki-history'));
   assert.equal(new WikiStore('/tmp/some/wiki', { historyDirectory: '/tmp/hist' }).historyDirectory, '/tmp/hist');
+});
+
+test('A3 判据历史：HIDS_WIKI_DIR 换掉判据库目录时，备份跟着判据库走（同级 .data/wiki-history/），不落数据根', async t => {
+  // 这条钉的是上一轮漏网的 bug：拿 `directory === defaultDirectory` 判「内置」，HIDS_WIKI_DIR 一设就把
+  // 外部目录当内置，历史落到数据根。module 在加载时读 env，所以设完 env 用带 query 的 import 拿一份新实例。
+  const wikiDirectory = path.join('/tmp/hids-deploy', 'wiki');
+  const previous = process.env.HIDS_WIKI_DIR;
+  process.env.HIDS_WIKI_DIR = wikiDirectory;
+  t.after(() => {
+    if (previous === undefined) delete process.env.HIDS_WIKI_DIR;
+    else process.env.HIDS_WIKI_DIR = previous;
+  });
+  const fresh = await import(`../../../wiki-store.js?hids-wiki-dir=${Date.now()}`);
+  const store = new fresh.WikiStore();
+  assert.equal(store.directory, wikiDirectory, 'HIDS_WIKI_DIR 没被当成缺省判据库目录');
+  assert.equal(store.historyDirectory, path.join('/tmp/hids-deploy', '.data', 'wiki-history'),
+    'HIDS_WIKI_DIR 注入时历史没跟判据库目录走（落数据根＝上一轮的 bug）');
+  assert.notEqual(store.historyDirectory, path.join(dataRoot(), 'wiki-history'));
+  // 回归钉子：判「内置」不许再拿 env 可改的 defaultDirectory 比。
+  const source = await readFile(path.join(repository, 'wiki-store.js'), 'utf8');
+  assert.ok(!/directory === defaultDirectory/.test(source),
+    'wiki-store.js 又拿 defaultDirectory 判「内置」——HIDS_WIKI_DIR 一设历史就会落到数据根');
 });
 
 // ── A2：测试与探针注入临时目录（静态钉子，防止将来加一个不注入的） ─────────────

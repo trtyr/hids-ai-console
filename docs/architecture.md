@@ -259,7 +259,7 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` 是仓库内文件；其余 12 个场景的 SOP 实际来自 `wiki/` 下的判据页，映射表在 `prompt-store.js:10-16`（例如 `webshell` → `webshell/WS-13.md`）。
 
-`PromptStore.load()`（`prompt-store.js:33-48`）把这三块拼起来，并叠加数据根下 `prompt-overrides.json` 里的本地覆盖（`prompt-store.js:20`、`prompt-store.js:38-44`）。拼完算出一个 `revision`：对 `prompts + scenarios + sop + release` 做 SHA-256 取前 16 位（`prompt-store.js:21-23`、`prompt-store.js:45`）。这个 revision 是整套提示词的版本指纹，写进每份研判记录的 `prompt_version`（形如 `版本号+revision+系统提示摘要`，见 `investigation-agent.js:551`）。
+`PromptStore.load()`（`prompt-store.js:33-48`）把这三块拼起来，并叠加数据根下 `prompt-overrides.json` 里的本地覆盖（`prompt-store.js:17`、`prompt-store.js:38-44`）。拼完算出一个 `revision`：对 `prompts + scenarios + sop + release` 做 SHA-256 取前 16 位（`prompt-store.js:21-23`、`prompt-store.js:45`）。这个 revision 是整套提示词的版本指纹，写进每份研判记录的 `prompt_version`（形如 `版本号+revision+系统提示摘要`，见 `investigation-agent.js:551`）。
 
 可改的地方与限制：
 
@@ -279,7 +279,7 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 - 修订时 `id` 不得变，状态只能是 `active` / `draft` / `deprecated`（`wiki-store.js:160-161`）。
 - 正文里必须有 `evidence:` 或 `source:` 之一，否则拒绝（`wiki-store.js:162-163`）。
 - 发布前检查会核编号重复、编号与路径不符、缺 `title` / `applies_to` / `status` / `updated`、引用了不存在的判据或证据页、退役缺 `deprecated_reason`（`wiki-store.js:181-224`）。
-- 每次修订前把上一版存进 `<数据根>/wiki-history/`（判据库目录被换掉时改存它同级 `.data/wiki-history/`，见 §8.1；`wiki-store.js:182-185`），并在 `wiki/log.md` 追加一条记录（`wiki-store.js:191`）。
+- 每次修订前把上一版存进 `<数据根>/wiki-history/`（判据库目录被换掉时改存它同级 `.data/wiki-history/`，见 §8.1；`wiki-store.js:171-174`），并在 `wiki/log.md` 追加一条记录（`wiki-store.js:180`）。
 
 `health()`（`wiki-store.js:129-151`）是给运维看的一致性体检：重复编号、缺来源、失效引用、缺证据页各报一条。
 
@@ -325,8 +325,8 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 **旧位不自动搬**（P003-T034 A4）：P003-T019 之前的 `<上一级>/backend/.data/` 与 P003-T019 的仓内 `.data/` 里的既有数据，
 进程**不读也不写**；要接着用里面的研判记录 / 基线 / 案卷，只能人工搬进数据根——代码里没有任何 `rename` / `copy` / 迁移脚本。
 
-数据根下还住着提示词覆盖文件与升级包（`prompt-store.js:20`、`update-store.js:62` 从覆盖文件所在目录推出），
-判据页历史版本落 `<数据根>/wiki-history/`（`wiki-store.js:11-13`、`wiki-store.js:37-41`）。
+数据根下还住着提示词覆盖文件与升级包（`prompt-store.js:17`、`update-store.js:62` 从覆盖文件所在目录推出），
+判据页历史版本落 `<数据根>/wiki-history/`（`wiki-store.js:353-361` 定义、`wiki-store.js:30` 注入）。
 
 ### 8.2 目录与文件清单
 
@@ -344,9 +344,9 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 | `<数据根>/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:59` |
 | `<数据根>/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:126` |
 | `<数据根>/config-overrides.json` | 可写配置的覆盖层（只存改过的五项） | `createConfigStore` | `server.js:32`、`config-store.js:37` |
-| `<数据根>/prompt-overrides.json` | 提示词与 SOP 的本地覆盖（`HIDS_PROMPT_STORE_FILE` 可换掉） | `PromptStore` | `prompt-store.js:20` |
+| `<数据根>/prompt-overrides.json` | 提示词与 SOP 的本地覆盖（`HIDS_PROMPT_STORE_FILE` 可换掉） | `PromptStore` | `prompt-store.js:17` |
 | `<数据根>/update-packages/` | 已上传的升级包（`HIDS_UPDATE_STORE_DIR` 可换掉；默认跟着覆盖文件所在目录走） | `UpdateStore` | `update-store.js:62` |
-| `<数据根>/wiki-history/` | 判据页历史版本（判据库目录被 `HIDS_WIKI_DIR` 换掉时改落 `<判据库目录的上一级>/.data/wiki-history/`） | `WikiStore` | `wiki-store.js:11-13`、`wiki-store.js:182`、`wiki-store.js:286` |
+| `<数据根>/wiki-history/` | 判据页历史版本（`HIDS_WIKI_DIR` / 构造参数把判据库目录换到别处时改落 `<判据库目录的上一级>/.data/wiki-history/`） | `WikiStore` | `wiki-store.js:353-361`、`wiki-store.js:171`、`wiki-store.js:275` |
 
 `.gitignore` 里还忽略了 `*.hids-policy`（`.gitignore:9`）与 `*.pem`、`*.key`（`.gitignore:7-8`），即签名私钥与加密密钥不进仓。
 
@@ -447,7 +447,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_PROMPT_ADMIN_TOKEN` | 无 | 知识库写操作令牌（请求头 `x-prompt-admin-token`） | `server.js:114` |
 | `HIDS_RULE_ADMIN_TOKEN` | 无 | 规则写操作令牌（请求头 `x-rule-admin-token`） | `server.js:116` |
 | `HIDS_WIKI_DIR` | 仓内 `wiki/` | 判据库目录 | `wiki-store.js:6`、`prompt-store.js:9` |
-| `HIDS_PROMPT_STORE_FILE` | `<数据根>/prompt-overrides.json` | 提示词覆盖文件 | `prompt-store.js:20` |
+| `HIDS_PROMPT_STORE_FILE` | `<数据根>/prompt-overrides.json` | 提示词覆盖文件 | `prompt-store.js:17` |
 | `HIDS_MAINTENANCE_ENTRY_URL` | 无 | 被读进 `createServer` 的参数，但路由里没有任何地方使用它 | `server.js:115` |
 
 ### 10.2 维护 API 与策略包

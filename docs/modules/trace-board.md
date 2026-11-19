@@ -330,7 +330,7 @@
 
 ### 5.4 白板持久化
 
-- **目录**：数据根下的 `trace-boards/`（`server.js:128`，值来自 `runtimePaths().traceBoards`，定义在 `server.js:1005-1018`）：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/trace-boards/`——**不在仓库内**；目录解析规则见架构篇第 8.1 节。
+- **目录**：数据根下的 `trace-boards/`（`server.js:126`，值来自 `runtimePaths().traceBoards`，定义在 `server.js:1005-1018`）：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/trace-boards/`——**不在仓库内**；目录解析规则见架构篇第 8.1 节。
 - **文件名**：入参是裸 IP 就落成 `ip:<IP>.json`，否则原样加 `.json`（`trace-board.js:262`）。
 - **写入方式**：先写 `<目标>.<UUID>.tmp`，再 `rename` 覆盖；文件权限 `0o600`；写失败先删临时文件再抛（`trace-board.js:309-322`）。
 - **落盘很频繁**：每次工具调用后（成功或失败）都存一次（`trace-board.js:377-392`）。调查收尾也存一次（`trace-board.js:481-484`），后面这几处动作执行完同样存：

@@ -2,15 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dataRoot } from './config-store.js';
 
-const defaultDirectory = process.env.HIDS_WIKI_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), 'wiki');
-// 历史版本目录（P003-T034）：判据库用内置的 `wiki/` 时，备份落**数据根**下的 `wiki-history/`——仓库里一个字都不写；
-// 判据库目录被外部注入（`HIDS_WIKI_DIR`、测试的 tmp 目录）时，历史仍旧跟着判据库目录走（同级 `.data/wiki-history/`），
-// 因为判据库搬到别处部署，它的备份该跟它走，不该散在机器全局，也不该让单测往真实全局根写。
-const historyDirectoryFor = directory => directory === defaultDirectory
-  ? path.join(dataRoot(), 'wiki-history')
-  : path.join(path.dirname(directory), '.data', 'wiki-history');
+const defaultDirectory = process.env.HIDS_WIKI_DIR || builtinWikiDirectory(); // 内置目录与历史落点见文件末尾
 const idPattern = /^[A-Z]{2,3}-\d+[a-z]?$/;
 const pagePattern = /^(?:common|webshell|memwebshell|rasp|revshell|suspicious-command|cmdaudit|malware|bruteforce|honeypot|elevation|abnormal-login|net|customer-experience)\/[A-Z]{2,3}-\d+[a-z]?\.md$/;
 const wikiDirectories = new Set(['common', 'webshell', 'memwebshell', 'rasp', 'revshell',
@@ -34,11 +27,7 @@ function metadata(filename, source) {
 }
 
 export class WikiStore {
-  constructor(directory = defaultDirectory, { historyDirectory = historyDirectoryFor(directory) } = {}) {
-    this.directory = directory;
-    this.historyDirectory = historyDirectory;
-    this.pending = Promise.resolve();
-  }
+  constructor(directory = defaultDirectory, { historyDirectory = historyDirectoryFor(directory) } = {}) { this.directory = directory; this.historyDirectory = historyDirectory; this.pending = Promise.resolve(); }
 
   file(filename) {
     const parts = String(filename || '').split('/');
@@ -351,3 +340,24 @@ export class WikiStore {
       Date.parse(record.review.expires_at || '') > Date.now()).slice(0, 8);
   }
 }
+
+// ── 判据库目录与历史版本落点（P003-T034）────────────────────────────────────
+// 定义在文件末尾、import 也放末尾（ESM 会提升，模块顶层就能用），是为了不挪动上面所有 `wiki-store.js:NNN`
+// 引用的行号——`server.js` 末尾的 runtimePaths() 是同一个理由。
+//   · 判据库用模块旁**内置**的 `wiki/`：备份落**数据根**下的 `wiki-history/`（数据根见 config-store.js 的
+//     dataRoot()：`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`）——仓库里一个字都不写；
+//   · 判据库被 `HIDS_WIKI_DIR` / 构造参数换到别处：备份跟着判据库走（同级 `.data/wiki-history/`）——判据库搬到
+//     别处部署，它的备份该跟它走，也不该让单测往真实全局根写。
+// 判「内置」只能跟模块旁的目录比：`defaultDirectory` 会被 `HIDS_WIKI_DIR` 换掉，拿它当判据等于
+// 「设了 HIDS_WIKI_DIR 就当内置」，历史就落到数据根，与上面这条规则相反（P003-T034 复审打回的那条）。
+function builtinWikiDirectory() {
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), 'wiki');
+}
+
+function historyDirectoryFor(directory) {
+  return directory === builtinWikiDirectory()
+    ? path.join(dataRoot(), 'wiki-history')
+    : path.join(path.dirname(directory), '.data', 'wiki-history');
+}
+
+import { dataRoot } from './config-store.js';
