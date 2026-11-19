@@ -432,3 +432,23 @@ test('边界：/api/config 只接 GET——POST 与尾斜杠都落到 404「接�
   // 无参数、忽略查询串：仍是同一条路由
   assert.equal((await call(base, '/api/config?debug=1')).status, 200, 'GET /api/config 带查询串照旧 200');
 });
+
+// ================= 两类问题同时出现（http-api.md §2 第 3 条：两行都写、同一个出口） =================
+test('A1 真进程：缺必填与取值非法同时出现 → 两类都点名、仍是一条 start_failed、退出码非 0', async () => {
+  const port = await freePort();
+  const env = baseEnv(port, { HIDS_TRIAGE_INPUT_MODE: 'pirate' });
+  delete env.LLM_MODEL; // 缺一项必填 + 坏值，两个问题一起撞
+  const { code, stdout, stderr } = await runToExit(env);
+
+  assert.notEqual(code, 0, '两类问题都在也要非 0 退出');
+  assert.equal(stdout.includes('server.started'), false, '两类问题都在时不监听');
+  assert.match(stderr, /缺少必填配置：LLM_MODEL/, `stderr 要点名缺的键：${stderr}`);
+  assert.match(stderr, /配置值无效：HIDS_TRIAGE_INPUT_MODE=pirate/, `stderr 要点名坏值与允许取值：${stderr}`);
+  const failures = stdout.trim().split('\n').filter(line => line.includes('server.start_failed'));
+  assert.equal(failures.length, 1, `两类问题合并成一条 start_failed，实测 ${failures.length} 条：${stdout}`);
+  const event = JSON.parse(failures[0]);
+  assert.deepEqual(event.missing, ['LLM_MODEL'], 'missing 只列缺的那一项');
+  assert.deepEqual(event.invalid, [{ key: 'HIDS_TRIAGE_INPUT_MODE', value: 'pirate', allowed: ['syslog', 'poll'] }], 'invalid 带键名/坏值/允许取值');
+  assert.equal(typeof event.error, 'string', 'event.error 是 stderr 那几行拼起来的原话');
+  assert.equal(await canConnect(port), false, '两类问题都在时不该监听');
+});
