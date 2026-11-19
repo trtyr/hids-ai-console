@@ -79,3 +79,29 @@ M8 变异：验证块改回「两处命中」旧口径（期望 A5 文档一致�
 ✖ failing tests:
 ✖ A5 对外文档里不再有九条路径与 04-上下文.md 带基线/情报的旧口径 (1.172773ms)
 
+
+── 测试席打回轮（第三轮，判词 P003-T043-gc-backend-tester-mwo3aoa9.json：1 major + 4 minor 之后）──
+M9 变异：wiki/log.md 的规则层行挂回 command_whitelist 场景提示（期望「log 与 GEN-13 同口径」守卫红）→
+✖ A4 wiki/log.md 的本次登记与 GEN-13 的分层口径一致 (1.093084ms)
+ℹ tests 13
+ℹ pass 12
+ℹ fail 1
+✖ failing tests:
+✖ A4 wiki/log.md 的本次登记与 GEN-13 的分层口径一致 (1.093084ms)
+
+M10 变异：GEN-13 的同目录引用 [GEN-12] 改指 deprecated 的 GEN-01（期望「只引 active 页」守卫红）→
+✖ A4 判据页只引用当前 active 页，不引 deprecated 页 (1.079325ms)
+ℹ tests 13
+ℹ pass 12
+ℹ fail 1
+✖ failing tests:
+✖ A4 判据页只引用当前 active 页，不引 deprecated 页 (1.079325ms)
+
+M11 变异：GEN-13 的「没有判定消费者」改回「没有程序消费者」（期望措辞守卫红）→
+✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 (0.870291ms)
+ℹ tests 13
+ℹ pass 12
+ℹ fail 1
+✖ failing tests:
+✖ A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参考 (0.870291ms)
+
