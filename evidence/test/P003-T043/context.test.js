@@ -137,7 +137,8 @@ test('A4 GEN-13 写清白名单命令哪层是硬判定、哪层只是研判参�
 
 test('A4 判据页只引用当前 active 页，不引 deprecated 页', async () => {
   const source = await readFile(path.join(wikiDirectory, 'common', 'GEN-13.md'), 'utf8');
-  const links = [...source.matchAll(/\]\((\.\.\/[a-z-]+\/[A-Z]{2}-\d+\.md)\)/g)].map(match => match[1]);
+  // 跨目录（../common/GEN-12.md）与同目录（GEN-12.md）两种写法都要核，别只扫跨目录。
+  const links = [...source.matchAll(/\]\(((?:\.\.\/[a-z-]+\/)?[A-Z]{2,3}-\d+\.md)\)/g)].map(match => match[1]);
   assert.ok(links.length > 0, 'GEN-13 一条页间引用都没有，这条守卫等于没生效');
   for (const link of links) {
     const target = await readFile(path.join(wikiDirectory, 'common', link), 'utf8');
