@@ -283,7 +283,8 @@ async function maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMai
   const settle = async (key, job) => {
     try { state[key] = { status: 'updated', at: new Date().toISOString(), ...await job() }; }
     catch (cause) {
-      state[key] = { status: 'failed', at: new Date().toISOString(), error: String(cause?.message || cause).slice(0, 300) };
+      // 维护失败原因会随记录回给调用方（falsePositiveView），同样过一道凭据擦除（A4）。
+      state[key] = { status: 'failed', at: new Date().toISOString(), error: scrubCredentials(cause?.message || cause).slice(0, 300) };
     }
     state.status = maintenanceState([state.rule, state.wiki]);
     state.updated_at = new Date().toISOString();
@@ -332,7 +333,54 @@ function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   res.end(JSON.stringify(body));
 }
-function error(res, status, message) { json(res, status, { error: message }); }
+// ── 错误响应：四类失败，一类一个稳定 code（P003-T024）──────────────────────────
+// 类 → 状态码固定，调用点只说「这是哪一类」，不再自己挑 400/502；同一类在哪条路由上都是同一个码。
+// 判据只认错误自己带的标记（failure / status），不看文案——文案会改，改文案不该改分类。
+const failureClasses = Object.freeze({
+  caller: { status: 400, code: 'caller_error' }, // 调用方传错：参数/正文/ID/权限/不存在/状态冲突
+  config: { status: 503, code: 'not_configured' }, // 没配置：牧云、模型、管理员令牌、研判队列
+  upstream: { status: 502, code: 'upstream_error' }, // 上游失败：牧云、模型、MCP、随部署的只读规则数据
+  internal: { status: 500, code: 'internal_error' } // 本程序失败：没预料到的异常、本地运行态读写
+});
+// 本程序失败对外只说这一句：异常原文与堆栈只进 http.failed 日志（A3），不回给调用方。
+const INTERNAL_ERROR_MESSAGE = '服务器内部错误';
+
+// 错误原文里可能带上游回显的凭据（Authorization 头、查询串里的 token/api_key）：正文出口统一擦一遍（A4）。
+function scrubCredentials(text) {
+  return String(text ?? '')
+    .replace(/\b(Basic|Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [redacted]')
+    .replace(/\b(token|api[_-]?key|password|secret)=[^\s&"'，。；]+/gi, '$1=[redacted]');
+}
+
+function failureBody(kind, message) {
+  const { code } = failureClasses[kind];
+  return { error: kind === 'internal' ? INTERNAL_ERROR_MESSAGE : scrubCredentials(message) || code, code };
+}
+// status 只在「调用方传错」这一类里覆盖（400 参数 / 403 权限 / 404 不存在 / 405 方法 / 409 冲突 / 410 已下线 / 422 无法溯源），
+// 5xx 一律由类决定，免得同一类又冒出两种服务端状态码。
+function fail(res, kind, message, status = failureClasses[kind].status) {
+  return json(res, status, failureBody(kind, message));
+}
+const callerError = (res, message, status = 400) => fail(res, 'caller', message, status);
+const configError = (res, message) => fail(res, 'config', message);
+const upstreamError = (res, message) => fail(res, 'upstream', message);
+
+// 一个异常属于哪一类：显式标记（viaCloudwalker 打的上游标）优先，其次 4xx status（各模块自己判过的调用方错误），
+// 都没有就落到调用点给的缺省类——调用点知道自己调的是上游还是本地代码。
+function failureKindOf(cause, fallback = 'internal') {
+  if (cause?.failure && Object.hasOwn(failureClasses, cause.failure)) return cause.failure;
+  const status = Number(cause?.status);
+  return Number.isInteger(status) && status >= 400 && status < 500 ? 'caller' : fallback;
+}
+function failureStatusOf(kind, cause) {
+  const status = Number(cause?.status);
+  return kind === 'caller' && Number.isInteger(status) ? status : failureClasses[kind].status;
+}
+function causeError(res, cause, fallback = 'internal') {
+  const kind = failureKindOf(cause, fallback);
+  const message = cause?.message || (kind === 'upstream' ? '上游请求失败' : '请求无效');
+  return fail(res, kind, message, failureStatusOf(kind, cause));
+}
 function hasAccess(req, access) {
   if (!access?.password) return true;
   const header = req.headers.authorization || '';
@@ -368,22 +416,23 @@ async function readJSON(req, maxLength = 8192) {
   let body = '';
   for await (const chunk of req) {
     body += chunk;
-    if (body.length > maxLength) throw new Error('请求正文过大');
+    // 两条都是调用方传错：带上 status 让外层分类不用去读文案（旧版靠 /请求正文/ 匹配）。
+    if (body.length > maxLength) throw Object.assign(new Error('请求正文过大'), { status: 400 });
   }
-  try { return JSON.parse(body); } catch { throw new Error('请求正文不是 JSON'); }
+  try { return JSON.parse(body); } catch { throw Object.assign(new Error('请求正文不是 JSON'), { status: 400 }); }
 }
 function configured(res) {
   if (gateway) return true;
-  error(res, 503, '未配置 CLOUDWALKER_URL 和 CLOUDWALKER_API_TOKEN');
+  configError(res, '未配置 CLOUDWALKER_URL 和 CLOUDWALKER_API_TOKEN');
   return false;
 }
 // 牧云调用一律经这里：失败时留一条 cloudwalker.call_failed（op 说明哪次调用，告警相关的带 alert_id），
-// 然后原样抛出——日志是旁路，状态码、响应体与失败处置一个字节都不动。
+// 打上 failure: 'upstream' 再抛出——外层据此回 502，不用拿文案猜「这是上游还是本程序」。
 async function viaCloudwalker(op, alertId, job) {
   try { return await job(); }
   catch (cause) {
     log('cloudwalker.call_failed', { op, alert_id: alertId ?? null, error: String(cause?.message || cause) }, 'error');
-    throw cause;
+    throw Object.assign(cause instanceof Error ? cause : new Error(String(cause)), { failure: 'upstream' });
   }
 }
 function validAlertId(value) {
@@ -561,15 +610,17 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
         try { return json(res, 200, { configured: true, ...(await viaCloudwalker('status', null, () => service.status())) }); }
-        catch (e) { return json(res, 502, { configured: true, connected: false, reason: e.message }); }
+        // 配了但连不上：业务体形状是契约（前端按 connected 判），只补一个稳定 code；reason 是上游那句摘要。
+        catch (e) { return json(res, 502, { configured: true, connected: false,
+          reason: scrubCredentials(e.message) || '上游请求失败', code: failureClasses.upstream.code }); }
       }
       if (url.pathname === '/api/agent/tools' && req.method === 'GET') {
-        if (!toolbox) return error(res, 503, '牧云 API 未配置');
+        if (!toolbox) return configError(res, '牧云 API 未配置');
         const tools = await viaCloudwalker('tools', null, () => toolbox.listTools());
         return json(res, 200, { provider: 'cloudwalker-api', readOnly: true, count: tools.length, tools });
       }
       if (url.pathname === '/api/trace/tools' && req.method === 'GET') {
-        if (!agentToolbox) return error(res, 503, '牧云 MCP 未配置');
+        if (!agentToolbox) return configError(res, '牧云 MCP 未配置');
         const tools = await viaCloudwalker('mcp_tools', null, () => agentToolbox.listTools());
         return json(res, 200, { provider: 'cloudwalker-mcp', readOnly: true, count: tools.length, tools });
       }
@@ -580,48 +631,48 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           prompt_version: `${activePrompts.version}+${activePrompts.revision}` });
       }
       if (url.pathname === '/api/trace/boards' && req.method === 'GET') {
-        if (!boardService) return error(res, 503, '深度溯源模型或牧云 MCP 尚未配置');
+        if (!boardService) return configError(res, '深度溯源模型或牧云 MCP 尚未配置');
         const count = Number(url.searchParams.get('count') || 20);
         const offset = Number(url.searchParams.get('offset') || 0);
         if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
-          return error(res, 400, '分页参数无效');
+          return callerError(res, '分页参数无效');
         const parsed = traceQuery(url.searchParams);
-        if (parsed.error) return error(res, 400, parsed.error);
+        if (parsed.error) return callerError(res, parsed.error);
         return json(res, 200, await boardService.page({ count, offset, ...parsed.filters }));
       }
       if (url.pathname === '/api/trace/boards' && req.method === 'POST') {
-        if (!boardService) return error(res, 503, '深度溯源模型或牧云 MCP 尚未配置');
+        if (!boardService) return configError(res, '深度溯源模型或牧云 MCP 尚未配置');
         const body = await readJSON(req);
         const target = body?.target || body?.alert_id || body?.ip;
-        if (!validTraceTarget(target)) return error(res, 400, '请输入有效告警 ID 或 IPv4 地址');
+        if (!validTraceTarget(target)) return callerError(res, '请输入有效告警 ID 或 IPv4 地址');
         try {
           // 已有白板回 200（直接打开那条），新建才回 202（任务已启动）。
           const started = boardService.startOrResume ? await boardService.startOrResume(target, body.focus)
             : { created: true, board: await boardService.start(target, body.focus) };
           return json(res, started.created ? 202 : 200, started.board);
-        } catch (cause) { return error(res, cause.status || 502, cause.message); }
+        } catch (cause) { return causeError(res, cause, 'upstream'); }
       }
       if (url.pathname.startsWith('/api/trace/boards/') && req.method === 'GET') {
-        if (!boardService) return error(res, 503, '深度溯源模型或牧云 MCP 尚未配置');
+        if (!boardService) return configError(res, '深度溯源模型或牧云 MCP 尚未配置');
         let alertId;
         try { alertId = decodeURIComponent(url.pathname.slice('/api/trace/boards/'.length)); }
-        catch { return error(res, 400, '告警 ID 编码无效'); }
-        if (!validTraceTarget(alertId)) return error(res, 400, '告警 ID 或 IP 无效');
+        catch { return callerError(res, '告警 ID 编码无效'); }
+        if (!validTraceTarget(alertId)) return callerError(res, '告警 ID 或 IP 无效');
         const board = await boardService.get(alertId);
-        return board ? json(res, 200, board) : error(res, 404, '该告警尚无溯源白板');
+        return board ? json(res, 200, board) : callerError(res, '该告警尚无溯源白板', 404);
       }
       if (url.pathname === '/api/agent/triage/status' && req.method === 'GET') {
-        if (!monitor) return error(res, 503, '自动研判尚未配置');
+        if (!monitor) return configError(res, '自动研判尚未配置');
         // 总览聚合的时间起点：与 /api/alerts、/api/agent/triage/cases 同一套时间解析，非法值回 400。
         const rawSince = url.searchParams.get('since')?.trim();
         const since = rawSince ? parseInstant(rawSince) : null;
-        if (rawSince && !since) return error(res, 400, `筛选起始时间无效：${rawSince}`);
+        if (rawSince && !since) return callerError(res, `筛选起始时间无效：${rawSince}`);
         return json(res, 200, monitor.summary({ since }));
       }
       if (url.pathname === '/api/triage/rules' && req.method === 'GET') {
         try { return json(res, 200, { ...await (monitor?.ruleEngine || triageRuleEngine).readConfig(),
           writable: Boolean(ruleAdminToken) }); }
-        catch (cause) { return error(res, 502, `规则配置读取失败：${cause.message}`); }
+        catch (cause) { return upstreamError(res, `规则配置读取失败：${cause.message}`); }
       }
       if (url.pathname === '/api/triage/rules/validate' && req.method === 'POST') {
         try {
@@ -629,76 +680,76 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           // 先判正文形状再读 config.rules：正文可能是 null / 数组 / 缺 config，直接读会抛 TypeError
           // 并把英文内部文案回给调用方。
           if (!body || typeof body !== 'object' || Array.isArray(body) || !Object.hasOwn(body, 'config'))
-            return error(res, 400, '请求正文缺少 config');
+            return callerError(res, '请求正文缺少 config');
           return json(res, 200, { valid: true, count: validateRuleSet(body.config).rules.length });
-        } catch (cause) { return error(res, 400, cause.message); }
+        } catch (cause) { return callerError(res, cause.message); }
       }
       if (url.pathname === '/api/triage/rules' && req.method === 'PUT') {
-        if (!ruleAdminToken) return error(res, 503, '尚未配置规则管理员令牌');
-        if (!hasRuleAdminAccess(req, ruleAdminToken)) return error(res, 403, '规则管理员令牌无效');
+        if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');
+        if (!hasRuleAdminAccess(req, ruleAdminToken)) return callerError(res, '规则管理员令牌无效', 403);
         try {
           const body = await readJSON(req, 100000);
           if (!body || !Object.hasOwn(body, 'expected_revision') ||
             !(body.expected_revision === null || /^[0-9a-f]{16}$/.test(body.expected_revision)))
-            return error(res, 400, '缺少有效的规则配置版本');
+            return callerError(res, '缺少有效的规则配置版本');
           return json(res, 200, await (monitor?.ruleEngine || triageRuleEngine)
             .saveConfig(body.config, body.expected_revision));
-        } catch (cause) { return error(res, cause.status || 400, cause.message); }
+        } catch (cause) { return causeError(res, cause, 'internal'); }
       }
       if (url.pathname === '/api/rules' && req.method === 'GET') {
         try { return json(res, 200, await ruleStore.list()); }
-        catch (cause) { return error(res, 502, `规则库读取失败：${cause.message}`); }
+        catch (cause) { return upstreamError(res, `规则库读取失败：${cause.message}`); }
       }
       if (url.pathname === '/api/rules/evaluate' && req.method === 'POST') {
         let fact;
-        try { fact = await readJSON(req); } catch (cause) { return error(res, 400, cause.message); }
-        if (fact === null || typeof fact !== 'object' || Array.isArray(fact)) return error(res, 400, '告警事实必须是 JSON 对象');
+        try { fact = await readJSON(req); } catch (cause) { return callerError(res, cause.message); }
+        if (fact === null || typeof fact !== 'object' || Array.isArray(fact)) return callerError(res, '告警事实必须是 JSON 对象');
         try { return json(res, 200, await ruleStore.evaluate(fact)); }
-        catch (cause) { return error(res, 502, `规则求值失败：${cause.message}`); }
+        catch (cause) { return upstreamError(res, `规则求值失败：${cause.message}`); }
       }
       if (url.pathname.startsWith('/api/rules/') && req.method === 'GET') {
         let id;
         try { id = decodeURIComponent(url.pathname.slice('/api/rules/'.length)); }
-        catch { return error(res, 400, '规则 id 编码无效'); }
-        if (!isRuleId(id)) return error(res, 400, '规则 id 无效');
+        catch { return callerError(res, '规则 id 编码无效'); }
+        if (!isRuleId(id)) return callerError(res, '规则 id 无效');
         try {
           const rule = await ruleStore.read(id);
-          return rule ? json(res, 200, rule) : error(res, 404, '规则不存在');
-        } catch (cause) { return error(res, 502, `规则库读取失败：${cause.message}`); }
+          return rule ? json(res, 200, rule) : callerError(res, '规则不存在', 404);
+        } catch (cause) { return upstreamError(res, `规则库读取失败：${cause.message}`); }
       }
       if (url.pathname === '/api/agent/triage/cases' && req.method === 'GET') {
-        if (!monitor) return error(res, 503, '自动研判尚未配置');
+        if (!monitor) return configError(res, '自动研判尚未配置');
         const count = Number(url.searchParams.get('count') || 20);
         const offset = Number(url.searchParams.get('offset') || 0);
         if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
-          return error(res, 400, '分页参数无效');
+          return callerError(res, '分页参数无效');
         const parsed = caseQuery(url.searchParams);
-        if (parsed.error) return error(res, 400, parsed.error);
+        if (parsed.error) return callerError(res, parsed.error);
         return json(res, 200, monitor.cases({ count, offset, ...parsed.filters }));
       }
       if (url.pathname === '/api/agent/triage/control' && req.method === 'PUT') {
-        if (!monitor) return error(res, 503, '自动研判尚未配置');
+        if (!monitor) return configError(res, '自动研判尚未配置');
         const body = await readJSON(req);
-        if (!body || typeof body !== 'object' || Array.isArray(body)) return error(res, 400, '请求正文无效');
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return callerError(res, '请求正文无效');
         try { return json(res, 200, await monitor.setEnabled(body.enabled)); }
-        catch (cause) { return error(res, cause.status || 502, cause.message); }
+        catch (cause) { return causeError(res, cause, 'internal'); }
       }
       const falsePositive = url.pathname.match(/^\/api\/agent\/triage\/(.+)\/false-positive$/);
       if (falsePositive && req.method === 'POST') {
-        if (!monitor) return error(res, 503, '自动研判尚未配置');
+        if (!monitor) return configError(res, '自动研判尚未配置');
         let alertId;
         try { alertId = decodeURIComponent(falsePositive[1]); }
-        catch { return error(res, 400, '告警 ID 编码无效'); }
-        if (!validTriageId(alertId)) return error(res, 400, '告警 ID 无效');
+        catch { return callerError(res, '告警 ID 编码无效'); }
+        if (!validTriageId(alertId)) return callerError(res, '告警 ID 无效');
         const body = await readJSON(req, 12000);
-        if (!body || typeof body !== 'object' || Array.isArray(body)) return error(res, 400, '请求正文无效');
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return callerError(res, '请求正文无效');
         const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
-        if (reason.length < 10 || reason.length > 4000) return error(res, 400, '误报理由必须为 10 到 4000 字');
+        if (reason.length < 10 || reason.length > 4000) return callerError(res, '误报理由必须为 10 到 4000 字');
         const who = String(body.who ?? access?.user ?? 'operator').trim().replace(/\s+/g, ' ').slice(0, 100);
-        if (who.length < 2) return error(res, 400, '误报登记人至少 2 个字');
+        if (who.length < 2) return callerError(res, '误报登记人至少 2 个字');
         const record = monitor.records.get(alertId);
-        if (!record) return error(res, 404, '找不到这条研判案件');
-        if (record.status !== 'done') return error(res, 409, '研判还没结束，不能登记误报');
+        if (!record) return callerError(res, '找不到这条研判案件', 404);
+        if (record.status !== 'done') return callerError(res, '研判还没结束，不能登记误报', 409);
         // 同一轮维护还在本进程里跑：不再起第二轮，直接把当前进度回给调用方（重复点击不该让维护者跑两遍）。
         // 记录上的 maintenance.status 可能是重启前的残留，所以这重只看在跑的集合。
         if (runningMaintenance.has(alertId)) return json(res, 202, falsePositiveView(record));
@@ -715,7 +766,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         runningMaintenance.add(alertId);
         void maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMaintainer }).catch(cause => {
           record.maintenance.status = 'failed';
-          record.maintenance.error = String(cause?.message || cause).slice(0, 300);
+          record.maintenance.error = scrubCredentials(cause?.message || cause).slice(0, 300);
         }).finally(() => { runningMaintenance.delete(alertId);
           // 误报维护的结局只从这里出来：两侧各自的状态与原因都带上，别让人去翻 .data/triage-monitor.json。
           log('maintenance.result', { alert_id: alertId, status: record.maintenance.status,
@@ -725,19 +776,19 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         return json(res, 202, falsePositiveView(record));
       }
       if (url.pathname.startsWith('/api/agent/triage/')) {
-        if (!monitor) return error(res, 503, '自动研判尚未配置');
+        if (!monitor) return configError(res, '自动研判尚未配置');
         let alertId;
         try { alertId = decodeURIComponent(url.pathname.slice('/api/agent/triage/'.length)); }
-        catch { return error(res, 400, '告警 ID 编码无效'); }
-        if (!validTriageId(alertId)) return error(res, 400, '告警 ID 无效');
+        catch { return callerError(res, '告警 ID 编码无效'); }
+        if (!validTriageId(alertId)) return callerError(res, '告警 ID 无效');
         if (req.method === 'GET') return json(res, 200, monitor.status(alertId) || { alert_id: alertId, status: 'not_queued', evidence: [] });
         if (req.method === 'POST') return json(res, 202, await monitor.enqueue(alertId, { retry: true }));
       }
       if (url.pathname === '/api/agent/prompts' && req.method === 'GET') {
         return json(res, 200, await prompts.metadata());
       }
-      if (url.pathname === '/api/agent/prompts' && req.method !== 'GET') return error(res, 405, '请使用提示词文件上传入口');
-      if (url.pathname === '/api/agent/prompts/upload') return error(res, 410, '提示词更新已迁移到独立维护端，业务端不允许上传');
+      if (url.pathname === '/api/agent/prompts' && req.method !== 'GET') return callerError(res, '请使用提示词文件上传入口', 405);
+      if (url.pathname === '/api/agent/prompts/upload') return callerError(res, '提示词更新已迁移到独立维护端，业务端不允许上传', 410);
       if (url.pathname.startsWith('/api/wiki/')) {
         if (url.pathname === '/api/wiki/pages' && req.method === 'GET') {
           // 分页只加不改（D002）：不带 count 时照旧返回全部，只有显式传 count 才切页；total 恒给出。
@@ -745,7 +796,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           const count = rawCount ? Number(rawCount) : null;
           const offset = Number(url.searchParams.get('offset') || 0);
           if ((count !== null && (!Number.isSafeInteger(count) || count < 1 || count > 50)) ||
-            !Number.isSafeInteger(offset) || offset < 0) return error(res, 400, '分页参数无效');
+            !Number.isSafeInteger(offset) || offset < 0) return callerError(res, '分页参数无效');
           const query = url.searchParams.get('q');
           const pages = query ? (await wiki.browse()).filter(page =>
             `${page.id} ${page.title} ${page.path}`.toLowerCase().includes(String(query).toLowerCase())).slice(0, 50)
@@ -754,24 +805,24 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         }
         // 页面读写走控制台 Basic 账号（D003），因此排在下面的管理员令牌闸之前。
         const pagePath = wikiPagePath(url.pathname);
-        if (pagePath?.invalidEncoding) return error(res, 400, '知识库页面路径编码无效');
+        if (pagePath?.invalidEncoding) return callerError(res, '知识库页面路径编码无效');
         if (pagePath && url.pathname === '/api/wiki/pages/' && req.method === 'PUT')
-          return error(res, 400, '请在路径里写明要修改的页面');
+          return callerError(res, '请在路径里写明要修改的页面');
         if (pagePath && req.method === 'GET') {
           try { return json(res, 200, await wiki.get(pagePath.filename)); }
-          catch (cause) { return error(res, cause.code === 'ENOENT' ? 404 : cause.status || 400, cause.message); }
+          catch (cause) { return causeError(res, cause, 'internal'); }
         }
         if (pagePath && req.method === 'PUT') {
           const body = await readJSON(req, 120000);
           if (!body || !Object.hasOwn(body, 'expected_revision') || !/^[0-9a-f]{16}$/.test(String(body.expected_revision)))
-            return error(res, 400, '缺少有效的页面版本，请刷新后重试');
+            return callerError(res, '缺少有效的页面版本，请刷新后重试');
           try {
             return json(res, 200, await wiki.update(pagePath.filename, body.content, body.expected_revision,
               `通过控制台直接编辑（操作人 ${access?.user || 'admin'}）`));
-          } catch (cause) { return error(res, cause.code === 'ENOENT' ? 404 : cause.status || 400, cause.message); }
+          } catch (cause) { return causeError(res, cause, 'internal'); }
         }
-        if (!promptAdminToken) return error(res, 503, '尚未配置知识库管理员凭据');
-        if (!hasPromptAdminAccess(req, promptAdminToken)) return error(res, 403, '知识库管理员凭据无效');
+        if (!promptAdminToken) return configError(res, '尚未配置知识库管理员凭据');
+        if (!hasPromptAdminAccess(req, promptAdminToken)) return callerError(res, '知识库管理员凭据无效', 403);
         if (url.pathname === '/api/wiki/health' && req.method === 'GET') return json(res, 200, await wiki.health());
         if (url.pathname === '/api/wiki/sessions' && req.method === 'GET') return json(res, 200, { sessions: await wikiAgent.list() });
         if (url.pathname === '/api/wiki/sessions' && req.method === 'POST') {
@@ -780,45 +831,50 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
             if (body.case_id) {
               const record = monitor?.records.get(body.case_id);
               if (!record?.input || record.status !== 'done' || !record.case_dir)
-                return error(res, 404, '找不到已完成的 Syslog 案件');
+                return callerError(res, '找不到已完成的 Syslog 案件', 404);
               const target = await wikiFeedbackTarget(wiki, record, body.page || null);
-              if (!target) return error(res, 409, '当前场景缺少可维护的判据页');
+              if (!target) return callerError(res, '当前场景缺少可维护的判据页', 409);
               return json(res, 201, await wikiAgent.create(target.page.path, {
                 case_id: body.case_id, case_dir: record.case_dir, event_type: target.eventType,
                 reason: body.reason, expected_verdict: body.expected_verdict, who: body.who }));
             }
             return json(res, 201, await wikiAgent.create(body.page));
           }
-          catch (cause) { return error(res, cause.status || (cause.code === 'ENOENT' ? 404 : 400), cause.message); }
+          catch (cause) { return causeError(res, cause, 'internal'); }
         }
         const sessionMatch = url.pathname.match(/^\/api\/wiki\/sessions\/([0-9a-f-]{36})(?:\/(messages|replay|publish))?$/i);
         if (sessionMatch) {
           if (req.method === 'GET' && !sessionMatch[2]) {
             const session = await wikiAgent.get(sessionMatch[1]);
-            return session ? json(res, 200, session) : error(res, 404, '知识维护会话不存在');
+            return session ? json(res, 200, session) : callerError(res, '知识维护会话不存在', 404);
           }
           if (req.method === 'POST' && sessionMatch[2] === 'messages') {
             const body = await readJSON(req, 12000);
             try { return json(res, 200, await wikiAgent.reply(sessionMatch[1], body.content)); }
-            catch (cause) { return error(res, cause.status || 502, cause.message); }
+            catch (cause) { return causeError(res, cause, 'upstream'); }
           }
           if (req.method === 'POST' && sessionMatch[2] === 'replay') {
             try { return json(res, 200, await wikiAgent.replay(sessionMatch[1])); }
-            catch (cause) { return error(res, cause.status || 502, cause.message); }
+            catch (cause) { return causeError(res, cause, 'upstream'); }
           }
           if (req.method === 'POST' && sessionMatch[2] === 'publish') {
             const body = await readJSON(req, 8192);
             try { return json(res, 200, await wikiAgent.publish(sessionMatch[1], body)); }
-            catch (cause) { return error(res, cause.status || 502, cause.message); }
+            catch (cause) { return causeError(res, cause, 'upstream'); }
           }
         }
-        return error(res, 404, '知识库接口不存在');
+        return callerError(res, '知识库接口不存在', 404);
       }
       if (url.pathname === '/api/agent/investigations' && req.method === 'POST') {
         const body = await readJSON(req);
-        if (!body || typeof body !== 'object' || Array.isArray(body)) return error(res, 400, '请求正文无效');
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return callerError(res, '请求正文无效');
         const executor = body.mode === 'deep' && investigator === agent ? deepInvestigator : investigator;
-        if (!executor) return error(res, 503, '该研判模式的模型或牧云取证接口尚未配置');
+        if (!executor) return configError(res, '该研判模式的模型或牧云取证接口尚未配置');
+        // 入参先在这里判完（与 InvestigationAgent.run 的判定一致：ID 形状 + 事件类型，模式白名单），
+        // 不再靠 /告警 ID 无效|研判模式无效/ 匹配异常文案——剩下的异常只可能是上游（模型 / 牧云工具）失败。
+        if (!validAlertId(body.alert_id)) return callerError(res, '告警 ID 无效');
+        const mode = body.mode || 'deep';
+        if (!['deep', 'triage'].includes(mode)) return callerError(res, '研判模式无效');
         if (url.searchParams.get('stream') === '1') {
           res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store',
             Connection: 'keep-alive', 'X-Content-Type-Options': 'nosniff' });
@@ -826,35 +882,35 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           const heartbeat = setInterval(() => { if (!res.destroyed && !res.writableEnded) res.write(': heartbeat\n\n'); }, 15000);
           res.on('close', () => clearInterval(heartbeat));
           try {
-            const result = await investigate(executor, body.alert_id, body.mode || 'deep',
+            const result = await investigate(executor, body.alert_id, mode,
               (stage, detail) => send({ type: 'progress', stage, detail }));
             send({ type: 'result', result: await history.save(result) });
-          } catch (cause) { send({ type: 'error', error: cause.message || '研判失败' }); }
+          } catch (cause) { send({ type: 'error', error: scrubCredentials(cause.message) || '研判失败' }); }
           finally { clearInterval(heartbeat); if (!res.destroyed) res.end(); }
           return;
         }
         try {
-          const result = await investigate(executor, body.alert_id, body.mode || 'deep');
+          const result = await investigate(executor, body.alert_id, mode);
           return json(res, 200, await history.save(result));
         }
-        catch (e) { return error(res, /告警 ID 无效|研判模式无效/.test(e.message) ? 400 : 502, e.message); }
+        catch (e) { return causeError(res, e, 'upstream'); }
       }
       if (url.pathname.startsWith('/api/agent/investigations/') && req.method === 'GET') {
         let alertId;
         try { alertId = decodeURIComponent(url.pathname.slice('/api/agent/investigations/'.length)); }
-        catch { return error(res, 400, '告警 ID 编码无效'); }
+        catch { return callerError(res, '告警 ID 编码无效'); }
         const mode = url.searchParams.get('mode') || 'deep';
-        if (!(mode === 'triage' ? validTriageId(alertId) : validAlertId(alertId)) || !['deep', 'triage'].includes(mode)) return error(res, 400, '告警 ID 或研判模式无效');
+        if (!(mode === 'triage' ? validTriageId(alertId) : validAlertId(alertId)) || !['deep', 'triage'].includes(mode)) return callerError(res, '告警 ID 或研判模式无效');
         const saved = await history.latest(alertId, mode);
-        return saved ? json(res, 200, saved) : error(res, 404, '该告警暂无已保存的研判记录');
+        return saved ? json(res, 200, saved) : callerError(res, '该告警暂无已保存的研判记录', 404);
       }
       if (url.pathname === '/api/alerts' && req.method === 'GET') {
         if (!service) return configured(res);
         const count = Number(url.searchParams.get('count') || 20);
         const offset = Number(url.searchParams.get('offset') || 0);
-        if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0) return error(res, 400, '分页参数无效');
+        if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0) return callerError(res, '分页参数无效');
         const filters = alertQuery(url.searchParams);
-        if (filters.error) return error(res, 400, filters.error);
+        if (filters.error) return callerError(res, filters.error);
         const triageFiltered = filters.statuses.length > 0 || filters.verdicts.length > 0;
         const result = triageFiltered
           ? await triageFilteredAlerts(service, monitor, filters.query, { statuses: filters.statuses, verdicts: filters.verdicts, count, offset })
@@ -866,32 +922,32 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       }
       let decodedPath;
       try { decodedPath = decodeURIComponent(url.pathname); }
-      catch { return error(res, 400, '事件路径编码无效'); }
+      catch { return callerError(res, '事件路径编码无效'); }
       // 详情：路径形状对但 ID / 事件类型不合法一律 400，不把牧云调用浪费掉。
       const detailPath = decodedPath.match(/^\/api\/alerts\/([^/]+)$/);
       if (detailPath && req.method === 'GET') {
-        if (!Object.hasOwn(eventTypes, detailPath[1].split(':')[0])) return error(res, 400, '不支持的事件类型');
-        if (!validAlertId(detailPath[1])) return error(res, 400, '告警 ID 无效');
+        if (!Object.hasOwn(eventTypes, detailPath[1].split(':')[0])) return callerError(res, '不支持的事件类型');
+        if (!validAlertId(detailPath[1])) return callerError(res, '告警 ID 无效');
         if (!service) return configured(res);
         const [type, id] = detailPath[1].split(':');
         let result;
         try { result = await viaCloudwalker('alert', detailPath[1], () => service.alert(type, Number(id))); }
         catch (cause) {
           // 404 = 牧云可达但这条事件读不到（cloudwalker.js 标 status）；其余（不可达、上游自相矛盾）落到外层 502。
-          if (cause?.status === 404) return error(res, 404, cause.message);
+          if (cause?.status === 404) return callerError(res, cause.message, 404);
           throw cause;
         }
         if (monitor) result.alert.triage = monitor.status(result.alert.id);
         return json(res, 200, result);
       }
-      if (url.pathname.startsWith('/api/')) return error(res, 404, '接口不存在');
-      return error(res, 404, '接口不存在');
+      if (url.pathname.startsWith('/api/')) return callerError(res, '接口不存在', 404);
+      return callerError(res, '接口不存在', 404);
     } catch (e) {
-      // 走到这里的是没被各路由自己接住的失败（主要是牧云调用、模型调用）：留一条带原因的日志，
-      // 状态码与正文照旧；字段里的凭据由 log.js 的脱敏闸处理。
-      log('http.failed', { method: req.method, path: route, status: /请求正文/.test(e.message || '') ? 400 : 502,
-        error: e.message || '牧云请求失败' }, 'error');
-      error(res, /请求正文/.test(e.message || '') ? 400 : 502, e.message || '牧云请求失败');
+      // 走到这里的是没被各路由自己接住的失败：分类交给四类判定——牧云调用经 viaCloudwalker 打了上游标（502），
+      // 读正文/各模块判过的 4xx 是调用方传错（400 等），剩下的本程序意外一概 500 + 固定文案，异常原文只进日志。
+      log('http.failed', { method: req.method, path: route, status: failureStatusOf(failureKindOf(e), e),
+        error: e.message || '未预期的失败' }, 'error');
+      causeError(res, e);
     }
   });
 }

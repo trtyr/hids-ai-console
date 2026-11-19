@@ -218,7 +218,7 @@ test('错误码：重试与误报登记的 400/404/409 都给出 Error 形状的
   const errorOf = async response => {
     assert.ok(response.headers.get('content-type')?.includes('application/json'), `content-type=${response.headers.get('content-type')}`);
     const body = await response.json();
-    assert.deepEqual(Object.keys(body), ['error'], `正文形状=${JSON.stringify(body)}`);
+    assert.deepEqual(Object.keys(body), ['error', 'code'], `正文形状=${JSON.stringify(body)}`);
     assert.equal(typeof body.error, 'string');
     return body.error;
   };
@@ -242,11 +242,11 @@ test('错误码：重试与误报登记的 400/404/409 都给出 Error 形状的
   await waitStatus(base, 'done', 'honeypot:999999');
 
   // 重试：syslog 前缀但没有原始报文。
-  // 文档自相矛盾（finding T18-F1，既有行为，与本卡无关）：triage-pipeline §5.4 说 enqueue 抛 404、
-  // openapi retryTriage 列了 404，但 http-api.md:353 说「含『请求正文』→400，其余→502」，实测走的是 502。
+  // 文档说 404（triage-pipeline §5.4 / openapi retryTriage），P003-T024 之前被外层 catch 拍平成 502（T18-F1）；
+  // 四类分类落地后按「异常自带 4xx → 调用方传错」认回 404，与文档一致（code=caller_error）。
   const noRaw = await fetch(`${base}/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43`,
     { method: 'POST' });
-  assert.equal(noRaw.status, 502, 'triage-pipeline §5.4 / openapi 承诺 404，实测 502（T18-F1）');
+  assert.equal(noRaw.status, 404, 'triage-pipeline §5.4 / openapi 承诺 404；T18-F1 已被 P003-T024 修正');
   assert.equal(await errorOf(noRaw), '该 syslog 告警的原始报文不存在，无法重试');
 
   // 误报登记：理由必填 / 10 字下限 / 4000 字上限 / 登记人 2 字下限 / 正文不是对象 → 400
@@ -315,11 +315,11 @@ test('没有研判队列时误报登记回 503，正文是 Error 形状', async 
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: '运维的蜜罐探针，不是攻击' }) });
   assert.equal(response.status, 503);
   const body = await response.json();
-  assert.deepEqual(body, { error: '自动研判尚未配置' });
+  assert.deepEqual(body, { error: '自动研判尚未配置', code: 'not_configured' });
   // 重试入口的同一前置条件（http-api.md §3.1 路由表：POST /api/agent/triage/{alertId} 无研判队列回 503）
   const retryNoMonitor = await fetch(`${base}${pathOf(TRIAGE_ID)}`, { method: 'POST' });
   assert.equal(retryNoMonitor.status, 503);
-  assert.deepEqual(await retryNoMonitor.json(), { error: '自动研判尚未配置' });
+  assert.deepEqual(await retryNoMonitor.json(), { error: '自动研判尚未配置', code: 'not_configured' });
 });
 
 // ── 重试语义：正在运行的任务不会重复启动（openapi retryTriage 202 描述） ──────

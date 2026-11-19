@@ -78,7 +78,7 @@ test('HTTP 白板列表分页参数不合法回 400，且不调服务层', async
   for (const query of ['count=0', 'count=51', 'count=abc', 'count=20.5', 'offset=-1', 'offset=1.5']) {
     const response = await fetch(`${base}/api/trace/boards?${query}`);
     assert.equal(response.status, 400, `${query} 应回 400`);
-    assert.deepEqual(await response.json(), { error: '分页参数无效' });
+    assert.deepEqual(await response.json(), { error: '分页参数无效', code: 'caller_error' });
   }
   assert.equal(calls, 0);
 });
@@ -132,7 +132,7 @@ test('HTTP 知识库列表分页参数不合法回 400', async t => {
   for (const query of ['count=0', 'count=51', 'count=abc', 'count=2.5', 'offset=-1', 'offset=abc']) {
     const response = await fetch(`${base}/api/wiki/pages?${query}`);
     assert.equal(response.status, 400, `${query} 应回 400`);
-    assert.deepEqual(await response.json(), { error: '分页参数无效' });
+    assert.deepEqual(await response.json(), { error: '分页参数无效', code: 'caller_error' });
   }
 });
 
