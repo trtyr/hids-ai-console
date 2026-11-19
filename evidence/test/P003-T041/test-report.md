@@ -126,11 +126,20 @@ node --test --test-force-exit evidence/test/P003-T034/data-root.test.js evidence
 ```
 
 ```
-$ git log --oneline -1
+$ git log --oneline -2
+fe01c88 test(P003-T041): 测试席黑盒验收——HTTP 契约 13 条 + 门禁/变异证据 + 报告（PASS，两条 minor 不阻塞）
 ec1eeb7 fix(rules): P003-T041 复审——note/who 落历史备注（sidecar）、写队列串行与 409、四处 minor
+$ git show --stat HEAD | tail -3
+ 11 files changed, 1734 insertions(+)        # 只有测试席产物，没有实现文件
+
 $ git status --short
-（测试产物已随报告提交；`.pi-child-claim.json` 的删除是运行时认领记录，起验前就在）
+ D .pi-child-claim.json
+MM rule-store.js
+MM server.js
+MM wiki-store.js
 ```
+
+上表后三行 `MM` 是**起验前就存在**的索引/工作树分叉（我是从 git status 看到它的第一眼就查过，不是这轮造成的）：`git hash-object` 三个文件与 `git rev-parse ec1eeb7:<file>` 逐个相同，即**工作树内容等于 ec1eeb7**，变的只是 index 里的旧 blob。我的验收是在「工作树 = ec1eeb7」这个事实上跑的；测试产物单独一个提交，`git show --stat HEAD` 里没有任何实现文件。
 
 ## 八、产物清单（本报告目录）
 
