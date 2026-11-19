@@ -16,6 +16,7 @@
 P003-T035 改写的段落（页内标了「P003-T035」的地方）行号对提交 `0230c28`；旧段落里的行号仍是 `35530d8`，读旧段落按内容对码，别按数字跳。
 P003-T039 新增/改写的段落（页内标「P003-T039」的地方，含 §3.9 整节、§3.2 的两条、§3.3 的复核输入、§3.8 的 D 小节）行号对提交 `10a8942`；
 P003-T039 复审修复（BUG1-BUG3，页内标「复审」的地方：§3.8 的 B/D 两条、§3.9 的 A4/A5 行）行号对复审修复提交 `241c0da`。
+P003-T040 新增/改写的段落（页内标「P003-T040」的地方：§3.5 末段、§3.7 的 `evidence[]` 表 `view` 行与四字段说明、§3.10 整节）行号对提交 `201d278`。
 全文只描述现状，不评价该改成什么。
 
 **术语**（第一次出现先给一句话解释，后面直接用）：
@@ -426,6 +427,13 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 按状态拼成一句话的在 `requiredEvidenceReport(checks)`（`required-evidence.js:178-190`），同样先过滤掉 `catalog_absent`，
 追加到客户报告在 `appendEvidenceReport(report, checks, maxLength = 300)`（`required-evidence.js:154-165`）。
 
+**必查项结果落案卷（P003-T040 A1）**：常规研判带案卷目录时，`run()` 在返回前把每一项写进 `case_dir/06-必查项.json`
+（`investigation-agent.js:283-288`、`:495-497`、`:959`；写文件在 `syslog-case.js:187-207`）。
+每项原有字段照写，另加 `first_rows`——该项证据视图的前 5 行（`record.view.items`，`investigation-agent.js:283-288`）。
+行取的是投影视图，不另造投影、不发新查询；没有证据编号的项（`source_unavailable` / `missing_identifier`）不带 `first_rows`。
+复算入口 `readRequiredEvidence(caseInfo)`（`syslog-case.js:209-212`）只读这个文件，不发任何牧云请求。
+没有案卷目录（deep 模式、替身上下文）时不写，也不凭空新建目录（`investigation-agent.js:495-497`）。
+
 ### 3.6 客户报告整形
 
 `finalizeTriageOutput(verdict)`（`triage-output.js:35-66`）负责把结论整成客户能直接读的两样东西：`report`（一段话）与建议动作。
@@ -494,8 +502,12 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 | `args` | object | 是 | 本次实际传给工具的参数（原样回写） | `agent-tools.js:58`、`investigation-agent.js:555-556` |
 | `fetched_at` | string（date-time） | 是 | 取证时间 | `agent-tools.js:58` |
 | `sha256` | string（64 位小写十六进制） | 是 | 对 `{name,args,result}` 序列化后的 SHA-256 | `agent-tools.js:56`、`agent-tools.js:59` |
+| `view` | object \| null | 是（P003-T040） | 证据的投影视图原文，单条不超过 6000 字；deep 模式的原始事件同样带它 | `investigation-agent.js:274-279`、`:963` |
 
-同一份数据在 `TriageCase.evidence[]` 里只有四个字段：`evidence_id`、`tool`、`fetched_at`、`sha256`——`args` 不外露（`triage-monitor.js:8-9`）。
+同一份数据进队列（`TriageCase.evidence[]`，`triage-monitor.js:25-31`）时只留四个字段加一个可选 `args`：
+`evidence_id`、`tool`、`fetched_at`、`sha256`，以及 `args`——**只要它是 RPC 形态**（`{id}` / `{count,offset}` 这类，
+序列化后 ≤200 字且没有超过 80 字的字符串值）就保留，含原文的剥掉并置 `args_omitted: true`（P003-T040 A6，`triage-monitor.js:18-31`）。
+`view` 不进队列：队列快照随每次状态变更落盘，带上视图会把快照撑大。
 客户经验复用路径的 `claims` 里 `citations` 的 `evidence_id` 恒等于本次告警取证编号 `cw:1`（`investigation-agent.js:317`）；外部编号只出现在 `knowledge_reuse.case_id`（`investigation-agent.js:339`）。
 
 **`validation`：引用校验结果**
@@ -649,6 +661,27 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 3. **A7 的边界**。chat/completions 无状态，整段历史每轮都要发；A7 能做的是让**系统段**只留稳定核心，
    工具名清单随首轮 user 发一次。实测系统段从每请求 10585 字降到 10080 字（每个请求 -505 字），
    大头收益来自 A1/A2/A5/A6，不是 A7。
+
+### 3.10 证据落盘与复算（P003-T040）
+
+盘上要能回答两件事：**「当时取到了什么」**（不能只有指纹）和**「重跑一遍对得上吗」**（不用再问牧云）。四组落盘物：
+
+| 落盘物 | 落在哪 | 上界 | 超界策略 | 代码 |
+| --- | --- | --- | --- | --- |
+| 研判记录的 `evidence[].view` | `InvestigationStore` 的单条 JSON（deep / triage 都有） | 单条 6000 字 | `boundEvidenceView` 先丢行、再丢字段、再整项降级成 `error` 视图；丢掉的以计数与 `omitted_fields` 记账 | `investigation-agent.js:274-279` |
+| deep 模式的原始事件 | 同上：`cw:1` 就是 `get_<类型>_event` 的投影 | 同上 | 同上 | `investigation-agent.js:274-279` |
+| 必查项结果 | `case_dir/06-必查项.json` | 64000 字符 | 整项先降级成「只留计数」（`slimmed_items`），仍放不下记 `omitted_items` + `truncated` | `syslog-case.js:179-207` |
+| `syslog:1` 降级回包 | 只发模型、不落盘 | 3000 字 | `omitted_fields` / `truncated_fields` 各封顶 40 名 + `*_total` 记总数 | `evidence-view.js:331-371` |
+
+**为什么 `sha256` 不够**：摘要只证明「是同一条记录」，回答不了「这条引用当时指向的值是什么」。`view` 是
+`projectEvidence` 的投影原文，引用里的 `pointer`/`value` 能在它里面直接复算（`investigation-agent.js:275-279`）；
+`sha256` 的覆盖面不变（`{name,args,result}`，`agent-tools.js:56`）。
+
+**deep 与 triage 的区别只在案卷**（P003-T040 A3）：deep 模式没有案卷目录（案卷只由 syslog 路径建），
+所以原始事件的视图随 `evidence[]` 进研判记录；triage 模式两种都有。
+
+**复算不重拉**：`readRequiredEvidence()` 与 `InvestigationStore.latest()` 都是纯读盘，不发牧云请求。
+单测用替身牧云计数验证前后调用数不变（`evidence/test/P003-T040/evidence-rollup.test.js` 第一条用例）。
 
 ## 4. 公开面
 
@@ -833,6 +866,23 @@ uncertain 存疑 低
 ```
 
 不抛错、记录不会进 `failed`——这就是 A1 要的「不再抛错进 failed」。
+
+### 5.7 证据落盘与复算（P003-T040，可照着写测试）
+
+只跑本卡的单测与变异检查：
+
+```bash
+node --test evidence/test/P003-T040/evidence-rollup.test.js      # 7 pass，~150ms
+bash evidence/test/P003-T040/mutate-check.sh                     # 7/7 变异变红，末行 MUTATION_CHECK_PASS
+```
+
+| 用例 | 断言（删掉对应实现就红） |
+| --- | --- |
+| 一条 triage 研判走完 | 案卷 `06-必查项.json` 里 `related_events` 有 `returned_count: 8`、`total_reported: 12`、`first_rows.length === 5`；`evidence[]` 里 `cw:1` 的 `sha256` 是 64 位十六进制且 `view.facts.command_line` 与引用的 `pointer`/`value` 对得上 |
+| 复算不重拉 | 读案卷 + `InvestigationStore.save/latest` 前后，替身牧云的 `callTool` 计数不变 |
+| deep 原始事件 | `mode: 'deep'` 的 `evidence[]` 里 `cw:1` 是 `get_suspicious_operation_event`，带 `sha256` 与 `view`；存进 `InvestigationStore` 再读回来 `view` 还在 |
+| 必查项落盘上界 | 120 项各带 5 行 200 字事实 → 文件 ≤64000 字符；降级项仍有 `returned_count`/`total_reported`；`checks.length + omitted_items === 120` |
+| `omitted_fields` 封顶 | 300 个短字段的载荷 → 回包 ≤3000 字、`omitted_fields.length === syslogOmittedFieldsLimit`、`omitted_fields_total > 40` |
 
 ## 6. 已知边界与未决
 
