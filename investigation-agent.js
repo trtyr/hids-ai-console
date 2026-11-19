@@ -232,8 +232,10 @@ const conclusionToolSpec = { type: 'function', function: {
   } } } };
 
 const wikiToolSpecs = [
-  { type: 'function', function: { name: 'wiki_page', description: '按编号读取当前告警类型或通用判据的完整 Wiki 页面。Wiki 是判断依据，不能当作当前告警证据。',
-    parameters: { type: 'object', properties: { id: { type: 'string', description: '例如 HP-01 或 GEN-03' } }, required: ['id'] } } },
+  { type: 'function', function: { name: 'wiki_page',
+    description: '按编号读取当前告警类型或通用判据的要点摘要与命中段（可按 keyword 只取包含该词的段落）；摘要是要点不是判据全文。Wiki 是判断依据，不能当作当前告警证据。',
+    parameters: { type: 'object', properties: { id: { type: 'string', description: '例如 HP-01 或 GEN-03' },
+      keyword: { type: 'string', description: '可选：只取包含该关键词的段落' } }, required: ['id'] } } },
   { type: 'function', function: { name: 'wiki_search', description: '按关键词搜索当前告警类型和通用判据，返回编号、标题和短片段。',
     parameters: { type: 'object', properties: { keyword: { type: 'string' } }, required: ['keyword'] } } }
 ];
@@ -721,8 +723,12 @@ export class InvestigationAgent {
             requested_args: call.function?.arguments || '{}', error: String(outcome.reason?.message || outcome.reason).slice(0, 250) });
           messages.push({ role: 'tool', tool_call_id: call.id, content });
           let evidenceId = null;
-          try { evidenceId = JSON.parse(content)?.evidence_id || null; } catch { /* 非 JSON 工具结果不进证据表 */ }
-          if (!evidenceId) return;
+          let pointer = false;
+          try { const parsed = JSON.parse(content); evidenceId = parsed?.evidence_id || null;
+            pointer = parsed?.already_queried === true; } catch { /* 非 JSON 工具结果不进证据表 */ }
+          // 复审 BUG2：already_queried 只是「这个查询已取过」的指针，不是证据正文。把它当正文注册会覆写
+          // evidenceFullText 里的原文，历史折叠摘要变空、read_evidence 取回无 view 的空壳。
+          if (!evidenceId || pointer) return;
           evidenceFullText.set(evidenceId, content);
           toolMessageEntries.set(messages.length - 1, { evidenceId });
         });

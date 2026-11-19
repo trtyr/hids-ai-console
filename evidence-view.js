@@ -316,6 +316,8 @@ export function compactEvidenceView(view, limits = agentDisplayLimits) {
 // P003-T039 A6：syslog:1 的视图是原始键值载荷，没有数组可裁。超长时先整条省略最长的字段
 // （省略的字段写进 omitted_fields，模型据此写缺口），仍超限再把长值截断（写进 truncated_fields）。
 // 短值一律原样保留：模型要拿它填 claims.citations 的 value，截断一个能给的值等于让它引用失败。
+// 复审 BUG1：三段收缩，每段都严格缩短内容（删一个字段 / 把字段换得更短 / 再删一个字段），
+// 所以循环一定收敛。旧实现第二段反复截同一个字段，长度稳定在 ~163 字不再下降，总量仍超限时死循环。
 export function boundSyslogView(view, maxChars = 3000) {
   if (!view || typeof view !== 'object') return view;
   if (JSON.stringify(view).length <= maxChars) return view;
@@ -327,22 +329,45 @@ export function boundSyslogView(view, maxChars = 3000) {
       note: 'syslog 载荷不是键值对象，已不在模型上下文展示' };
   }
   const omittedFields = [];
+  const truncatedFields = [];
+  const bookkeeping = () => ({ truncated_for_context: true,
+    ...(truncatedFields.length ? { truncated_fields: truncatedFields } : {}),
+    ...(omittedFields.length ? { omitted_fields: omittedFields } : {}) });
+  // 量的是最终要发出去的那个对象（含 omitted_fields / truncated_fields 记账字段），不是半成品 payload。
+  const oversize = () => JSON.stringify({ ...bounded, ...bookkeeping() }).length > maxChars;
   const longestString = () => Object.entries(payload).filter(([, value]) => typeof value === 'string')
     .sort((a, b) => b[1].length - a[1].length)[0];
-  while (JSON.stringify(bounded).length > maxChars) {
+  // 1) 整条省略长字段：碎片没有引用价值。
+  while (oversize()) {
     const longest = longestString();
     if (!longest || longest[1].length <= 600) break;
     delete payload[longest[0]];
     omittedFields.push(longest[0]);
   }
-  const truncatedFields = [];
-  while (JSON.stringify(bounded).length > maxChars) {
+  // 2) 逐个截断中等长度的字段，每个字段只截一次；只截「截断后确实更短」的字段，否则越截越长。
+  const truncated = value => `${value.slice(0, 150)}…（截断，原 ${value.length} 字）`;
+  while (oversize()) {
+    const candidate = Object.entries(payload)
+      .filter(([name, value]) => typeof value === 'string' && !truncatedFields.includes(name)
+        && truncated(value).length < value.length)
+      .sort((a, b) => b[1].length - a[1].length)[0];
+    if (!candidate) break;
+    payload[candidate[0]] = truncated(candidate[1]);
+    truncatedFields.push(candidate[0]);
+  }
+  // 3) 仍超限就整条省略（最长优先，含已截断的碎片）：短值留到最后才丢，字段名进 omitted_fields。
+  while (oversize()) {
     const longest = longestString();
     if (!longest) break;
-    payload[longest[0]] = `${longest[1].slice(0, 150)}…（截断，原 ${longest[1].length} 字）`;
-    truncatedFields.push(longest[0]);
+    delete payload[longest[0]];
+    omittedFields.push(longest[0]);
+    const at = truncatedFields.indexOf(longest[0]);
+    if (at >= 0) truncatedFields.splice(at, 1);
   }
-  return { ...bounded, ...(omittedFields.length || truncatedFields.length ? { truncated_for_context: true } : {}),
-    ...(truncatedFields.length ? { truncated_fields: truncatedFields } : {}),
-    ...(omittedFields.length ? { omitted_fields: omittedFields } : {}) };
+  if (oversize()) {
+    return { msgid: bounded.msgid, truncated_for_context: true,
+      omitted_fields: [...omittedFields, ...Object.keys(payload)],
+      note: 'syslog 载荷字段过多，已整条不在模型上下文展示' };
+  }
+  return { ...bounded, ...bookkeeping() };
 }

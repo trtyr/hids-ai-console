@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import { AgentToolbox } from '../../../agent-tools.js';
 import { InvestigationAgent } from '../../../investigation-agent.js';
 import { WikiStore, pageExcerpts, pageSummary } from '../../../wiki-store.js';
@@ -295,4 +296,102 @@ test('A8 triage 提示词不再重复 submit_conclusion 的字段模板', async 
   assert.match(prompts.prompts.triage, /submit_conclusion/);
   // 字段契约仍然由工具 schema 给：模板删了不等于契约丢了。
   assert.match(prompts.prompts.triage, /以该工具的 schema 为准/);
+});
+
+// 复审 BUG1：裁剪必须在有限步内收敛。同步死循环会饿死事件循环，`node:test` 的 timeout 根本不触发，
+// 所以把它扔进 worker，看门狗超时就判红——这样回归时是一条失败用例，而不是整柜测试一起挂住。
+const evidenceViewUrl = new URL('../../../evidence-view.js', import.meta.url).href;
+function boundSyslogViewInWorker(view, timeoutMs = 2000) {
+  const worker = new Worker(`
+    const { parentPort, workerData } = require('node:worker_threads');
+    import(workerData.moduleUrl).then(({ boundSyslogView }) => {
+      const result = boundSyslogView(workerData.view);
+      parentPort.postMessage({ result, length: JSON.stringify(result).length });
+    }, error => parentPort.postMessage({ error: String(error && error.stack || error) }));
+  `, { eval: true, workerData: { moduleUrl: evidenceViewUrl, view } });
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      worker.terminate();
+      reject(new Error(`boundSyslogView 在 ${timeoutMs}ms 内没有返回（裁剪循环不收敛）`));
+    }, timeoutMs);
+    worker.once('message', message => { clearTimeout(timer); worker.terminate(); resolve(message); });
+    worker.once('error', error => { clearTimeout(timer); reject(error); });
+  });
+}
+
+test('复审 BUG1 syslog 视图：字段多而短、总量超限时裁剪收敛且仍在限内', async () => {
+  // 40 个短字段（每条 100 字）：总量 3800+ 超限，但没有一条超 600 字的长字段——
+  // 旧实现第二段截断会反复截同一个字段、长度不再下降，5 秒挂死（判词 blocker）。
+  const wide = { msgid: 'm', payload: Object.fromEntries(Array.from({ length: 40 }, (_, index) => [`field_${index}`, 'z'.repeat(100)])) };
+  const { result, length, error } = await boundSyslogViewInWorker(wide);
+  assert.equal(error, undefined, `worker 报错：${error}`);
+  assert.ok(length <= 3000, `裁剪后仍有 ${length} 字`);
+  assert.equal(result.truncated_for_context, true);
+  // 能进限的短值原样保留（模型要拿它填 citations.value）；被整条省略的字段名一个不丢。
+  const kept = Object.entries(result.payload);
+  assert.ok(kept.length > 0);
+  for (const [, value] of kept) assert.equal(value, 'z'.repeat(100));
+  assert.equal(kept.length + result.omitted_fields.length, 40);
+  assert.equal(result.msgid, 'm');
+});
+
+test('复审 BUG2 重复查询不覆写证据正文：read_evidence 取回含 view 的完整视图，折叠摘要不空', async () => {
+  const readBack = [];
+  const seenIds = [];
+  const query = { host_id: 41, count: 5 };
+  const { agent, requests, streamContext: context } = runAgent({ withWiki: false, script: ({ messages, requests: seen }) => {
+    if (String(messages[0].content).startsWith('你是独立质疑者')) {
+      return { content: JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
+    }
+    if (String(messages.at(-1).content).startsWith('请根据以下已查询证据')) return conclusion();
+    const turn = seen.length;
+    const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
+    const toolContents = () => messages.filter(message => message.role === 'tool').map(message => JSON.parse(String(message.content)));
+    // 同一查询连发两次：第二次命中已取证据，回 already_queried 指针（带同一个 evidence_id）。
+    if (turn === 1 || turn === 2) return { tool_calls: [call(`dup-${turn}`, 'list_host_events', query)] };
+    if (turn === 3) {
+      // 真结果与指针都还在历史里：前者给 viewed 计数，后者给要取回的编号。
+      const contents = toolContents();
+      seenIds.push(contents.find(content => !content.already_queried && content.view)?.view.returned_count,
+        contents.find(content => content.already_queried)?.evidence_id);
+      return { tool_calls: [call('more-1', 'list_process_assets', { filters: { host_id: [41] }, count: 5 })] };
+    }
+    if (turn === 4) {
+      // 同一批里再取一条 + 用 already_queried 回包里那个编号取回（判词里复现的路径）。
+      return { tool_calls: [call('more-2', 'list_host_assets', { host_ip: '10.0.0.5', count: 5 }),
+        call('read-back', 'read_evidence', { evidence_id: seenIds[1] })] };
+    }
+    readBack.push(JSON.parse(String(messages.at(-1).content)));
+    return conclusion();
+  } });
+  await agent.run('honeypot:7', { mode: 'triage', streamContext: context });
+  const [realReturnedCount, pointerId] = seenIds;
+  assert.equal(typeof realReturnedCount, 'number');
+  assert.match(pointerId, /^cw:\d+$/);
+  // 第 5 次请求时历史里已有 3 条按证据注册的工具结果（指针不算证据，不占折叠名额）：最早那条被折叠，
+  // 折叠摘要取的是**原始全文**而不是后来那条指针——这正是判词里复现的覆写路径。
+  const history = toolMessages(requests[4]).map(message => JSON.parse(message.content));
+  const folded = history.filter(content => content.folded);
+  const foldedTarget = folded.find(content => content.evidence_id === pointerId);
+  assert.ok(foldedTarget, '最早那条证据应被折叠');
+  assert.equal(foldedTarget.summary.returned_count, realReturnedCount);
+  // 指针回包本身还在历史里（内容极小，不需要折叠），模型仍看得到「这条已经取过」。
+  assert.equal(history.some(content => content.already_queried === true), true);
+  // read_evidence 必须取回带 view 的完整视图，不能把 already_queried 指针回给模型。
+  assert.equal(readBack.length, 1);
+  assert.equal(readBack[0].already_queried, undefined);
+  assert.equal(typeof readBack[0].view, 'object');
+  assert.equal(readBack[0].view.returned_count, realReturnedCount);
+});
+
+test('复审 BUG3 wiki_page schema 与实现一致：描述是摘要+命中段，带可选 keyword', async () => {
+  const { agent, requests, streamContext: context } = runAgent();
+  await agent.run('honeypot:7', { mode: 'triage', streamContext: context });
+  const spec = requests[0].tools.map(tool => tool.function).find(fn => fn.name === 'wiki_page');
+  assert.ok(spec, '模型侧工具表里应有 wiki_page');
+  assert.match(spec.description, /摘要/);
+  assert.match(spec.description, /命中段/);
+  assert.equal(spec.description.includes('完整 Wiki 页面'), false);
+  assert.equal(spec.parameters.properties.keyword.type, 'string');
+  assert.deepEqual(spec.parameters.required, ['id']);
 });
