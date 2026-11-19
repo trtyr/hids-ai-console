@@ -33,19 +33,19 @@
 
 ## 2. 启动与依赖装配
 
-**关键路径**：`server.js:24` 到 `server.js:50` 是模块级装配，`server.js:186-190` 是 `createServer` 的签名，`server.js:484-491` 是进程入口。
+**关键路径**：`server.js:26` 到 `server.js:54` 是模块级装配（运行态路径取 `server.js:27` 的 `runtime`），`server.js:186-190` 是 `createServer` 的签名，`server.js:484-491` 是进程入口。
 
 模块被加载时就建好的东西：
 
 | 件 | 位置 | 缺配置时的结果 |
 | --- | --- | --- |
-| 运行态根目录 `root` | `server.js:24` | 恒为「本文件所在目录的上一级」 |
-| 监听地址与端口 | `server.js:25-26` | `HIDS_HOST` 缺省 `127.0.0.1`，`HIDS_PORT` 缺省 `8080` |
-| 牧云网关 `gateway` 与 API 工具箱 `apiToolbox` | `server.js:27-31` | 牧云地址或 Token 缺一个 → 两者为 `null` |
-| 模型 `model` 与两个研判器 | `server.js:32-37` | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项 → `model` 为 `null`，两个研判器也是 `null` |
-| 研判记录、规则集、研判队列、判据工作台、溯源白板 | `server.js:38-50` | 队列要 `gateway` 与研判器、白板要 MCP 工具箱与模型，缺任一则该件为 `null` |
+| 运行态目录 `runtime`（9 条路径） | `server.js:27`、`server.js:805-818` | 不依赖环境变量，恒为仓内 `.data/` 下 |
+| 监听地址与端口 | `server.js:28-29` | `HIDS_HOST` 缺省 `127.0.0.1`，`HIDS_PORT` 缺省 `8080` |
+| 牧云网关 `gateway` 与 API 工具箱 `apiToolbox` | `server.js:30-34` | 牧云地址或 Token 缺一个 → 两者为 `null` |
+| 模型 `model` 与两个研判器 | `server.js:35-40` | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项 → `model` 为 `null`，两个研判器也是 `null` |
+| 研判记录、规则集、研判队列、判据工作台、溯源白板 | `server.js:41-54`、`server.js:95-97` | 队列要 `gateway` 与研判器、白板要 MCP 工具箱与模型，缺任一则该件为 `null` |
 
-`root` 的含义容易看错：`server.js:24` 解析出来的是「仓库目录的上一级」，所以运行态数据落在 `<上一级>/backend/.data/`，不是仓内 `.data/`。这条规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
+运行态路径的默认值全出自导出的 `runtimePaths(directory = moduleDirectory)`（`server.js:805-818`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，全部落在仓内 `.data/` 下。整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
 
 **`createServer` 是依赖注入点**（`server.js:186-190`）：14 个参数都带默认值，默认指向模块级单例。测试与探针靠传替身换掉 `service`、`investigator`、`history`、`monitor`、`wiki`、`wikiAgent` 这些件。其中 `monitor` 与 `boardService` 的默认值写成「`service` 是不是模块级 `gateway`」的条件式——换了 `service`，就不再挂默认的研判队列与溯源白板。
 

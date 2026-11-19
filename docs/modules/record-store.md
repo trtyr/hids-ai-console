@@ -75,7 +75,7 @@ latest(alertId, mode = 'deep')
 
 ### 3.3 记录落在哪
 
-默认落点是 `<root>/backend/.data/investigations/`（`server.js:38`），`root` 是「本文件所在目录的上一级」（`server.js:24`）。
+默认落点是仓内 `.data/investigations/`（`runtimePaths().investigations`，定义在 `server.js:805-818`，`server.js:41` 交给构造函数）。
 目录名、权限与整仓的运行态目录规则见 [架构篇第 8 节](../architecture.md)；本模块只负责在给定目录下读写文件，
 不决定自己被放在哪。
 
