@@ -247,35 +247,37 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 
 ### 8.1 运行态目录的解析规则
 
-`server.js:24` 把 `root` 定义为「本文件所在目录的上一级」：
+`server.js:26` 拿到本文件所在目录，`server.js:27` 用它算出模块级常量 `runtime`；具体路径清单由导出的 `runtimePaths(directory = moduleDirectory)`（`server.js:805-818`）给出：
 
 ```js
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const data = path.join(directory, '.data');
 ```
 
-此后 `server.js` 里定义的运行态路径一律是 `path.join(root, 'backend', '.data', ...)`。也就是说，**运行态数据落在「仓库目录的上一级」下的 `backend/.data/`，而不是仓库内的 `.data/`**。在当前工作树里它解析到：
+`server.js` 里定义的运行态路径一律取自 `runtime.*`（`server.js:41-54`、`server.js:96`），**不再经过仓库的上一级**。也就是说，运行态数据落在仓库内的 `.data/`（被 `.gitignore:10` 忽略，不进 git），在本工作树里解析到：
 
 ```
-/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/backend/.data/
+/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T019/.data/
 ```
 
-（仓库在 `/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P001-T001`，其上一级是 `.../hids-ai-console`。）
+P003-T019 之前的版本把这里算成「本文件所在目录的上一级」+ `backend/.data/`，即落到仓库外（工作树是 `.../hids-ai-console/hids-ai-console/backend/.data/`，主仓是 `/home/trtyr/code/backend/.data/`）。**那些旧目录下的数据不自动搬**：进程不会读也不会写它们，要接着用里面的研判记录/基线得人工搬进仓内 `.data/`。
 
-而仓库内另有一个 `.data/`，被 `.gitignore:10` 忽略，供提示词覆盖文件使用。两处不是同一个目录，不要混。
+仓内 `.data/` 同一目录下还住着提示词覆盖文件与升级包（`prompt-store.js:17`、`update-store.js:62`），判据页历史版本在 `<wiki 目录的上一级>/.data/wiki-history/`（`wiki-store.js:164`）。
 
 ### 8.2 目录与文件清单
 
+下表路径均相对于仓库内的 `.data/`（第 8.1 节）。默认值由 `runtimePaths()`（`server.js:805-818`）给出，`server.js:41-54`、`server.js:96` 把这些默认值交给各构件。
+
 | 路径 | 存什么 | 谁写 | 证据 |
 | --- | --- | --- | --- |
-| `<root>/backend/.data/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:38` |
-| `<root>/backend/.data/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:39` |
-| `<root>/backend/.data/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:42`、`triage-monitor.js:69-71` |
-| `<root>/backend/.data/cases/` | syslog 案件目录 | `writeSyslogCase()` | `server.js:46`、`syslog-case.js:64-87` |
-| `<root>/backend/.data/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:47`、`triage-monitor.js:282` |
-| `<root>/backend/.data/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:48`、`triage-monitor.js:284` |
-| `<root>/backend/.data/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:49` |
-| `<root>/backend/.data/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:50` |
-| 仓内 `.data/prompt-overrides.json` | 提示词与 SOP 的本地覆盖 | `PromptStore` | `prompt-store.js:17` |
+| `.data/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:41` |
+| `.data/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:42` |
+| `.data/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:47`、`triage-monitor.js:69-71` |
+| `.data/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:51`、`syslog-case.js:64-87` |
+| `.data/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:52`、`triage-monitor.js:282` |
+| `.data/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:53`、`triage-monitor.js:284` |
+| `.data/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:54` |
+| `.data/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:96` |
+| `.data/prompt-overrides.json` | 提示词与 SOP 的本地覆盖 | `PromptStore` | `prompt-store.js:17` |
 | `<提示词覆盖文件所在目录>/update-packages/` | 已上传的升级包 | `UpdateStore` | `update-store.js:62` |
 | `<wiki 目录的上一级>/.data/wiki-history/` | 判据页历史版本 | `WikiStore` | `wiki-store.js:164` |
 
@@ -371,7 +373,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_SYSLOG_HOST` | `127.0.0.1` | syslog UDP 监听地址 | `server.js:367` |
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
-| `HIDS_CASES_DIR` | `<root>/backend/.data/cases` | 案件目录根 | `server.js:46` |
+| `HIDS_CASES_DIR` | 仓内 `.data/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:51` |
 | `HIDS_BASIC_AUTH_USER` | 无 | Basic 认证用户名 | `server.js:113` |
 | `HIDS_BASIC_AUTH_PASSWORD` | 无 | Basic 认证密码；不配则不启用认证 | `server.js:113`、`server.js:59` |
 | `HIDS_PROMPT_ADMIN_TOKEN` | 无 | 知识库写操作令牌（请求头 `x-prompt-admin-token`） | `server.js:114` |
@@ -430,15 +432,16 @@ node --test triage-rules.test.js   # 只跑一个文件
 | `wiki-current.test.js` | 当前生效判据与提示词是否一致（只读） |
 | `wiki.test.js` | 判据库读写、维护会话、发布与回放 |
 
-**本卡实测结果**（命令：`node --test`，退出码 1）：
+**本卡实测结果**（命令：`node --test *.test.js`，21 个后端测试文件 190 条，201 条输出中 1 条失败）：
 
 ```
-ℹ tests 99
-ℹ pass 98
+ℹ tests 190
+ℹ pass 189
 ℹ fail 1
 ```
 
-唯一失败的是 `maintenance-startup.test.js`。原因是它把部署路径写死成 `<当前目录的上一级>/backend/maintenance-server.js`（`maintenance-startup.test.js:12-14`），而本仓目录名为 `hids-ai-console` 而不是 `backend`，于是子进程报 `Cannot find module '.../current/backend/maintenance-server.js'`。这与第 8.1 节的目录解析规则是同一件事的另一个表现，已记入 [docs/_meta/gaps.md](_meta/gaps.md)。
+唯一失败的仍是 `maintenance-startup.test.js`。原因是它自己把部署路径写死成 `<当前目录的上一级>/backend/maintenance-server.js`（`maintenance-startup.test.js:12-14`）。
+**这条与第 8.1 节的运行态目录已经是两回事了**：P003-T019 把运行态位置改回仓库内 `.data/`（`server.js:27`），但那个测试仍然按「仓库名为 `backend`」的老布局拼路径，所以本仓目录名下依旧 `Cannot find module '.../current/backend/maintenance-server.js'`。改前改后同样红，已记入 [docs/_meta/gaps.md](_meta/gaps.md)。
 
 ### 11.2 手工冒烟
 
@@ -497,7 +500,7 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 
 写这份文档时碰到的几处「读代码读不出来的东西」，全部记在 [docs/_meta/gaps.md](_meta/gaps.md)。这里只列个引子：
 
-1. **运行态数据落在仓库外**。`server.js:24` 的目录解析规则把 `.data/` 指到仓库的上一级（第 8.1 节）。`maintenance-startup.test.js` 按同一约定写死了路径，所以当前目录名下它是 `node --test` 里唯一的失败项（第 11.1 节）。
+1. **`maintenance-startup.test.js` 按老布局写死路径**。它拼 `<当前目录的上一级>/backend/maintenance-server.js`（`maintenance-startup.test.js:12-14`），本仓目录名不是 `backend`，所以它是 `node --test` 里唯一的失败项（第 11.1 节）。P003-T019 已把运行态目录改回仓库内 `.data/`（第 8.1 节），这条测试自身还没跟着改。
 2. **候选经验整理台未接线**。`knowledge-store.js` 与 `knowledge-workbench.js` 只被测试文件引用（第 4 节末）。
 3. **`createServer` 有两个没被路由使用的参数**：`maintenanceEntry`（`server.js:115`）与 `knowledge`（`server.js:112`）。
 4. **接口契约有两套真源**：`openapi.yaml` 与 `server.js` 的路由各自独立（第 11.3 节）。

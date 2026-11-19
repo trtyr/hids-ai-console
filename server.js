@@ -24,7 +24,7 @@ import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
 import { RuleStore, isRuleId } from './rule-store.js';
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(moduleDirectory, '..');
+const runtime = runtimePaths(moduleDirectory); // 运行态一律落在仓库内 .data/（`.gitignore:10` 已忽略）；规则与旧目录说明见文件末尾 runtimePaths()
 const host = process.env.HIDS_HOST || '127.0.0.1';
 const port = Number(process.env.HIDS_PORT || 8080);
 const baseUrl = process.env.CLOUDWALKER_URL;
@@ -38,20 +38,20 @@ const promptStore = new PromptStore();
 const wikiStore = new WikiStore();
 const agent = triageToolbox && model ? new InvestigationAgent(triageToolbox, model, promptStore, wikiStore) : null;
 const deepInvestigator = agentToolbox && model ? new InvestigationAgent(agentToolbox, model, promptStore, wikiStore) : null;
-const investigationStore = new InvestigationStore(path.join(root, 'backend', '.data', 'investigations'));
-const triageRuleEngine = new TriageRuleEngine(path.join(root, 'backend', '.data', 'triage-rules.json'));
+const investigationStore = new InvestigationStore(runtime.investigations);
+const triageRuleEngine = new TriageRuleEngine(runtime.triageRules);
 // Rego 规则库跟着代码走（不是 .data/ 运行态）：默认读仓根的 rules/ 目录。
 const regoRuleStore = new RuleStore(path.join(moduleDirectory, 'rules'));
 const triageInputMode = process.env.HIDS_TRIAGE_INPUT_MODE || 'syslog';
 const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, investigator: agent,
-  history: investigationStore, file: path.join(root, 'backend', '.data', 'triage-monitor.json'),
+  history: investigationStore, file: runtime.triageMonitor,
   inputMode: triageInputMode, concurrency: triageInputMode === 'syslog' ? 1 : 2,
   eventToolbox: apiToolbox, wiki: wikiStore,
   ruleEngine: triageRuleEngine,
-  casesDirectory: process.env.HIDS_CASES_DIR || path.join(root, 'backend', '.data', 'cases'),
-  baselineFile: path.join(root, 'backend', '.data', 'baseline.json'),
-  intelFile: path.join(root, 'backend', '.data', 'intel.json') }) : null;
-const wikiWorkbench = new WikiWorkbench(wikiStore, model, promptStore, path.join(root, 'backend', '.data', 'wiki-sessions'));
+  casesDirectory: process.env.HIDS_CASES_DIR || runtime.cases,
+  baselineFile: runtime.baseline,
+  intelFile: runtime.intel }) : null;
+const wikiWorkbench = new WikiWorkbench(wikiStore, model, promptStore, runtime.wikiSessions);
 
 // A4：告警分析已经取到的原始报文写在案卷（cases/<...>/01-原始告警.txt）里，研判记录（InvestigationStore）带 case_dir。
 // TriageMonitor.status() 对外是瘦身记录（triage-monitor.js 剥掉 input），这里不读它的 input，只按研判记录顺案卷取原始报文。
@@ -93,7 +93,7 @@ export function createAnalysisProvider({ monitor = null, history = null } = {}) 
 }
 
 const traceBoard = agentToolbox && model ? new TraceBoardService({ toolbox: agentToolbox, model, promptStore,
-  directory: path.join(root, 'backend', '.data', 'trace-boards'),
+  directory: runtime.traceBoards,
   analysis: createAnalysisProvider({ monitor: triageMonitor, history: investigationStore }) }) : null;
 
 // ── 误报维护（P003-T013）──────────────────────────────────────────────────
@@ -796,6 +796,25 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       error(res, /请求正文/.test(e.message || '') ? 400 : 502, e.message || '牧云请求失败');
     }
   });
+}
+
+// 运行态路径的唯一真源（P003-T019）：全部落在仓库内 .data/，不经过仓库的上一级。
+// 别改成「本文件所在目录的上一级」：部署时上一级是别人的目录，写出去的案卷/基线没人知道该去哪找。
+// 旧版指的是 `<上一级>/backend/.data/`，那些目录里的既有数据不自动搬，要接着用就人工搬进仓内 .data/。
+// 定义在这个位置（模块末尾）而不在顶部，是为了不挪动上面所有 `path:line` 引用的行号。
+export function runtimePaths(directory = moduleDirectory) {
+  const data = path.join(directory, '.data');
+  return {
+    data,
+    investigations: path.join(data, 'investigations'),
+    triageRules: path.join(data, 'triage-rules.json'),
+    triageMonitor: path.join(data, 'triage-monitor.json'),
+    cases: path.join(data, 'cases'),
+    baseline: path.join(data, 'baseline.json'),
+    intel: path.join(data, 'intel.json'),
+    wikiSessions: path.join(data, 'wiki-sessions'),
+    traceBoards: path.join(data, 'trace-boards')
+  };
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
