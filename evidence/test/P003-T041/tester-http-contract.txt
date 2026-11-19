@@ -1,18 +1,23 @@
-✔ A1 库落数据根：rules/ 与 wiki/ 缺省在 HIDS_DATA_DIR 下；仓内副本运行期一个字节不被写 (186.439192ms)
-✔ A2 种子只初始化一次：二次启动读数据根的改动，不按仓库副本盖回 (174.662927ms)
-✔ A2 目录在但不种：数据根 rules/ 存在（空）时就是空库，不按「没初始化」重种 (78.480565ms)
-✔ A3 备注落盘：sidecar <id>-<rev>.json、history() 逐条回 note、PUT 结果同形 (91.581996ms)
-✔ A3 缺失 / 坏 JSON 的 sidecar 一律当 null，不拖垮历史接口 (86.811497ms)
-✔ A3/A5 错误码：400 / 403 / 404 / 409 / 502 / 503 都触发一次，正文是 {error, code} (198.882719ms)
-✔ A3 边界（待定口径）：note 超 maxLength=200 与 expected_revision 不合 pattern 的处置 (83.852047ms)
-ℹ note>200 实测 200；expected_revision=zzz 实测 400（openapi 声明 maxLength/pattern，服务端是否拒绝属待定口径）
-✔ A5 并发：同一 expected_revision 的 PUT 只成一个，另一个 409，历史只多一份 (99.683149ms)
-✔ A5 并发：新增规则的两路写只成一个；PUT 与回滚同队列串行、不交叉 (92.715378ms)
-✔ A5 sessions 路由不被 /api/rules/{id} 抢走；摘要只回元数据、按 updated_at 倒序 (87.875386ms)
-✔ A6 知识库：读数据根种子库；PUT 落数据根库并留历史；仓内 wiki/ 不动；sessions 仍要令牌 (212.924351ms)
+# P003-T041 测试席黑盒套件（修复轮）— 本终端逐条命令的原始输出
+# 工作树: /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T041（分支 task/hids-ai-console-P003-T041，实现=ec1eeb7）
+
+$ node --test --test-force-exit --test-timeout=60000 evidence/test/P003-T041/http-contract.test.js
+✔ A1 库落数据根：rules/ 与 wiki/ 缺省在 HIDS_DATA_DIR 下；仓内副本运行期一个字节不被写 (185.495918ms)
+✔ A2 种子只初始化一次：二次启动读数据根的改动，不按仓库副本盖回 (172.530048ms)
+✔ A2 目录在但不种：数据根 rules/ 存在（空）时就是空库，不按「没初始化」重种 (77.262676ms)
+✔ A3 备注落盘：sidecar <id>-<rev>.json、history() 逐条回 note、PUT 结果同形 (95.271075ms)
+✔ A3 缺失 / 坏 JSON 的 sidecar 一律当 null，不拖垮历史接口 (87.635971ms)
+✔ A3/A5 错误码：400 / 403 / 404 / 409 / 502 / 503 都触发一次，正文是 {error, code} (192.067131ms)
+✔ A3 边界（待定口径）：note 超 maxLength=200 与 expected_revision 不合 pattern 的处置 (87.788435ms)
+ℹ note 201 字 → PUT 200，历史 note 长 205 字（=「人工维护：」5 字 + 截断后的 200）；
+    expected_revision=zzz 实测 400（openapi 声明 maxLength/pattern，拒绝/截断属待定口径，见报告 §五 minor-1）
+✔ A5 并发：同一 expected_revision 的 PUT 只成一个，另一个 409，历史只多一份 (95.18545ms)
+✔ A5 并发：新增规则的两路写只成一个；PUT 与回滚同队列——两种到达顺序各钉一遍 + 真并发断顺序无关性质 (110.358718ms)
+✔ A5 sessions 路由不被 /api/rules/{id} 抢走；摘要只回元数据、按 updated_at 倒序 (94.646346ms)
+✔ A6 知识库：读数据根种子库；PUT 落数据根库并留历史；仓内 wiki/ 不动；sessions 仍要令牌 (207.847529ms)
 ℹ PUT /api/wiki/pages/{path} 不带知识库令牌实测 200（docs 说会先撞令牌判定回 403）
-✔ A8 全链：改一条 → 数据根变更 → 历史有副本与备注 → 回滚生效且进历史 → 重启仍在 (172.752842ms)
-✔ A7 openapi 里有本卡四条维护路由与备注 schema；docs 旧口径已换 (1.478956ms)
+✔ A8 全链：改一条 → 数据根变更 → 历史有副本与备注 → 回滚生效且进历史 → 重启仍在 (173.777062ms)
+✔ A7 openapi 里有本卡四条维护路由与备注 schema；docs 旧口径已换 (1.315318ms)
 ℹ tests 13
 ℹ suites 0
 ℹ pass 13
@@ -20,4 +25,17 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 1625.800807
+ℹ duration_ms 1642.665348
+EXIT=0
+
+$ # 连跑 10 遍看 flake（并发用例改确定性后）
+run 1 exit=0 ℹ pass 13 ℹ fail 0 
+run 2 exit=0 ℹ pass 13 ℹ fail 0 
+run 3 exit=0 ℹ pass 13 ℹ fail 0 
+run 4 exit=0 ℹ pass 13 ℹ fail 0 
+run 5 exit=0 ℹ pass 13 ℹ fail 0 
+run 6 exit=0 ℹ pass 13 ℹ fail 0 
+run 7 exit=0 ℹ pass 13 ℹ fail 0 
+run 8 exit=0 ℹ pass 13 ℹ fail 0 
+run 9 exit=0 ℹ pass 13 ℹ fail 0 
+run 10 exit=0 ℹ pass 13 ℹ fail 0 

@@ -1,18 +1,23 @@
-✔ A1 库落数据根：rules/ 与 wiki/ 缺省在 HIDS_DATA_DIR 下；仓内副本运行期一个字节不被写 (181.760883ms)
-✔ A2 种子只初始化一次：二次启动读数据根的改动，不按仓库副本盖回 (169.107204ms)
-✔ A2 目录在但不种：数据根 rules/ 存在（空）时就是空库，不按「没初始化」重种 (76.121959ms)
-✖ A3 备注落盘：sidecar <id>-<rev>.json、history() 逐条回 note、PUT 结果同形 (86.268341ms)
-✖ A3 缺失 / 坏 JSON 的 sidecar 一律当 null，不拖垮历史接口 (88.365531ms)
-✔ A3/A5 错误码：400 / 403 / 404 / 409 / 502 / 503 都触发一次，正文是 {error, code} (199.967771ms)
-✔ A3 边界（待定口径）：note 超 maxLength=200 与 expected_revision 不合 pattern 的处置 (89.23247ms)
-ℹ note>200 实测 200；expected_revision=zzz 实测 400（openapi 声明 maxLength/pattern，服务端是否拒绝属待定口径）
-✔ A5 并发：同一 expected_revision 的 PUT 只成一个，另一个 409，历史只多一份 (97.115021ms)
-✔ A5 并发：新增规则的两路写只成一个；PUT 与回滚同队列串行、不交叉 (89.890094ms)
-✔ A5 sessions 路由不被 /api/rules/{id} 抢走；摘要只回元数据、按 updated_at 倒序 (93.412043ms)
-✔ A6 知识库：读数据根种子库；PUT 落数据根库并留历史；仓内 wiki/ 不动；sessions 仍要令牌 (205.511272ms)
+# 变异 2：锚点字符串（备注前缀全角→半角），在 ec1eeb7 的 /tmp 副本上改 server.js 两处
+$ sed -i "s/人工维护：/人工维护:/g; s/人工回滚（/人工回滚(/g" /tmp/t041-mut2/server.js
+$ cp -r evidence/test/P003-T041 /tmp/t041-mut2/evidence/test/
+$ cd /tmp/t041-mut2 && node --test --test-force-exit --test-timeout=60000 evidence/test/P003-T041/http-contract.test.js
+✔ A1 库落数据根：rules/ 与 wiki/ 缺省在 HIDS_DATA_DIR 下；仓内副本运行期一个字节不被写 (181.305449ms)
+✔ A2 种子只初始化一次：二次启动读数据根的改动，不按仓库副本盖回 (173.369679ms)
+✔ A2 目录在但不种：数据根 rules/ 存在（空）时就是空库，不按「没初始化」重种 (76.531718ms)
+✖ A3 备注落盘：sidecar <id>-<rev>.json、history() 逐条回 note、PUT 结果同形 (88.439494ms)
+✖ A3 缺失 / 坏 JSON 的 sidecar 一律当 null，不拖垮历史接口 (86.989102ms)
+✔ A3/A5 错误码：400 / 403 / 404 / 409 / 502 / 503 都触发一次，正文是 {error, code} (189.614799ms)
+✔ A3 边界（待定口径）：note 超 maxLength=200 与 expected_revision 不合 pattern 的处置 (88.446268ms)
+ℹ note 201 字 → PUT 200，历史 note 长 205 字（=「人工维护：」5 字 + 截断后的 200）；
+    expected_revision=zzz 实测 400（openapi 声明 maxLength/pattern，拒绝/截断属待定口径，见报告 §五 minor-1）
+✔ A5 并发：同一 expected_revision 的 PUT 只成一个，另一个 409，历史只多一份 (98.597888ms)
+✔ A5 并发：新增规则的两路写只成一个；PUT 与回滚同队列——两种到达顺序各钉一遍 + 真并发断顺序无关性质 (109.638725ms)
+✔ A5 sessions 路由不被 /api/rules/{id} 抢走；摘要只回元数据、按 updated_at 倒序 (93.803783ms)
+✔ A6 知识库：读数据根种子库；PUT 落数据根库并留历史；仓内 wiki/ 不动；sessions 仍要令牌 (203.526177ms)
 ℹ PUT /api/wiki/pages/{path} 不带知识库令牌实测 200（docs 说会先撞令牌判定回 403）
-✖ A8 全链：改一条 → 数据根变更 → 历史有副本与备注 → 回滚生效且进历史 → 重启仍在 (85.401194ms)
-✔ A7 openapi 里有本卡四条维护路由与备注 schema；docs 旧口径已换 (2.180231ms)
+✖ A8 全链：改一条 → 数据根变更 → 历史有副本与备注 → 回滚生效且进历史 → 重启仍在 (87.909748ms)
+✔ A7 openapi 里有本卡四条维护路由与备注 schema；docs 旧口径已换 (1.952199ms)
 ℹ tests 13
 ℹ suites 0
 ℹ pass 10
@@ -20,12 +25,12 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 1527.458049
+ℹ duration_ms 1536.252305
 
 ✖ failing tests:
 
-test at evidence/test/P003-T041/http-contract.test.js:180:1
-✖ A3 备注落盘：sidecar <id>-<rev>.json、history() 逐条回 note、PUT 结果同形 (86.268341ms)
+test at evidence/test/P003-T041/http-contract.test.js:248:1
+✖ A3 备注落盘：sidecar <id>-<rev>.json、history() 逐条回 note、PUT 结果同形 (88.439494ms)
   AssertionError [ERR_ASSERTION]: sidecar 的 note 没按「人工维护：<note>」落盘
   + actual - expected
   
@@ -33,7 +38,7 @@ test at evidence/test/P003-T041/http-contract.test.js:180:1
   - '人工维护：排除运维探针来源'
          ^
   
-      at TestContext.<anonymous> (file:///tmp/t041-mut/evidence/test/P003-T041/http-contract.test.js:208:10)
+      at TestContext.<anonymous> (file:///tmp/t041-mut2/evidence/test/P003-T041/http-contract.test.js:276:10)
       at async Test.run (node:internal/test_runner/test:1409:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
     generatedMessage: false,
@@ -44,8 +49,8 @@ test at evidence/test/P003-T041/http-contract.test.js:180:1
     diff: 'simple'
   }
 
-test at evidence/test/P003-T041/http-contract.test.js:244:1
-✖ A3 缺失 / 坏 JSON 的 sidecar 一律当 null，不拖垮历史接口 (88.365531ms)
+test at evidence/test/P003-T041/http-contract.test.js:312:1
+✖ A3 缺失 / 坏 JSON 的 sidecar 一律当 null，不拖垮历史接口 (86.989102ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
   + actual - expected
   
@@ -53,7 +58,7 @@ test at evidence/test/P003-T041/http-contract.test.js:244:1
   - '人工维护：第一次'
          ^
   
-      at TestContext.<anonymous> (file:///tmp/t041-mut/evidence/test/P003-T041/http-contract.test.js:254:10)
+      at TestContext.<anonymous> (file:///tmp/t041-mut2/evidence/test/P003-T041/http-contract.test.js:322:10)
       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
       at async Test.run (node:internal/test_runner/test:1409:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
@@ -65,8 +70,8 @@ test at evidence/test/P003-T041/http-contract.test.js:244:1
     diff: 'simple'
   }
 
-test at evidence/test/P003-T041/http-contract.test.js:517:1
-✖ A8 全链：改一条 → 数据根变更 → 历史有副本与备注 → 回滚生效且进历史 → 重启仍在 (85.401194ms)
+test at evidence/test/P003-T041/http-contract.test.js:641:1
+✖ A8 全链：改一条 → 数据根变更 → 历史有副本与备注 → 回滚生效且进历史 → 重启仍在 (87.909748ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
   + actual - expected
   
@@ -74,7 +79,7 @@ test at evidence/test/P003-T041/http-contract.test.js:517:1
   - '人工维护：排除健康检查'
          ^
   
-      at TestContext.<anonymous> (file:///tmp/t041-mut/evidence/test/P003-T041/http-contract.test.js:529:10)
+      at TestContext.<anonymous> (file:///tmp/t041-mut2/evidence/test/P003-T041/http-contract.test.js:653:10)
       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
       at async Test.run (node:internal/test_runner/test:1409:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
@@ -85,3 +90,4 @@ test at evidence/test/P003-T041/http-contract.test.js:517:1
     operator: 'strictEqual',
     diff: 'simple'
   }
+EXIT=1

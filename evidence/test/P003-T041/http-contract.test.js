@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -49,6 +50,12 @@ async function boot(t, { dataRoot: root, ruleToken = RULE_TOKEN } = {}) {
     HIDS_PROMPT_ADMIN_TOKEN: PROMPT_TOKEN };
   if (ruleToken !== null) env.HIDS_RULE_ADMIN_TOKEN = ruleToken;
   const child = spawn(process.execPath, [bootScript], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  // 回收要覆盖起服失败路径：端口解析超时 / 提前退出时也得把子进程收掉，别漏在后台。
+  t.after(async () => {
+    if (child.exitCode !== null) return;
+    child.kill('SIGKILL');
+    await new Promise(resolve => child.once('exit', resolve));
+  });
   let stderr = '';
   child.stderr.on('data', chunk => { stderr += chunk; });
   const port = await new Promise((resolve, reject) => {
@@ -62,11 +69,6 @@ async function boot(t, { dataRoot: root, ruleToken = RULE_TOKEN } = {}) {
       resolve(JSON.parse(line).port);
     });
     child.once('exit', code => { clearTimeout(timer); reject(new Error(`服务提前退出（${code}）：${stderr}`)); });
-  });
-  t.after(async () => {
-    if (child.exitCode !== null) return;
-    child.kill('SIGKILL');
-    await new Promise(resolve => child.once('exit', resolve));
   });
   return `http://127.0.0.1:${port}`;
 }
@@ -97,6 +99,72 @@ function assertError(res, expectedStatus, expectedCode = 'caller_error') {
   assert.equal(res.body.code, expectedCode, `code 期望 ${expectedCode}，实测 ${res.body.code}`);
   assert.equal(typeof res.body.error, 'string');
   assert.ok(res.body.error.length > 0, '错误正文的 error 是空串');
+}
+
+// 慢 body 的 PUT：先发请求头 + 一小截正文就停手，服务端卡在读 body、一定还没进写队列。
+// 这期间发别的请求就能把「谁先到」钉死，不靠 sleep 猜进程调度（写队列的顺序依赖是上一轮打回的那条）。
+function stalledRequest(base, pathname, payloadText, token) {
+  const url = new URL(base);
+  const payload = Buffer.from(payloadText, 'utf8');
+  const head = [
+    `PUT ${pathname} HTTP/1.1`,
+    `Host: ${url.host}`,
+    'content-type: application/json',
+    `x-rule-admin-token: ${token}`,
+    `content-length: ${payload.length}`,
+    'connection: close', '', ''
+  ].join('\r\n');
+  const socket = net.connect(Number(url.port), url.hostname);
+  socket.on('error', () => {}); // 迟到的 socket 错误由 finish/destroy 收，别把它抛成未捕获异常
+  socket.setTimeout(10000, () => socket.destroy(new Error('慢 body 的 PUT 10s 没回音')));
+  const chunks = [];
+  socket.on('data', chunk => { chunks.push(chunk); });
+  const connected = new Promise((resolve, reject) => {
+    socket.once('connect', resolve);
+    socket.once('error', reject);
+  });
+  let sent = 0;
+  return {
+    async start(half = 20) {
+      await connected;
+      socket.write(head);
+      socket.write(payload.subarray(0, half));
+      sent = half;
+    },
+    async finish() {
+      socket.write(payload.subarray(sent));
+      await new Promise(resolve => {
+        socket.once('end', resolve);
+        socket.once('close', resolve);
+      });
+      socket.destroy();
+      const raw = Buffer.concat(chunks);
+      const headerEnd = raw.indexOf('\r\n\r\n');
+      const statusLine = raw.subarray(0, raw.indexOf('\r\n')).toString('utf8');
+      const status = Number(statusLine.split(' ')[1]);
+      const headerBlock = raw.subarray(0, headerEnd).toString('utf8').toLowerCase();
+      let bodyBytes = raw.subarray(headerEnd + 4);
+      if (headerBlock.includes('transfer-encoding: chunked')) {
+        // 连接没有 content-length，node 回 chunked；按字节剥块（中文按字节算长度，不能拿字符串切）
+        const parts = [];
+        let rest = bodyBytes;
+        for (;;) {
+          const lineEnd = rest.indexOf('\r\n');
+          if (lineEnd < 0) break;
+          const size = Number.parseInt(rest.subarray(0, lineEnd).toString('utf8'), 16);
+          if (!Number.isFinite(size) || size === 0) break;
+          parts.push(rest.subarray(lineEnd + 2, lineEnd + 2 + size));
+          rest = rest.subarray(lineEnd + 2 + size + 2);
+        }
+        bodyBytes = Buffer.concat(parts);
+      }
+      const bodyText = bodyBytes.toString('utf8');
+      let body = null;
+      try { body = JSON.parse(bodyText); } catch { /* 非 JSON */ }
+      return { status, body, text: bodyText || statusLine };
+    },
+    destroy() { socket.destroy(); }
+  };
 }
 
 // ── A1 / A2：库落数据根，仓库只做种子 ──────────────────────────────────────
@@ -300,8 +368,7 @@ test('A3/A5 错误码：400 / 403 / 404 / 409 / 502 / 503 都触发一次，正�
   // 400：包名与 id 不一致（openapi 路径参数：「必须与正文里 package 一致，否则回 400」）
   const wrongPackage = await putRule(base, 'honeypot_probe', {
     rego: rego('other_rule', '  input.type == "x"'), expected_revision: revision });
-  assertError(wrongPackage, 400);
-  assert.match(wrongPackage.body.error, /package|包名/, `包名错的 400 没说明原因：${wrongPackage.body.error}`);
+  assertError(wrongPackage, 400); // openapi 只承诺「包名须与 id 一致，否则回 400」，不约定措辞
   // 400：子集外语法，openapi 承诺报错带 <id>.rego:<行>
   const outsideSubset = await putRule(base, 'honeypot_probe', {
     rego: rego('honeypot_probe', '  input.host =~ "10.*"'), expected_revision: revision });
@@ -360,10 +427,14 @@ test('A3 边界（待定口径）：note 超 maxLength=200 与 expected_revision
   const long = await putRule(base, 'honeypot_probe', {
     rego: rego('honeypot_probe', '  input.type == "honeypot"\n  input.user == "root"'), expected_revision: revision, note: longNote });
   assert.ok(long.status < 500, `超长 note 不许 5xx，实测 ${long.status}`);
+  // 只记实测（拒绝 / 截断都算待定口径）：openapi 声明 maxLength=200，服务端怎么处置由群主拍板，测试不替它选。
+  const longEntry = (await history(base, 'honeypot_probe')).body.history.find(row => row.rev === revision);
+  const storedNoteLength = typeof longEntry?.note === 'string' ? [...longEntry.note].length : null;
   const oddRevision = await putRule(base, 'honeypot_probe', {
     rego: rego('honeypot_probe', '  input.type == "honeypot"\n  input.user == "root"'), expected_revision: 'zzz' });
   assert.ok(oddRevision.status < 500, `不合 pattern 的 expected_revision 不许 5xx，实测 ${oddRevision.status}`);
-  t.diagnostic(`note>200 实测 ${long.status}；expected_revision=zzz 实测 ${oddRevision.status}（openapi 声明 maxLength/pattern，服务端是否拒绝属待定口径）`);
+  t.diagnostic(`note 201 字 → PUT ${long.status}，历史 note 长 ${storedNoteLength} 字（=「人工维护：」5 字 + 截断后的 200）；
+    expected_revision=zzz 实测 ${oddRevision.status}（openapi 声明 maxLength/pattern，拒绝/截断属待定口径，见报告 §五 minor-1）`);
 });
 
 // ── A5：并发写 ───────────────────────────────────────────────────────────
@@ -397,7 +468,7 @@ test('A5 并发：同一 expected_revision 的 PUT 只成一个，另一个 409�
   assert.equal((await history(base, 'honeypot_probe')).body.history.length, 2, '五次并发写应只多一份历史');
 });
 
-test('A5 并发：新增规则的两路写只成一个；PUT 与回滚同队列串行、不交叉', async t => {
+test('A5 并发：新增规则的两路写只成一个；PUT 与回滚同队列——两种到达顺序各钉一遍 + 真并发断顺序无关性质', async t => {
   const root = await dataRoot(t);
   const base = await boot(t, { dataRoot: root });
   const one = rego('manual_rule', '  input.type == "one"');
@@ -414,20 +485,65 @@ test('A5 并发：新增规则的两路写只成一个；PUT 与回滚同队列�
   const files = (await readdir(path.join(root, 'rules'))).filter(name => name.startsWith('manual_rule'));
   assert.deepEqual(files, ['manual_rule.rego'], `同 id 起了第二个文件：${files.join(',')}`);
 
-  // PUT 与回滚并发：两者都过同一段写队列。允许 409（版本对不上），但不许 5xx、不许历史与成功次数对不上
-  const base0 = await call(base, '/api/rules/manual_rule');
-  const mixed = await Promise.all([
-    putRule(base, 'manual_rule', { rego: rego('manual_rule', '  input.type == "three"'), expected_revision: base0.body.revision, note: '并发写' }),
-    rollback(base, 'manual_rule', { rev: base0.body.revision, who: '值班主任' })
+  // PUT 与回滚共用同一段写队列。断言不能交给请求到达顺序（上一轮就栽在这：回滚先到按 openapi 回 404 也合法）。
+  // 先把回滚目标钉进历史，再按两种到达顺序各验一遍，最后真并发只断与顺序无关的性质。
+  const r0 = settled.body.revision; // 当前版，历史这时还是空的
+  const v1 = await putRule(base, 'manual_rule', { rego: rego('manual_rule', '  input.type == "v1"'), expected_revision: r0, note: '归档 v0' });
+  assert.equal(v1.status, 200, v1.text.slice(0, 200));
+  assert.deepEqual((await history(base, 'manual_rule')).body.history.map(row => row.rev), [r0],
+    '前置：v0 必须先落进历史，回滚目标才一定存在（否则回滚回 404 也是合法结果）');
+
+  // 到达顺序一「PUT 先到」：依次发，等价于队列里 PUT 排在回滚前面——两个都成功
+  const putFirst = await putRule(base, 'manual_rule', { rego: rego('manual_rule', '  input.type == "put-first"'), expected_revision: v1.body.rev, note: 'PUT 先到' });
+  assert.equal(putFirst.status, 200, putFirst.text.slice(0, 200));
+  const rollbackAfter = await rollback(base, 'manual_rule', { rev: r0, who: '值班主任' });
+  assert.equal(rollbackAfter.status, 200, rollbackAfter.text.slice(0, 200));
+  assert.equal((await call(base, '/api/rules/manual_rule')).body.revision, r0, '回滚后当前版应是回滚目标');
+
+  // 到达顺序二「回滚先到」：慢 body 把 PUT 钉在读 body 阶段（一定还没进写队列），回滚确定性地先完成；
+  // 放行 PUT 时它带的 expected_revision 已被回滚作废 → 必须 409（Conflict 形状），且回滚已把当时那版归档进历史。
+  const v2 = await putRule(base, 'manual_rule', { rego: rego('manual_rule', '  input.type == "v2"'), expected_revision: r0, note: '归档 v1' });
+  assert.equal(v2.status, 200, v2.text.slice(0, 200));
+  const held = stalledRequest(base, '/api/rules/manual_rule', JSON.stringify({
+    rego: rego('manual_rule', '  input.type == "late"'), expected_revision: v2.body.rev, note: '回滚先到' }), RULE_TOKEN);
+  t.after(() => held.destroy());
+  await held.start();
+  const rollbackFirst = await rollback(base, 'manual_rule', { rev: r0, who: '值班主任' });
+  assert.equal(rollbackFirst.status, 200, rollbackFirst.text.slice(0, 200));
+  const late = await held.finish();
+  assert.equal(late.status, 409, `回滚先到后放行的 PUT 应 409（Conflict），实测 ${late.status}：${late.text.slice(0, 300)}`);
+  assert.equal(late.body?.code, 'caller_error');
+  assert.equal(typeof late.body?.error, 'string');
+  assert.equal((await call(base, '/api/rules/manual_rule')).body.revision, r0, '迟到的 PUT 把回滚结果盖了');
+  assert.ok((await history(base, 'manual_rule')).body.history.some(row => row.rev === v2.body.rev),
+    '回滚没把当时那版归档进历史');
+
+  // 真并发：只断与到达顺序无关的性质——无 5xx；200/409；历史增量 = 成功写次数；无重复版；终态落在回滚目标
+  const v3 = await putRule(base, 'manual_rule', { rego: rego('manual_rule', '  input.type == "v3"'), expected_revision: r0 });
+  assert.equal(v3.status, 200, v3.text.slice(0, 200));
+  const v4 = await putRule(base, 'manual_rule', { rego: rego('manual_rule', '  input.type == "v4"'), expected_revision: v3.body.rev });
+  assert.equal(v4.status, 200, v4.text.slice(0, 200));
+  const beforeRace = await history(base, 'manual_rule');
+  const raced = await Promise.all([
+    putRule(base, 'manual_rule', { rego: rego('manual_rule', '  input.type == "race"'), expected_revision: v4.body.rev, note: '并发写' }),
+    rollback(base, 'manual_rule', { rev: r0, who: '值班主任' })
   ]);
-  for (const row of mixed) assert.ok(row.status < 500, `并发写与回滚出现 5xx：${row.status} ${row.text.slice(0, 200)}`);
-  assert.ok(mixed.every(row => row.status === 200 || row.status === 409), `并发写与回滚出现了意外的状态：${JSON.stringify(mixed.map(row => row.status))}`);
-  const successCount = mixed.filter(row => row.status === 200).length;
-  const afterMixed = await history(base, 'manual_rule');
-  assert.equal(afterMixed.body.history.length, successCount,
-    `成功 ${successCount} 次写，历史却有 ${afterMixed.body.history.length} 条（写队列没串起来）`);
-  const revs = afterMixed.body.history.map(row => row.rev);
+  for (const row of raced) assert.ok(row.status < 500, `并发写与回滚出现 5xx：${row.status} ${row.text.slice(0, 200)}`);
+  const statuses = raced.map(row => row.status);
+  assert.ok(statuses.every(status => status === 200 || status === 409), `并发写与回滚出现意外状态：${JSON.stringify(statuses)}`);
+  for (const row of raced.filter(row => row.status === 409)) {
+    assert.equal(row.body?.code, 'caller_error');
+    assert.equal(typeof row.body?.error, 'string');
+  }
+  const successCount = statuses.filter(status => status === 200).length;
+  const afterRace = await history(base, 'manual_rule');
+  const delta = afterRace.body.history.length - beforeRace.body.history.length;
+  assert.equal(delta, successCount,
+    `成功 ${successCount} 次写，历史却多了 ${delta} 条（写队列没串起来，或有写没归档）`);
+  const revs = afterRace.body.history.map(row => row.rev);
   assert.equal(new Set(revs).size, revs.length, `历史里同一版出现两次：${revs.join(',')}`);
+  assert.equal((await call(base, '/api/rules/manual_rule')).body.revision, r0,
+    '并发结束后当前版应是回滚目标（回滚要么在 PUT 之后生效，要么 PUT 被 409 挡下）');
 });
 
 // ── A5：维护会话摘要接口 ──────────────────────────────────────────────────
@@ -442,30 +558,38 @@ test('A5 sessions 路由不被 /api/rules/{id} 抢走；摘要只回元数据、
   assert.deepEqual(Object.keys(listed.body).sort(), ['sessions']);
   assert.ok(Array.isArray(listed.body.sessions));
 
-  // 会话记录：按 openapi RegoSessionSummary 的字段造两份（数据文件是数据根输入，不是代码）
+  // 会话记录按 architecture.md §7.5 的真形制造：输入案卷引用 + 模型草案（id/rego/rationale）+ 校验结果（validation.ok）
+  // + 终态。摘要的 validated 从 validation.ok 推——夹具不给 validation 就只读到 false，上一轮因此等于没验这一列。
   const sessionsDirectory = path.join(root, 'rule-sessions');
   await mkdir(sessionsDirectory, { recursive: true });
-  const record = (id, updated_at, extra) => JSON.stringify({
+  const record = (id, updated_at, status, validation) => JSON.stringify({
     id, case_id: 'honeypot:7', case_dir: '/data/cases/honeypot/7', event_type: 'honeypot',
-    who: '值守', status: 'updated', rule_id: 'honeypot_probe', validated: true, updated_at,
-    proposal: { rego: 'SECRET_REGO_MARKER', rationale: '草案理由' }, reason: 'REASON_MARKER', ...extra
+    who: '值守', status, proposal: { id: 'honeypot_probe', rego: 'SECRET_REGO_MARKER', rationale: '草案理由' },
+    validation, reason: 'REASON_MARKER', updated_at
   });
-  await writeFile(path.join(sessionsDirectory, '11111111-1111-4111-8111-111111111111.json'),
-    record('11111111-1111-4111-8111-111111111111', '2026-01-01T00:00:00.000Z'));
-  await writeFile(path.join(sessionsDirectory, '22222222-2222-4222-8222-222222222222.json'),
-    record('22222222-2222-4222-8222-222222222222', '2026-02-01T00:00:00.000Z'));
+  const okId = '11111111-1111-4111-8111-111111111111';
+  const badId = '22222222-2222-4222-8222-222222222222';
+  await writeFile(path.join(sessionsDirectory, `${okId}.json`),
+    record(okId, '2026-01-01T00:00:00.000Z', 'updated', { ok: true }));
+  await writeFile(path.join(sessionsDirectory, `${badId}.json`),
+    record(badId, '2026-02-01T00:00:00.000Z', 'failed', { ok: false, error: '校验没过' }));
   const summaries = await call(base, '/api/rules/sessions');
   assert.equal(summaries.status, 200);
   assert.equal(summaries.body.sessions.length, 2, '数据根 rule-sessions 里的两份会话没被列出来（openapi 说全文在 <数据根>/rule-sessions/<uuid>.json）');
-  assert.deepEqual(summaries.body.sessions.map(row => row.id),
-    ['22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111'], '会话摘要没按 updated_at 倒序');
+  assert.deepEqual(summaries.body.sessions.map(row => row.id), [badId, okId], '会话摘要没按 updated_at 倒序');
   for (const row of summaries.body.sessions) {
     for (const key of ['id', 'case_id', 'event_type', 'who', 'status', 'rule_id', 'validated', 'updated_at']) {
       assert.ok(key in row, `摘要缺 ${key}（RegoSessionSummary required）`);
     }
+    // rule_id 只断键存在不断值：会话文件里「模型草案」的键名文档没钉死（architecture §7.5 只写 id/rego/rationale）。
     assert.ok(['collecting', 'validating', 'updated', 'no_change', 'failed'].includes(row.status));
     assert.equal(typeof row.validated, 'boolean');
   }
+  const byId = Object.fromEntries(summaries.body.sessions.map(row => [row.id, row]));
+  assert.equal(byId[okId].validated, true, 'validation.ok=true 的会话摘要 validated 应为 true');
+  assert.equal(byId[badId].validated, false, 'validation.ok=false 的会话摘要 validated 应为 false');
+  assert.equal(byId[okId].status, 'updated');
+  assert.equal(byId[badId].status, 'failed');
   assert.doesNotMatch(summaries.text, /SECRET_REGO_MARKER|REASON_MARKER/, '摘要里带了规则正文或误报理由原文');
 });
 
