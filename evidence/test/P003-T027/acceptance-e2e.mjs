@@ -18,6 +18,11 @@
 //   拿上一轮的 parsed 配本轮的假上游 → nearest_gap 漂（实测 481 而非 480）；跨轮同指纹报文还会被去重表折叠。
 //   nonce 改指纹那套是无效修法：指纹只取固定字段 + 分类型字段（triage-pipeline.md §4.1），nonce 不进指纹，已撤。
 //
+// 端口：维护端端口不写死，向内核要空闲端口后经 HIDS_MAINTENANCE_PORT 传入（architecture.md:59、:464）。
+// 测试钩子（只给 verify-mutations.sh 用，人工跑不会用到）：
+//   P27_KEEP_RUN_ROOT=1  保留临时运行根并打印 [run-root-kept] <path>——变异脚本用系统自己写的运行态造前置态
+//   P27_BASE_SECOND=<秒> 把事件时间基准钉死，重放记录算出的 nearest_gap 才是可复算的定值
+//
 // 跑法：node evidence/test/P003-T027/acceptance-e2e.mjs
 // 退出码 0 = 全部断言过；1 = 有断言失败（失败项逐条打印 文档说 / 实测）。
 
@@ -26,6 +31,7 @@ import dgram from 'node:dgram';
 import http from 'node:http';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -68,7 +74,9 @@ function waitExit(proc, timeout = 10000) {
 }
 
 // ---------- 1. 假牧云 RPC ----------
-const BASE = Math.floor(Date.now() / 1000);
+// 事件时间基准：默认取当前秒。P27_BASE_SECOND 只给变异脚本（verify-mutations.sh 的隔离变异 E）
+// 造前置态用——把两轮的事件时间钉在已知差值上，重放记录的 nearest_gap 才是可复算的定值。
+const BASE = Number(process.env.P27_BASE_SECOND) || Math.floor(Date.now() / 1000);
 const EVENT_TIME = BASE + 120;          // 第三条报文（时间窗外）的事件时间
 const CANDIDATE_GAPS = [600, 900];      // 假上游候选事件的 created_at 相对 BASE
 
@@ -88,7 +96,14 @@ function makeRunRoot() {
 }
 const RUN_ROOT = makeRunRoot();
 console.log(`[run-root] ${RUN_ROOT}（.data 是否随树带过来：${fs.existsSync(path.join(RUN_ROOT, '.data'))}）`);
-process.on('exit', () => { try { fs.rmSync(RUN_ROOT, { recursive: true, force: true }); } catch {} });
+// P27_KEEP_RUN_ROOT=1 时保留运行根并打出路径：变异脚本用它取「真系统自己写出来的运行态」当种子，
+// 不依赖工作树里遗留的 .data（干净树上也能跑）。
+const KEEP_RUN_ROOT = process.env.P27_KEEP_RUN_ROOT === '1';
+if (KEEP_RUN_ROOT) console.log(`[run-root-kept] ${RUN_ROOT}`);
+process.on('exit', () => {
+  if (KEEP_RUN_ROOT) return;
+  try { fs.rmSync(RUN_ROOT, { recursive: true, force: true }); } catch {}
+});
 function fakeUpstream() {
   // created_at 是 time_window 分支算 nearest_gap_seconds 取的时间字段（给出即有值，审计确认）：
   // 最近一条候选 +600s、事件时间 +120s → 期望 480。
@@ -180,21 +195,40 @@ async function runSyslogPipeline() {
 }
 
 // ---------- 3. 维护端 ----------
-async function runMaintenance() {
+// 端口不写死：先向内核要一个空闲端口，再把它通过 HIDS_MAINTENANCE_PORT 传进去（architecture.md:59、:464）。
+// 被占就换一个重试，最多 3 次；返回实际用的端口，A1-1 断言回显端口 == 这个端口。
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const s = net.createServer();
+    s.once('error', reject);
+    s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); });
+  });
+}
+async function tryMaintenance(port) {
   const proc = spawn(process.execPath, ['maintenance-server.js', '--preview'], {
     cwd: RUN_ROOT,
-    env: { ...process.env, HIDS_MAINTENANCE_PORT: '18593', HIDS_MAINTENANCE_PASSWORD: 'MaintPassword987' },
+    env: { ...process.env, HIDS_MAINTENANCE_PORT: String(port), HIDS_MAINTENANCE_PASSWORD: 'MaintPassword987' },
   });
   let out = '';
   proc.stdout.on('data', (d) => (out += d));
   proc.stderr.on('data', (d) => (out += d));
   try {
-    await waitUntil(() => /"event":"maintenance\.listening"/.test(out), { timeout: 60000, label: 'maintenance.listening 启动行' });
+    await waitUntil(() => /"event":"maintenance\.listening"/.test(out), { timeout: 30000, label: 'maintenance.listening 启动行' });
   } finally {
     proc.kill('SIGTERM');
     if (!(await waitExit(proc, 10000))) proc.kill('SIGKILL');
   }
   return out;
+}
+async function runMaintenance() {
+  let out = '';
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const port = await freePort();
+    out = await tryMaintenance(port);
+    if (/"event":"maintenance\.listening"/.test(out)) return { out, port };
+    console.error(`[maintenance] 第 ${attempt} 次起在端口 ${port} 没出启动行，换端口重试`);
+  }
+  return { out, port: null };
 }
 
 // ---------- 4. package-policy ----------
@@ -315,15 +349,18 @@ check('A2-5 独立运行根：本轮不碰仓内 .data（triage-monitor.json 前
   `前=${repoStateBefore} 后=${repoStateAfter} 运行根=${RUN_ROOT}`);
 
 // ---------- 维护端 ----------
-const mOut = await runMaintenance();
+const maint = await runMaintenance();
+const mOut = maint.out;
+const mPort = maint.port;
 const mLines = lines(mOut);
 const listening = pick(mLines, 'maintenance.listening')[0];
 check('A1-1 维护端启动行走 log.js（maintenance.listening）',
-  Boolean(listening && listening.level === 'info' && listening.host === '127.0.0.1' && listening.port === 18593 && listening.preview === true),
-  'host/port/preview/message 四键，level=info（architecture.md §3.2）',
-  JSON.stringify(listening || null));
+  Boolean(listening && listening.level === 'info' && listening.host === '127.0.0.1' && listening.port === mPort && typeof mPort === 'number' && listening.preview === true),
+  'host/port/preview/message 四键，level=info，port=启动时传入的 HIDS_MAINTENANCE_PORT（architecture.md §3.2、:59、:464）',
+  `传入端口=${mPort} 回显=${JSON.stringify(listening || null)}`);
 check('A1-2 旧中文启动文案留在 message（部署端 grep 就绪探测）',
-  Boolean(listening && typeof listening.message === 'string' && listening.message.includes('HIDS maintenance') && listening.message.includes('只读预览')),
+  Boolean(listening && typeof listening.message === 'string' && listening.message.includes('HIDS maintenance') && listening.message.includes('只读预览')
+    && typeof mPort === 'number' && listening.message.includes(`http://127.0.0.1:${mPort}`)),
   'message 里保留 `HIDS maintenance（只读预览）: http://127.0.0.1:<port>`',
   JSON.stringify(listening && listening.message));
 check('A3-2 维护端日志不出现 HIDS_MAINTENANCE_PASSWORD',
