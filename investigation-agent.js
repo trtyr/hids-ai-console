@@ -414,9 +414,11 @@ export function boundedToolArgs(name, rawArgs, catalog) {
 }
 
 export class InvestigationAgent {
-  constructor(toolbox, model, promptStore = new PromptStore(), knowledgeStore = null, ruleStore = null) {
+  // 第 6 参 reviewModel（P003-T042）：独立复核那一轮用的实例。不传就沿用研判模型（分层前的行为）。
+  constructor(toolbox, model, promptStore = new PromptStore(), knowledgeStore = null, ruleStore = null, reviewModel = null) {
     this.toolbox = toolbox; this.model = model; this.promptStore = promptStore; this.knowledgeStore = knowledgeStore;
     this.ruleStore = ruleStore || new RuleStore(defaultRulesDirectory);
+    this.reviewModel = reviewModel || model;
   }
 
   async prompts() { return this.promptStore.load(); }
@@ -851,7 +853,8 @@ export class InvestigationAgent {
       const reviewInput = JSON.stringify({ alert_id: alertId, draft, rule_candidate: ruleContext,
         required_evidence: requiredChecks, wiki_pages: [...wikiPages.values()].map(wikiDigest).slice(0, 4),
         evidence: conclusionEvidence(session) });
-      try { review = parseJSON((await this.model.complete([{ role: 'system', content: reviewPrompt }, { role: 'user', content: reviewInput }], [])).content); }
+      // A2（P003-T042）：复核轮用复核模型实例，与研判不是同一个客户端——独立复核才有独立配置。
+      try { review = parseJSON((await this.reviewModel.complete([{ role: 'system', content: reviewPrompt }, { role: 'user', content: reviewInput }], [])).content); }
       catch (error) {
         review = { assessment: 'unavailable', concerns: [`独立复核未完成：${String(error.message).slice(0, 120)}`], missing_evidence: [] };
         trace.push({ kind: 'review_unavailable', error: String(error.message).slice(0, 200) });

@@ -101,7 +101,8 @@ test('schema：200 正文逐键逐类型对 openapi writeConfig（updated + conf
   assert.ok(['syslog', 'poll'].includes(config.triage_input_mode));
   assert.deepEqual(Object.keys(config.cloudwalker), ['configured']);
   assert.equal(typeof config.cloudwalker.configured, 'boolean');
-  assert.deepEqual(Object.keys(config.model).sort(), ['configured', 'name']);
+  // P003-T042：model 段多出 roles（五个角色各自 resolved 到谁）；configured / name 原样。
+  assert.deepEqual(Object.keys(config.model).sort(), ['configured', 'name', 'roles']);
   assert.equal(typeof config.model.configured, 'boolean');
   assert.equal(config.model.name, 'schema-model');
   assert.deepEqual(Object.keys(config.auth), ['basic_auth_enabled']);

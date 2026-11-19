@@ -308,10 +308,13 @@ test('A4 .env.example 的键与代码真读的键双向一致，且现有键名�
     '.env.example 列了、但代码里没人读的键');
 
   // 老键名一个都不许丢（A4 明确「不改现有环境变量的名字」）。
+  // P003-T042 的模型分层六键同样是契约键名：加进去了就不许再改名（改键名要同时改代码与文档）。
   for (const name of ['HIDS_HOST', 'HIDS_PORT', 'CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN', 'LLM_BASE_URL',
     'LLM_MODEL', 'LLM_API_KEY', 'HIDS_BASIC_AUTH_USER', 'HIDS_BASIC_AUTH_PASSWORD', 'HIDS_PROMPT_ADMIN_TOKEN',
-    'HIDS_RULE_ADMIN_TOKEN', 'HIDS_TRIAGE_INPUT_MODE', 'HIDS_SYSLOG_HOST', 'HIDS_SYSLOG_PORT'])
-    assert.ok(listed.has(name), `.env.example 丢了老键名 ${name}`);
+    'HIDS_RULE_ADMIN_TOKEN', 'HIDS_TRIAGE_INPUT_MODE', 'HIDS_SYSLOG_HOST', 'HIDS_SYSLOG_PORT',
+    'LLM_REVIEW_BASE_URL', 'LLM_REVIEW_API_KEY', 'LLM_REVIEW_MODEL',
+    'LLM_LIGHT_BASE_URL', 'LLM_LIGHT_API_KEY', 'LLM_LIGHT_MODEL'])
+    assert.ok(listed.has(name), `.env.example 丢了契约键名 ${name}`);
 
   // 五项必填在示例文件里必须点名标出，否则新部署抄它抄不出一个能起的进程。
   const requiredNote = example.split('\n').filter(line => line.startsWith('#')).join('\n');

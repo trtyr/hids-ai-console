@@ -4,7 +4,7 @@
 
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
-- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。
+- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。P003-T042 的模型分层按 1387 行的 `server.js` 标号（见 [evidence/recon/P003-T042.md](../../evidence/recon/P003-T042.md)）：新增装配在 `server.js:42`（五个角色实例）与 `configSummary` 的 `model.roles`（`server.js:1355`），`applyLiveConfig` 涨到 `server.js:74-95`，路由行号整体 +5（`GET /api/config` 在 `server.js:871`、`POST` 在 `server.js:875-879`）；§3.5 与 §3.6 的表与样例已按本卡更新，其余章节的旧锚点没挪。
 P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inventory` 与 `POST /api/data/cleanup`、新增 §3.7）按本卡提交时的 `server.js` 标号（1309 行，`server.js:598-799` 的 helper、`server.js:864-870` 的两个分支、`server.js:829` 的 `dataDeps`）与 `triage-monitor.js` 标号（924 行，`triage-monitor.js:349-407` 的三个新方法，见 [evidence/recon/P003-T044.md](../../evidence/recon/P003-T044.md)）：新代码全部落在文件末尾与 `server.js:864-870`，前面所有锚点没挪。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
@@ -43,7 +43,7 @@ P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inven
 | 运行态目录 `runtime`（9 条路径） | `server.js:27`、`server.js:1073-1085` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
 | 监听地址与端口 | `server.js:28-29` | `HIDS_HOST` 缺省 `127.0.0.1`，`HIDS_PORT` 缺省 `8080` |
 | 牧云网关 `gateway` 与 API 工具箱 `apiToolbox` | `server.js:30-34` | 牧云地址或 Token 缺一个 → 两者为 `null` |
-| 模型 `model` 与两个研判器 | `server.js:35-40` | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项 → `model` 为 `null`，两个研判器也是 `null` |
+| 模型五个角色实例 `models` 与两个研判器 | `server.js:40-42`、`server.js:50-53` | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项 → `models` 为 `null`（五个角色都不建），两个研判器也是 `null`。P003-T042：研判=`models.triage`、独立复核=`models.review`、规则维护者=`models.rule_maintainer`、wiki 维护者=`models.wiki_maintainer`、溯源白板=`models.trace_board`；新键不设时逐键回退主判（§3.5 的 `model.roles`） |
 | 研判记录、规则集、研判队列、判据工作台、溯源白板 | `server.js:46-59`、`server.js:126` | 队列要 `gateway` 与研判器、白板要 MCP 工具箱与模型，缺任一则该件为 `null` |
 
 运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1073-1085`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
@@ -85,8 +85,8 @@ P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inven
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/session` | 200 `{authenticated:true, user, role}` | — | `server.js:208-214` |
-| GET | `/api/config` | 200 生效配置（`{host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required}`） | —（只读环境变量：不探上游、不因缺件 503；机密只在 `secrets` 里给布尔） | `server.js:642` |
-| POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写五键；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:646-650` |
+| GET | `/api/config` | 200 生效配置（`{host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required}`；`model` 段含 `roles`） | —（只读环境变量：不探上游、不因缺件 503；机密只在 `secrets` 里给布尔） | `server.js:871` |
+| POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写十一键（含 P003-T042 的复核组 / 轻量组六键）；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:875-879` |
 | GET | `/api/data/inventory` | 200 七类存储的条数与字节（`{data_dir, stores, total}`，见 §3.7） | —（只读本地运行态目录：不探上游、不碰模型，缺目录按 0 报，不 503） | `server.js:864` |
 | POST | `/api/data/cleanup` | 200 `{dry_run, kind, action, threshold, candidates, applied, inventory}`（见 §3.7） | 默认 dry-run；`kind` / 阈值 / 动作 / `execute` 不合法回 400；候选里有没完结的案件回 409；没装配研判队列时清 `queue` 回 503 | `server.js:866-870` |
 | GET | `/api/updates` | 200 升级包概览 | — | `server.js:215` |
@@ -247,10 +247,23 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 | `triage_input_mode` | string | `syslog` / `poll`，**恒在这两个值里**；未设或空串为缺省 `syslog` | `HIDS_TRIAGE_INPUT_MODE` 的生效值——表外值（如 `pirate`）不会出现在这里：真进程被闸门拦下（§2 第 2 条），进程内 `createServer()` 按缺省 `syslog` 生效 |
 | `cloudwalker.configured` | boolean | — | `CLOUDWALKER_URL` 与 `CLOUDWALKER_API_TOKEN` 是否都在（两个都在才算 `true`） |
 | `model.configured` | boolean | — | `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` 三项是否齐全 |
-| `model.name` | string \| null | `LLM_MODEL` 原值，未配为 `null` | 模型名 |
+| `model.name` | string \| null | `LLM_MODEL` 原值，未配为 `null` | 主判模型名（研判用它） |
+| `model.roles` | object | 五个角色恒在：`triage` / `review` / `rule_maintainer` / `wiki_maintainer` / `trace_board` | **P003-T042 模型分层**：每个角色 resolved 到的模型名与来源，见下面那张表 |
 | `auth.basic_auth_enabled` | boolean | — | 配了 `HIDS_BASIC_AUTH_PASSWORD` 才是 `true` |
 | `secrets` | object | 五个键恒在，值都是 boolean | `CLOUDWALKER_API_TOKEN` / `LLM_API_KEY` / `HIDS_BASIC_AUTH_PASSWORD` / `HIDS_PROMPT_ADMIN_TOKEN` / `HIDS_RULE_ADMIN_TOKEN`，**只报有或没有** |
 | `missing_required` | string[] | 必填五项的子集 | 缺哪几项必填；正常起着的进程是 `[]`（闸门见 §2） |
+
+**模型分层（P003-T042，`model.roles`）**：每个角色一个对象 `{model, source}`——
+
+| 角色 | `model` | 配置组 | 消费者 |
+| --- | --- | --- | --- |
+| `triage` | 研判实际用的模型名 | 主判 `LLM_*` | 两个 `InvestigationAgent` |
+| `review` | 独立复核实际用的模型名 | 复核组 `LLM_REVIEW_*` | 研判里的独立复核那一轮（`investigation-agent.js:854`） |
+| `rule_maintainer` | 规则维护者用的模型名 | 轻量组 `LLM_LIGHT_*` | `RegoRuleMaintainer` |
+| `wiki_maintainer` | wiki 维护者用的模型名 | 轻量组 `LLM_LIGHT_*` | `WikiWorkbench` |
+| `trace_board` | 溯源白板用的模型名 | 轻量组 `LLM_LIGHT_*` | `TraceBoardService` |
+
+`source` 三态说明这一组配置的来源：`primary` = 这一组三个键全空、**逐键**回退主判（与分层前的行为完全一致）；`own` = 三个键全有、全用自己的；`mixed` = 部分有，空的那几项逐键回退主判。回退按**字段**比，不按组比：只设了 `LLM_REVIEW_MODEL` → 复核的模型名是自己的、地址与密钥仍是主判的，`source` 报 `mixed`。主判三项不齐时五个角色的 `model` 都是 `null`（`model.configured` 也是 `false`）。**只报模型名与来源，不报地址与密钥**——新两组的 API Key 不进 `secrets`（那里仍是原来五个键），正文里也不出现它们的原文。
 
 **机密口径（A3，可断言）**：响应正文里不出现任何 Token 与密码原文——五个机密键的值都是布尔，`secrets` 之外没有第二个地方出现它们。两个状态都要测：配了 → `true`；没配 → `false`。**别只在「都配了」的状态下测**：那样把实现改成回原文也发现不了（会回一堆字符串，但 `typeof` 断言才抓得住）。
 
@@ -266,12 +279,18 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 ```json
 // 五项齐、没配 Basic 与两个 admin token
 {"host":"127.0.0.1","port":8080,"triage_input_mode":"syslog","cloudwalker":{"configured":true},
- "model":{"configured":true,"name":"fake-model"},"auth":{"basic_auth_enabled":false},
+ "model":{"configured":true,"name":"fake-model","roles":{"triage":{"model":"fake-model","source":"primary"},
+   "review":{"model":"fake-model","source":"primary"},"rule_maintainer":{"model":"fake-model","source":"primary"},
+   "wiki_maintainer":{"model":"fake-model","source":"primary"},"trace_board":{"model":"fake-model","source":"primary"}}},
+ "auth":{"basic_auth_enabled":false},
  "secrets":{"CLOUDWALKER_API_TOKEN":true,"LLM_API_KEY":true,"HIDS_BASIC_AUTH_PASSWORD":false,
             "HIDS_PROMPT_ADMIN_TOKEN":false,"HIDS_RULE_ADMIN_TOKEN":false},"missing_required":[]}
 // 一个必填都没配（这种进程用 node server.js 起不来，只能用 createServer() 起）
 {"host":"127.0.0.1","port":8080,"triage_input_mode":"syslog","cloudwalker":{"configured":false},
- "model":{"configured":false,"name":null},"auth":{"basic_auth_enabled":false},
+ "model":{"configured":false,"name":null,"roles":{"triage":{"model":null,"source":"primary"},
+   "review":{"model":null,"source":"primary"},"rule_maintainer":{"model":null,"source":"primary"},
+   "wiki_maintainer":{"model":null,"source":"primary"},"trace_board":{"model":null,"source":"primary"}}},
+ "auth":{"basic_auth_enabled":false},
  "secrets":{"CLOUDWALKER_API_TOKEN":false,"LLM_API_KEY":false,"HIDS_BASIC_AUTH_PASSWORD":false,
             "HIDS_PROMPT_ADMIN_TOKEN":false,"HIDS_RULE_ADMIN_TOKEN":false},
  "missing_required":["CLOUDWALKER_URL","CLOUDWALKER_API_TOKEN","LLM_BASE_URL","LLM_API_KEY","LLM_MODEL"]}
@@ -279,9 +298,9 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 ### 3.6 写配置（`POST /api/config`，P003-T029）
 
-**是什么**：不重启进程改牧云与模型的五项，改完立刻生效、落盘、重启仍生效，且不回显。实现：路由两行（`server.js:646-650`），行为全在新文件 `config-store.js`（`createConfigStore`，`config-store.js:88`）。OpenAPI 契约见 `openapi.yaml` 的 `writeConfig`。
+**是什么**：不重启进程改牧云与模型的十一项（P003-T042 起加了模型分层的复核组与轻量组六键），改完立刻生效、落盘、重启仍生效，且不回显。实现：路由两行（`server.js:875-879`），行为全在新文件 `config-store.js`（`createConfigStore`，`config-store.js:104`）。OpenAPI 契约见 `openapi.yaml` 的 `writeConfig`。
 
-**可写的只有五个键**（`WRITABLE_CONFIG_KEYS`，`config-store.js:22`）：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。表外键一律 400，包括看起来很顺手的 `HIDS_PORT`：`HIDS_HOST` / `HIDS_PORT` / `HIDS_TRIAGE_INPUT_MODE` 改起来必须重启进程；Basic 口令与两个管理员令牌是鉴权凭据本身，写进来等于自己给自己开门。
+**可写的只有十一个键**（`WRITABLE_CONFIG_KEYS`，`config-store.js:24-28`）：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`，以及复核组 `LLM_REVIEW_BASE_URL` / `LLM_REVIEW_API_KEY` / `LLM_REVIEW_MODEL` 与轻量组 `LLM_LIGHT_BASE_URL` / `LLM_LIGHT_API_KEY` / `LLM_LIGHT_MODEL`。表外键一律 400，包括看起来很顺手的 `HIDS_PORT`：`HIDS_HOST` / `HIDS_PORT` / `HIDS_TRIAGE_INPUT_MODE` 改起来必须重启进程；Basic 口令与两个管理员令牌是鉴权凭据本身，写进来等于自己给自己开门。新六键与主判三项走**同一张表、同一套覆盖层**（不是 T043 的新机制）：写进去的键进 `config-overrides.json`，重启照样读回。
 
 **请求**：`POST /api/config`，`Content-Type: application/json`，正文是一个对象，只放要改的键（部分更新）：
 
@@ -289,14 +308,18 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 {"LLM_MODEL":"qwen2.5-72b-instruct"}
 ```
 
-- **值的形状**用模块级装配处同一套构造器判（`config-store.js:47` → `rpc-client.js:4-5`、`model-client.js:22-24`）：`CLOUDWALKER_URL` / `LLM_BASE_URL` 必须 `http(s)://` 开头；`CLOUDWALKER_API_TOKEN` 至少 6 位；`LLM_API_KEY`、`LLM_MODEL` 非空。校验对象是**合并后的生效值**（只改 `LLM_MODEL` 也要三项齐——进程里这三项本来就被启动闸门保证齐全）。
+- **值的形状**用模块级装配处同一套构造器判（`config-store.js:63-76` → `rpc-client.js:4-5`、`model-client.js:14-21`）：`CLOUDWALKER_URL` / 三组 `*_BASE_URL` 必须 `http(s)://` 开头；`CLOUDWALKER_API_TOKEN` 至少 6 位；三组 `*_API_KEY`、`*_MODEL` 非空。校验对象是**合并后的生效值**（只改 `LLM_MODEL` 也要主判三项齐——进程里这三项本来就被启动闸门保证齐全；只改复核组一个键时，另外两项逐键回退主判，所以照样 200）。
+- **坏值报错点组内键名**（P003-T042）：写坏的 `LLM_LIGHT_BASE_URL` 回「LLM_LIGHT_BASE_URL 必须是 HTTP(S) 地址」，不是笼统的 `LLM_BASE_URL`；回退来的字段出问题才点主判键名（那才是要改的键）。
 - **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只能新增/改值、不能删键；要清掉改过的值，用 P003-T044 的数据管理接口删掉覆盖层（`POST /api/data/cleanup`，`kind: config_overrides`，见 §3.7），或手工删 `.data/config-overrides.json`——两种都要**重启进程**才回到「按环境变量生效」，因为覆盖层是启动时同步读进 `env` 的。
 
 **响应**：`200`，`Cache-Control: no-store`：
 
 ```json
 {"updated":["LLM_MODEL"],"config":{"host":"127.0.0.1","port":8080,"triage_input_mode":"syslog",
-  "cloudwalker":{"configured":true},"model":{"configured":true,"name":"qwen2.5-72b-instruct"},
+  "cloudwalker":{"configured":true},"model":{"configured":true,"name":"qwen2.5-72b-instruct",
+  "roles":{"triage":{"model":"qwen2.5-72b-instruct","source":"primary"},"review":{"model":"qwen3-32b-review","source":"own"},
+  "rule_maintainer":{"model":"qwen-flash","source":"own"},"wiki_maintainer":{"model":"qwen-flash","source":"own"},
+  "trace_board":{"model":"qwen-flash","source":"own"}}},
   "auth":{"basic_auth_enabled":false},"secrets":{"CLOUDWALKER_API_TOKEN":true,"LLM_API_KEY":true,
   "HIDS_BASIC_AUTH_PASSWORD":false,"HIDS_PROMPT_ADMIN_TOKEN":false,"HIDS_RULE_ADMIN_TOKEN":false},
   "missing_required":[]}}
@@ -308,7 +331,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 **写完之后的三件事（A1/A4，可分别断言）**：
 
 1. **立刻反映**：`GET /api/config` 下一次请求就报新值——store 把覆盖层写进 `env`，而 GET 读的就是 `configSummary(config.env)`。
-2. **运行中生效**：进程内活着的客户端对象**原地换值**（`applyLiveConfig`，`server.js:65-84`：`gateway.rpc.baseUrl/token`、`agentToolbox.client.url/token`（并把 `initialized` 置 false，新服务端要重新 initialize MCP 会话）、`model.url/apiKey/model`），后续牧云 / 模型调用立刻走新地址与新凭据。不重建对象是因为 `createServer` 的 `service` / `toolbox` / `investigator` / `monitor` 都是值捕获，重建等于换了一批引用，路由手里还是旧的。
+2. **运行中生效**：进程内活着的客户端对象**原地换值**（`applyLiveConfig`，`server.js:74-95`：`gateway.rpc.baseUrl/token`、`agentToolbox.client.url/token`（并把 `initialized` 置 false，新服务端要重新 initialize MCP 会话）、五个角色实例的 `url/apiKey/model`），后续牧云 / 模型调用立刻走新地址与新凭据。**P003-T042 起按新值重新解析五个角色**：回退主判的角色（`source` 为 `primary` / `mixed`）跟着主判三项一起动，自有组（`own`）只认自己那组——只改主判不会把复核组覆盖掉，把复核组写空之后复核会立刻回退到主判。不重建对象是因为 `createServer` 的 `service` / `toolbox` / `investigator` / `monitor` 都是值捕获，重建等于换了一批引用，路由手里还是旧的。
 3. **持久化**：值落到**数据根**下的 `config-overrides.json`（`~/.local/share/hids-ai-console/config-overrides.json`，或 `HIDS_DATA_DIR` 指的目录；同目录临时文件 + `rename`，权限 0600），文件里**只有改过的键**。进程启动时 store 在建模块级客户端**之前**同步读回它（`server.js:32`），所以重启后改过的值仍生效，**没改过的键继续读环境变量**。文件坏了（不是合法 JSON、不是对象）不当场死：当空处理并落一条 `config.load_failed`（`level: error`，字段 `file` / `error`），进程照常起来、按环境变量生效。
 
 **鉴权（A3）**：和其它业务路由一样过 Basic 认证闸门（§4，`server.js:413` / `server.js:421`），闸门在 URL 解析之前。**没配 `HIDS_BASIC_AUTH_PASSWORD` 时闸门放行，写接口也放行**——那是一个合法部署（单机探针、内网只读演示），不是推荐部署：任一能访问到端口的人都能把牧云地址指到自己的服务器再把模型密钥送出去。要挡住写就把 Basic 认证配上（配了就回 401，见 A3 用例）。这一点不是本节的推论，是写进 `openapi.yaml` `writeConfig.description` 的契约。
@@ -332,7 +355,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 | 正文没有可写的键（`{}`） | 400 | `caller_error` | 「请求正文没有可写的配置项」 |
 | 键不在可写表里 | 400 | `caller_error` | 「配置项不可写：HIDS_PORT」（多个用、「」隔开） |
 | 值是空串/空白/非字符串 | 400 | `caller_error` | 「配置项取值必须是非空字符串：LLM_MODEL」 |
-| 值形状不合法 | 400 | `caller_error` | 装配处那句原话，如「LLM_BASE_URL 必须是 HTTP(S) 地址」「CLOUDWALKER_API_TOKEN 无效」 |
+| 值形状不合法 | 400 | `caller_error` | 装配处那句原话，键名换成这一组真正的键，如「LLM_BASE_URL 必须是 HTTP(S) 地址」「LLM_LIGHT_BASE_URL 必须是 HTTP(S) 地址」「CLOUDWALKER_API_TOKEN 无效」 |
 | 落盘失败（目录不可写等） | 500 | `internal_error` | 「服务器内部错误」（异常原文只进 `http.failed` 日志） |
 | 没通过 Basic 认证（启用了认证时） | 401 | —（纯文本） | 「需要登录后访问」，见 §4 |
 
@@ -340,10 +363,11 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 **不做什么**（测试别按这些写期望）：
 
-- 不在运行中**新建**原本为空的客户端：启动闸门要求五项必填齐全，进程里 `gateway` / `model` 恒存在；`applyLiveConfig` 只换值不建对象（进程内注入空客户的测试路径不会因为一次写就跑起来）。
+- 不在运行中**新建**原本为空的客户端：启动闸门要求五项必填齐全，进程里 `gateway` / 五个角色实例恒存在；`applyLiveConfig` 只换值不建对象（进程内注入空客户的测试路径不会因为一次写就跑起来）。新建实例只在进程启动时发生一次（`createModelRolesFromEnv`，`server.js:42`）。
 - 不写前端：本卡不动 `web/**`，配置页要不要加输入框是另一张卡。
-- 不动数据根：覆盖层路径固定由 `runtimePaths().data` 推出，根怎么算不归这条接口管（P003-T034 起由 `HIDS_DATA_DIR` / 全局默认决定，见 §2）。`HIDS_DATA_DIR` 改起来必须重启进程，它不在可写五项里。
-- 不改 `GET /api/config` 的响应形状（§3.5 契约照旧）。
+- 不动数据根：覆盖层路径固定由 `runtimePaths().data` 推出，根怎么算不归这条接口管（P003-T034 起由 `HIDS_DATA_DIR` / 全局默认决定，见 §2）。`HIDS_DATA_DIR` 改起来必须重启进程，它不在可写十一项里。
+- 不改 `GET /api/config` 的既有字段语义：根还是八个键，`model.configured` / `model.name` 仍是主判口径；P003-T042 只在 `model` 段里加了 `roles`（§3.5）。
+- 不做 T043 的覆盖层新机制：新六键走的就是上面这套 `config-overrides.json`（读回、原子写、0600、只有改过的键）。
 
 **可重放证据**（`evidence/test/P003-T029/config-write.test.js`，10 条）：
 
