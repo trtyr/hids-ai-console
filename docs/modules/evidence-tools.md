@@ -44,7 +44,7 @@ updated: 2026-11-17
 | **取证会话** | `EvidenceSession`：一次调查里的调用计数、证据记录与引用校验 | `agent-tools.js:54` |
 | **工具白名单** | `investigationToolNames`：工具名的冻结数组，外加由它建出的 `allowed` 集合 | `agent-tools.js:8`、`agent-tools.js:18` |
 
-三者的关系一句话：**MCP 客户端**是通道；**MCP 取证工具箱**与 **API 取证工具箱**是两种取数方式；**常规研判工具箱**把两者拼起来；**取证会话**是每次调查的账本；**工具白名单**是深度研判那侧的闸门。
+三者的关系一句话：**MCP 客户端**是通道；**MCP 取证工具箱**与 **API 取证工具箱**是两种取数方式；**常规研判工具箱**把两者拼起来；**取证会话**是每次调查的账本（工具结果原文常驻，模型侧看到的是可裁副本，见 §4.4）；**工具白名单**是深度研判那侧的闸门。
 
 ## 3 对外能力
 
@@ -113,6 +113,23 @@ MCP 客户端自己的公开面是 `request(method, params)`、`initialize()`、
 7. 返回 `{ ok, errors }`，`ok` 为 `true` 当且仅当 `errors` 为空（`agent-tools.js:92`）。
 
 这一层只认「引得到、值对得上」，不认结论说得对不对——代码注释把这点写明了（`agent-tools.js:70`）。
+
+### 4.4 按编号取回已取到的证据（P003-T039）
+
+`EvidenceSession.records` 是本次调查的账本，**工具结果原文一直留在里面**（`agent-tools.js:60-66`），
+模型上下文里的那份是可裁的副本。从 P003-T039 起，编排层（`investigation-agent.js`）把历史里的工具结果只留最近 2 条全文，
+更早的换成计数摘要，模型要引用其中字段时调用 `read_evidence`：
+
+1. **折叠**。每条 tool 消息入历史时按 `evidence_id` 记一份全文（`investigation-agent.js` 的 `evidenceFullText`），
+   一轮批次结束后，除最近 `historyFullResults = 2` 条外都换成 `{evidence_id, tool, args, folded: true, summary, note}`
+   （`foldedToolMessage()`，`investigation-agent.js:288-302`），trace 记一条 `history_folded`。
+2. **取回**。`read_evidence({evidence_id})` 命中 `evidenceFullText` 就原样返回那条完整视图；
+   不在历史里但在 `session.records` 里（例如平台自己发的必查项、`syslog:1`）就用 `toolMessage(record)` 现拼一份
+   （`investigation-agent.js:613-625`）。
+3. **不计取证预算**。这一步不发牧云查询、不占 `maxToolCalls`，也不产生新证据；取不到时回
+   `{"error":"本次调查没有证据 <编号>；可用编号见之前工具结果的 evidence_id"}`。
+4. **证据编号的来源**。编号由会话分配（`cw:<n>`），平台自己发的必查项也占号——所以模型第一批真实取证从 `cw:3`、`cw:4` 起很常见，
+   不要假设 `cw:1` 一定是自己的第一条查询。
 
 ## 5 值语义
 

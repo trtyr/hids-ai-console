@@ -46,22 +46,31 @@ updated: 2026-11-17
 
 ## 3 公开面
 
-本模块导出两个函数（`grep -n '^export' evidence-view.js` 输出两行，命令见 §10.2）：
+本模块导出五个符号（`grep -n '^export' evidence-view.js` 输出五行，命令见 §10.2）：
 
 | 导出 | 种类 | 用途 | 定义处 |
 | --- | --- | --- | --- |
-| `projectEvidence` | 函数 | 把 `(工具名, 原始返回)` 投成视图 | `evidence-view.js:155` |
-| `boundEvidenceView` | 函数 | 把视图裁到字符预算内 | `evidence-view.js:234` |
+| `projectEvidence(tool, result)` | 函数 | 把 `(工具名, 原始返回)` 投成视图 | `evidence-view.js:155` |
+| `boundEvidenceView(view, maxChars)` | 函数 | 把视图裁到字符预算内 | `evidence-view.js:243` |
+| `agentDisplayLimits` | 冻结对象 | 模型侧展示上限：`timeline: 8`、`commands: 4`（P003-T039） | `evidence-view.js:272` |
+| `compactEvidenceView(view, limits)` | 函数 | 只裁嵌套序列展示行，计数一律保留（P003-T039） | `evidence-view.js:302` |
+| `boundSyslogView(view, maxChars=3000)` | 函数 | `syslog:1` 载荷视图的长度上限（P003-T039） | `evidence-view.js:319` |
 
-业务代码里的调用点有三处（本模块自带测试另有引用，见 `evidence-view.test.js:3`）：
+业务代码里的调用点（本模块自带测试另有引用，见 `evidence-view.test.js:3`）：
 
-| 调用点 | 传入的 `maxChars` | 依据 |
+| 调用点 | 传入的口径 | 依据 |
 | --- | --- | --- |
-| 取证会话生成记录里的 `view` | 用默认值 12000 | `agent-tools.js:65` |
-| 结论证据列表 | `focused` 为真且不是第一条 → 3000；其余 → 4000 | `investigation-agent.js:139` |
-| 必查项视图 | 3000 | `investigation-agent.js:264` |
+| 取证会话生成记录里的 `view` | `projectEvidence(...)` 后按默认值 12000 裁；**不套 `compactEvidenceView`**（`record.view` 保持完整投影） | `agent-tools.js:65` |
+| 工具结果消息（模型看到的那份） | 先 `compactEvidenceView`（8/4 行），超 20000 字改回一条错误说明 | `investigation-agent.js:271-279` |
+| 结论轮 / 复核轮证据 | `compactEvidenceView` 后 `boundEvidenceView(..., 4000)`；记录超过 5 条时只给前 5 条完整视图 | `investigation-agent.js:315-330` |
+| `syslog:1` 记录视图 | `boundSyslogView`（默认 3000 字） | `investigation-agent.js:443` |
 
-后两处传进去的是 `record.view`，即已经被取证会话按 12000 裁过一次的视图（`investigation-agent.js:139`、`investigation-agent.js:264`、`agent-tools.js:65`）。
+`record.view` 与模型侧视图分开是有意的（P003-T039）：知识经验复用判定要看「时间线是否完整」，
+依据是 `record.view.related_sequences.timeline.shown_count === total_in_record`，
+所以裁剪只发生在模型侧副本上，不改 `record.view`。
+
+`boundEvidenceView` 的既有调用点里，`focused` 参数已随 P003-T039 的结论轮口径一起删掉（那条分支从来没被调用过），
+现在结论轮与复核轮共用同一份 `conclusionEvidence()`。
 
 ## 4 关键路径
 
@@ -148,6 +157,17 @@ timeline 另带五个统计（`evidence-view.js:144-150`）：`nonempty_request_
 裁剪只动展示行：原始返回不在这个视图里，引用校验仍拿原始返回核对（`evidence-view.js:233`）。第 6 步的文案明确要求「不能引用本次省略的字段」（`evidence-view.js:255`）。
 
 预聚合计数不随裁剪重算：`counts_on_returned_page` 描述的是裁剪前的整页计数（`evidence-view.js:195` 对 `rows`，`evidence-view.js:239-242` 只删 `items`）。
+
+**模型侧还有一层展示裁剪（P003-T039，`evidence-view.js:272-347`）**，与上面的字符预算正交：
+
+- `compactEvidenceView(view, limits = agentDisplayLimits)`：把 `related_sequences.timeline` 收到 8 行、`commands` 收到 4 行。
+  `timeline` 先按「有响应长度 > 带 HTTP 请求行/载荷类型 > 有请求字节 > 其余」挑行，再按原下标回排（`evidence-view.js:283-300`），
+  关键行不会被裁掉；`commands` 保留头 2 条 + 尾 2 条。两个序列的 `total_in_record`、`shown_count`、
+  `nonempty_request_count`、`nonzero_response_count`、`response_payload_available`、`timestamp_valid_count` 全部保留，
+  `http_request_lines` 按留下的行重算——**裁的是展示行，不是计数**。
+- `boundSyslogView(view, maxChars = 3000)`（`evidence-view.js:319-347`）：`syslog:1` 是原始键值载荷，没有数组可裁。
+  超过上限时先整条省略最长的字段（记进 `omitted_fields`），仍超限再把长值截成「前 150 字…（截断，原 N 字）」（记进 `truncated_fields`），
+  两种情况都置 `truncated_for_context: true`。**短值一律原样保留**——模型要拿它填 `claims.citations` 的 `value`，截断一个能给的值等于让它引用失败。
 
 ## 5 值语义
 

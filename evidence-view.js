@@ -265,3 +265,84 @@ export function boundEvidenceView(view, maxChars = 12000) {
     error: '精简后仍超出上下文限制；请缩小查询条件或降低 count 后重查，不能引用本次省略的字段。' };
   return bounded;
 }
+
+// P003-T039 A6：给模型看的视图再收一层——嵌套序列 timeline 8 行、commands 4 行，计数一律保留。
+// 只裁展示行，不动 projectEvidence 的投影口径：EvidenceSession 里的 record.view 保持原样，
+// 知识经验复用的「时间线是否完整」判定（investigation-agent.js 的 completeTimeline）不受影响。
+export const agentDisplayLimits = Object.freeze({ timeline: 8, commands: 4 });
+
+// 时间线里值得留的行：有响应 > 带 HTTP 请求行/载荷类型 > 有请求字节 > 其余。排序只为挑行，展示仍按原顺序。
+function timelineRowPriority(row) {
+  const facts = row?.facts || {};
+  if (Number(facts.response_length?.value) > 0) return 0;
+  if (facts.http_request_line || facts.request_payload_type) return 1;
+  if (Number(facts.request_length?.value) > 0) return 2;
+  return 3;
+}
+
+function trimSequence(sequence, name, limit) {
+  if (!Array.isArray(sequence?.shown) || sequence.shown.length <= limit) return;
+  const rows = sequence.shown;
+  let kept;
+  if (name === 'timeline') {
+    kept = rows.map((row, index) => ({ row, index, priority: timelineRowPriority(row) }))
+      .sort((a, b) => a.priority - b.priority || a.index - b.index)
+      .slice(0, limit).map(entry => entry.index).sort((a, b) => a - b).map(index => rows[index]);
+  } else {
+    const head = Math.ceil(limit / 2);
+    kept = [...rows.slice(0, head), ...rows.slice(rows.length - (limit - head))];
+  }
+  sequence.shown = kept;
+  sequence.shown_count = kept.length;
+  if (name === 'timeline') {
+    sequence.http_request_lines = kept.map(row => row.facts?.http_request_line?.decoded).filter(Boolean);
+  }
+}
+
+export function compactEvidenceView(view, limits = agentDisplayLimits) {
+  if (!view || typeof view !== 'object') return view;
+  const compacted = structuredClone(view);
+  const sequenceSets = [compacted.related_sequences, ...(compacted.items || []).map(item => item.related_sequences)]
+    .filter(Boolean);
+  for (const sequenceSet of sequenceSets) {
+    for (const [name, sequence] of Object.entries(sequenceSet)) {
+      if (name === 'timeline') trimSequence(sequence, name, limits.timeline);
+      else if (name === 'commands') trimSequence(sequence, name, limits.commands);
+    }
+  }
+  return compacted;
+}
+
+// P003-T039 A6：syslog:1 的视图是原始键值载荷，没有数组可裁。超长时先整条省略最长的字段
+// （省略的字段写进 omitted_fields，模型据此写缺口），仍超限再把长值截断（写进 truncated_fields）。
+// 短值一律原样保留：模型要拿它填 claims.citations 的 value，截断一个能给的值等于让它引用失败。
+export function boundSyslogView(view, maxChars = 3000) {
+  if (!view || typeof view !== 'object') return view;
+  if (JSON.stringify(view).length <= maxChars) return view;
+  const bounded = structuredClone(view);
+  const payload = bounded.payload && typeof bounded.payload === 'object' && !Array.isArray(bounded.payload)
+    ? bounded.payload : null;
+  if (!payload) {
+    return { msgid: bounded.msgid, truncated_for_context: true, omitted_fields: [],
+      note: 'syslog 载荷不是键值对象，已不在模型上下文展示' };
+  }
+  const omittedFields = [];
+  const longestString = () => Object.entries(payload).filter(([, value]) => typeof value === 'string')
+    .sort((a, b) => b[1].length - a[1].length)[0];
+  while (JSON.stringify(bounded).length > maxChars) {
+    const longest = longestString();
+    if (!longest || longest[1].length <= 600) break;
+    delete payload[longest[0]];
+    omittedFields.push(longest[0]);
+  }
+  const truncatedFields = [];
+  while (JSON.stringify(bounded).length > maxChars) {
+    const longest = longestString();
+    if (!longest) break;
+    payload[longest[0]] = `${longest[1].slice(0, 150)}…（截断，原 ${longest[1].length} 字）`;
+    truncatedFields.push(longest[0]);
+  }
+  return { ...bounded, ...(omittedFields.length || truncatedFields.length ? { truncated_for_context: true } : {}),
+    ...(truncatedFields.length ? { truncated_fields: truncatedFields } : {}),
+    ...(omittedFields.length ? { omitted_fields: omittedFields } : {}) };
+}
