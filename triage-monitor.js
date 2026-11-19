@@ -4,6 +4,7 @@ import path from 'node:path';
 import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from './syslog-input.js';
 import { eventTypes } from './cloudwalker.js';
 import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './syslog-case.js';
+import { log } from './log.js';
 
 // 结论排序的档位：threat 在前，其余同档保持时间倒序；没有结论的记录排最后。
 const verdictRanks = Object.freeze({ threat: 0, uncertain: 1, false_positive: 2 });
@@ -92,7 +93,9 @@ export class TriageMonitor {
     const snapshot = JSON.stringify({ initialized: this.initialized, enabled: this.enabled, watermark: this.watermark,
       watermark_ids: [...this.watermarkIds], last_received_at: this.lastReceivedAt,
       records: [...this.records.values()], dedupe: [...this.dedupe], windows: [...this.windows] });
-    this.writeChain = this.writeChain.catch(() => {}).then(async () => {
+    this.writeChain = this.writeChain.catch(error => {
+      log('triage.persist_failed', { file: this.file, error: String(error?.message || error) }, 'error');
+    }).then(async () => {
       await mkdir(path.dirname(this.file), { recursive: true, mode: 0o700 });
       const temporary = `${this.file}.${randomUUID()}.tmp`;
       await writeFile(temporary, snapshot, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
@@ -157,9 +160,11 @@ export class TriageMonitor {
     try {
       const address = await receiver.start();
       this.syslog = { listening: true, bind: `udp://${address.address}:${address.port}`, error: null };
+      log('syslog.listening', { bind: this.syslog.bind });
     } catch (cause) {
       // 绑定失败不能让队列静默收不到消息：记进 summary()，队列照常服务（HTTP 还要活）。
       this.syslog = { listening: false, bind: null, error: String(cause?.message || cause).slice(0, 300) };
+      log('syslog.bind_failed', { error: this.syslog.error }, 'error');
     }
     return this.syslog;
   }
@@ -226,6 +231,8 @@ export class TriageMonitor {
         summary: existing.summary, decision_source: existing.decision_source, feedback: existing.feedback } : {}),
       status: 'queued', stage: '等待研判', detail: '已进入自动研判队列',
       created_at: existing?.created_at || now, updated_at: now, steps: existing?.steps || [], attempts: existing?.attempts || 0 });
+    // 入队是研判链的起点：谁把这条排进来的（人工手动 / 人工重试）跟着告警 ID 一起记。
+    log('triage.enqueued', { alert_id: alertId, source: existing ? 'retry' : 'manual' });
     await this.persist();
     this.drain();
     return this.status(alertId);
@@ -243,7 +250,10 @@ export class TriageMonitor {
       let boundaryReached = false;
       const found = [];
       for (let page = 0; page < 20; page++) {
-        const response = await this.service.alerts({ count: 50, offset });
+        const response = await this.service.alerts({ count: 50, offset }).catch(error => {
+          log('cloudwalker.call_failed', { op: 'alerts', alert_id: null, error: String(error?.message || error) }, 'error');
+          throw error;
+        });
         if (response.partial) throw new Error('部分牧云事件类型读取失败，暂缓推进自动研判游标');
         const rows = response.alerts || [];
         if (!this.initialized) {
@@ -276,27 +286,42 @@ export class TriageMonitor {
         this.records.set(alertId, { alert_id: alertId, status: 'queued', stage: '等待研判',
           detail: '牧云新增告警已进入队列', created_at: this.lastPollAt, updated_at: this.lastPollAt,
           steps: [], attempts: 0 });
+        log('triage.enqueued', { alert_id: alertId, source: 'poll' });
       }
       await this.persist();
       this.drain();
-    } catch (error) { if (pollEpoch === this.pollEpoch) this.lastError = error.message; }
+    } catch (error) { if (pollEpoch === this.pollEpoch) {
+      this.lastError = error.message;
+      log('triage.poll_failed', { error: error.message }, 'warn');
+    } }
     finally { this.polling = false; }
   }
 
   acceptSyslog(line) {
     const job = this.acceptChain.catch(() => {}).then(() => this._acceptSyslog(line));
-    this.acceptChain = job.catch(() => {});
+    // 收包链上的抛错不能静默：下一条报文之前没人会知道这条丢了。
+    this.acceptChain = job.catch(error => log('syslog.accept_failed', { error: String(error?.message || error) }, 'error'));
     return job;
   }
 
   async _acceptSyslog(line) {
     if (this.inputMode !== 'syslog') throw new Error('自动研判未使用 syslog 输入');
-    if (!this.enabled) return { skipped: 'paused' };
+    if (!this.enabled) {
+      log('syslog.skipped', { reason: 'paused' }, 'warn');
+      return { skipped: 'paused' };
+    }
     let parsed;
     try { parsed = parseSyslog(line); }
-    catch (error) { this.lastError = `syslog 解析失败：${error.message}`; return { error: this.lastError }; }
+    catch (error) {
+      this.lastError = `syslog 解析失败：${error.message}`;
+      log('syslog.parse_failed', { error: error.message, bytes: String(line || '').length }, 'warn');
+      return { error: this.lastError };
+    }
     const type = eventTypeFor(parsed.msgid);
-    if (!type) return { skipped: 'no_agent_for_msgid', msgid: parsed.msgid };
+    if (!type) {
+      log('syslog.skipped', { reason: 'no_agent_for_msgid', msgid: parsed.msgid }, 'warn');
+      return { skipped: 'no_agent_for_msgid', msgid: parsed.msgid };
+    }
     const seconds = eventSeconds(parsed);
     const fp = fingerprint(parsed);
     const previous = this.dedupe.get(fp);
@@ -318,6 +343,7 @@ export class TriageMonitor {
         if (record.status === 'done') await updateSyslogDeliveryCount(record.case_dir, record.repeat_count);
       }
       await this.persist();
+      log('syslog.collapsed', { alert_id: previous.record_id, repeat_count: previous.event_delivery_count });
       return { collapsed: true, repeat_count: previous.event_delivery_count, alert_id: previous.record_id };
     }
     const occurrence = previous && seconds != null && Math.abs(seconds - previous.last_seen) <= 300
@@ -333,6 +359,7 @@ export class TriageMonitor {
     this.dedupe.set(fp, { last_seen: seconds, last_delivery_second: seconds,
       occurrence_count: occurrence, delivery_count: (previous?.delivery_count || 0) + 1,
       event_delivery_count: 1, record_id: alertId });
+    log('syslog.received', { alert_id: alertId, msgid: parsed.msgid, event_type: type, occurrence });
     await this.persist();
     this.drain();
     return { alert_id: alertId, status: 'queued' };
@@ -390,12 +417,38 @@ export class TriageMonitor {
       next.stage = '准备研判';
       next.updated_at = new Date().toISOString();
       next.attempts = (next.attempts || 0) + 1;
-      void this.run(next).catch(error => { this.lastError = `研判状态保存失败：${error.message}`; })
+      void this.run(next).catch(error => {
+        this.lastError = `研判状态保存失败：${error.message}`;
+        log('triage.persist_failed', { alert_id: next.alert_id, error: error.message }, 'error');
+      })
         .finally(() => { this.active--; this.drain(); });
     }
   }
 
+  // 牧云取数调用包一层：syslog 事件匹配内部会把失败降级成 reason（syslog-case.js 不在本卡 scope），
+  // 只有套在调用点上，cloudwalker.call_failed 才留得下来。日志记完原样抛出，降级策略不变。
+  async cloudwalkerCall(op, job) {
+    try { return await job(); }
+    catch (error) {
+      log('cloudwalker.call_failed', { op, alert_id: null, error: String(error?.message || error) }, 'error');
+      throw error;
+    }
+  }
+
+  // matchSyslogEvent 只用 callTool / listEvents 两个方法：给它一个带日志的薄替身，别碰真 toolbox。
+  // 只包真有的方法——替身上凭空多个方法会让原实现的分支判断变掉。
+  observedToolbox() {
+    const toolbox = this.eventToolbox;
+    if (!toolbox) return toolbox;
+    const wrapped = {};
+    for (const [name, op] of [['callTool', 'call_tool'], ['listEvents', 'list_events']])
+      if (typeof toolbox[name] === 'function')
+        wrapped[name] = (...args) => this.cloudwalkerCall(op, () => toolbox[name](...args));
+    return wrapped;
+  }
+
   async run(record) {
+    const startedAt = Date.now();
     try {
       await this.persist();
       let targetId = record.alert_id;
@@ -405,7 +458,7 @@ export class TriageMonitor {
       if (record.input) {
         record.input.context = await this.contextFor(record);
         record.stage = '关联事件'; record.detail = '优先按事件 ID 精确读取牧云详情，并核对主机身份';
-        match = await matchSyslogEvent(this.eventToolbox, record.input.parsed);
+        match = await matchSyslogEvent(this.observedToolbox(), record.input.parsed);
         if (match.matched) { targetId = match.alert_id; record.matched_alert_id = targetId; }
       }
       if (this.ruleEngine) {
@@ -428,7 +481,10 @@ export class TriageMonitor {
         record.stage = stage; record.detail = detail; record.updated_at = new Date().toISOString();
         record.steps.push({ stage, detail, at: record.updated_at });
         if (record.steps.length > 80) record.steps.shift();
-        void this.persist().catch(error => { this.lastError = `研判进度保存失败：${error.message}`; });
+        void this.persist().catch(error => {
+          this.lastError = `研判进度保存失败：${error.message}`;
+          log('triage.persist_failed', { alert_id: record.alert_id, error: error.message }, 'error');
+        });
       };
       const result = match?.matched === false
         ? await this.investigator.runUnmatchedSyslog(record.input, match, caseInfo, onProgress)
@@ -467,8 +523,11 @@ export class TriageMonitor {
         .slice(0, 10).map(citation => ({ evidence_id: citation.evidence_id, pointer: citation.pointer }));
       record.evidence = evidenceItems(saved.evidence);
       Object.assign(record, evidenceSummary(saved));
+      log('triage.done', { alert_id: record.alert_id, verdict: record.verdict ?? null,
+        attempts: record.attempts || 0, duration_ms: Date.now() - startedAt });
     } catch (error) {
       record.status = 'failed'; record.stage = '研判失败'; record.detail = String(error.message || error).slice(0, 250);
+      log('triage.failed', { alert_id: record.alert_id, attempts: record.attempts || 0, error: record.detail }, 'error');
     } finally { record.updated_at = new Date().toISOString(); await this.persist(); }
   }
 }
