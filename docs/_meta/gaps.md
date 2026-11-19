@@ -145,3 +145,4 @@ P003-T032 把上一轮现场（192.168.24.21，2026-11-19 上午）留下的四�
 2. 卡面说「上午两条失败研判」；`triage-monitor.json` 里是 3 条 failed，其中「模型未在调查轮数内给出有效 JSON 结论」的是 2 条、「模型没有返回可用消息」的是 1 条。群主口径：「两条」是上午现场报告当时的口径（当时 2 failed + 1 还在跑），后来三条都落到 failed；**后续重跑以盘上三条为准**（进 T048）。
 
 **顺带看到的行号漂移（不在 P003-T032 scope，未改）**：`docs/modules/triage-pipeline.md` 里 `setEnabled` 引 `triage-monitor.js:153`，当前 `setEnabled` 在 `triage-monitor.js:197`；同段 `poll()` 引 `:189`，当前在 `:240`。属于 P003-T023 之后新增代码造成的漂移。
+合并含 server.js 的卡：合并提交前必须 node --check server.js（T044 事故：自动合并造出重名声明，语法错差点带进主枝过夜）

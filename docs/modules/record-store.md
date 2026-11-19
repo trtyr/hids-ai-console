@@ -42,7 +42,7 @@ depth: complete
 | 原子写入 | `investigation-store.js:18-21` | 先写带 UUID 的 `.tmp`，再 `rename` 覆盖到最终文件名 |
 
 构件全集以拆分清单为准：[docs/modules/_breakdown.json](_breakdown.json) 的 `record-store.components` 列的是上面三项；
-[架构篇第 12 节](../architecture.md) 的同一个模块行只写了「研判记录存取」一项（`docs/architecture.md:593`）。
+[架构篇第 12 节](../architecture.md) 的同一个模块行只写了「研判记录存取」一项（`docs/architecture.md:645`）。
 两处写法不同——代码里能逐个对应上的，是拆分清单那三项。
 
 ## 3 关键路径
@@ -85,7 +85,7 @@ latest(alertId, mode = 'deep')
 | 调用方 | 出处 | 调的是什么 |
 | --- | --- | --- |
 | 业务 API（流式分支） | `server.js:315` | `history.save(result)` |
-| 业务 API（普通分支） | `server.js:322` | `history.save(result)` |
+| 业务 API（普通分支） | `server.js:1223` | `history.save(result)` |
 | 业务 API（查最近一次） | `server.js:332` | `history.latest(alertId, mode)` |
 | 自动研判流水线 | `triage-monitor.js:388` | `history.save(result)` |
 | 自动研判流水线（补证据） | `triage-monitor.js:62` | `history.latest(alert_id, 'triage')` |

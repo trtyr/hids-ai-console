@@ -432,6 +432,70 @@ export class TriageMonitor {
     return { archived: expired.length, remaining: this.records.size };
   }
 
+  // ── 数据管理（P003-T044）：队列侧的候选挑选与清理 ──────────────────────────
+  // 时间戳取 updated_at → saved_at → created_at 第一个能解析的；排序用它们，按「最新在前」排。
+  // 候选集是两条阈值的并集：早于 olderThan 的，与按时间倒序排在第 keep 条之后的（keep = 保留最新多少条）。
+  // 非 done 的记录（queued / running / failed）不在这里挡，交给 clean() 判 409——候选可以列出来，但不许动。
+  cleanCandidates({ olderThan = null, keep = null } = {}) {
+    const stamp = record => {
+      for (const key of ['updated_at', 'saved_at', 'created_at']) {
+        const parsed = Date.parse(record[key] || '');
+        if (Number.isFinite(parsed)) return parsed;
+      }
+      return null;
+    };
+    const all = [...this.records.values()];
+    const ranked = all.slice().sort((a, b) => (stamp(b) ?? 0) - (stamp(a) ?? 0));
+    const selected = new Map();
+    if (Number.isInteger(keep) && keep >= 0) for (const record of ranked.slice(keep)) selected.set(record.alert_id, record);
+    if (Number.isFinite(olderThan)) for (const record of all) {
+      const at = stamp(record);
+      if (at != null && at < olderThan) selected.set(record.alert_id, record);
+    }
+    const records = [...selected.values()].sort((a, b) => (stamp(b) ?? 0) - (stamp(a) ?? 0));
+    // 原始报文（input）是队列内部状态：候选清单只给 ID / 状态 / 时刻 / 估算字节，不往外带报文。
+    const items = records.map(record => ({ name: record.alert_id, status: record.status,
+      at: record.updated_at || record.saved_at || record.created_at || null,
+      bytes: Buffer.byteLength(JSON.stringify(record)) }));
+    return { records, items, bytes: items.reduce((sum, item) => sum + item.bytes, 0) };
+  }
+
+  // 真清：候选里只要有一条不是 done（还在排/在跑/可重排）就整体拒绝 409，盘上一动不动。
+  // archive 追加到 <队列文件>.archive.jsonl（与 archiveDone 同格式、带 archived_at）再移出内存；delete 直接移出。
+  // 两条路都走 dropRecord()：records 之外的 dedupe 悬空引用必须一起失效（R-TRIAGE-13）。
+  async clean({ action = 'archive', execute = false, olderThan = null, keep = null, now = Date.now() } = {}) {
+    const { records, items, bytes } = this.cleanCandidates({ olderThan, keep });
+    const blocked = records.filter(record => record.status !== 'done');
+    if (blocked.length) {
+      const statuses = [...new Set(blocked.map(record => record.status))].join('、');
+      const error = new Error(`${blocked.length} 条记录状态不是 done（${statuses}），已完结的案件才可清理`);
+      error.status = 409;
+      throw error;
+    }
+    if (!execute || !records.length) return { count: records.length, bytes, items };
+    if (action === 'archive') {
+      const file = `${this.file}.archive.jsonl`;
+      const lines = records.map(record => `${JSON.stringify({ ...record, archived_at: new Date(now).toISOString() })}\n`).join('');
+      await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+      await appendFile(file, lines, { encoding: 'utf8', mode: 0o600 });
+      this.archivedCount += records.length;
+    }
+    for (const record of records) {
+      this.dropRecord(record.alert_id);
+      this.pendingCounts.delete(record.alert_id);
+    }
+    await this.persist();
+    return { count: records.length, bytes, items };
+  }
+
+  // 案卷清理的 409 判据：目录上挂着非 done 记录（还在排 / 在跑 / 等重排）的，一个都不许清。
+  blockedCaseDirs() {
+    const blocked = new Set();
+    for (const record of this.records.values())
+      if (record.case_dir && record.status !== 'done') blocked.add(path.resolve(record.case_dir));
+    return blocked;
+  }
+
   // A9：取消排队中的案件。只允许取消还没在研判的记录（queued / failed）；取消即删记录并失效 dedupe（A3）。
   async cancel(alertId) {
     const record = this.records.get(alertId);

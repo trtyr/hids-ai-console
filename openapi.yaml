@@ -31,6 +31,7 @@ security:
   - basicAuth: []
 tags:
   - name: 状态
+  - name: 数据管理
   - name: 告警
   - name: 自动研判
   - name: 深度研判
@@ -209,6 +210,112 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /api/data/inventory:
+    get:
+      tags: [数据管理]
+      summary: 盘点七类运行态存储的条数与字节
+      operationId: getDataInventory
+      description: |
+        七类存储各报**条数**与**字节量**，再给一个总数；只读本地运行态目录，不碰牧云、不碰模型、不读日志文件内容。
+
+        | kind | 中文 | 什么算「一条」 | 路径来源 |
+        | --- | --- | --- | --- |
+        | `cases` | 案卷 | 案件目录下的一级子目录（字节按目录内文件递归累加） | `HIDS_CASES_DIR`，缺省 `.data/cases` |
+        | `investigations` | 研判记录 | 一个 `*.json` 文件 | `.data/investigations` |
+        | `boards` | 溯源白板 | 一个 `*.json` 文件 | `.data/trace-boards` |
+        | `wiki_sessions` | 知识库会话 | 一个 `*.json` 文件 | `.data/wiki-sessions` |
+        | `queue` | 研判队列 | 一条队列记录（有研判队列时按进程内记录数，否则读队列文件 `records`）；字节＝队列文件 + 同名 `.archive.jsonl` | `.data/triage-monitor.json` |
+        | `logs` | 日志 | `.data/` **顶层**的一个 `*.log` 文件 | 后端自身不落日志文件（只上 stdout），正常部署下这里是 0 |
+        | `config_overrides` | 配置覆盖层 | 那一个覆盖层文件（`config-overrides.json`） | `.data/config-overrides.json` |
+
+        `oldest_at` / `newest_at` 是这一类的条目时刻：文件取 mtime，案卷取目录内**文件**的最新 mtime（空目录退回目录 mtime），
+        队列取记录上的 `updated_at`（没有则 `saved_at`、`created_at`）。没有条目时为 `null`。
+        `exists` 表示那条存储路径在不在盘上（目录/文件缺失不报错，按 `count: 0` 返回，`exists: false`）。
+        每次请求都现扫盘：`POST /api/data/cleanup` 执行完再调它，数字立刻是清理后的。
+      responses:
+        '200':
+          description: 七类存储的占用明细与总数（`stores` 顺序固定，见 `DataStoreUsage.kind` 的枚举顺序）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataInventory'
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/data/cleanup:
+    post:
+      tags: [数据管理]
+      summary: 按类型与阈值归档或删除老数据（默认 dry-run 只报清单）
+      operationId: cleanData
+      description: |
+        按 `kind`（与盘点同一套七类）与阈值挑候选，再按 `action` **归档**或**删除**。
+        **默认 dry-run**：`execute` 不给或为 `false` 时只回将清清单（`candidates`），盘上一个字节都不动；
+        带 `"execute": true` 才真执行。
+
+        阈值（两条都要给至少一条，一个都不给回 400——不许无阈值一把抹掉）：
+        - `older_than`：ISO 8601 时间，**早于**它的条目进候选；
+        - `keep`：保留**最新** N 条（按条目时刻倒序），排在它后面的进候选。
+        两条同时给时取**并集**（不重复计）。
+
+        动作：
+        - `archive`（缺省）：文件/案卷目录 `rename` 进 `.data/archive/<kind>/<执行时刻>-<原名>`；队列记录追加到
+          `.data/triage-monitor.json.archive.jsonl`（带 `archived_at`，与 TTL 归档同格式）再移出队列。
+        - `delete`：直接删文件/目录；队列记录从内存与队列文件里删掉（同时失效对应去重条目）。
+
+        **已完结案件才可清**：`queue` 的候选里只要有一条状态不是 `done`（`queued` / `running` / `failed` 都算没完），
+        整个请求回 **409**，盘上一动不动；`cases` 的候选目录上挂着非 `done` 记录的同样 409。
+        没有装配研判队列（没配牧云或模型）时清 `queue` 回 **503**（不拿队列文件硬删，那是另一条进程的状态）。
+
+        **留痕**：`execute: true` 且真的执行时落一条 `data.cleaned` 日志，字段只有 `kind` / `action` / `count` / `bytes`——
+        与 `config.updated` 同口径：不记文件名、不记记录内容。dry-run 不留痕。
+
+        响应里的 `inventory` 是**执行之后**重新扫出来的盘点（dry-run 时就是当下未变的数字），
+        与紧接着调 `GET /api/data/inventory` 的结果一致。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataCleanupRequest'
+            examples:
+              dryRunOldCases:
+                summary: 只看早于 2026-11-01 的案卷会被清几个（不动盘）
+                value: { kind: cases, older_than: '2026-11-01T00:00:00.000Z' }
+              deleteExtraInvestigations:
+                summary: 研判记录只留最新 200 条，多出来的删掉
+                value: { kind: investigations, keep: 200, action: delete, execute: true }
+              archiveOldWikiSessions:
+                summary: 知识库会话早于一个月前的归档
+                value: { kind: wiki_sessions, older_than: '2026-10-19T00:00:00.000Z', action: archive, execute: true }
+      responses:
+        '200':
+          description: |
+            `candidates` 是将清清单（`truncated: true` 表示超过 100 条只列了前 100）；
+            `applied` 是这次真清掉的条数与字节（dry-run 恒为 0）；`inventory` 是执行后的盘点。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataCleanupResult'
+        '400':
+          description: |
+            调用方传错（`code=caller_error`）：正文不是 JSON 对象、`kind` 不在七类里、`action` 不是 archive/delete、
+            `execute` 不是布尔、`older_than` 解析不出时间、`keep` 不是非负整数、`older_than` 与 `keep` 一个都没给、带未知参数。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '409':
+          description: |
+            状态冲突（`code=caller_error`）：候选里有还没完结的案件（`queued` / `running` / `failed`），
+            或案卷对应的案件还在排/在跑。整个请求被拒绝，盘上没有任何变化；等研判收尾或把阈值调窄再试。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503':
+          description: '`code=not_configured`：没装配研判队列（没配牧云或模型）时清 `queue` 会被拒（不拿队列文件硬删）。'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /api/status:
     get:
       tags: [状态]
@@ -854,12 +961,96 @@ paths:
               schema: { $ref: '#/components/schemas/RegoEvaluation' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/rules/sessions:
+    get:
+      tags: [Rego 规则]
+      summary: 列出规则维护会话（摘要）
+      operationId: listRegoSessions
+      description: |
+        每次误报触发的规则维护落一份会话（形制对齐 `wiki-sessions`）：输入案卷引用、模型修订草案、校验结果、终态。
+        会话全文在 `<数据根>/rule-sessions/<uuid>.json`；这里只回摘要，按 `updated_at` 倒序，不含规则正文与误报理由原文。
+        路径必须排在 `/api/rules/{id}` 之前判断——`sessions` 本身是合法规则 id 形状，排后面会被当成规则读。
+      responses:
+        '200':
+          description: 会话摘要列表，按 `updated_at` 倒序；没有会话时是空数组
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/RegoSessionSummary' }
+                additionalProperties: false
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/rules/{id}/history:
+    get:
+      tags: [Rego 规则]
+      summary: 列一条规则的历史版本
+      operationId: listRegoRuleHistory
+      description: |
+        每次覆盖一条规则前，旧版原件先落 `<数据根>/rules-history/<id>-<rev>.rego`，理由（备注）与它并排落在
+        `<数据根>/rules-history/<id>-<rev>.json`（`{id, rev, note, saved_at, replaced_by}`）；`note` 就是那条副本的
+        「为什么被替换」。这里列这些副本，按写入时间升序。
+        规则不存在或还没改过时回空数组（不是 404）；正文一字未改的提交不会新增历史。
+        没带备注归档、或本接口备注落盘之前留下的旧历史副本，`note` 是 `null`。同一版被归档第二次
+        （回滚回去又回滚回来）时副本与备注都保留第一次的。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 规则 id；小写字母开头的标识符，不合格式回 400
+          schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+      responses:
+        '200':
+          description: 该规则的历史版本列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoRuleHistory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/rules/{id}/rollback:
+    post:
+      tags: [Rego 规则]
+      summary: 把一条规则回滚到某个历史版本
+      operationId: rollbackRegoRule
+      description: |
+        回滚＝把历史里那一版当新版再写一次（走同一个 `RuleStore.save()`）：所以当前版也会进历史（它的备注就是
+        `人工回滚（<who>）`），回滚本身可再回滚。
+        历史里没有这一版回 404，且不动现网那份；正文写盘失败回 500。
+        与 `PUT /api/rules/{id}` 同一道闸：要求规则管理员令牌 `x-rule-admin-token`，没配令牌回 503、令牌不对回 403。
+        与 `PUT` 同一段写队列：并发的人工写 / 回滚按到达顺序串起来，不会交叉着读旧版各写一份。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 规则 id；小写字母开头的标识符，不合格式回 400
+          schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegoRollback' }
+      responses:
+        '200':
+          description: 回滚结果（`action=rollback`，带 `rolled_back_to`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoSaveResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/rules/{id}:
     get:
       tags: [Rego 规则]
       summary: 按 id 读规则的 Rego 原文
       operationId: getRegoRule
-      description: 返回规则元数据与整份 .rego 文件原文（逐字返回，含注释与空行）。id 不存在回 404，id 不合格式回 400。
+      description: |
+        返回规则元数据与整份 .rego 文件原文（逐字返回，含注释与空行）。id 不存在回 404，id 不合格式回 400。
+        `revision` 是正文指纹，`PUT` 的 `expected_revision` 就填它。
+        规则库是数据根里的活数据（`<数据根>/rules/`），不是随部署的只读副本。
       parameters:
         - name: id
           in: path
@@ -875,6 +1066,39 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
         '502': { $ref: '#/components/responses/RuleLibraryError' }
+    put:
+      tags: [Rego 规则]
+      summary: 写一条规则（人工维护入口，与维护者 Agent 共用同一套校验与版本化）
+      operationId: putRegoRule
+      description: |
+        写盘走 `RuleStore.save()`——与规则维护者 Agent 是同一个方法，没有第二套直写文件的函数。
+        顺序：语法校验（规则子集，报错带 `<id>.rego:<行>`）→ 旧版进 `<数据根>/rules-history/<id>-<rev>.rego`
+        及其备注 `<id>-<rev>.json` → 临时文件 + rename 原子替换。正文与原样一致时回 `action=unchanged`，不写盘也不刷历史。
+        已有规则的 id 可能住在别的文件名里：写回它自己那份，不另起同 id 的第二个文件。
+        **读—比对 `expected_revision`—写在同一个写队列任务里**（与 `WikiStore.update()` 同一口径）：并发两个 PUT
+        只有一个能落盘，后到的拿 409，不会拿旧版本悄悄盖掉前一份。
+        要求规则管理员令牌 `x-rule-admin-token`：没配令牌回 503、令牌不对回 403。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 规则 id，必须与正文里 `package hids.rules.<id>` 一致，否则回 400
+          schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegoRuleWrite' }
+      responses:
+        '200':
+          description: 写入结果（`action` 是 add / update / unchanged）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoSaveResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/wiki/pages:
     get:
       tags: [知识库]
@@ -1343,6 +1567,119 @@ components:
       schema: { type: string, const: '1' }
       description: 写入请求还会校验 Origin 和 Sec-Fetch-Site
   schemas:
+    DataStoreUsage:
+      type: object
+      description: 一类运行态存储的占用：条数与字节，外加这一类的条目时刻区间。
+      required: [kind, label, path, exists, count, bytes, oldest_at, newest_at]
+      properties:
+        kind:
+          type: string
+          enum: [cases, investigations, boards, wiki_sessions, queue, logs, config_overrides]
+          description: 存储类型；`GET /api/data/inventory` 的 `stores` 按这个枚举的顺序返回
+        label: { type: string, description: 这一类的中文名（案卷 / 研判记录 / 溯源白板 / 知识库会话 / 研判队列 / 日志 / 配置覆盖层） }
+        path: { type: string, description: 这一类在盘上的绝对路径（队列是队列文件路径，日志是 `.data/` 目录本身） }
+        exists: { type: boolean, description: 那条路径在不在盘上；不在时 count 恒为 0 }
+        count: { type: integer, minimum: 0, description: 条数：文件 = 文件个数，案卷 = 一级子目录个数，配置覆盖层 = 0/1，队列 = 记录数 }
+        bytes: { type: integer, minimum: 0, description: 字节量：目录/案卷递归累加；队列是队列文件 + `.archive.jsonl` }
+        oldest_at:
+          type: [string, 'null']
+          format: date-time
+          description: 这一类最早的条目时刻；没有条目为 null
+        newest_at:
+          type: [string, 'null']
+          format: date-time
+          description: 这一类最新的条目时刻；没有条目为 null
+    DataInventory:
+      type: object
+      required: [data_dir, stores, total]
+      properties:
+        data_dir: { type: string, description: 运行态根目录（仓内 `.data/`）的绝对路径 }
+        stores:
+          type: array
+          description: 七类存储，顺序固定为 cases → investigations → boards → wiki_sessions → queue → logs → config_overrides
+          items: { $ref: '#/components/schemas/DataStoreUsage' }
+        total:
+          type: object
+          required: [count, bytes]
+          description: 七类之和
+          properties:
+            count: { type: integer, minimum: 0 }
+            bytes: { type: integer, minimum: 0 }
+    DataCleanupRequest:
+      type: object
+      required: [kind]
+      additionalProperties: false
+      description: |
+        按类型与阈值清理。`older_than` 与 `keep` 至少给一个（都空回 400）；两条同给时取并集。
+        默认 `action: archive`、`execute: false`（只报清单不动盘）。
+      properties:
+        kind:
+          type: string
+          enum: [cases, investigations, boards, wiki_sessions, queue, logs, config_overrides]
+          description: 要清理的存储类型（与盘点同一套）
+        action:
+          type: string
+          enum: [archive, delete]
+          default: archive
+          description: 归档（移进 `.data/archive/<kind>/`，队列追加到 `.archive.jsonl`）或删除
+        execute:
+          type: boolean
+          default: false
+          description: 不给或 false 是 dry-run（只报将清清单）；true 才真动盘
+        older_than:
+          type: string
+          format: date-time
+          description: 早于这个时刻的条目进候选（ISO 8601）
+        keep:
+          type: integer
+          minimum: 0
+          description: 保留最新 N 条；排在 N 条之后的进候选
+    DataCleanupResult:
+      type: object
+      required: [dry_run, kind, action, threshold, candidates, applied, inventory]
+      properties:
+        dry_run: { type: boolean, description: 没有真动盘时为 true（请求里 execute 不给或 false） }
+        kind: { type: string, enum: [cases, investigations, boards, wiki_sessions, queue, logs, config_overrides] }
+        action: { type: string, enum: [archive, delete] }
+        threshold:
+          type: object
+          required: [older_than, keep]
+          properties:
+            older_than: { type: [string, 'null'], format: date-time, description: 回显请求里的 older_than；没给为 null }
+            keep: { type: [integer, 'null'], minimum: 0, description: 回显请求里的 keep；没给为 null }
+        candidates:
+          type: object
+          description: 将清清单（dry-run 时是预测，execute 时是刚被清掉的那些）
+          required: [count, bytes, items, truncated]
+          properties:
+            count: { type: integer, minimum: 0 }
+            bytes: { type: integer, minimum: 0, description: 候选的字节合计（队列按记录 JSON 序列化字节估算） }
+            items:
+              type: array
+              description: 最多 100 条（按条目时刻从老到新）；多出来的只体现在 count/bytes 与 truncated
+              items:
+                type: object
+                required: [name, bytes, at]
+                properties:
+                  name: { type: string, description: 文件名 / 案卷目录名；队列是告警 ID }
+                  bytes: { type: integer, minimum: 0 }
+                  at: { type: [string, 'null'], format: date-time, description: 条目时刻 }
+                  status:
+                    type: string
+                    enum: [done]
+                    description: 只有队列条目带这个字段；能进候选的一律是 done（非 done 会 409）
+            truncated: { type: boolean, description: 候选多于 100 条时为 true }
+        applied:
+          type: object
+          required: [count, bytes]
+          description: 这次真清掉的条数与字节；dry-run 恒为 0
+          properties:
+            count: { type: integer, minimum: 0 }
+            bytes: { type: integer, minimum: 0 }
+        inventory:
+          allOf:
+            - $ref: '#/components/schemas/DataInventory'
+            - description: 执行之后重新扫出来的盘点（dry-run 时是当下未变的数字）
     ClaimCitation:
       type: object
       description: 一条证据引用，指向本次取证记录里的某个原始字段（`agent-tools.js:79-90` 逐条核：证据存在、pointer 是 JSON Pointer、字段能解出、值相等）。
@@ -2163,13 +2500,100 @@ components:
     RegoRule:
       type: object
       description: 单条规则：元数据加 Rego 原文。
-      required: [id, name, description, file, rego]
+      required: [id, name, description, file, rego, revision]
       properties:
         id: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
         name: { type: string }
         description: { type: [string, 'null'] }
         file: { type: string }
         rego: { type: string, description: 整份 .rego 文件原文，逐字返回 }
+        revision:
+          type: string
+          pattern: '^[0-9a-f]{16}$'
+          description: 正文 sha256 的前 16 位；`PUT /api/rules/{id}` 的 `expected_revision` 就填它
+      additionalProperties: false
+    RegoSaveResult:
+      type: object
+      description: |
+        一次规则写入的结果（`PUT /api/rules/{id}` 与 `POST /api/rules/{id}/rollback` 同形）。
+        `action` 三态之外多一个 `rollback`：回滚是「把历史里那一版当新版再写一次」，所以当前版也会进历史，回滚可再回滚。
+      required: [id, file, name, rev, previous_rev, action]
+      properties:
+        id: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+        file: { type: string, description: 写回的规则文件名（沿用该 id 原来的文件名，不另起同 id 的第二个文件） }
+        name: { type: string }
+        rev: { type: string, pattern: '^[0-9a-f]{16}$', description: 新正文的版本指纹 }
+        previous_rev:
+          type: [string, 'null']
+          description: 被覆盖那一版的版本指纹；新增规则时是 null，`action=unchanged` 时也是 null（没写盘、没进历史）
+        action: { type: string, enum: [add, update, unchanged, rollback] }
+        rolled_back_to: { type: string, pattern: '^[0-9a-f]{16}$', description: 只在 `action=rollback` 时出现：回滚到的历史版本 }
+      additionalProperties: false
+    RegoHistoryEntry:
+      type: object
+      description: |
+        历史版本的一条：正文副本 `<数据根>/rules-history/<id>-<rev>.rego`，备注在并排的 `<id>-<rev>.json`。
+      required: [id, rev, file, bytes, saved_at, note]
+      properties:
+        id: { type: string }
+        rev: { type: string, pattern: '^[0-9a-f]{16}$' }
+        file: { type: string, description: 历史文件名，形如 `<id>-<rev>.rego` }
+        bytes: { type: integer, minimum: 0 }
+        saved_at: { type: string, format: date-time, description: 该历史文件的写入时间 }
+        note:
+          type: [string, 'null']
+          description: |
+            这一版为什么被替换掉（`PUT` 的 `note` 存成 `人工维护：<note>`，回滚存成 `人工回滚（<who>）`，
+            维护者 Agent 存成 `误报维护（<who>）：<理由>`）。没备注的归档与旧副本是 `null`。
+      additionalProperties: false
+    RegoRuleHistory:
+      type: object
+      required: [id, history]
+      properties:
+        id: { type: string }
+        history:
+          type: array
+          description: 按写入时间升序；规则不存在或还没改过时是空数组，不是 404。
+          items: { $ref: '#/components/schemas/RegoHistoryEntry' }
+      additionalProperties: false
+    RegoSessionSummary:
+      type: object
+      description: 规则维护会话摘要（不含规则正文与误报理由原文；全文在 `<数据根>/rule-sessions/<uuid>.json`）。
+      required: [id, case_id, event_type, who, status, rule_id, validated, updated_at]
+      properties:
+        id: { type: string, description: 会话 ID（UUID），也是会话文件名 }
+        case_id: { type: [string, 'null'], description: 触发的案卷 ID }
+        event_type: { type: [string, 'null'] }
+        who: { type: [string, 'null'], description: 登记误报的人 }
+        status:
+          type: string
+          enum: [collecting, validating, updated, no_change, failed]
+          description: 终态是 updated / no_change / failed；collecting 与 validating 是过程态（进程半路挂掉会停在这里）
+        rule_id: { type: [string, 'null'], description: 模型草案改的是哪条规则 }
+        validated: { type: boolean, description: 校验是否通过（`status=failed` 时为 false） }
+        updated_at: { type: string, format: 'date-time' }
+      additionalProperties: false
+    RegoRuleWrite:
+      type: object
+      description: |
+        人工维护一条规则。校验与写盘由 `RuleStore.save()` 完成，与规则维护者 Agent 走同一套：
+        语法必须在规则子集内（`rule-store.js` 文件头）、包名必须与 id 一致、旧版先进 `<数据根>/rules-history/` 再原子替换。
+      required: [rego, expected_revision]
+      properties:
+        rego: { type: string, minLength: 1, description: 整份 .rego 原文 }
+        expected_revision:
+          type: [string, 'null']
+          description: |
+            乐观并发：读到的当前正文指纹（`GET /api/rules/{id}` 的 `revision`）。与当前不一致回 409，别让后写的悄悄盖掉前一份。
+            新增规则时传 null（要求当前不存在）。
+        note: { type: string, maxLength: 200, description: 写进历史备注的一句话：被替换那一版的历史条目里存成 `人工维护：<note>`（没传就是 `人工维护`） }
+      additionalProperties: false
+    RegoRollback:
+      type: object
+      required: [rev]
+      properties:
+        rev: { type: string, pattern: '^[0-9a-f]{16}$', description: 回滚到的历史版本；历史里没有这一版回 404 }
+        who: { type: string, maxLength: 100, description: 操作人，写进被替换那一版的历史备注（`人工回滚（<who>）`）；不传就用当前登录用户名 }
       additionalProperties: false
     RegoRuleList:
       type: object
@@ -2306,6 +2730,13 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: |
+        乐观并发冲突或状态不允许（调用方传错，`code=caller_error`）：`expected_revision` / `expected` 与当前版本不一致时回它，
+        调用方刷新后重提。正文 `error` 是校验原话，如「规则已更新，请刷新后再提交」。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     ServiceUnavailable:
       description: 依赖的牧云、模型或管理令牌尚未配置（没配置，`code=not_configured`）
       content:
@@ -2318,8 +2749,8 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     RuleLibraryError:
       description: |
-        规则文件读取或解析失败（上游失败，`code=upstream_error`）：规则库是随部署的只读数据源，
-        读不出来按上游类处理。正文 `error` 里带 `rules/<文件>:<行>` 定位。
+        规则文件读取或解析失败（上游失败，`code=upstream_error`）：规则库是数据根里的活数据
+        （`<数据根>/rules/`，P003-T041），读不出来按上游类处理。正文 `error` 里带 `rules/<文件>:<行>` 定位。
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

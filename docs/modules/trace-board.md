@@ -63,10 +63,10 @@
 | `POST /api/trace/boards` | 请求体取 `target`／`alert_id`／`ip` 与 `focus`；目标不合法 400，已有白板 200（原样返回那条，不重查不覆盖），新建 202 与白板快照；告警起不了板回 422，建板过程出错回 502 | `server.js:338-352` |
 | `GET /api/trace/boards` | 分页列白板：接 `count`／`offset` 与 `status`／`type`／`host`／`from`／`to` 筛选，回 `{ boards, total }`（`total` 是筛选后、切页前总数）；分页或筛选参数不合法返回 400 | `server.js:328-336` |
 | `GET /api/trace/boards/{id}` | 返回单张白板（`hops`／`links`／`gaps`／`discovery` 为详情主数据）；没有这张白板返回 404 | `server.js:353-361` |
-| `GET /api/trace/tools` | 返回牧云 MCP 的工具目录（`provider` 为 `cloudwalker-mcp`，`readOnly` 为 `true`） | `server.js:226-229` |
+| `GET /api/trace/tools` | 返回牧云 MCP 的工具目录（`provider` 为 `cloudwalker-mcp`，`readOnly` 为 `true`） | `server.js:895-897` |
 
-`/api/trace/tools` 依赖牧云 MCP 工具箱（`server.js:226-229`）；另外三条依赖 `boardService`，它默认为 `traceBoard` 实例，而 `traceBoard` 只在牧云 MCP 工具箱与模型都在时才创建
-（`server.js:50-51`、`server.js:187`）。没配齐时这些路由返回 503（`server.js:226-229`、`server.js:237-238`、`server.js:245-246`、`server.js:253-254`）。
+`/api/trace/tools` 依赖牧云 MCP 工具箱（`server.js:895-897`）；另外三条依赖 `boardService`，它默认为 `traceBoard` 实例，而 `traceBoard` 只在牧云 MCP 工具箱与模型都在时才创建
+（`server.js:129-131`、`server.js:816`）。没配齐时这些路由返回 503（`server.js:895-897`、`server.js:907`、`server.js:917`、`server.js:929`）。
 
 **`GET /api/trace/boards` 的分页口径**（`server.js:237-242`）：`count` 缺省 20、合法范围 1 到 50；`offset` 缺省 0、合法范围大于等于 0；两者不是安全整数就回 400「分页参数无效」。判定顺序是先判白板服务在不在（503），再判分页，所以没配服务时 `?count=0` 也是 503。切页由 `TraceBoardService.page` 做，回的是切页前的 `total`；`count` 超出剩余条数就回空 `boards`，不报错。
 
@@ -94,7 +94,7 @@
 | 方向 | 依赖什么 | 证据 |
 | --- | --- | --- |
 | 本模块用到 | Node 内置模块（文件、路径、UUID）、事件类型表与告警归一化、提示词装载 | `trace-board.js:1-5` |
-| 上游 | 业务 API 引入本模块，把 HTTP 请求转成本模块的方法调用 | `server.js:20`、`server.js:187` |
+| 上游 | 业务 API 引入本模块，把 HTTP 请求转成本模块的方法调用 | `server.js:22`、`server.js:816` |
 | 下游 | 事件类型表决定 `get_<类型>_event` 与 `list_<类型>_events` 的类型名；告警归一化把牧云事件行转成告警 | `cloudwalker.js:2-6`、`cloudwalker.js:31-34` |
 | 下游 | 取证会话：开一个会话、记录每次调用与证据编号；引用校验给关系边把关 | `agent-tools.js:50`、`agent-tools.js:55`、`agent-tools.js:57-67`、`agent-tools.js:71-93` |
 | 下游 | 提示词装载：`prompts.trace` 段对应仓内 `prompts/trace-board.md` | `prompt-store.js:18-19` |

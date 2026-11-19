@@ -1,0 +1,37 @@
+# 外部时序扰动（复跑审计打回时的注入手法）：给指定 method 的 fetch 垫延迟，验证并发断言不交给到达顺序
+# /tmp/t041-jitter/jitter.mjs:
+#   // 外部时序扰动：给指定 method 的 fetch 垫一段延迟，用来验证并发断言不依赖到达顺序。
+#   const realFetch = globalThis.fetch;
+#   const method = String(process.env.JITTER_METHOD || 'PUT').toUpperCase();
+#   const ms = Number(process.env.JITTER_MS || 20);
+#   globalThis.fetch = async (url, init = {}) => {
+#     const m = String(init?.method || 'GET').toUpperCase();
+#     if (m === method) await new Promise(resolve => setTimeout(resolve, ms));
+#     return realFetch(url, init);
+#   };
+
+$ JITTER_METHOD=PUT JITTER_MS=20 node --import /tmp/t041-jitter/jitter.mjs --test --test-force-exit --test-timeout=60000 evidence/test/P003-T041/http-contract.test.js
+EXIT=0
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+
+$ JITTER_METHOD=POST JITTER_MS=20 node --import /tmp/t041-jitter/jitter.mjs --test --test-force-exit --test-timeout=60000 evidence/test/P003-T041/http-contract.test.js
+EXIT=0
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+
+$ JITTER_METHOD=PUT JITTER_MS=100 node --import /tmp/t041-jitter/jitter.mjs --test --test-force-exit --test-timeout=60000 evidence/test/P003-T041/http-contract.test.js
+EXIT=0
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+
+$ JITTER_METHOD=POST JITTER_MS=100 node --import /tmp/t041-jitter/jitter.mjs --test --test-force-exit --test-timeout=60000 evidence/test/P003-T041/http-contract.test.js
+EXIT=0
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+
+# 结论：审计当时用 PUT +20ms 注入得到的 1 fail（[200,404]）在修复后的同一注入下复绿（4 种注入全 13/0）。

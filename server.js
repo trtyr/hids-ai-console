@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -22,10 +22,9 @@ import { WikiWorkbench } from './wiki-workbench.js';
 import { TraceBoardService } from './trace-board.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
-import { RuleStore, isRuleId } from './rule-store.js';
+import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
 import { createConfigStore, dataRoot } from './config-store.js';
 
-const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
 // 可写配置的覆盖层（P003-T029）：**必须在下面这批模块级装配之前建**——它把改过的键盖进 process.env，
 // 装配才看得到；「重启进程后改过的值仍生效」全靠这一行。没改过的键继续读环境变量。
@@ -40,13 +39,18 @@ const agentToolbox = createAgentToolboxFromEnv();
 const triageToolbox = apiToolbox && agentToolbox ? new TriageEvidenceToolbox(apiToolbox, agentToolbox) : apiToolbox;
 const model = createModelFromEnv();
 const promptStore = new PromptStore();
+// 判据库（P003-T041）：缺省库＝数据根下的 `wiki/`，仓内 `wiki/` 只当种子源，首次读时初始化一次。
 const wikiStore = new WikiStore();
-const agent = triageToolbox && model ? new InvestigationAgent(triageToolbox, model, promptStore, wikiStore) : null;
-const deepInvestigator = agentToolbox && model ? new InvestigationAgent(agentToolbox, model, promptStore, wikiStore) : null;
+// Rego 规则库（P003-T041 A1）：同样住数据根下的 `rules/`，仓内 `rules/` 只当种子源。
+// 研判 Agent 与维护者**共用这一个实例**：维护者改了规则，下一次研判读到的就是改过的那份。
+const regoRuleStore = new RuleStore();
+const defaultRuleSessions = new RuleSessionStore();
+const agent = triageToolbox && model
+  ? new InvestigationAgent(triageToolbox, model, promptStore, wikiStore, regoRuleStore) : null;
+const deepInvestigator = agentToolbox && model
+  ? new InvestigationAgent(agentToolbox, model, promptStore, wikiStore, regoRuleStore) : null;
 const investigationStore = new InvestigationStore(runtime.investigations);
 const triageRuleEngine = new TriageRuleEngine(runtime.triageRules);
-// Rego 规则库跟着代码走（不是 .data/ 运行态）：默认读仓根的 rules/ 目录。
-const regoRuleStore = new RuleStore(path.join(moduleDirectory, 'rules'));
 const triageInputMode = triageInputModeOf();
 const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, investigator: agent,
   history: investigationStore, file: runtime.triageMonitor,
@@ -146,17 +150,6 @@ function ruleProposal(text) {
   return output;
 }
 
-// 校验：候选规则在临时目录里用真的 RuleStore 解析——只有规则子集内的语法能过，过不了就不落盘。
-async function validateRego(id, rego) {
-  const directory = await mkdtemp(path.join(tmpdir(), 'hids-rego-'));
-  try {
-    await writeFile(path.join(directory, `${id}.rego`), rego, { encoding: 'utf8', mode: 0o600 });
-    const rule = await new RuleStore(directory).read(id);
-    if (!rule) throw new Error(`规则正文的 package 与规则 id 不一致：${id}`);
-    return rule;
-  } finally { await rm(directory, { recursive: true, force: true }); }
-}
-
 // 一份规则正文里的条件行（`match if { }` 体内，按出现顺序）。
 // **这里不校验语法**：候选正文先过 `validateRego`、原规则由装载器读进来，两边都是规则子集内的合法正文，
 // 抽取只为比对。认不出的行留着 `raw` 原文，比对时按「无法证明没放宽」处理（见 `atLeastAsStrict`）。
@@ -222,62 +215,82 @@ function widenedConditions(previousRego, nextRego) {
   return widened;
 }
 
-// 写一份规则：临时文件 + rename，写完再整库装载一次——宁可这次维护失败，也不留半截规则或重复 id。
-async function writeRuleFile(directory, file, rego) {
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const temporary = path.join(directory, `.${file}.${randomUUID()}.tmp`);
-  await writeFile(temporary, rego, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  try { await rename(temporary, path.join(directory, file)); }
-  catch (cause) { await rm(temporary, { force: true }); throw cause; }
-  await new RuleStore(directory).list();
-}
-
 /**
- * 规则维护者：拿一条已完成的误报案件，让模型改一条 Rego 或新增一条，校验通过才写进 `rules/<id>.rego`。
- * 返回 `{ id, file, name, action, rationale }`；任何一步不成立都抛错，调用方记 failed。
- * 不重写整本：只写这一份文件，同目录其它 `.rego` 一个字节都不动。
+ * 规则维护者（P003-T041 A4/A5）：拿一条已完成的误报案件，让模型改一条 Rego 或新增一条。
+ *
+ * - **写盘只有一条路**：`RuleStore.save()`——与人工维护接口 `PUT /api/rules/{id}` 是同一个方法，
+ *   校验、旧版进历史、原子替换都在那里；这里不再有第二套直写文件的函数。
+ * - **每次维护落一份会话**（`<数据根>/rule-sessions/<uuid>.json`，形制对齐 wiki-sessions）：
+ *   输入案卷引用、模型草案、校验结果、终态。会话先落一份再干活，模型或校验半路挂掉也留得下「卡在哪」。
+ * 返回 `{ id, file, name, action, rationale, rev, previous_rev, session_id }`；任何一步不成立都抛错，调用方记 failed。
  */
 export class RegoRuleMaintainer {
-  constructor(model, ruleStore, prompts) { this.model = model; this.ruleStore = ruleStore; this.prompts = prompts; }
+  constructor(model, ruleStore, prompts, sessions = null) {
+    this.model = model; this.ruleStore = ruleStore; this.prompts = prompts; this.sessions = sessions;
+  }
 
-  async maintain({ caseId, eventType, reason, who, alert, ruleIds = [] }) {
-    const inventory = await this.ruleStore.list();
-    const matched = [];
-    for (const id of ruleIds) {
-      const rule = await this.ruleStore.read(id);
-      if (rule) matched.push({ id: rule.id, name: rule.name, rego: rule.rego });
+  async maintain({ caseId, caseDir = null, eventType, reason, who, alert, ruleIds = [] }) {
+    const now = new Date().toISOString();
+    const session = this.sessions ? await this.sessions.save({ id: randomUUID(),
+      case_id: caseId, case_dir: caseDir, event_type: eventType, reason, who, status: 'collecting',
+      proposal: null, validation: null, result: null, error: null, created_at: now, updated_at: now }) : null;
+    // 会话的每次状态推进都落盘：维护跑在后台，进程挂掉后数据根里还能看出这次维护到哪一步。
+    // 累积在 `record` 上（不是在原始 `session` 上）——后一次推进不能把前一次记下的草案/校验结果冲掉。
+    let record = session;
+    const settle = async patch => {
+      if (!record) return;
+      record = { ...record, ...patch, updated_at: new Date().toISOString() };
+      await this.sessions.save(record);
+    };
+    try {
+      const inventory = await this.ruleStore.list();
+      const matched = [];
+      for (const id of ruleIds) {
+        const rule = await this.ruleStore.read(id);
+        if (rule) matched.push({ id: rule.id, name: rule.name, rego: rule.rego });
+      }
+      const prompt = (await this.prompts.load())?.prompts?.rule;
+      if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('规则维护提示词未配置');
+      const message = await this.model.complete([
+        { role: 'system', content: prompt },
+        { role: 'user', content: JSON.stringify({ case_id: caseId, event_type: eventType, false_positive_reason: reason,
+          reported_by: who, alert, matched_rules: matched, existing_rules: inventory.rules }) }
+      ], [], 'none');
+      const output = ruleProposal(message.content);
+      if (output.ready === false)
+        throw new Error(`规则维护者没有给出可落盘的修订：${String(output.reason || '').slice(0, 200) || '未说明原因'}`);
+      const id = String(output.id || '').trim();
+      if (!isRuleId(id)) throw new Error(`规则 id 不合法：${id || '(空)'}`);
+      const rego = String(output.rego || '');
+      if (!rego.trim()) throw new Error('规则正文为空');
+      const rationale = String(output.reason || '').slice(0, 500);
+      // 草案先记进会话：即便下面校验不过，数据根里也留得下模型当时提了什么。
+      await settle({ status: 'validating', proposal: { id, rego, rationale } });
+      // 第一道校验：语法必须在规则子集内（与装载器同一份 `parseRule`，报错带 file:line）。
+      this.ruleStore.validate(id, rego);
+      const existing = await this.ruleStore.read(id);
+      // 第二道校验：改已有规则时原条件不许更宽。放在写盘之前——校验不过就一个字都不落，维护判 failed。
+      if (existing) {
+        const widened = widenedConditions(existing.rego, rego);
+        if (widened.length)
+          throw new Error(`规则修订放宽了原有限制条件，拒绝落盘：${widened.join('；').slice(0, 200)}`);
+      }
+      const saved = await this.ruleStore.save(id, rego, { note: `误报维护（${who}）：${rationale.slice(0, 120)}` });
+      await settle({ status: saved.action === 'unchanged' ? 'no_change' : 'updated',
+        validation: { ok: true, name: saved.name, file: saved.file, rev: saved.rev },
+        result: { action: saved.action, file: saved.file, rev: saved.rev, previous_rev: saved.previous_rev } });
+      // 返回形状与 P003-T013 一致（调用方 `maintainFalsePositive` 与既有测试都按这四个字段读）；
+      // `rev` / `previous_rev` / 会话 id 落在会话文件里（`GET /api/rules/sessions` 可按 case_id 找到）。
+      return { id, file: saved.file, name: saved.name, action: saved.action, rationale };
+    } catch (cause) {
+      // 会话落盘本身再挂，也不能顶掉原始错误：调用方要看到的是「为什么维护没成」。
+      await settle({ status: 'failed', error: scrubCredentials(cause?.message || cause).slice(0, 300) }).catch(() => {});
+      throw cause;
     }
-    const prompt = (await this.prompts.load())?.prompts?.rule;
-    if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('规则维护提示词未配置');
-    const message = await this.model.complete([
-      { role: 'system', content: prompt },
-      { role: 'user', content: JSON.stringify({ case_id: caseId, event_type: eventType, false_positive_reason: reason,
-        reported_by: who, alert, matched_rules: matched, existing_rules: inventory.rules }) }
-    ], [], 'none');
-    const output = ruleProposal(message.content);
-    if (output.ready === false)
-      throw new Error(`规则维护者没有给出可落盘的修订：${String(output.reason || '').slice(0, 200) || '未说明原因'}`);
-    const id = String(output.id || '').trim();
-    if (!isRuleId(id)) throw new Error(`规则 id 不合法：${id || '(空)'}`);
-    const rego = String(output.rego || '');
-    if (!rego.trim()) throw new Error('规则正文为空');
-    const read = await validateRego(id, rego);
-    const existing = await this.ruleStore.read(id);
-    // 第三道校验：改已有规则时原条件不许更宽。放在写盘之前——校验不过就一个字都不落，维护判 failed。
-    if (existing) {
-      const widened = widenedConditions(existing.rego, rego);
-      if (widened.length)
-        throw new Error(`规则修订放宽了原有限制条件，拒绝落盘：${widened.join('；').slice(0, 200)}`);
-    }
-    // 已有规则的 id 可能住在别的文件名里：改它就要写回它自己那份，不能另起一个同 id 的文件。
-    const file = existing?.file || `${id}.rego`;
-    await writeRuleFile(this.ruleStore.directory, file, rego);
-    return { id, file, name: read.name, action: existing ? 'update' : 'add',
-      rationale: String(output.reason || '').slice(0, 500) };
   }
 }
 
-const regoMaintainer = model ? new RegoRuleMaintainer(model, regoRuleStore, promptStore) : null;
+const regoMaintainer = model ? new RegoRuleMaintainer(model, regoRuleStore, promptStore, defaultRuleSessions) : null;
 
 // 案件里命中的 Rego 规则 id：结果落盘的 result.json 里就有，没有就当没命中（旧案件可能没有这条轨迹）。
 async function caseRegoRuleIds(record) {
@@ -322,8 +335,8 @@ async function maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMai
   const ruleJob = async () => {
     if (!ruleMaintainer) throw new Error('规则维护者未配置');
     const parsed = record.input?.parsed;
-    return ruleMaintainer.maintain({ caseId: record.alert_id, eventType: eventTypeFor(parsed?.msgid),
-      reason: record.feedback.reason, who: record.feedback.who,
+    return ruleMaintainer.maintain({ caseId: record.alert_id, caseDir: record.case_dir || null,
+      eventType: eventTypeFor(parsed?.msgid), reason: record.feedback.reason, who: record.feedback.who,
       alert: parsed ? { msgid: parsed.msgid, payload: parsed.payload } : null,
       ruleIds: await caseRegoRuleIds(record) });
   };
@@ -590,12 +603,221 @@ async function triageFilteredAlerts(service, monitor, query, { statuses, verdict
   }
   return { ...envelope, alerts: collected.slice(offset, offset + count), total: collected.length, truncated };
 }
+
+// ── 数据管理（P003-T044）：盘点 / 归档 / 清理 ───────────────────────────────
+// 七类运行态的真源路径一律取自 createServer 的注入件（history / boardService / wikiAgent / monitor / config），
+// 不另立一套路径表：测试换掉注入件里的替身目录，盘点的就是那份替身目录。
+// dataRoot 取配置覆盖层文件所在目录（缺省就是仓内 .data）：队列的 .archive.jsonl 与清理归档目录都落在这下面。
+export const DATA_KINDS = Object.freeze(['cases', 'investigations', 'boards', 'wiki_sessions', 'queue', 'logs', 'config_overrides']);
+const DATA_KIND_LABELS = Object.freeze({ cases: '案卷', investigations: '研判记录', boards: '溯源白板',
+  wiki_sessions: '知识库会话', queue: '研判队列', logs: '日志', config_overrides: '配置覆盖层' });
+const DATA_CLEAN_ACTIONS = Object.freeze(['archive', 'delete']);
+const DATA_CANDIDATE_LIMIT = 100; // dry-run 清单最多列这么多条，多出来的只给数字（truncated: true）
+
+function dataAdminRoot(deps) {
+  return deps.config?.file ? path.dirname(deps.config.file) : runtime.data;
+}
+
+// 布局四种：dirs（一级子目录各算一条）/ files（匹配扩展名的文件）/ single（单文件）/ queue（队列文件，条数＝记录）。
+// logs 也走 files 布局，匹配 *.log，目录就是 dataRoot：后端自身不落日志文件（docs/architecture.md:156）。
+function dataStores(deps = {}) {
+  const root = dataAdminRoot(deps);
+  const store = (kind, layout, location, extension = null) => ({ kind, label: DATA_KIND_LABELS[kind], layout, path: location, extension, root });
+  return new Map([
+    ['cases', store('cases', 'dirs', deps.monitor?.casesDirectory || process.env.HIDS_CASES_DIR || path.join(root, 'cases'))],
+    ['investigations', store('investigations', 'files', deps.history?.directory || path.join(root, 'investigations'), 'json')],
+    ['boards', store('boards', 'files', deps.boardService?.directory || path.join(root, 'trace-boards'), 'json')],
+    ['wiki_sessions', store('wiki_sessions', 'files', deps.wikiAgent?.directory || path.join(root, 'wiki-sessions'), 'json')],
+    ['queue', store('queue', 'queue', deps.monitor?.file || path.join(root, 'triage-monitor.json'))],
+    ['logs', store('logs', 'files', root, 'log')],
+    ['config_overrides', store('config_overrides', 'single', deps.config?.file || path.join(root, 'config-overrides.json'))]
+  ]);
+}
+
+async function statOrNull(location) {
+  try { return await stat(location); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+
+async function listOrNull(directory) {
+  try { return await readdir(directory, { withFileTypes: true }); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+
+// 一个文件/目录占多少字节、最后一次写是什么时候。
+// 目录递归累加字节；at 取目录里**文件**的最新 mtime（空目录退回目录自身的 mtime）——
+// 目录 mtime 只在建/删条目时变，拿它当「这个案卷最后动过是什么时候」会偏到刚建目录那一刻。
+// 读不到的条目按 0 字节算：盘点不能因为一个断掉的符号链接整个 500。
+async function measure(location) {
+  let info;
+  try { info = await stat(location); }
+  catch { return { bytes: 0, at: null, exists: false }; }
+  if (!info.isDirectory()) return { bytes: info.size, at: info.mtimeMs, exists: true };
+  let bytes = 0, at = null;
+  let entries = [];
+  try { entries = await readdir(location, { withFileTypes: true }); } catch { entries = []; }
+  for (const entry of entries) {
+    // 只把文件的时间算进来：子目录自己的 mtime 同样是「建/删条目」时刻，不是内容时刻。
+    const child = await measure(path.join(location, entry.name));
+    bytes += child.bytes;
+    if (child.at != null && (at == null || child.at > at)) at = child.at;
+  }
+  return { bytes, at: at ?? info.mtimeMs, exists: true };
+}
+
+const isoOrNull = at => (at == null ? null : new Date(at).toISOString());
+
+// 一类存储里的「条」：文件布局是一个文件，dirs 布局是一个下级目录，single 是那一个文件。
+async function storeEntries(store) {
+  if (store.layout === 'single') {
+    const measured = await measure(store.path);
+    return measured.exists ? [{ name: path.basename(store.path), path: store.path, bytes: measured.bytes, at: measured.at }] : [];
+  }
+  const entries = await listOrNull(store.path);
+  if (!entries) return [];
+  const picked = entries.filter(entry => entry.isDirectory()
+    ? store.layout === 'dirs'
+    : store.layout === 'files' && entry.name.endsWith(`.${store.extension}`));
+  const rows = [];
+  for (const entry of picked) {
+    const location = path.join(store.path, entry.name);
+    const measured = await measure(location);
+    rows.push({ name: entry.name, path: location, bytes: measured.bytes, at: measured.at });
+  }
+  return rows;
+}
+
+// 队列条数：有研判队列时按进程内记录数（内存才是活口径），没有队列时退回读队列文件里的 records。
+// 字节数＝队列文件 + 同名 .archive.jsonl（归档也是队列这块存储的占用）。
+async function queueMeasure(store, deps) {
+  const queueFile = await statOrNull(store.path);
+  const archiveFile = await statOrNull(`${store.path}.archive.jsonl`);
+  let records = [];
+  if (deps.monitor?.records instanceof Map) records = [...deps.monitor.records.values()];
+  else if (queueFile) {
+    try {
+      const data = JSON.parse(await readFile(store.path, 'utf8'));
+      records = Array.isArray(data.records) ? data.records : [];
+    } catch { records = []; }
+  }
+  const stamps = records.map(record => Date.parse(record.updated_at || record.saved_at || record.created_at || ''))
+    .filter(Number.isFinite).sort((a, b) => a - b);
+  return { exists: Boolean(queueFile), count: records.length,
+    bytes: (queueFile?.size || 0) + (archiveFile?.size || 0),
+    oldestAt: stamps[0] ?? null, newestAt: stamps[stamps.length - 1] ?? null };
+}
+
+async function inventoryRow(store, deps) {
+  if (store.layout === 'queue') {
+    const queue = await queueMeasure(store, deps);
+    return { kind: store.kind, label: store.label, path: store.path, exists: queue.exists,
+      count: queue.count, bytes: queue.bytes, oldest_at: isoOrNull(queue.oldestAt), newest_at: isoOrNull(queue.newestAt) };
+  }
+  const entries = await storeEntries(store);
+  const exists = store.layout === 'single' ? entries.length > 0 : (await listOrNull(store.path)) !== null;
+  const ats = entries.map(entry => entry.at).filter(at => at != null);
+  return { kind: store.kind, label: store.label, path: store.path, exists,
+    count: entries.length, bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
+    oldest_at: isoOrNull(ats.length ? Math.min(...ats) : null), newest_at: isoOrNull(ats.length ? Math.max(...ats) : null) };
+}
+
+// 盘点：七类各报条数与字节，再给一个总数。每次都现扫盘（清理前后的数字立刻对得上，A5）。
+export async function dataInventory(deps = {}) {
+  const stores = dataStores(deps);
+  const rows = [];
+  for (const kind of DATA_KINDS) rows.push(await inventoryRow(stores.get(kind), deps));
+  const total = rows.reduce((sum, row) => ({ count: sum.count + row.count, bytes: sum.bytes + row.bytes }), { count: 0, bytes: 0 });
+  return { data_dir: dataAdminRoot(deps), stores: rows, total };
+}
+
+const dataCallerError = message => Object.assign(new Error(message), { status: 400 });
+
+// 案卷清理的 409：目录上挂着非 done 记录（还在排 / 在跑 / 等重排）的，整个请求拒绝，盘上一动不动。
+function assertCasesSettled(store, chosen, deps) {
+  if (store.kind !== 'cases' || typeof deps.monitor?.blockedCaseDirs !== 'function') return;
+  const blocked = deps.monitor.blockedCaseDirs();
+  const hit = chosen.filter(entry => blocked.has(path.resolve(entry.path)));
+  if (!hit.length) return;
+  const error = new Error(`${hit.length} 个案卷对应的案件还在排或在跑，已完结的案件才可清理`);
+  error.status = 409;
+  throw error;
+}
+
+// 归档文件名前加执行时刻：同一路径清理两次不会覆盖上一份（rename 对已存在的目标是静默替换）。
+function archiveTarget(directory, name, now) {
+  const stamp = new Date(now).toISOString().replace(/[:.]/g, '-');
+  return path.join(directory, `${stamp}-${name}`);
+}
+
+async function fileCleanup(deps, store, { action, execute, olderThan, keep, now }) {
+  const entries = await storeEntries(store);
+  const ranked = entries.slice().sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  const selected = new Map();
+  if (Number.isInteger(keep)) for (const entry of ranked.slice(keep)) selected.set(entry.path, entry);
+  if (Number.isFinite(olderThan))
+    for (const entry of entries) if (entry.at != null && entry.at < olderThan) selected.set(entry.path, entry);
+  const chosen = [...selected.values()].sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+  assertCasesSettled(store, chosen, deps);
+  const bytes = chosen.reduce((sum, entry) => sum + entry.bytes, 0);
+  const listed = { count: chosen.length, bytes,
+    items: chosen.slice(0, DATA_CANDIDATE_LIMIT).map(entry => ({ name: entry.name, bytes: entry.bytes, at: isoOrNull(entry.at) })),
+    truncated: chosen.length > DATA_CANDIDATE_LIMIT };
+  if (!execute || !chosen.length) return { count: chosen.length, bytes, listed };
+  const archiveDir = path.join(store.root, 'archive', store.kind);
+  if (action === 'archive') await mkdir(archiveDir, { recursive: true, mode: 0o700 });
+  for (const entry of chosen) {
+    if (action === 'archive') await rename(entry.path, archiveTarget(archiveDir, entry.name, now));
+    else await rm(entry.path, { recursive: true, force: true });
+  }
+  return { count: chosen.length, bytes, listed };
+}
+
+async function queueCleanup(deps, store, { action, execute, olderThan, keep }) {
+  const monitor = deps.monitor;
+  if (typeof monitor?.clean !== 'function') {
+    // 没有研判队列就没有「案件状态」可判：不拿队列文件硬删（那是另一条进程的活）。
+    throw Object.assign(new Error('自动研判尚未配置（没有研判队列），无法清理队列'), { failure: 'config' });
+  }
+  const result = await monitor.clean({ action, execute, olderThan, keep });
+  return { count: result.count, bytes: result.bytes,
+    listed: { count: result.count, bytes: result.bytes,
+      items: result.items.slice(0, DATA_CANDIDATE_LIMIT), truncated: result.items.length > DATA_CANDIDATE_LIMIT } };
+}
+
+// 清理：按类型 + 阈值（早于某时间 / 超过某数量）归档或删除；默认 dry-run 只报清单，execute: true 才动盘。
+// 真执行才落 data.cleaned 一条（只带类型、动作、条数、字节，不带文件名与内容——与 config.updated 同一口径）。
+export async function dataCleanup(deps = {}, body = null, { now = Date.now() } = {}) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw dataCallerError('请求正文必须是 JSON 对象');
+  const unknown = Object.keys(body).filter(key => !['kind', 'action', 'execute', 'older_than', 'keep'].includes(key));
+  if (unknown.length) throw dataCallerError(`不认识的参数：${unknown.join('、')}`);
+  if (!DATA_KINDS.includes(body.kind)) throw dataCallerError(`要清理的类型只能是 ${DATA_KINDS.join('、')}`);
+  const action = body.action ?? 'archive';
+  if (!DATA_CLEAN_ACTIONS.includes(action)) throw dataCallerError(`action 只能是 ${DATA_CLEAN_ACTIONS.join(' 或 ')}`);
+  const execute = body.execute ?? false;
+  if (typeof execute !== 'boolean') throw dataCallerError('execute 必须是布尔值');
+  const olderThan = body.older_than == null ? null : Date.parse(body.older_than);
+  if (body.older_than != null && !Number.isFinite(olderThan)) throw dataCallerError('older_than 必须是可解析的时间（ISO 8601）');
+  const keep = body.keep ?? null;
+  if (keep != null && (!Number.isSafeInteger(keep) || keep < 0)) throw dataCallerError('keep 必须是不小于 0 的整数');
+  if (olderThan == null && keep == null) throw dataCallerError('至少要给一个阈值：older_than（早于某时间）或 keep（保留最新 N 条）');
+  const store = dataStores(deps).get(body.kind);
+  const outcome = body.kind === 'queue'
+    ? await queueCleanup(deps, store, { action, execute, olderThan, keep })
+    : await fileCleanup(deps, store, { action, execute, olderThan, keep, now });
+  if (execute) log('data.cleaned', { kind: body.kind, action, count: outcome.count, bytes: outcome.bytes });
+  return { dry_run: !execute, kind: body.kind, action,
+    threshold: { older_than: body.older_than ?? null, keep },
+    candidates: outcome.listed,
+    applied: { count: execute ? outcome.count : 0, bytes: execute ? outcome.bytes : 0 },
+    inventory: await dataInventory(deps) };
+}
+
 export function createServer(service = gateway, toolbox = apiToolbox, investigator = agent, history = investigationStore, prompts = promptStore, monitor = service === gateway ? triageMonitor : null, knowledge = null,
   access = { user: process.env.HIDS_BASIC_AUTH_USER, password: process.env.HIDS_BASIC_AUTH_PASSWORD }, boardService = service === gateway ? traceBoard : null,
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
   maintenanceEntry = process.env.HIDS_MAINTENANCE_ENTRY_URL,
   ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore,
-  ruleMaintainer = regoMaintainer, config = configStore) {
+  ruleMaintainer = regoMaintainer, config = configStore, ruleSessions = defaultRuleSessions) {
   // 注入的 TraceBoardService 没有取数器时，用本次的 monitor / history 现接一条：
   // 测试与部署走同一套接线，不再靠测试里手塞假 analysis。
   if (boardService instanceof TraceBoardService && !boardService.analysis)
@@ -616,6 +838,8 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   // 本进程里正在跑维护的告警：重复登记靠它挡，不靠记录上的 maintenance.status——进程重启后记录会停在 updating，
   // 拿那个当日志会把这个案件永久锁死在 updating。
   const runningMaintenance = new Set();
+  // 数据管理（P003-T044）的路径来源：全部是本次注入的构件，换替身就是换盘点对象。
+  const dataDeps = { history, monitor, boardService, wikiAgent, config };
   return http.createServer(async (req, res) => {
     const startedAt = Date.now();
     // 只记方法与路径（query 一律不记：可能带令牌），请求头一个字段都不碰——Authorization / Cookie 不进日志（A4）。
@@ -647,6 +871,14 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const updated = await config.update(await readJSON(req));
         applyLiveConfig({ gateway, model, agentToolbox }, config.values());
         return json(res, 200, { updated, config: configSummary(config.env) });
+      }
+      // 数据管理（P003-T044）：盘点七类运行态的条数与字节；清理按类型与阈值归档或删除（默认 dry-run）。
+      // 两个路径不碰上游、不碰模型，只读本地运行态目录；清理的 409（还有案件在排/在跑）由 causeError 原样回。
+      if (url.pathname === '/api/data/inventory' && req.method === 'GET')
+        return json(res, 200, await dataInventory(dataDeps));
+      if (url.pathname === '/api/data/cleanup' && req.method === 'POST') {
+        try { return json(res, 200, await dataCleanup(dataDeps, await readJSON(req))); }
+        catch (cause) { return causeError(res, cause, 'internal'); }
       }
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
@@ -741,12 +973,63 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         try { return json(res, 200, await ruleStore.list()); }
         catch (cause) { return upstreamError(res, `规则库读取失败：${cause.message}`); }
       }
+      // 规则维护接口（P003-T041 A5）。读开放、写要规则管理员令牌，与 `PUT /api/triage/rules` 同一道闸。
+      // `sessions` 必须排在 `/api/rules/{id}` 之前：`sessions` 本身是合法规则 id 形状，排后面会被当成规则读。
+      if (url.pathname === '/api/rules/sessions' && req.method === 'GET') {
+        try { return json(res, 200, { sessions: await ruleSessions.list() }); }
+        catch (cause) { return upstreamError(res, `规则维护会话读取失败：${cause.message}`); }
+      }
       if (url.pathname === '/api/rules/evaluate' && req.method === 'POST') {
         let fact;
         try { fact = await readJSON(req); } catch (cause) { return callerError(res, cause.message); }
         if (fact === null || typeof fact !== 'object' || Array.isArray(fact)) return callerError(res, '告警事实必须是 JSON 对象');
         try { return json(res, 200, await ruleStore.evaluate(fact)); }
         catch (cause) { return upstreamError(res, `规则求值失败：${cause.message}`); }
+      }
+      const ruleMaintenance = url.pathname.match(/^\/api\/rules\/([^/]+)\/(history|rollback)$/);
+      if (ruleMaintenance) {
+        let id;
+        try { id = decodeURIComponent(ruleMaintenance[1]); }
+        catch { return callerError(res, '规则 id 编码无效'); }
+        if (!isRuleId(id)) return callerError(res, '规则 id 无效');
+        if (ruleMaintenance[2] === 'history' && req.method === 'GET') {
+          try { return json(res, 200, { id, history: await ruleStore.history(id) }); }
+          catch (cause) { return upstreamError(res, `规则历史读取失败：${cause.message}`); }
+        }
+        if (ruleMaintenance[2] === 'rollback' && req.method === 'POST') {
+          if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');
+          if (!hasRuleAdminAccess(req, ruleAdminToken)) return callerError(res, '规则管理员令牌无效', 403);
+          const body = await readJSON(req, 20000);
+          const rev = typeof body?.rev === 'string' ? body.rev.trim() : '';
+          if (!/^[0-9a-f]{16}$/.test(rev)) return callerError(res, '缺少有效的目标版本 rev');
+          const who = String(body.who ?? access?.user ?? 'operator').trim().replace(/\s+/g, ' ').slice(0, 100);
+          try { return json(res, 200, await ruleStore.rollback(id, rev, { note: `人工回滚（${who}）` })); }
+          catch (cause) { return causeError(res, cause, 'internal'); }
+        }
+      }
+      if (url.pathname.startsWith('/api/rules/') && req.method === 'PUT') {
+        if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');
+        if (!hasRuleAdminAccess(req, ruleAdminToken)) return callerError(res, '规则管理员令牌无效', 403);
+        let id;
+        try { id = decodeURIComponent(url.pathname.slice('/api/rules/'.length)); }
+        catch { return callerError(res, '规则 id 编码无效'); }
+        if (!isRuleId(id)) return callerError(res, '规则 id 无效');
+        const body = await readJSON(req, 200000);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return callerError(res, '请求正文无效');
+        if (typeof body.rego !== 'string' || !body.rego.trim()) return callerError(res, '请求正文缺少规则正文 rego');
+        // 乐观并发（与 wiki 页面、triage 规则集同一口径）：改了别处就 409，别让后写的悄悄盖掉前一份。
+        const expected = body.expected_revision;
+        if (!Object.hasOwn(body, 'expected_revision') ||
+          !(expected === null || (typeof expected === 'string' && /^[0-9a-f]{16}$/.test(expected))))
+          return callerError(res, '缺少有效的规则版本 expected_revision');
+        try {
+          // 备注进被替换那一版的历史条目（`<id>-<rev>.json`）：传什么就记什么，不静默丢掉。
+          const note = typeof body.note === 'string' && body.note.trim()
+            ? `人工维护：${body.note.trim().replace(/\s+/g, ' ').slice(0, 200)}` : '人工维护';
+          // 版本比对在 `RuleStore` 的写队列里做（与 `WikiStore.update()` 同一口径）：读—比对—写不可分割，
+          // 并发两个 PUT 只有一个能落盘，后到的拿 409，不会悄悄盖掉前一份。
+          return json(res, 200, await ruleStore.save(id, body.rego, { note, expectedRevision: expected }));
+        } catch (cause) { return causeError(res, cause, 'internal'); }
       }
       if (url.pathname.startsWith('/api/rules/') && req.method === 'GET') {
         let id;

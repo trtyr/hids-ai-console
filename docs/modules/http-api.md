@@ -4,7 +4,8 @@
 
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
-- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。
+- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:870-873` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。
+P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inventory` 与 `POST /api/data/cleanup`、新增 §3.7）按本卡提交时的 `server.js` 标号（1309 行，`server.js:598-799` 的 helper、`server.js:864-870` 的两个分支、`server.js:829` 的 `dataDeps`）与 `triage-monitor.js` 标号（924 行，`triage-monitor.js:349-407` 的三个新方法，见 [evidence/recon/P003-T044.md](../../evidence/recon/P003-T044.md)）：新代码全部落在文件末尾与 `server.js:864-870`，前面所有锚点没挪。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
 ## 1. 模块职责与边界
@@ -39,13 +40,13 @@
 
 | 件 | 位置 | 缺配置时的结果 |
 | --- | --- | --- |
-| 运行态目录 `runtime`（9 条路径） | `server.js:29`、`server.js:1010-1022` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
+| 运行态目录 `runtime`（9 条路径） | `server.js:28`、`server.js:1293-1306` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
 | 监听地址与端口 | `server.js:28-29` | `HIDS_HOST` 缺省 `127.0.0.1`，`HIDS_PORT` 缺省 `8080` |
 | 牧云网关 `gateway` 与 API 工具箱 `apiToolbox` | `server.js:30-34` | 牧云地址或 Token 缺一个 → 两者为 `null` |
 | 模型 `model` 与两个研判器 | `server.js:35-40` | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项 → `model` 为 `null`，两个研判器也是 `null` |
 | 研判记录、规则集、研判队列、判据工作台、溯源白板 | `server.js:46-59`、`server.js:126` | 队列要 `gateway` 与研判器、白板要 MCP 工具箱与模型，缺任一则该件为 `null` |
 
-运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1010-1022`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
+运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1293-1306`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
 
 **`createServer` 是依赖注入点**（`server.js:257-261`）：14 个参数都带默认值，默认指向模块级单例。测试与探针靠传替身换掉 `service`、`investigator`、`history`、`monitor`、`wiki`、`wikiAgent` 这些件。其中 `monitor` 与 `boardService` 的默认值写成「`service` 是不是模块级 `gateway`」的条件式——换了 `service`，就不再挂默认的研判队列与溯源白板。
 
@@ -64,24 +65,30 @@
 
 ## 3. 路由分发
 
-**关键路径**：`server.js:275`（处理函数）、`server.js:277`（路径解析）、`server.js:279` 到 `server.js:546`（依次排列的分支）、`server.js:547-548`（404 兜底）。
+**关键路径**：`server.js:843`（处理函数）、`server.js:853`（路径解析）、`server.js:855` 到 `server.js:1270`（依次排列的分支）、`server.js:1272-1273`（404 兜底）。
 
 **分发机制**：没有路由表，是一条 `if` 链。每一支的形状都是「路径条件 + 方法条件」，命中即 `return`，后面的分支不再看。因此**分支顺序决定谁先赢**：`GET /api/agent/triage/status`（`server.js:333-334`）排在 `GET /api/agent/triage/{alertId}`（`server.js:378-385`）前面，所以 `status` 这个词不会被当成告警 ID。
 
-路径与查询串由 `new URL(req.url, 'http://' + (req.headers.host || 'localhost'))` 解析（`server.js:277`），后面的判断都用 `url.pathname` 与 `url.searchParams`。
+路径与查询串由 `new URL(req.url, 'http://' + (req.headers.host || 'localhost'))` 解析（`server.js:853`），后面的判断都用 `url.pathname` 与 `url.searchParams`。
 
 ### 3.1 路由表
 
-37 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
+39 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
 
-> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）。
-> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 37 行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
+> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）；P003-T044 再加两条数据管理路由（`GET /api/data/inventory`、`POST /api/data/cleanup`，见 §3.7）。
+> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 39 行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
+41 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
+
+> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）。P003-T041 把规则维护做成正式接口，补了 `PUT /api/rules/{id}`、`GET /api/rules/{id}/history`、`POST /api/rules/{id}/rollback`、`GET /api/rules/sessions` 四条。
+> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 40 行），不是组合数：一行可以给出多条组合（`server.js:819` 的 `/api/agent/triage/{alertId}` 给 GET / POST / DELETE 三条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
 
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/session` | 200 `{authenticated:true, user, role}` | — | `server.js:208-214` |
 | GET | `/api/config` | 200 生效配置（`{host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required}`） | —（只读环境变量：不探上游、不因缺件 503；机密只在 `secrets` 里给布尔） | `server.js:642` |
-| POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写五键；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:646-650` |
+| POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写五键；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:870-873` |
+| GET | `/api/data/inventory` | 200 七类存储的条数与字节（`{data_dir, stores, total}`，见 §3.7） | —（只读本地运行态目录：不探上游、不碰模型，缺目录按 0 报，不 503） | `server.js:877` |
+| POST | `/api/data/cleanup` | 200 `{dry_run, kind, action, threshold, candidates, applied, inventory}`（见 §3.7） | 默认 dry-run；`kind` / 阈值 / 动作 / `execute` 不合法回 400；候选里有没完结的案件回 409；没装配研判队列时清 `queue` 回 503 | `server.js:866-870` |
 | GET | `/api/updates` | 200 升级包概览 | — | `server.js:215` |
 | GET | `/api/status` | 200 / 502 | 未配牧云回 200（`configured:false`）；配了但连不上回 502，正文仍是 `{configured, connected:false, reason}`。**探活结果缓存 45 秒**（`HIDS_STATUS_TTL_MS`，P003-T037）：窗口内不再发牧云 RPC，并发请求共用同一次探活；失败不缓存 | `server.js:216-220`、`cloudwalker.js:120-133` |
 | GET | `/api/agent/tools` | 200 工具清单 | 无 API 工具箱回 503 | `server.js:221-225` |
@@ -94,9 +101,13 @@
 | GET | `/api/triage/rules` | 200 | 读取失败回 502 | `server.js:265-269` |
 | POST | `/api/triage/rules/validate` | 200 `{valid:true,count}` | 正文不是对象 / 缺 `config` 键回 400「请求正文缺少 config」；`config` 不是合法规则集回 400「规则集格式无效」 | `server.js:270-279` |
 | PUT | `/api/triage/rules` | 200 | 需规则管理员令牌 | `server.js:280-291` |
-| GET | `/api/rules` | 200 `{count, rules}`（Rego 规则库） | 规则库读取失败回 502 | `server.js:559-562` |
-| POST | `/api/rules/evaluate` | 200 `{count, matched}` | 正文不是对象回 400；求值失败回 502 | `server.js:563-569` |
-| GET | `/api/rules/{id}` | 200 / 404 | id 不合格式回 400；规则库读取失败回 502 | `server.js:570-578` |
+| GET | `/api/rules` | 200 `{count, rules}`（Rego 规则库，活数据在 `<数据根>/rules/`） | 规则库读取失败回 502 | `server.js:752-755` |
+| GET | `/api/rules/sessions` | 200 `{sessions}`（规则维护会话摘要，按 `updated_at` 倒序；不含规则正文与误报理由） | 会话目录不可读回 502 | `server.js:758-761` |
+| POST | `/api/rules/evaluate` | 200 `{count, matched}` | 正文不是对象回 400；求值失败回 502 | `server.js:762-768` |
+| GET | `/api/rules/{id}/history` | 200 `{id, history:[{rev, file, bytes, saved_at, note}]}` 按写入时间升序；规则不存在时回空数组。`note` 是那条历史副本「为什么被替换」（`人工维护：<note>` / `人工回滚（<who>）` / `误报维护（<who>）：<理由>`），没备注的旧副本是 `null` | id 不合格式回 400；历史目录不可读回 502 | `server.js:769-778` |
+| POST | `/api/rules/{id}/rollback` | 200 与 `PUT` 同形，另带 `action:"rollback"` 与 `rolled_back_to`；被替换那一版进历史，备注 `人工回滚（<who>）` | 需规则管理员令牌（没配 503／不对 403）；`rev` 不是 16 位十六进制回 400；历史里没有这一版回 404 | `server.js:779-788` |
+| PUT | `/api/rules/{id}` | 200 `{id, file, name, rev, previous_rev, action}`（`action` 是 `add` / `update` / `unchanged`） | 需规则管理员令牌（没配 503／不对 403）；正文缺 `rego` 或 `expected_revision` 回 400；正文不在规则子集内回 400 并带 `<id>.rego:<行>`；`expected_revision` 与当前指纹不一致回 409（比对与写在 `RuleStore` 的同一个写队列任务里，并发两个 `PUT` 只成一个）；规则目录写失败回 500 | `server.js:790-812` |
+| GET | `/api/rules/{id}` | 200（含 `revision` = 正文 sha256 前 16 位）/ 404 | id 不合格式回 400；规则库读取失败回 502 | `server.js:814-827` |
 | GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:292-299` |
 | PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503。暂停期间报文进缓冲不丢、恢复不动游标（P003-T036，见 openapi 该路径说明） | `server.js:771-777` |
 | GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:825` |
@@ -124,11 +135,11 @@
 
 | 条件 | 状态 | 正文 | 出处 |
 | --- | --- | --- | --- |
-| `/api/agent/prompts` 用了非 GET 方法 | 405 | 请使用提示词文件上传入口 | `server.js:836` |
-| `/api/agent/prompts/upload` | 410 | 提示词更新已迁移到独立维护端，业务端不允许上传 | `server.js:836-837` |
+| `/api/agent/prompts` 用了非 GET 方法 | 405 | 请使用提示词文件上传入口 | `server.js:1119` |
+| `/api/agent/prompts/upload` | 410 | 提示词更新已迁移到独立维护端，业务端不允许上传 | `server.js:1120` |
 | `/api/` 开头的未知路径 | 404 | 接口不存在 | `server.js:793-794` |
 
-405 在整个文件里只有这一处（`grep -n "405" server.js` 只命中 `server.js:836`）。**方法对不上的路径，除这一处外都落到 404**：`POST /api/session` 与 `POST /api/triage/rules` 都回 404「接口不存在」。非 API 路径（如 `/`）也回同一句 404（`server.js:989-990`）。但 404 有两种文案——`/api/` 下的未知路径回「接口不存在」（`server.js:989-990`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:912`）。
+405 在整个文件里只有这一处（`grep -n "405" server.js` 只命中 `server.js:1119`）。**方法对不上的路径，除这一处外都落到 404**：`POST /api/session` 与 `POST /api/triage/rules` 都回 404「接口不存在」。非 API 路径（如 `/`）也回同一句 404（`server.js:989-990`）。但 404 有两种文案——`/api/` 下的未知路径回「接口不存在」（`server.js:989-990`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:1195`）。
 
 ### 3.3 路径里的 ID
 
@@ -218,7 +229,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 失败只写 `maintenance.rule.error` / `maintenance.wiki.error`（各截 300 字），**`verdict` 与 `feedback` 一个字节都不动**。
 维护状态随记录一起 `persist()`，所以 `GET /api/agent/triage/{alertId}` 能读到同一组字段。同一轮维护还在本进程里跑时再次登记只回当前进度，
-不重起一轮（`server.js:686`）；挡它的是 `runningMaintenance` 集合（`server.js:530`）——**不是**记录上的 `maintenance.status`：
+不重起一轮（`server.js:1079`）；挡它的是 `runningMaintenance` 集合（`server.js:840`）——**不是**记录上的 `maintenance.status`：
 进程重启后记录会停在 `updating`，拿那个当锁会把案件永久锁死。重启后的残留不挡重新登记，但也不会自动恢复（见本卡报告「未决」）。
 
 ### 3.5 生效配置（`GET /api/config`，P003-T025）
@@ -268,7 +279,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 ### 3.6 写配置（`POST /api/config`，P003-T029）
 
-**是什么**：不重启进程改牧云与模型的五项，改完立刻生效、落盘、重启仍生效，且不回显。实现：路由两行（`server.js:646-650`），行为全在新文件 `config-store.js`（`createConfigStore`，`config-store.js:88`）。OpenAPI 契约见 `openapi.yaml` 的 `writeConfig`。
+**是什么**：不重启进程改牧云与模型的五项，改完立刻生效、落盘、重启仍生效，且不回显。实现：路由两行（`server.js:870-873`），行为全在新文件 `config-store.js`（`createConfigStore`，`config-store.js:88`）。OpenAPI 契约见 `openapi.yaml` 的 `writeConfig`。
 
 **可写的只有五个键**（`WRITABLE_CONFIG_KEYS`，`config-store.js:22`）：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。表外键一律 400，包括看起来很顺手的 `HIDS_PORT`：`HIDS_HOST` / `HIDS_PORT` / `HIDS_TRIAGE_INPUT_MODE` 改起来必须重启进程；Basic 口令与两个管理员令牌是鉴权凭据本身，写进来等于自己给自己开门。
 
@@ -279,7 +290,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 ```
 
 - **值的形状**用模块级装配处同一套构造器判（`config-store.js:47` → `rpc-client.js:4-5`、`model-client.js:22-24`）：`CLOUDWALKER_URL` / `LLM_BASE_URL` 必须 `http(s)://` 开头；`CLOUDWALKER_API_TOKEN` 至少 6 位；`LLM_API_KEY`、`LLM_MODEL` 非空。校验对象是**合并后的生效值**（只改 `LLM_MODEL` 也要三项齐——进程里这三项本来就被启动闸门保证齐全）。
-- **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只增不减，要清掉改过的值就手工删数据根下的 `config-overrides.json`（`~/.local/share/hids-ai-console/config-overrides.json`，或 `HIDS_DATA_DIR` 指的目录）后重启。
+- **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只能新增/改值、不能删键；要清掉改过的值，用 P003-T044 的数据管理接口删掉覆盖层（`POST /api/data/cleanup`，`kind: config_overrides`，见 §3.7），或手工删 `.data/config-overrides.json`——两种都要**重启进程**才回到「按环境变量生效」，因为覆盖层是启动时同步读进 `env` 的。
 
 **响应**：`200`，`Cache-Control: no-store`：
 
@@ -340,6 +351,154 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 160ms
 # 真进程手工验三件事（起进程 → 写 → 读 → 杀 → 再起 → 读）
 ```
+
+### 3.7 数据管理（`GET /api/data/inventory`、`POST /api/data/cleanup`，P003-T044）
+
+**关键路径**：两个分支在 `server.js:864-870`；实现是 `server.js:601-812` 的一批 helper（`DATA_KINDS` 在 `server.js:611`、`dataStores()` 在 `server.js:623`、`dataInventory()` 在 `server.js:725`、`dataCleanup()` 在 `server.js:789`）；队列侧的候选挑选与清理在 `triage-monitor.js:439-500`（`cleanCandidates()` / `clean()` / `blockedCaseDirs()`）；路径来源在 `server.js:842` 的 `dataDeps`（`{history, monitor, boardService, wikiAgent, config}`）。
+
+**它管什么**：给运维一眼看清仓内 `.data/` 下七类运行态各占多少，再按类型与阈值把老数据**归档或删除**。**不管**页面（`web/**` 不在本卡 scope）、不管各 store 的类（`investigation-store.js` 等仍然没有删除方法——清理是文件系统层的运维动作）、不新增配置键、不引入自动清理定时器。
+
+#### 3.7.1 七类存储与「一条」的口径
+
+`kind` 的枚举顺序就是响应里 `stores[]` 的顺序，测试按它写期望：
+
+| `kind` | 中文 | 路径来源（缺省值） | 什么算「一条」 | 条目时刻（`oldest_at` / `newest_at` / 排序） |
+| --- | --- | --- | --- | --- |
+| `cases` | 案卷 | `monitor.casesDirectory` → `HIDS_CASES_DIR` → `.data/cases` | 一级子目录（一个案件目录） | 目录内**文件**的最新 mtime；空目录退回目录自身 mtime |
+| `investigations` | 研判记录 | `history.directory` → `.data/investigations` | 一个 `*.json` | 文件 mtime |
+| `boards` | 溯源白板 | `boardService.directory` → `.data/trace-boards` | 一个 `*.json` | 文件 mtime |
+| `wiki_sessions` | 知识库会话 | `wikiAgent.directory` → `.data/wiki-sessions` | 一个 `*.json` | 文件 mtime |
+| `queue` | 研判队列 | `monitor.file` → `.data/triage-monitor.json` | 一条队列记录 | 记录上 `updated_at` → `saved_at` → `created_at` 第一个能解析的 |
+| `logs` | 日志 | `.data/` 目录本身 | `.data/` **顶层**的一个 `*.log` | 文件 mtime |
+| `config_overrides` | 配置覆盖层 | `config.file` → `.data/config-overrides.json` | 那一个文件（0 或 1） | 文件 mtime |
+
+- **路径全部取自注入件**（`createServer` 的 `history` / `monitor` / `boardService` / `wikiAgent` / `config`）：换替身就是换盘点对象，测试不必碰仓内 `.data/`。
+- **`logs` 的真相**：后端日志只上 stdout、不落文件（`docs/architecture.md` §3.6 末句）。这一类只盘点**部署端自己**把 stdout 重定向到 `.data/*.log` 时产生的文件，正常部署下恒为 `count: 0`；子目录里的 `*.log` 不算（只认顶层）。
+- **`bytes` 口径**：文件取 `stat.size`；案卷按目录内文件递归累加；`queue` 是队列文件 + 同名 `.archive.jsonl`；读不到的条目按 0 算（一个断掉的符号链接不该让整次盘点 500）。
+- **`exists`**：路径在不在盘上。缺目录不报错，回 `count: 0`、`bytes: 0`、`exists: false`。
+- **每次请求现扫盘**，没有缓存：清完再盘点，数字立刻是清后的（A5）。
+
+**响应**（200，`Cache-Control: no-store`）：
+
+```json
+{"data_dir":"/…/.data",
+ "stores":[{"kind":"cases","label":"案卷","path":"/…/.data/cases","exists":true,
+            "count":2,"bytes":12,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"investigations","label":"研判记录","path":"/…/.data/investigations","exists":true,
+            "count":2,"bytes":9,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"boards","label":"溯源白板","path":"/…/.data/trace-boards","exists":true,"count":1,"bytes":11,
+            "oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2020-01-01T00:00:00.000Z"},
+           {"kind":"wiki_sessions","label":"知识库会话","path":"/…/.data/wiki-sessions","exists":true,"count":1,"bytes":7,
+            "oldest_at":"2026-11-19T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"queue","label":"研判队列","path":"/…/.data/triage-monitor.json","exists":true,"count":2,"bytes":333,
+            "oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"logs","label":"日志","path":"/…/.data","exists":true,"count":1,"bytes":9,
+            "oldest_at":"2026-11-19T00:00:00.000Z","newest_at":"2026-11-19T00:00:00.000Z"},
+           {"kind":"config_overrides","label":"配置覆盖层","path":"/…/.data/config-overrides.json","exists":true,
+            "count":1,"bytes":33,"oldest_at":"2020-01-01T00:00:00.000Z","newest_at":"2020-01-01T00:00:00.000Z"}],
+ "total":{"count":10,"bytes":414}}
+```
+
+`total` 就是七类 `count` / `bytes` 之和（上面这份样例逐项加起来对得上）。空运行态时七类全 0、`total` 为 `{count:0,bytes:0}`，不报错。
+
+#### 3.7.2 清理（`POST /api/data/cleanup`）
+
+**请求**：`Content-Type: application/json`，正文对象只收五个键（`additionalProperties: false`，多带一个就 400）：
+
+```json
+{"kind":"investigations","older_than":"2026-11-01T00:00:00.000Z","keep":200,"action":"archive","execute":false}
+```
+
+| 键 | 必填 | 取值 | 缺省 | 语义 |
+| --- | --- | --- | --- | --- |
+| `kind` | 是 | 七类之一 | — | 与盘点同一套 `kind` |
+| `older_than` | 二选一 | ISO 8601 时间串（`Date.parse` 解析得出） | `null` | 条目时刻**早于**它 → 进候选 |
+| `keep` | 二选一 | 不小于 0 的整数 | `null` | 保留最新 N 条（按条目时刻倒序），排在后面的进候选 |
+| `action` | 否 | `archive` / `delete` | `archive` | 归档或删除 |
+| `execute` | 否 | 布尔 | `false` | `false`＝dry-run 只报清单；`true` 才真动盘 |
+
+- **阈值至少给一个**：`older_than` 与 `keep` 都不给回 400——不许无阈值一把抹掉。
+- **两条同给取并集**：早于时间的 ∪ 超出数量的，同一「条」不会重复计。
+- **`archive` 落到哪**：文件/案卷目录 `rename` 进 `.data/archive/<kind>/<执行时刻>-<原名>`（前缀是 ISO 时间去掉了 `:` 与 `.`，同一路径清两次不会覆盖上一份）；队列记录追加到 `.data/triage-monitor.json.archive.jsonl`（带 `archived_at`，与 TTL 归档 `archiveDone()` 同格式）再移出队列。**归档目录不在七类盘点的任何一类里**，所以盘点数字会降。
+- **`delete` 落到哪**：文件/目录 `rm -r`；队列记录从内存与队列文件里删掉，并按 R-TRIAGE-13 同时失效指向它的 `dedupe` 条目（走 `dropRecord()`，`triage-monitor.js:322-330`）。
+- **`config_overrides` 的特殊后果**：删/归档只动盘上的覆盖层文件，**进程内的 `env` 仍是旧值**；要回到「按环境变量生效」必须重启进程（覆盖层是启动时同步读进 `env` 的，见 §3.6）。
+
+**已完结案件才可清（A4）**：
+
+| 情形 | 状态 | 行为 |
+| --- | --- | --- |
+| `queue` 候选里有 `queued` / `running` / `failed` | **409**（`caller_error`） | 整个请求拒绝，内存与队列文件都不动；`error` 原话形如「2 条记录状态不是 done（queued、running），已完结的案件才可清理」 |
+| `cases` 候选目录上挂着非 `done` 的记录（记录的 `case_dir` 就是它） | **409** | 同上，一个案卷都不动 |
+| 没装配研判队列（没配牧云或模型）时清 `queue` | **503**（`not_configured`） | 不读也不改队列文件——那是另一条进程的状态 |
+
+`failed` 也按「没完结」拒：它还可能被重排（`resumeRetries()`，`triage-monitor.js:306-318`）。要清就先把阈值调窄，或者等它重排/收尾。
+
+没有装配研判队列（`monitor` 为 `null`，没配牧云或模型）时，`cases` 清理不按案件状态拦（没有记录可判）：这时能进候选的就是没有活案件的目录。`queue` 反过来直接 503——它没有内存主人，不许拿队列文件硬删。
+
+**响应**（200）：
+
+```json
+{"dry_run":false,"kind":"investigations","action":"delete",
+ "threshold":{"older_than":"2026-11-01T00:00:00.000Z","keep":null},
+ "candidates":{"count":1,"bytes":7,"items":[{"name":"old.json","bytes":7,"at":"2020-01-01T00:00:00.000Z"}],"truncated":false},
+ "applied":{"count":1,"bytes":7},
+ "inventory":{"data_dir":"…","stores":[…七类…],"total":{"count":…,"bytes":…}}}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `dry_run` | `true`＝没动盘（`execute` 不给或 `false`） |
+| `threshold` | 回显请求里的 `older_than` / `keep`（没给为 `null`） |
+| `candidates` | 将清清单：`count` / `bytes` 是全量，`items` 最多 100 条（条目时刻从老到新），超出只体现在 `truncated: true` |
+| `candidates.items[]` | `{name, bytes, at}`；`queue` 的 `name` 是告警 ID，并多一个 `status: "done"`（能进候选的一律是 done） |
+| `applied` | 这次真清掉的条数与字节；dry-run 恒为 `{count:0, bytes:0}` |
+| `inventory` | **执行之后**重新扫出来的盘点，与紧接着 `GET /api/data/inventory` 完全一致（dry-run 时就是当下未变的数字） |
+
+**留痕（A3）**：`execute: true` 时落一条 `data.cleaned`，字段只有 `kind` / `action` / `count` / `bytes`——与 `config.updated` 同口径（§3.6「留痕」），**不记文件名、不记记录内容**；dry-run 与校验失败都不落这条：
+
+```json
+{"time":"…","level":"info","event":"data.cleaned","kind":"investigations","action":"delete","count":1,"bytes":7}
+```
+
+> 这条事件还没进 `docs/architecture.md` §3.6 的事件名表——那张表不在本卡 scope，已在 `coding-reports/P003-T044.md` 的「未决」里申报。
+
+**错误**（四类口径见 §8，路由自己判的一律走 `callerError`）：
+
+| 情形 | 状态 | `code` | 正文 `error`（原话） |
+| --- | --- | --- | --- |
+| 正文不是 JSON / 过大 | 400 | `caller_error` | 「请求正文不是 JSON」/「请求正文过大」 |
+| 正文不是对象 | 400 | `caller_error` | 「请求正文必须是 JSON 对象」 |
+| `kind` 不在七类里（或没给） | 400 | `caller_error` | 「要清理的类型只能是 cases、investigations、boards、wiki_sessions、queue、logs、config_overrides」 |
+| 带未知参数 | 400 | `caller_error` | 「不认识的参数：surprise」 |
+| `action` 不是 archive/delete | 400 | `caller_error` | 「action 只能是 archive 或 delete」 |
+| `execute` 不是布尔 | 400 | `caller_error` | 「execute 必须是布尔值」 |
+| `older_than` 解析不出时间 | 400 | `caller_error` | 「older_than 必须是可解析的时间（ISO 8601）」 |
+| `keep` 不是非负整数 | 400 | `caller_error` | 「keep 必须是不小于 0 的整数」 |
+| 两个阈值都没给 | 400 | `caller_error` | 「至少要给一个阈值：older_than（早于某时间）或 keep（保留最新 N 条）」 |
+| 候选里有没完结的案件 | 409 | `caller_error` | 「N 条记录状态不是 done（queued、…），已完结的案件才可清理」/「N 个案卷对应的案件还在排或在跑，已完结的案件才可清理」 |
+| 没装配研判队列时清 `queue` | 503 | `not_configured` | 「自动研判尚未配置（没有研判队列），无法清理队列」 |
+| 没通过 Basic 认证（启用了认证时） | 401 | —（纯文本） | 「需要登录后访问」，见 §4 |
+
+**鉴权**：与其它业务路由同一个 Basic 闸门（§4）。本卡**没有**为清理新增独立令牌（`.env.example` 不在 scope，新增配置键要同步那份文件与启动闸门文档）；防误删靠两层：默认 dry-run + `execute: true` 必须显式给，再加 Basic 认证。
+
+**不做什么**（测试别按这些写期望）：
+
+- 不做页面、不动 `web/**`。
+- 不改各 store 的类：`InvestigationStore` / `TraceBoardService` / `WikiWorkbench` 仍然没有删除方法。
+- 不自动清理：没有定时器，只有这两个接口（队列的 TTL 归档 `archiveDone()` 是既有能力，不受本卡影响）。
+- 不保证「归档后还能从接口读回来」：归档目录只落盘，仓内没有读它的接口；要翻旧案直接看 `.data/archive/**`。
+- 队列候选只挑 `done`：`failed` / `queued` / `running` 一律 409，不静默跳过。
+
+**可重放证据**（`evidence/test/P003-T044/data-admin.test.js`，20 条，约 270ms）：
+
+```bash
+cd /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T044
+node --test evidence/test/P003-T044/data-admin.test.js   # 20 条全绿
+node --test --test-timeout=60000 --test-force-exit *.test.js   # 根套件 210 条全绿（回归）
+bash evidence/test/P003-T044/mutation-round2.sh   # 20 条实现变异逐条打红新断言（断言自证的复现入口）
+```
+
+单测全部在 tmp 目录里跑（`mkdtemp`）：替身目录 + 内存队列 + 进程内 HTTP 请求，mtime 用 `utimes` 钉死，不碰真实网络、不碰仓内 `.data/`、不依赖真实时钟。
 
 ## 4. Basic 认证
 
@@ -420,7 +579,7 @@ A6 空密码放行 | 200 | {"authenticated":true,"user":null,"role":null}
 | `result` | `{result: <history.save() 的返回值>}`——发出去的是落盘之后的对象 | `server.js:491` |
 | `error` | `{error: <异常消息>}`；原文过一遍凭据擦除（`Basic …`/`Bearer …`/`token=…` → `[redacted]`），帧里没有 `code` | `server.js:888` |
 
-**心跳**：每 15000 毫秒写一行 `: heartbeat\n\n`（`server.js:486`），这是 SSE 的注释行，客户端按协议忽略它。连接关闭时清掉定时器（`server.js:487`），`finally` 里再清一次并结束响应（`server.js:493`）。
+**心跳**：每 15000 毫秒写一行 `: heartbeat\n\n`（`server.js:1211`），这是 SSE 的注释行，客户端按协议忽略它。连接关闭时清掉定时器（`server.js:1212`），`finally` 里再清一次并结束响应（`server.js:1218`）。
 
 **异常也回 200**：研判过程抛错时，状态码仍是 200，错误以 `error` 帧的形式发给客户端（`server.js:492`）。探针 D2 实测：
 
@@ -494,7 +653,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 | 情况 | 抛出 | 出处 |
 | --- | --- | --- |
 | 长度超过上限 | 请求正文过大 | `server.js:449` |
-| 不是合法 JSON | 请求正文不是 JSON | `server.js:451` |
+| 不是合法 JSON | 请求正文不是 JSON | `server.js:464` |
 
 各路由传进去的上限不一样：
 
@@ -507,7 +666,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 ### 8.2 正文形状
 
-`readJSON` 只保证「是合法 JSON」，不保证形状。形状由各路由自己判：不传 `expected_revision` 的规则写请求回 400「缺少有效的规则配置版本」（`server.js:735`）；正文不是对象或数组的回 400「请求正文无效」（`server.js:774`、`server.js:916`）。
+`readJSON` 只保证「是合法 JSON」，不保证形状。形状由各路由自己判：不传 `expected_revision` 的规则写请求回 400「缺少有效的规则配置版本」（`server.js:967`）；正文不是对象或数组的回 400「请求正文无效」（`server.js:1018`、`server.js:1199`）。
 
 ### 8.3 错误怎么翻译：四类，一类一个稳定 code（P003-T024）
 
@@ -517,8 +676,8 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 | 类 | 状态码 | `code` | 谁判的 | 正文 `error` 写什么 |
 | --- | --- | --- | --- | --- |
 | 调用方传错 | 4xx：400 参数/正文、403 权限、404 不存在、405 方法、409 状态冲突、410 已下线、422 无法溯源 | `caller_error` | 路由自己判出来走 `callerError`（`server.js:364`）；异常自带 4xx `status`（各模块判过的档位，如 `wiki-store.js` 的 400/404/409、`trace-board.js` 的 422）也算这一类 | 校验原话，如「分页参数无效」「告警 ID 无效」 |
-| 没配置 | 503 | `not_configured` | 路由开头判依赖在不在，走 `configError`（`server.js:365`） | 点名缺哪个变量/组件，如「未配置 CLOUDWALKER_URL 和 CLOUDWALKER_API_TOKEN」 |
-| 上游失败 | 502 | `upstream_error` | `viaCloudwalker` 在异常上打的 `failure: 'upstream'` 标（`server.js:431-437`）；**随部署的只读规则数据**（`rules/` 的 Rego、数据根下的 `triage-rules.json`）读/解析失败也归这类 | 上游那句摘要原话：牧云 `/rpc <code>: <message>`、`connect ECONNREFUSED <ip>:<port>`、`模型接口 HTTP <status>: <message>`、`规则库读取失败：rules/<文件>:<行> …` |
+| 没配置 | 503 | `not_configured` | 路由开头判依赖在不在，走 `configError`（`server.js:407`） | 点名缺哪个变量/组件，如「未配置 CLOUDWALKER_URL 和 CLOUDWALKER_API_TOKEN」 |
+| 上游失败 | 502 | `upstream_error` | `viaCloudwalker` 在异常上打的 `failure: 'upstream'` 标（`server.js:431-437`）；**规则数据只读解析失败**（数据根下 `rules/` 的 Rego、数据根下的 `triage-rules.json`）也归这类 | 上游那句摘要原话：牧云 `/rpc <code>: <message>`、`connect ECONNREFUSED <ip>:<port>`、`模型接口 HTTP <status>: <message>`、`规则库读取失败：rules/<文件>:<行> …` |
 | 本程序失败 | 500 | `internal_error` | 其余没被认领的异常：路由里调本地存储/自己代码的 catch 用 `causeError(res, cause, 'internal')`，外层 catch 的缺省类也是它（`server.js:945-951`） | 恒为「服务器内部错误」；异常原文与堆栈只进 `http.failed` 日志 |
 
 判定顺序（`failureKindOf`，`server.js:370-374`）：异常上有 `failure` 标记 → 按标记；否则异常带 4xx `status` → `caller`；
@@ -558,7 +717,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 ### 9.1 与 `openapi.yaml` 的关系
 
-对外 HTTP 契约在 `openapi.yaml`，声明 39 条路径（`grep -c '^  /' openapi.yaml` → `39`，P003-T013 提交时）。它与 `server.js` 的路由是**分开维护的两份文本**，改路由时两边都要动（这条在 [architecture.md](../architecture.md) 第 11.3 节也记着）。本页只描述 `server.js` 实际跑出来的行为；两边逐条比对不是本卡做的事。
+对外 HTTP 契约在 `openapi.yaml`，声明 42 条路径（`grep -c '^  /' openapi.yaml` → `42`，P003-T044 提交时；P003-T013 提交时是 39，本卡加了两条数据管理路由）。它与 `server.js` 的路由是**分开维护的两份文本**，改路由时两边都要动（这条在 [architecture.md](../architecture.md) 第 11.3 节也记着）。本页只描述 `server.js` 实际跑出来的行为；两边逐条比对不是本卡做的事。
 
 ### 9.2 同一类为什么还有多个 4xx，以及还剩下的不齐之处
 
@@ -568,7 +727,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 | 档位 | 含义 | 出现处举例 |
 | --- | --- | --- |
 | 400 | 参数/正文/ID 不合法 | 分页参数、正文不是 JSON、`请求正文无效` |
-| 403 | 管理令牌不对 | 规则管理员令牌（`server.js:688`）、知识库管理员凭据（`server.js:824`） |
+| 403 | 管理令牌不对 | 规则管理员令牌（`server.js:962`）、知识库管理员凭据（`server.js:1153`） |
 | 404 | 目标不存在 | 未知 API（`server.js:943-944`）、知识库页面/会话、研判记录、告警事件 |
 | 405 | 方法不对（只有提示词入口一处，`server.js:790`） | `POST /api/agent/prompts` |
 | 409 | 状态冲突 | 研判未完成不能登记误报（`server.js:793`）、页面版本过期、缺可维护判据页 |
@@ -591,7 +750,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 
 ### 9.4 入口判定的一个边界
 
-`server.js:555` 的入口判定会先对 `process.argv[1]` 做 `realpathSync`。以 `-` 作入口（stdin 方式跑）时该路径不存在，`realpathSync` 抛 ENOENT，模块在加载阶段就失败。用 `node --input-type=module -e "..."` 执行时 `process.argv[1]` 是 `undefined`，判定短路，不受影响——本页的探针就是这么跑的（见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md) 第 5.1 节）。
+`server.js:1354` 的入口判定会先对 `process.argv[1]` 做 `realpathSync`。以 `-` 作入口（stdin 方式跑）时该路径不存在，`realpathSync` 抛 ENOENT，模块在加载阶段就失败。用 `node --input-type=module -e "..."` 执行时 `process.argv[1]` 是 `undefined`，判定短路，不受影响——本页的探针就是这么跑的（见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md) 第 5.1 节）。
 
 ## 10. 怎么复跑本页的结论
 

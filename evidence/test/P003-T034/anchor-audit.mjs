@@ -16,6 +16,7 @@
 //   node evidence/test/P003-T034/anchor-audit.mjs              # 审计（只打印结论与非 PASS 明细）
 //   node evidence/test/P003-T034/anchor-audit.mjs --verbose    # 连 PASS 明细一起打印
 //   node evidence/test/P003-T034/anchor-audit.mjs --file docs/modules/knowledge-base.md  # 只看某份文档
+//   node evidence/test/P003-T034/anchor-audit.mjs --pre <合并前提交>                    # 多一条证据：锚点指向的行在合并前后逐字未变（P003-T034 合并轮）
 // 退出码：0 = 没有被判为 MOVED 的锚点；1 = 有。
 
 import { execFileSync } from 'node:child_process';
@@ -24,6 +25,7 @@ import { readFileSync } from 'node:fs';
 const ROOT = process.cwd();
 const VERBOSE = process.argv.includes('--verbose');
 const ONLY = (() => { const at = process.argv.indexOf('--file'); return at > 0 ? process.argv[at + 1] : null; })();
+const PRE = (() => { const at = process.argv.indexOf('--pre'); return at > 0 ? process.argv[at + 1] : null; })();
 const GLOBAL_BASELINES = ['e997260', 'a16e94b', '51aa339', '0467223'];
 const ANCHOR_RE = /([A-Za-z0-9_./-]+\.(?:js|mjs|cjs|json|yaml|yml|md|sh)):(\d+)(?:-(\d+))?/g;
 const ANCHOR_IN_CELL_RE = /[A-Za-z0-9_./-]+\.(?:js|mjs|cjs|json|yaml|yml|md|sh):\d+/;
@@ -119,6 +121,17 @@ for (const row of rows) {
   try { targetIdx = head(file); } catch { row.status = 'MISSING_TARGET'; continue; }
   if (from > targetIdx.lines.length) { row.status = 'OUT_OF_RANGE'; continue; }
   row.current = targetIdx.lines.slice(from - 1, to).map(text => (text || '').trim()).join(' ⏎ ').slice(0, 120);
+  // 0) 合并前基线：锚点指向的那几行在合并前后**逐字未变** → 锚点没被这次合并挪动，判定与合并前一致
+  if (PRE) {
+    const preIdx = version(file, PRE);
+    if (preIdx && to <= preIdx.lines.length) {
+      const preBlock = preIdx.lines.slice(from - 1, to);
+      const nowBlock = targetIdx.lines.slice(from - 1, to);
+      if (preBlock.every((text, i) => text === nowBlock[i])) {
+        row.status = 'PASS'; row.evidence = `合并前后同号行逐字未变（${PRE}）`; continue;
+      }
+    }
+  }
   // 1b) 当前行本身就是定义行：锚点指到一个定义上，文案/映射都不再翻案
   if (isDefinitionText(targetIdx.lines[from - 1])) { row.status = 'PASS'; row.evidence = '目标行是定义行'; continue; }
 

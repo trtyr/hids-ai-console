@@ -1,0 +1,71 @@
+# minor-1 复测量：note 超 openapi maxLength=200 时服务端到底怎么处置（只走 HTTP，量历史接口回的 note）
+$ node /tmp/t041-probe.mjs   # 起真进程 → 200/201/300 三档 PUT → GET /api/rules/honeypot_probe/history
+{"n":200,"putStatus":200,"action":"update","storedNoteLen":205,"storedCodepoints":"人工维护：备备备…","headLen":205,"newRev":"a79374a203aa15df"}
+{"n":201,"putStatus":200,"action":"update","storedNoteLen":205,"storedCodepoints":"人工维护：备备备…","headLen":205,"newRev":"b25736dcefc5bdff"}
+{"n":300,"putStatus":200,"action":"update","storedNoteLen":205,"storedCodepoints":"人工维护：备备备…","headLen":205,"newRev":"07ee94eb59109994"}
+EXIT=0
+
+# 读法：storedNoteLen = 205 = 「人工维护：」5 字 + 截断后的 200 字；三档都 205 → 不拒、静默截断到 200
+
+# ── 复跑用的探针源（/tmp/t041-probe.mjs，只走 HTTP，不读实现）──
+# // 临时探针：只走 HTTP，不读实现。量 note 超长处置与会话 validation.ok 语义。
+# import { spawn } from 'node:child_process';
+# import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+# import { tmpdir } from 'node:os';
+# import path from 'node:path';
+# 
+# const repo = '/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T041';
+# const root = await mkdtemp(path.join(tmpdir(), 'hids-probe-'));
+# const env = { PATH: process.env.PATH, HOME: process.env.HOME, HIDS_DATA_DIR: root,
+#   HIDS_PROMPT_ADMIN_TOKEN: 'pt', HIDS_RULE_ADMIN_TOKEN: 'rt' };
+# const child = spawn(process.execPath, [path.join(repo, 'evidence/test/P003-T041/tester-boot-server.mjs')],
+#   { env, stdio: ['ignore', 'pipe', 'panel'.replace('panel', 'pipe')].slice(0, 3) });
+# child.stderr.on('data', c => process.stderr.write(c));
+# const port = await new Promise((resolve, reject) => {
+#   let out = '';
+#   const timer = setTimeout(() => reject(new Error('no port')), 15000);
+#   child.stdout.on('data', c => {
+#     out += c;
+#     const line = out.split('\n').find(r => r.includes('"port"'));
+#     if (line) { clearTimeout(timer); resolve(JSON.parse(line).port); }
+#   });
+# });
+# const base = `http://127.0.0.1:${port}`;
+# const H = { 'content-type': 'application/json', 'x-rule-admin-token': 'rt' };
+# const call = async (p, init) => {
+#   const r = await fetch(base + p, init);
+#   const text = await r.text();
+#   let body = null; try { body = JSON.parse(text); } catch {}
+#   return { status: r.status, body, text };
+# };
+# const rego = (body) => `package hids.rules.honeypot_probe\n\n# name: 探针\n# description: 探针\n\ndefault match := false\n\nmatch if {\n${body}\n}\n`;
+# 
+# const cur = await call('/api/rules/honeypot_probe');
+# for (const n of [200, 201, 300]) {
+#   const note = '备'.repeat(n);
+#   const r = await call('/api/rules/honeypot_probe', { method: 'PUT', headers: H,
+#     body: JSON.stringify({ rego: rego(`  input.type == "n${n}"`), expected_revision: cur.body.revision, note }) });
+#   const h = await call('/api/rules/honeypot_probe/history');
+#   const got = h.body.history.find(row => row.rev === cur.body.revision);
+#   const cur2 = await call('/api/rules/honeypot_probe');
+#   console.log(JSON.stringify({ n, putStatus: r.status, action: r.body?.action,
+#     storedNoteLen: got ? [...got.note].length : null,
+#     storedCodepoints: got ? [...got.note].slice(0, 8).join('') + '…' : null,
+#     headLen: got ? [...got.note].length : null, newRev: cur2.body.revision }));
+#   // 把下一次的 expected_revision 换成最新版
+#   cur.body.revision = cur2.body.revision;
+# }
+# 
+# // 会话夹具：validation.ok 真值能不能推到摘要 validated
+# const dir = path.join(root, 'rule-sessions');
+# await mkdir(dir, { recursive: true });
+# const uuid = (n) => `${n}${n}${n}${n}${n}${n}${n}${n}-${n}${n}${n}${n}-4${n}${n}${n}-8${n}${n}${n}-${n}${n}${n}${n}${n}${n}${n}${n}${n}${n}${n}${n}`;
+# const rec = (id, updated_at, status, validation) => JSON.stringify({
+#   id, case_id: 'c:1', case_dir: '/d', event_type: 'honeypot', who: '值守', status,
+#   rule_id: 'honeypot_probe', validation, updated_at,
+#   proposal: { rego: 'SECRET', rationale: 'r' }, reason: 'REASON' });
+# await writeFile(path.join(dir, `${uuid(1)}.json`), rec(uuid(1), '2026-01-01T00:00:00.000Z', 'updated', { ok: true }));
+# await writeFile(path.join(dir, `${uuid(2)}.json`), rec(uuid(2), '2026-02-01T00:00:00.000Z', 'failed', { ok: false, error: '校验没过' }));
+# const s = await call('/api/rules/sessions');
+# console.log(JSON.stringify({ sessions: s.status, body: s.body }, null, 1));
+# child.kill('SIGKILL');
