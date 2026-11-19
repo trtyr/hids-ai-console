@@ -35,7 +35,7 @@ HIDS_API_ORIGIN=http://127.0.0.1:19880 HIDS_WEB_PORT=13300 node web/serve.js
   单测直接把它挂到临时端口上，不占固定端口。
 - 端口被占就换 `HIDS_PORT` / `HIDS_WEB_PORT`，两个都要换（反代跟着 `HIDS_API_ORIGIN` 走）。
 - 单测：`cd web && npm install && npm test`（`node --test`，jsdom 只给单测用；`serve.js` 的用例起在临时端口上，不需要先起服务）。
-  仓根 `npm test` 只跑后端单测（`node --test *.test.js`）；web 单测用 `npm run test:web`，两段一起跑用 `npm run test:all`（P003-T028）。
+  仓根 `npm test` 只跑后端单测（`node --test --test-timeout=60000 --test-force-exit *.test.js`）；web 单测用 `npm run test:web`，两段一起跑用 `npm run test:all`（P003-T028）。
 
 ## 2. 数据来源：形态 B（对接已就绪后端）
 

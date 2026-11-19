@@ -1,0 +1,32 @@
+# 改动后：负载下 npm test 连跑五把（nproc=16；负载=24 个 busy-loop + 临时目录读写 churn）
+# 命令：timeout 180 npm test（package.json：node --test --test-timeout=60000 --test-force-exit *.test.js)
+=== run1 EXIT=0 ELAPSED=2529ms
+ℹ tests 198
+ℹ pass 198
+ℹ fail 0
+ℹ cancelled 0
+ℹ duration_ms 2096.770922
+=== run2 EXIT=0 ELAPSED=2872ms
+ℹ tests 198
+ℹ pass 198
+ℹ fail 0
+ℹ cancelled 0
+ℹ duration_ms 2386.974358
+=== run3 EXIT=0 ELAPSED=3054ms
+ℹ tests 198
+ℹ pass 198
+ℹ fail 0
+ℹ cancelled 0
+ℹ duration_ms 2575.63338
+=== run4 EXIT=0 ELAPSED=3257ms
+ℹ tests 198
+ℹ pass 198
+ℹ fail 0
+ℹ cancelled 0
+ℹ duration_ms 2802.498998
+=== run5 EXIT=0 ELAPSED=3745ms
+ℹ tests 198
+ℹ pass 198
+ℹ fail 0
+ℹ cancelled 0
+ℹ duration_ms 2596.720306

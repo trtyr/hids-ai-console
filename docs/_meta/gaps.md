@@ -105,13 +105,13 @@ P003-T028 之前根 `package.json` 的 `test` 是裸 `node --test`。无参时�
 
 | 命令 | 跑什么 | 实测 |
 | --- | --- | --- |
-| `npm test` | `node --test *.test.js`，只跑仓根后端单测 | 198 条全绿，约 2s，退出码 0 |
+| `npm test` | `node --test --test-timeout=60000 --test-force-exit *.test.js`，只跑仓根后端单测；`--test-timeout`/`--test-force-exit` 是复审修复轮加的挂起上界 | 198 条全绿，约 2s，退出码 0 |
 | `npm run test:web` | `npm --prefix web test`，跑 `web/test/**` | 447 条全绿，约 5.8s，退出码 0 |
 | `npm run test:all` | 上面两段串跑 | 198 + 447 全绿，约 6.3s，退出码 0 |
 
 退出码：任一用例失败 → 1（实跑注入一条必红用例验证过），全绿 → 0。
 
-**前置条件**：`npm run test:web` / `npm run test:all` 需要先 `npm install --prefix web`（`web/package.json:14` 已声明 `jsdom ^31.0.1`，锁文件 `web/package-lock.json` 已提交）。不装也能跑 `npm test`——它零外部依赖。
+**前置条件**：`npm run test:web` / `npm run test:all` 需要先 `npm install --prefix web`（`web/package.json:11` 已声明 `jsdom ^31.0.1`，锁文件 `web/package-lock.json` 已提交）。不装也能跑 `npm test`——它零外部依赖。
 
 **范围边界**：`evidence/test/**` 是逐卡验证件，不是单测基线，命令里不扫它们；要复跑旧卡片按该卡 test-report 里的原始命令单独跑。`maintenance-startup.test.js` 的修复见第一节末段。
 

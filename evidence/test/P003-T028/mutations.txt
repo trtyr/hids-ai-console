@@ -1,0 +1,51 @@
+# 变异验红：teardown 的 rm 修复是不是真管事（负载下实跑，本终端）
+# 变异做法：integration.test.js:353 退回裸 rm(directory, { recursive: true, force: true })，即删掉 maxRetries/retryDelay
+# 负载：nproc=16，16 个 busy-loop 占满
+
+## 配置 A：node --test --test-timeout=5000 --test-force-exit *.test.js（变异树）
+# 命令：for r in 1..8; timeout 40 npm test
+  run1 EXIT=0 ELAPSED=2289ms ENOTEMPTY=0 ℹ fail 0
+  run2 EXIT=0 ELAPSED=2534ms ENOTEMPTY=0 ℹ fail 0
+  run3 EXIT=0 ELAPSED=2181ms ENOTEMPTY=0 ℹ fail 0
+  run4 EXIT=0 ELAPSED=2575ms ENOTEMPTY=0 ℹ fail 0
+  run5 EXIT=1 ELAPSED=1981ms ENOTEMPTY=1 ℹ fail 1
+  run6 EXIT=0 ELAPSED=2300ms ENOTEMPTY=0 ℹ fail 0
+  run7 EXIT=1 ELAPSED=2424ms ENOTEMPTY=1 ℹ fail 1
+  run8 EXIT=0 ELAPSED=2161ms ENOTEMPTY=0 ℹ fail 0
+
+## 配置 B：node --test --test-timeout=5000 *.test.js（变异树，再去掉 --test-force-exit）
+# 命令：for r in 1..8; timeout 40 npm test
+  run1 EXIT=0 ELAPSED=2356ms ENOTEMPTY=0 ℹ fail 0
+  run2 EXIT=0 ELAPSED=2660ms ENOTEMPTY=0 ℹ fail 0
+  run3 EXIT=124 ELAPSED=40040ms ENOTEMPTY=1 ℹ fail 1
+  run4 EXIT=124 ELAPSED=40042ms ENOTEMPTY=1 ℹ fail 1
+  run5 EXIT=0 ELAPSED=2484ms ENOTEMPTY=0 ℹ fail 0
+  run6 EXIT=0 ELAPSED=2141ms ENOTEMPTY=0 ℹ fail 0
+  run7 EXIT=0 ELAPSED=2930ms ENOTEMPTY=0 ℹ fail 0
+  run8 EXIT=124 ELAPSED=40039ms ENOTEMPTY=1 ℹ fail 1
+
+## 配置 C：修复树（maxRetries: 20, retryDelay: 20）+ 最终 test 命令
+# 命令：for r in 1..5; timeout 180 npm test（负载同 B，另加 tmp 读写 churn）
+# 结果见 load-after-fix.txt：5/5 EXIT=0，198/198
+
+## 结论
+- 裸 rm 在负载下 2/8（配置 A）、3/8（配置 B）撞 ENOTEMPTY——审计说的抢跑是真的，不是测试环境噪音。
+- 只加 --test-timeout 兜不住：配置 B 的三次 ENOTEMPTY 全部把进程挂到外部 timeout（EXIT=124，40s）。
+  --test-timeout 到点只把用例标 cancelled，after 钩子抛错后文件级用例不 settle，runner 照样不退。
+- --test-force-exit 能把失败的进程收在 2s 内（配置 A：2/8 红但全部 EXIT=1），但它是兜底不是修复：
+  红还在的根子要用 maxRetries/retryDelay 把 rm 的抢跑吃掉（配置 C 5/5 绿）。
+
+## 代表日志
+--- nA5（配置 A，ENOTEMPTY 红但 1.98s 收场）：
+ℹ tests 198
+ℹ pass 197
+ℹ fail 1
+ℹ cancelled 0
+  [Error: ENOTEMPTY: directory not empty, rmdir '/tmp/hids-triage-2e9ba6ae-3351-4467-a8d1-93b5a6b1d619'] { errno: -39, code: 'ENOTEMPTY', syscall: 'rmdir', path: '/tmp/hids-triage-2e9ba6ae-3351-4467-a8d1-93b5a6b1d619' }
+--- nB3（配置 B，ENOTEMPTY 红且挂到 40s 被外部杀）：
+ℹ tests 199
+ℹ pass 197
+ℹ fail 1
+ℹ cancelled 1
+  [Error: ENOTEMPTY: directory not empty, rmdir '/tmp/hids-triage-879170ec-3c06-4750-9582-c4cc9c910579'] { errno: -39, code: 'ENOTEMPTY', syscall: 'rmdir', path: '/tmp/hids-triage-879170ec-3c06-4750-9582-c4cc9c910579' }
+  'Promise resolution is still pending but the event loop has already resolved'

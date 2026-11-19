@@ -350,7 +350,8 @@ test('HTTP 详情：告警 ID 格式不对或类型不在枚举 → 400，不浪
 
 test('TriageCase 三处都带 evidence[]：未入队详情、入队 202、告警列表挂的 triage', async t => {
   const directory = path.join(tmpdir(), `hids-triage-${randomUUID()}`);
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  // 后台 persist 与 teardown 抢跑：rm 撞上并发写入时 ENOTEMPTY 会直接把用例判红，交给 Node 自带重试
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 20 }));
   const monitor = new TriageMonitor({ file: path.join(directory, 'queue.json'), concurrency: 1,
     history: { latest: async () => null, save: async result => ({ ...result, saved_at: new Date().toISOString() }) },
     service: { alerts: async () => ({ alerts: [], partial: false }) },

@@ -460,12 +460,12 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 ### 11.1 跑测试
 
 ```bash
-npm test                # 后端单测：node --test *.test.js（package.json:8）
+npm test                # 后端单测：node --test --test-timeout=60000 --test-force-exit *.test.js（package.json:8）
 npm run test:web        # web 单测：npm --prefix web test（需先 npm install --prefix web）
 node --test triage-rules.test.js   # 只跑一个文件
 ```
 
-需要 Node.js 20 及以上（`package.json:10`）。本机实测环境为 Node v26.13.0。
+需要 Node.js 20 及以上（`package.json:12`）。本机实测环境为 Node v26.13.0。
 
 仓里有 18 个测试文件，覆盖情况：
 
@@ -490,7 +490,7 @@ node --test triage-rules.test.js   # 只跑一个文件
 | `wiki-current.test.js` | 当前生效判据与提示词是否一致（只读） |
 | `wiki.test.js` | 判据库读写、维护会话、发布与回放 |
 
-**本卡实测结果**（命令：`node --test *.test.js`，198 条全绿，P003-T028 起）：
+**本卡实测结果**（命令：`npm test`，即 `node --test --test-timeout=60000 --test-force-exit *.test.js`，198 条全绿，P003-T028 起）：
 
 ```
 ℹ tests 198
