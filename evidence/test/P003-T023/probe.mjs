@@ -4,8 +4,10 @@
 // 不读实现文件内容；不碰外网（牧云/模型一律指向 127.0.0.1:1 或本机回环）。
 //
 // 跑法：node evidence/test/P003-T023/probe.mjs   （EXIT=0 全过；每条 FAIL 打印断言名）
+// 段：S1 HTTP/错误码 · S2 牧云失败 · S3 syslog 全链 · S4 端口被占 · S5 log 契约 · S6 poll · S7 临时副本抛错 · S8 第二次落盘失败
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import dgram from 'node:dgram';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -554,11 +556,18 @@ async function sectionS4() {
   });
   try {
     await waitFor(state, line => line.event === 'server.started', 15000, 'server.started');
-    const failed = await waitFor(state, line => line.event === 'syslog.bind_failed' || line.event === 'server.start_failed', 10000, 'bind_failed|start_failed');
-    check('S4 端口被占 → syslog.bind_failed（error 含 EADDRINUSE）或 server.start_failed，行形状合规', () => {
+    const failed = await waitFor(state, line => line.event === 'syslog.bind_failed', 10000, 'syslog.bind_failed');
+    const receiverError = await waitFor(state, line => line.event === 'syslog.receiver_error', 10000, 'syslog.receiver_error');
+    check('S4 端口被占 → syslog.bind_failed（error 含 EADDRINUSE），行形状合规', () => {
       assertLineShape(failed);
       eq(failed.level, 'error', 'level');
-      ok(/EADDRINUSE/.test(JSON.stringify(failed)), `error 里没有 EADDRINUSE: ${JSON.stringify(failed)}`);
+      match(failed.error, /EADDRINUSE/, 'error');
+    });
+    check('S4 同一 socket 错误另落 syslog.receiver_error（level=error，error 含 EADDRINUSE，docs/architecture.md:115）', () => {
+      assertLineShape(receiverError);
+      eq(receiverError.level, 'error', 'level');
+      match(receiverError.error, /EADDRINUSE/, 'error');
+      ok(eventsOf(state, 'server.start_failed').length === 0, '端口被占不该再落 server.start_failed');
     });
     const alive = await http(`http://127.0.0.1:${port}`, '/api/session', { headers: AUTH_HEADER });
     check('S4 syslog 绑定失败不影响 HTTP 面（仍 200）', () => eq(alive.status, 200, 'status'));
@@ -797,6 +806,98 @@ async function sectionS7() {
   }
 }
 
+/* ================= S8：第二次状态落盘失败 → triage.persist_failed =================
+   做法：临时副本 + 牧云替身。替身把第一条 /rpc 扣住不回（研判停在匹配调用上），
+   这之前 syslog 收包已经把记录落过一次盘（第一次落盘成功）；此时把 .data 置 0555，
+   再放行替身回 500 → 研判收尾的第二次落盘失败，落 triage.persist_failed。
+   仓内 .data 一个字不动（副本在 tmpdir，跑完删）。 */
+async function sectionS8() {
+  console.log('\n== S8 临时副本：第二次状态落盘失败（triage.persist_failed） ==');
+  const repo = await mkdtemp(path.join(tmpdir(), 'p023-persist-'));
+  const root = path.join(repo, 'repo');
+  const keep = src => {
+    const rel = path.relative(ROOT, src);
+    return rel === '' || !['.git', '.data', 'evidence'].includes(rel.split(path.sep)[0]);
+  };
+  cpSync(ROOT, root, { recursive: true, filter: keep });
+  const dataDir = path.join(root, '.data');
+  await mkdir(dataDir, { recursive: true });
+  await chmod(dataDir, 0o700);
+
+  // 牧云替身：第一条 /rpc 扣住（研判停住），放行后回 500；后续请求直接 500。
+  let heldResponse = null;
+  let releaseRpc;
+  const rpcHit = new Promise(resolve => { releaseRpc = resolve; });
+  const stub = createHttpServer((request, response) => {
+    if (request.url.startsWith('/rpc') && heldResponse === null) {
+      heldResponse = response;
+      releaseRpc(request.url);
+      return;
+    }
+    response.writeHead(500, { 'content-type': 'application/json' });
+    response.end('{"error":"probe stub"}');
+  });
+  await new Promise(resolve => stub.listen(0, '127.0.0.1', resolve));
+  const stubPort = stub.address().port;
+
+  const port = await freeTcpPort();
+  const syslogPort = await freeUdpPort();
+  const state = startServer({
+    HIDS_HOST: '127.0.0.1', HIDS_PORT: String(port),
+    HIDS_TRIAGE_INPUT_MODE: 'syslog', HIDS_SYSLOG_HOST: '127.0.0.1', HIDS_SYSLOG_PORT: String(syslogPort),
+    CLOUDWALKER_URL: `http://127.0.0.1:${stubPort}`, CLOUDWALKER_API_TOKEN: CW_TOKEN,
+    LLM_BASE_URL: 'http://127.0.0.1:1', LLM_API_KEY: LLM_KEY, LLM_MODEL: 'probe-model'
+  }, root);
+  try {
+    await waitFor(state, line => line.event === 'server.started', 15000, 'server.started');
+    await waitFor(state, line => line.event === 'syslog.listening', 10000, 'syslog.listening');
+    const rnd = len => Array.from({ length: len }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+    const eventId = String(Date.now()).slice(-8) + rnd(4);
+    await sendUdp(syslogPort, '<134>1 2026-11-03T08:00:00Z host app 1 cloudwalker-honeypot ' +
+      `event_id=${eventId} host_ip=10.7.7.7 source_ip=192.0.2.44 event_create_time="2026-11-03 09:00:00"`);
+    const received = await waitFor(state, line => line.event === 'syslog.received', 5000, 'syslog.received');
+    const hitUrl = await Promise.race([
+      rpcHit,
+      sleep(10000).then(() => { throw new Error('牧云替身没收到 /rpc；已见事件=' + JSON.stringify(state.lines.map(line => line.event))); })
+    ]);
+    check('S8 前置：收包后第一次落盘已成功、研判停在匹配调用上（替身扣住 /rpc）', () => {
+      match(hitUrl, /method=/, 'rpc url');
+      eq(eventsOf(state, 'triage.persist_failed'), [], '第一次落盘就失败了');
+      eq(eventsOf(state, 'syslog.accept_failed'), [], '收包链已抛错（不是「第二次」落盘）');
+    });
+
+    await chmod(dataDir, 0o555);            // 第二次落盘前把状态目录置只读
+    heldResponse.writeHead(500, { 'content-type': 'application/json' });
+    heldResponse.end('{"error":"probe stub"}');
+    heldResponse = 'released';
+
+    const persistFailed = await waitFor(state, line => line.event === 'triage.persist_failed' && line.alert_id === received.alert_id, 20000, 'triage.persist_failed');
+    check('S8 第二次状态落盘失败 → triage.persist_failed（level=error，alert_id 对得上，error 含 EACCES，docs/architecture.md:118）', () => {
+      assertLineShape(persistFailed);
+      eq(persistFailed.level, 'error', 'level');
+      eq(persistFailed.alert_id, received.alert_id, 'alert_id');
+      match(persistFailed.error, /EACCES/, 'error');
+    });
+    check('S8 所有 persist_failed 行形状一致（level=error、error 非空；带 file 的必须指向 triage-monitor.json）', () => {
+      const all = eventsOf(state, 'triage.persist_failed');
+      ok(all.length >= 1, '一条都没有');
+      for (const line of all) {
+        assertLineShape(line);
+        eq(line.level, 'error', 'level');
+        ok(typeof line.error === 'string' && line.error.length > 0, 'error');
+        if ('file' in line) match(line.file, /triage-monitor\.json$/, 'file');
+      }
+    });
+  } catch (error) {
+    check('S8 第二次状态落盘失败留痕', () => { throw error; });
+  } finally {
+    await stopServer(state);
+    await new Promise(resolve => stub.close(resolve));
+    try { await chmod(dataDir, 0o700); } catch {}
+    await rm(repo, { recursive: true, force: true });
+  }
+}
+
 /* ================= main ================= */
 const overall = Date.now();
 try {
@@ -807,6 +908,7 @@ try {
   await sectionS5();
   await sectionS6();
   await sectionS7();
+  await sectionS8();
 } catch (error) {
   failures.push({ name: '探针异常终止', error });
   console.log('FAIL 探针异常终止 ::', error && error.stack || error);

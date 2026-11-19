@@ -3,15 +3,26 @@
 - 工作树：`/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T023`（分支 `task/hids-ai-console-P003-T023`）
 - 被测提交：`432edfb`（产品代码，之后产品路径零 diff）；其后的提交只有纸与本席证据（`603559d`、`eb2c5a3`、本轮复审修正提交＝本报告的 HEAD）
 - 测试面：**只走文档承诺的公开面**——`docs/architecture.md` §3.6「日志」事件名表 / §8.1 运行态路径表 / §11.1-11.3、`docs/modules/http-api.md` 路由表与错误码、`docs/modules/triage-pipeline.md`（poll 模式与落盘习惯）、`log.js` 文档化的三个导出（`createJournal` / `log` / `useJournal`）。**未读实现文件内容**，行号核对只用 `grep -n` 做符号级定位。
-- 探针：`evidence/test/P003-T023/probe.mjs`（**70 条断言 / 7 段**：真进程 `spawn(server.js)` + 真 HTTP + 真 UDP，子进程逐个 `SIGKILL` 回收；S7 在 `tmpdir` 的源码副本里跑，不碰仓内 `.data`；外部依赖一律 `127.0.0.1:1` 与本机回环，不碰外网）
+- 探针：`evidence/test/P003-T023/probe.mjs`（**74 条断言 / 8 段**：真进程 `spawn(server.js)` + 真 HTTP + 真 UDP，子进程逐个 `SIGKILL` 回收；S7/S8 在 `tmpdir` 的源码副本里跑，不碰仓内 `.data`；外部依赖一律 `127.0.0.1:1`、本机回环与**牧云替身**（S8 的 `/rpc` 替身，只按 `docs/modules/event-gateway.md` 记的 `/rpc?method=` 形态回包），不碰外网）
 - 写者单测：`evidence/test/P003-T023/logging.test.js`（15 条，我亲跑，绿）
 
 ## 0. 本轮复审修正（test-review 判 reject_test 的两条）
 
 | 退回项 | 上一版的说法 | 本轮核实与处置 |
 | --- | --- | --- |
-| ① 报告称六条 FATAL 事件「只在写者单测里有断言」 | §6 第 1 条这么写，但全仓单测**零命中** | 上一版是错的，已删。证据：`git grep -n "server.start_failed\|syslog.handler_failed\|syslog.receiver_error\|syslog.accept_failed\|triage.persist_failed\|triage.poll_failed" -- '*.test.js'` → **EXIT=1，零命中**；`logging.test.js:273` 那条名字叫「syslog 绑定失败与接收器错误也在日志里」，正文（`:281`/`:283`）只断言 `syslog.bind_failed`，「接收器错误」没有断言。处置：**不写不存在的断言**——能黑盒造的四条（`syslog.accept_failed` / `syslog.handler_failed` / `triage.poll_failed` / `server.start_failed`）本轮补进探针 S6/S7 真进程实测，剩下两条（`syslog.receiver_error` / `triage.persist_failed`）在 §2 与 §6 里如实标「无断言」 |
+| ① 报告称六条 FATAL 事件「只在写者单测里有断言」 | §6 第 1 条这么写，但全仓单测**零命中** | 上一版是错的，已删。证据：`git grep -n "server.start_failed\|syslog.handler_failed\|syslog.receiver_error\|syslog.accept_failed\|triage.persist_failed\|triage.poll_failed" -- '*.test.js'` → **EXIT=1，零命中**；`logging.test.js:273` 那条名字叫「syslog 绑定失败与接收器错误也在日志里」，正文（`:281`/`:283`）只断言 `syslog.bind_failed`，「接收器错误」没有断言。处置：**不写不存在的断言**——能黑盒造的四条（`syslog.accept_failed` / `syslog.handler_failed` / `triage.poll_failed` / `server.start_failed`）本轮补进探针 S6/S7 真进程实测，剩下两条（`syslog.receiver_error` / `triage.persist_failed`）当轮如实标「无断言」——**这两条已被下一轮推翻，见 §0.1** |
 | ② `probe.mjs` 两处 `sleep(150)` 当同步 | S1 数 `http.request`、S2 数 `cloudwalker.call_failed` 前先睡 150ms | 已换成哨兵等待 `waitUntil(predicate, ms, label)`（轮询条件 + 超时抛错，失败落一条 FAIL 而不是静默少数）。`grep -n "sleep(150)" probe.mjs` → 零命中。变异验红：把 S1 期望条数改成 `>=13` → 探针 **EXIT=1**，恰红在「S1 各请求的 http.request 都到齐（哨兵等待 12 条…）:: 等不到「http.request × 12」（2500ms）」；把 S2 期望 op 里加 `tools` → **EXIT=1** 恰红在同一段哨兵；还原后 **EXIT=0 复绿** |
+
+## 0.1 第三轮：补齐剩下两条事件的断言（本轮唯一改动）
+
+上一轮把 `syslog.receiver_error` / `triage.persist_failed` 记成「黑盒造不出」，**这个说法是错的**，本轮推翻并补上断言（产品代码零 diff，只改探针与本报告）：
+
+| 事件 | 上一轮的错误说法 | 本轮怎么造出来的 | 探针位置 |
+| --- | --- | --- | --- |
+| `syslog.receiver_error` | 「需 UDP socket 的 `error` 事件，黑盒只能从进程外发包，造不出」 | **占住 UDP 端口**（探针自己先 `bind` 一个 udp4 socket）再起被测进程 → 接收器 `bind` 撞 `EADDRINUSE`，同一个 socket 错误落两条：`syslog.receiver_error` 与 `syslog.bind_failed`。本轮把它从「顺带出现」改成**显式断言**（上一版 S4 只等 `bind_failed`/`start_failed` 二者之一，`receiver_error` 出现了但没断言） | `probe.mjs` S4 第 2 条 |
+| `triage.persist_failed` | 「要把研判跑过半程才触发，黑盒造不出」 | **第二次落盘**才失败：临时副本里 `.data` 先可写 → 发一条合法 syslog 报文（收包路径第一次落盘成功）→ 牧云替身扣住匹配调用 `/rpc?method=HoneypotService.List` 不让研判往下走 → 此刻把 `.data` 置 `0555` → 放行替身回 500 → 研判收尾的**第二次落盘**撞 `EACCES`，落 `triage.persist_failed`（带 `alert_id` 那条；同一时刻后台 drain 那条带 `file`，探针对两种形状都做形状断言）。`.data` 一开始就置 0555 只会让**第一次**落盘失败（走 `syslog.accept_failed` + 502，见 F5），所以必须「先成功一次、再置只读」 | `probe.mjs` S8（3 条） |
+
+两条都变异验红过（M7/M8，见 §4），不是永真断言。
 
 ## 1. 验收锚点（任务卡 A1-A5）
 
@@ -61,9 +72,9 @@
 | `server.start_failed` | ✅ S7：状态文件写成非法 JSON（临时副本），落 `what:"triage"` + `error`（含 JSON 解析原文） | 上一版「⛔ 未触发」作废 |
 | `syslog.accept_failed` | ✅ S7：状态目录不可写，收包链抛错 → 一条，`error` 含 `EACCES` | 上一版「⛔ 未触发」作废 |
 | `syslog.handler_failed` | ✅ S7：同一抛错在收包回调兜底再落一条，`error` 非空 | 上一版「⛔ 未触发」作废 |
-| `syslog.receiver_error` | ⛔ **无断言**（探针与单测都没有） | 需 UDP socket 的 `error` 事件，黑盒只能从进程外发包，造不出（§6） |
+| `syslog.receiver_error` | ✅ S4：占住 UDP 端口 → `syslog.receiver_error`（level=error，`error` 含 `EADDRINUSE`），与 `syslog.bind_failed` 各一条；同段断言**不**落 `server.start_failed` | 上一版「⛔ 造不出」作废（§0.1） |
 | `triage.poll_failed` | ✅ S6：`HIDS_TRIAGE_INPUT_MODE=poll` + 牧云不可达，启动第一轮即落，`error` 非空 | **不用等 30s 定时器**：首轮在 `server.started` 后立刻跑 |
-| `triage.persist_failed` | ⛔ **无断言**（探针与单测都没有） | 已落盘的两条路径是后台 `drain()` / 进度回调：要把研判跑过半程才触发，黑盒造不出；同步入队路径的状态落盘失败实测走 **502 + `http.failed`**，不落这条（F5，§3 已钉） |
+| `triage.persist_failed` | ✅ S8：临时副本，第一次落盘成功后把 `.data` 置 0555，收尾的第二次落盘失败 → level=error、`alert_id` 与 `syslog.received` 对得上、`error` 含 `EACCES`；带 `file` 的变体也做形状断言 | 上一版「⛔ 造不出」作废（§0.1）。同步入队路径（第一次落盘就失败）仍走 502 + `http.failed`（F5），**不落**这条——两种路径不混 |
 
 ## 3. 边界与错误码（黑盒实造）
 
@@ -89,17 +100,19 @@
 | 命令 | 结果 |
 | --- | --- |
 | `timeout 120 node --test evidence/test/P003-T023/logging.test.js` | **EXIT=0**，tests 15 / pass 15 / fail 0（341.8ms）——写者单测，我亲跑 |
-| `timeout 200 node evidence/test/P003-T023/probe.mjs`（本席探针） | **EXIT=0**，PASS 70 / FAIL 0（约 1.2s）；连跑 3 次全绿（1214ms / 1193ms / 1188ms）（状态隔离：每次用一次性随机 syslog 指纹与一次性告警 ID，见 §6） |
+| `timeout 240 node evidence/test/P003-T023/probe.mjs`（本席探针，本轮 74 条） | **EXIT=0**，PASS 74 / FAIL 0（1376ms / 1377ms / 1373ms 连跑 3 次全绿；本轮补完 S4/S8 后又跑一次 1404ms 仍 EXIT=0）（状态隔离：每次用一次性随机 syslog 指纹与一次性告警 ID，见 §6） |
 | 变异 M5（哨兵不是摆设）：S1 期望条数改 `>=13` | 探针 **EXIT=1**，恰红在 `S1 各请求的 http.request 都到齐（哨兵等待 12 条…）:: 等不到「http.request × 12」（2500ms）`；还原后 **EXIT=0 复绿** |
 | 变异 M6：S2 期望 op 里加 `tools` | **EXIT=1**，恰红在 `S2 三条牧云失败与 http.failed 都到齐（哨兵等待…）:: 等不到「cloudwalker.call_failed × 3 与 http.failed × 2」（5000ms）`；还原后 **EXIT=0 复绿** |
+| 变异 M7：`sed -i "s/'syslog\.receiver_error'/'syslog.receiver_errorMUTED'/" syslog-input.js` | 探针 **EXIT=1**（PASS 71 / FAIL 1，11418ms），恰红在 `S4 绑定失败留痕 :: 等不到日志「syslog.receiver_error」（10000ms），已见事件=["server.started","syslog.receiver_errorMUTED","syslog.bind_failed"]`；`git checkout -- syslog-input.js` 后 **EXIT=0 复绿** |
+| 变异 M8：`sed -i "s/'triage\.persist_failed'/'triage.persist_failedMUTED'/g" triage-monitor.js`（3 处） | 探针 **EXIT=1**（PASS 72 / FAIL 1，21372ms），恰红在 `S8 第二次状态落盘失败留痕 :: 等不到日志「triage.persist_failed」（20000ms），已见事件=[…,"triage.failed","triage.persist_failedMUTED"]`；`git checkout -- triage-monitor.js` 后 **EXIT=0 复绿** |
 | `timeout 300 node --test *.test.js` | **EXIT=1**，tests 198 / pass 197 / fail 1——唯一红 `maintenance CLI starts when the deployment current path is a symlink`（`maintenance-startup.test.js`），与 `docs/_meta/gaps.md:19,30` 记载的既有基线一致；与 docs/architecture.md §11.1 的 198/197/1 计数一致 |
 | 基线对照：`git worktree add --detach /tmp/p023-base a6cbaa3` + 在 base 上跑 `timeout 120 node --test maintenance-startup.test.js` | **EXIT=1**，tests 1 / pass 0 / fail 1，`MODULE_NOT_FOUND`——**开工前就红，非本卡引入**（验完 `git worktree remove --force`，`git worktree list` 无残留） |
 | 变异 M1：`sed -i "s/'\[redacted\]'/'[leaked]'/g" log.js` | 探针 **EXIT=1**（PASS 69 / FAIL 1），恰红在 `A4 敏感键一律 [redacted]…:: authorization: actual="[leaked]" expected="[redacted]"`；`git checkout -- log.js` 后 **EXIT=0 复绿** |
 | 变异 M2：`sed -i "s/'http\.request'/'http.requestMUTED'/g" server.js` | **EXIT=1**（PASS 68 / FAIL 2）：哨兵段 `S1 各请求的 http.request 都到齐…:: 等不到「http.request × 12」（5000ms）` 先红，`S1 超长路径在日志里被截断` 跟着红；还原后复绿 |
 | 变异 M3：`sed -i "s/'triage\.enqueued'/…MUTED/g"` triage-monitor.js | **EXIT=1**（PASS 68 / FAIL 4，21.2s）：`S3 triage.enqueued 留痕（手动重排）` 等不到，已见事件里是 `triage.enqueuedMUTED`；还原后复绿 |
 | 变异 M4：`sed -i "s/'maintenance\.result'/…MUTED/g"` server.js | **EXIT=1**（PASS 69 / FAIL 2，31.2s）：等不到 `maintenance.result`，已见事件里是 `maintenance.resultMUTED`；还原后复绿 |
-| 变异后的收尾核对 | `git diff --stat` → 空；最终一次探针 **EXIT=0，PASS 70 / FAIL 0（1238ms）** |
-| 还原核对 | `git diff --stat` → 空（变异全部还原）；`git status --short` → 只有未跟踪 `.pi-child-claim.json`（本席证据本轮已提交，见头部） |
+| 变异后的收尾核对 | 两轮变异（M1-M8）全部 `git checkout --` 还原后 `git diff --stat` 只剩本席证据；最终一次探针 **EXIT=0，PASS 74 / FAIL 0（1404ms）** |
+| 还原核对 | `git diff --stat` → 只有 `evidence/test/P003-T023/probe.mjs` 与 `evidence/test/P003-T023/test-report.md`（本轮只补测试与报告，**产品代码零 diff**）；`git status --short` → 另有未跟踪 `.pi-child-claim.json`（本席会话标记） |
 
 ## 5. Findings（全部 doc-side、minor，不挡 A1-A5）
 
@@ -156,11 +169,8 @@
 
 ## 6. 残余风险
 
-1. **两条事件至今没有任何断言**（上一版「只在写者单测里有断言」是错的，已作废）：
-   - `syslog.receiver_error`：需要 UDP socket 的 `error` 事件，黑盒只能从进程外发包，造不出。
-   - `triage.persist_failed`：只剩后台 `drain()` / 进度回调两处，要把研判跑到半程才落盘失败；同步入队路径的落盘失败走 502 + `http.failed`（F5），不落这条。
-   - 零断言的证据（本轮亲跑）：`git grep -n "server.start_failed\|syslog.handler_failed\|syslog.receiver_error\|syslog.accept_failed\|triage.persist_failed\|triage.poll_failed" -- '*.test.js'` → **EXIT=1 零命中**；探针里现在有前四条里能黑盒造的四条（`server.start_failed` / `syslog.handler_failed` / `syslog.accept_failed` / `triage.poll_failed`），这两条仍然没有。
-2. **写者单测名与断言不符（记录，不是本席可改的文件）**：`evidence/test/P003-T023/logging.test.js:273` 名为「syslog 绑定失败与接收器错误也在日志里」，正文 `:281`/`:283` 只断言 `syslog.bind_failed`，没有「接收器错误」的断言——上一版报告把它当成了 `receiver_error` / `handler_failed` 的断言来源，这正是本次退回的起因。`handler_failed` / `accept_failed` 本轮由探针 S7 独立覆盖。
+1. **`triage.persist_failed` 只验到「研判收尾」那条路径**：S8 造的是收尾落盘失败（带 `alert_id`）。后台 `drain()` 的另一种写法要单独一次落盘失败才会出现（上一轮在 `.data` 一开始就只读的副本里顺带见过一次，形态是 `file`+`error`），本轮没把它做成独立断言——`file` 变体的形状断言只在 S8 里「出现则校验」。同步入队路径的第一次落盘失败仍走 502 + `http.failed`（F5）。
+2. **写者单测名与断言不符（记录，不是本席可改的文件）**：`evidence/test/P003-T023/logging.test.js:273` 名为「syslog 绑定失败与接收器错误也在日志里」，正文 `:281`/`:283` 只断言 `syslog.bind_failed`，没有「接收器错误」的断言——上一版报告把它当成了 `receiver_error` / `handler_failed` 的断言来源，这正是上一次退回的起因。`receiver_error` 现在由探针 S4 独立断言，`handler_failed` / `accept_failed` 由 S7 覆盖，但这行单测名仍名不副实。
 3. **`cloudwalker.call_failed` 的 op=`tools`/`mcp_tools`/`list_events`**：`/api/agent/tools` 在牧云不可达时实测回 **200 工具清单**（工具清单是本地定义，不打网络），op=`tools` 的失败分支只能靠替身工具箱造；`list_events` 需匹配路径走到该分支。黑盒未触发。
 4. **`maintenance.result` 只验到失败态**（rule/wiki 至少一侧 failed）；两侧都 `updated` 的成功态需要模型与知识库都到位，本轮没造。
 5. **状态面持久化的副作用**：`.data/triage-monitor.json` 跨进程留存去重表与记录，探针已用一次性随机指纹/一次性告警 ID 隔离；仓库 `.data/` 被 `.gitignore` 忽略，未污染 git 面。
@@ -170,10 +180,10 @@
 
 ```bash
 cd /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T023
-timeout 200 node evidence/test/P003-T023/probe.mjs          # 本席黑盒探针，期望 PASS 70 / FAIL 0，EXIT=0（约 1.2s）
+timeout 240 node evidence/test/P003-T023/probe.mjs          # 本席黑盒探针，期望 PASS 74 / FAIL 0，EXIT=0（约 1.4s）
 timeout 120 node --test evidence/test/P003-T023/logging.test.js  # 写者单测，期望 15/15，EXIT=0
 timeout 300 node --test *.test.js                            # 全套，期望 198/197/1，EXIT=1（唯一红是既有基线）
-git grep -n "server.start_failed\|syslog.handler_failed\|syslog.receiver_error\|syslog.accept_failed\|triage.persist_failed\|triage.poll_failed" -- '*.test.js'  # 期望 EXIT=1 零命中（§6 第 1 条的证据）
+git grep -n "server.start_failed\|syslog.handler_failed\|syslog.receiver_error\|syslog.accept_failed\|triage.persist_failed\|triage.poll_failed" -- '*.test.js'  # 期望 EXIT=1 零命中：写者单测对六条 FATAL 事件仍无断言，全靠本席探针（S4/S6/S7/S8）
 ```
 
 F6 的复现（三个非法端口各起一次，读 `syslog.listening` 的 `bind`）：
