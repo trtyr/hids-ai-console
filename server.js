@@ -23,9 +23,13 @@ import { TraceBoardService } from './trace-board.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
 import { RuleStore, isRuleId } from './rule-store.js';
+import { createConfigStore } from './config-store.js';
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const runtime = runtimePaths(moduleDirectory); // 运行态一律落在仓库内 .data/（`.gitignore:10` 已忽略）；规则与旧目录说明见文件末尾 runtimePaths()
+// 可写配置的覆盖层（P003-T029）：**必须在下面这批模块级装配之前建**——它把改过的键盖进 process.env，
+// 装配才看得到；「重启进程后改过的值仍生效」全靠这一行。没改过的键继续读环境变量。
+const configStore = createConfigStore({ file: path.join(runtime.data, 'config-overrides.json') });
 const host = process.env.HIDS_HOST || '127.0.0.1';
 const port = Number(process.env.HIDS_PORT || 8080);
 const baseUrl = process.env.CLOUDWALKER_URL;
@@ -53,6 +57,31 @@ const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, i
   baselineFile: runtime.baseline,
   intelFile: runtime.intel }) : null;
 const wikiWorkbench = new WikiWorkbench(wikiStore, model, promptStore, runtime.wikiSessions);
+
+// 写配置之后的生效（P003-T029 A1）：活着的客户端对象**原地换值**，后续调用立刻走新地址与新凭据。
+// 不重建对象：createServer 的 service / toolbox / investigator / monitor 都是值捕获，重建等于换了一批引用，
+// 路由手里的还是旧对象。持有这些引用的下游（apiToolbox、triageToolbox、两个 InvestigationAgent、
+// wikiWorkbench、triageMonitor.service）是同一批对象，跟着一起变。targets 可注入：单测传假对象验映射。
+export function applyLiveConfig(targets, values) {
+  const { gateway, model: chatModel, agentToolbox } = targets || {};
+  if (gateway?.rpc && values.CLOUDWALKER_URL && values.CLOUDWALKER_API_TOKEN) {
+    gateway.rpc.baseUrl = new URL(values.CLOUDWALKER_URL);
+    gateway.rpc.token = values.CLOUDWALKER_API_TOKEN;
+  }
+  const mcp = agentToolbox?.client;
+  if (mcp && values.CLOUDWALKER_URL && values.CLOUDWALKER_API_TOKEN) {
+    mcp.url = new URL('/api/mcp', values.CLOUDWALKER_URL);
+    mcp.token = values.CLOUDWALKER_API_TOKEN;
+    mcp.initialized = false; // 换了服务端：MCP 会话要重新 initialize，旧会话 id 不能接着用
+  }
+  if (chatModel && values.LLM_BASE_URL && values.LLM_API_KEY && values.LLM_MODEL) {
+    const base = values.LLM_BASE_URL.endsWith('/') ? values.LLM_BASE_URL : `${values.LLM_BASE_URL}/`;
+    chatModel.url = new URL('chat/completions', base);
+    chatModel.apiKey = values.LLM_API_KEY;
+    chatModel.model = values.LLM_MODEL;
+  }
+  return targets;
+}
 
 // A4：告警分析已经取到的原始报文写在案卷（cases/<...>/01-原始告警.txt）里，研判记录（InvestigationStore）带 case_dir。
 // TriageMonitor.status() 对外是瘦身记录（triage-monitor.js 剥掉 input），这里不读它的 input，只按研判记录顺案卷取原始报文。
@@ -566,7 +595,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
   maintenanceEntry = process.env.HIDS_MAINTENANCE_ENTRY_URL,
   ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore,
-  ruleMaintainer = regoMaintainer) {
+  ruleMaintainer = regoMaintainer, config = configStore) {
   // 注入的 TraceBoardService 没有取数器时，用本次的 monitor / history 现接一条：
   // 测试与部署走同一套接线，不再靠测试里手塞假 analysis。
   if (boardService instanceof TraceBoardService && !boardService.analysis)
@@ -609,7 +638,16 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname === '/api/updates' && req.method === 'GET') return json(res, 200, await new UpdateStore(prompts).overview());
       // 生效值一览（P003-T025）：地址、端口、研判输入模式、牧云与模型配了没有、模型名。
       // 机密只给有/没有——本路由的响应体里不出现任何 Token 与密码原文（A3）。
-      if (url.pathname === '/api/config' && req.method === 'GET') return json(res, 200, configSummary());
+      // 读的是注入的 store 的 env（缺省就是 process.env）：写配置盖进的覆盖层立刻反映在这里（P003-T029 A1）。
+      if (url.pathname === '/api/config' && req.method === 'GET') return json(res, 200, configSummary(config.env));
+      // 写配置（P003-T029）：运行中改牧云与模型五项，落盘后重启仍生效（store 建时读回覆盖层）。
+      // 顺序＝先校验、再落盘、再改 env（config.update 内部），最后原地换活着的客户端值。
+      // 响应只回「改了哪几个键 + 生效摘要」：机密永远只以布尔出现（A2）。
+      if (url.pathname === '/api/config' && req.method === 'POST') {
+        const updated = await config.update(await readJSON(req));
+        applyLiveConfig({ gateway, model, agentToolbox }, config.values());
+        return json(res, 200, { updated, config: configSummary(config.env) });
+      }
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
         try { return json(res, 200, { configured: true, ...(await viaCloudwalker('status', null, () => service.status())) }); }
@@ -1013,7 +1051,7 @@ export function configSummary(env = process.env) {
     triage_input_mode: triageInputModeOf(env),
     cloudwalker: { configured: Boolean(env.CLOUDWALKER_URL && env.CLOUDWALKER_API_TOKEN) },
     model: { configured: Boolean(env.LLM_BASE_URL && env.LLM_API_KEY && env.LLM_MODEL), name: env.LLM_MODEL || null },
-    // 不配 Basic 口令 = 不启用鉴权（hasAccess 见 server.js:408），这是合法部署，不是缺配置。
+    // 不配 Basic 口令 = 不启用鉴权（hasAccess 见 server.js:413），这是合法部署，不是缺配置。
     auth: { basic_auth_enabled: Boolean(env.HIDS_BASIC_AUTH_PASSWORD) },
     secrets: Object.fromEntries(SECRET_CONFIG_KEYS.map(name => [name, Boolean(env[name])])),
     missing_required: REQUIRED_CONFIG_KEYS.filter(name => !env[name])

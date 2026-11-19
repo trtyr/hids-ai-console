@@ -4,7 +4,7 @@
 
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
-- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。
+- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
 ## 1. 模块职责与边界
@@ -72,15 +72,16 @@
 
 ### 3.1 路由表
 
-36 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
+37 条「路径 + 方法」组合：「前置条件」写的是这条路由在缺件时的表现；「出处」是该分支所在的行。
 
-> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。
-> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 36 行），不是组合数：一行可以给出多条组合（`server.js:704` 的 `/api/agent/triage/{alertId}` 给 GET 与 POST 两条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
+> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）。
+> `grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathname.match" server.js` 数的是**分支条件行数**（当前 37 行），不是组合数：一行可以给出多条组合（`server.js:704` 的 `/api/agent/triage/{alertId}` 给 GET 与 POST 两条），也有行不算组合（`server.js:718` 只是 `/api/wiki/` 分组入口）。数之前先分清这两种。
 
 | 方法 | 路径 | 成功状态 | 前置条件 | 出处 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/session` | 200 `{authenticated:true, user, role}` | — | `server.js:208-214` |
-| GET | `/api/config` | 200 生效配置（`{host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required}`） | —（只读环境变量：不探上游、不因缺件 503；机密只在 `secrets` 里给布尔） | `server.js:612` |
+| GET | `/api/config` | 200 生效配置（`{host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required}`） | —（只读环境变量：不探上游、不因缺件 503；机密只在 `secrets` 里给布尔） | `server.js:642` |
+| POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写五键；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:646-650` |
 | GET | `/api/updates` | 200 升级包概览 | — | `server.js:215` |
 | GET | `/api/status` | 200 / 502 | 未配牧云回 200（`configured:false`）；配了但连不上回 502，正文仍是 `{configured, connected:false, reason}` | `server.js:216-220` |
 | GET | `/api/agent/tools` | 200 工具清单 | 无 API 工具箱回 503 | `server.js:221-225` |
@@ -221,11 +222,11 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 
 ### 3.5 生效配置（`GET /api/config`，P003-T025）
 
-**是什么**：一处能看进程实际生效的配置——不用登机器翻环境变量。实现只有一行路由（`server.js:612`），响应体就是 `configSummary()`（`server.js:1009`）的返回值；OpenAPI 契约见 `openapi.yaml` 的 `getConfig`。
+**是什么**：一处能看进程实际生效的配置——不用登机器翻环境变量。实现只有一行路由（`server.js:642`），响应体就是 `configSummary(config.env)`（`server.js:1047-1059`）的返回值——`config.env` 缺省就是 `process.env`，写配置盖进去的覆盖层立刻反映在这里（§3.6）；OpenAPI 契约见 `openapi.yaml` 的 `getConfig`。
 
 **请求**：`GET /api/config`，无参数、无正文。和其它业务路由一样过 Basic 认证闸门（§4）：启用认证时没凭据回 401 纯文本。
 
-**响应**：`200`，`Cache-Control: no-store`，JSON 正文八键恒在（`server.js:1009-1035`）：
+**响应**：`200`，`Cache-Control: no-store`，JSON 正文八键恒在（`server.js:1047-1059`）：
 
 | 字段 | 类型 | 取值 | 说明 |
 | --- | --- | --- | --- |
@@ -262,6 +263,81 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
  "secrets":{"CLOUDWALKER_API_TOKEN":false,"LLM_API_KEY":false,"HIDS_BASIC_AUTH_PASSWORD":false,
             "HIDS_PROMPT_ADMIN_TOKEN":false,"HIDS_RULE_ADMIN_TOKEN":false},
  "missing_required":["CLOUDWALKER_URL","CLOUDWALKER_API_TOKEN","LLM_BASE_URL","LLM_API_KEY","LLM_MODEL"]}
+```
+
+### 3.6 写配置（`POST /api/config`，P003-T029）
+
+**是什么**：不重启进程改牧云与模型的五项，改完立刻生效、落盘、重启仍生效，且不回显。实现：路由两行（`server.js:646-650`），行为全在新文件 `config-store.js`（`createConfigStore`，`config-store.js:76`）。OpenAPI 契约见 `openapi.yaml` 的 `writeConfig`。
+
+**可写的只有五个键**（`WRITABLE_CONFIG_KEYS`，`config-store.js:22`）：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。表外键一律 400，包括看起来很顺手的 `HIDS_PORT`：`HIDS_HOST` / `HIDS_PORT` / `HIDS_TRIAGE_INPUT_MODE` 改起来必须重启进程；Basic 口令与两个管理员令牌是鉴权凭据本身，写进来等于自己给自己开门。
+
+**请求**：`POST /api/config`，`Content-Type: application/json`，正文是一个对象，只放要改的键（部分更新）：
+
+```json
+{"LLM_MODEL":"qwen2.5-72b-instruct"}
+```
+
+- **值的形状**用模块级装配处同一套构造器判（`config-store.js:35` → `rpc-client.js:4-5`、`model-client.js:22-24`）：`CLOUDWALKER_URL` / `LLM_BASE_URL` 必须 `http(s)://` 开头；`CLOUDWALKER_API_TOKEN` 至少 6 位；`LLM_API_KEY`、`LLM_MODEL` 非空。校验对象是**合并后的生效值**（只改 `LLM_MODEL` 也要三项齐——进程里这三项本来就被启动闸门保证齐全）。
+- **空串不能用来「删键」**：值必须是非空字符串，空串/空白串回 400。覆盖层只增不减，要清掉改过的值就手工删 `.data/config-overrides.json` 后重启。
+
+**响应**：`200`，`Cache-Control: no-store`：
+
+```json
+{"updated":["LLM_MODEL"],"config":{"host":"127.0.0.1","port":8080,"triage_input_mode":"syslog",
+  "cloudwalker":{"configured":true},"model":{"configured":true,"name":"qwen2.5-72b-instruct"},
+  "auth":{"basic_auth_enabled":false},"secrets":{"CLOUDWALKER_API_TOKEN":true,"LLM_API_KEY":true,
+  "HIDS_BASIC_AUTH_PASSWORD":false,"HIDS_PROMPT_ADMIN_TOKEN":false,"HIDS_RULE_ADMIN_TOKEN":false},
+  "missing_required":[]}}
+```
+
+- `updated`：这次改了哪几个键，顺序＝正文里的顺序。
+- `config`：写完之后的生效值，与 `GET /api/config` 的 200 正文**同形状同口径**（八键恒在、机密只布尔）。
+
+**写完之后的三件事（A1/A4，可分别断言）**：
+
+1. **立刻反映**：`GET /api/config` 下一次请求就报新值——store 把覆盖层写进 `env`，而 GET 读的就是 `configSummary(config.env)`。
+2. **运行中生效**：进程内活着的客户端对象**原地换值**（`applyLiveConfig`，`server.js:65-84`：`gateway.rpc.baseUrl/token`、`agentToolbox.client.url/token`（并把 `initialized` 置 false，新服务端要重新 initialize MCP 会话）、`model.url/apiKey/model`），后续牧云 / 模型调用立刻走新地址与新凭据。不重建对象是因为 `createServer` 的 `service` / `toolbox` / `investigator` / `monitor` 都是值捕获，重建等于换了一批引用，路由手里还是旧的。
+3. **持久化**：值落到仓内 `.data/config-overrides.json`（`.gitignore:10` 已忽略；同目录临时文件 + `rename`，权限 0600），文件里**只有改过的键**。进程启动时 store 在建模块级客户端**之前**同步读回它（`server.js:32`），所以重启后改过的值仍生效，**没改过的键继续读环境变量**。文件坏了（不是合法 JSON、不是对象）不当场死：当空处理并落一条 `config.load_failed`（`level: error`，字段 `file` / `error`），进程照常起来、按环境变量生效。
+
+**鉴权（A3）**：和其它业务路由一样过 Basic 认证闸门（§4，`server.js:413` / `server.js:421`），闸门在 URL 解析之前。**没配 `HIDS_BASIC_AUTH_PASSWORD` 时闸门放行，写接口也放行**——那是一个合法部署（单机探针、内网只读演示），不是推荐部署：任一能访问到端口的人都能把牧云地址指到自己的服务器再把模型密钥送出去。要挡住写就把 Basic 认证配上（配了就回 401，见 A3 用例）。这一点不是本节的推论，是写进 `openapi.yaml` `writeConfig.description` 的契约。
+
+**不回显（A2）**：写成功的响应、`GET /api/config`、以及所有错误正文里都不出现 Token / 密钥原文——机密只以布尔出现在 `secrets` 里；错误原话只点键名（如「LLM_BASE_URL 必须是 HTTP(S) 地址」），即便坏值里塞了一段像凭据的东西也不漏出去。
+
+**留痕（A5）**：每次写落一条 `config.updated`，字段只有 `keys`（数组，本次改了的键名），不带值：
+
+```json
+{"time":"…","level":"info","event":"config.updated","keys":["LLM_MODEL"]}
+```
+
+写失败（校验不过 / 落盘失败）不落这条事件——它记的是「改了」，不是「想改」。
+
+**错误**（四类口径见 §8，路由自己判的一律走 `callerError`）：
+
+| 情形 | 状态 | `code` | 正文 `error`（原话） |
+| --- | --- | --- | --- |
+| 正文不是 JSON / 过大 | 400 | `caller_error` | 「请求正文不是 JSON」/「请求正文过大」 |
+| 正文不是对象（数组、字符串、null） | 400 | `caller_error` | 「请求正文必须是 JSON 对象」 |
+| 正文没有可写的键（`{}`） | 400 | `caller_error` | 「请求正文没有可写的配置项」 |
+| 键不在可写表里 | 400 | `caller_error` | 「配置项不可写：HIDS_PORT」（多个用、「」隔开） |
+| 值是空串/空白/非字符串 | 400 | `caller_error` | 「配置项取值必须是非空字符串：LLM_MODEL」 |
+| 值形状不合法 | 400 | `caller_error` | 装配处那句原话，如「LLM_BASE_URL 必须是 HTTP(S) 地址」「CLOUDWALKER_API_TOKEN 无效」 |
+| 落盘失败（目录不可写等） | 500 | `internal_error` | 「服务器内部错误」（异常原文只进 `http.failed` 日志） |
+| 没通过 Basic 认证（启用了认证时） | 401 | —（纯文本） | 「需要登录后访问」，见 §4 |
+
+**失败时什么都不变**：先校验、再落盘、再改内存与 `env`——被拒的写不会留下覆盖层，也不会让 `GET /api/config` 报出半套值。
+
+**不做什么**（测试别按这些写期望）：
+
+- 不在运行中**新建**原本为空的客户端：启动闸门要求五项必填齐全，进程里 `gateway` / `model` 恒存在；`applyLiveConfig` 只换值不建对象（进程内注入空客户的测试路径不会因为一次写就跑起来）。
+- 不写前端：本卡不动 `web/**`，配置页要不要加输入框是另一张卡。
+- 不新增环境变量：覆盖层路径固定由 `runtimePaths()` 的 `.data/` 推出，`.env.example` 不变。
+- 不改 `GET /api/config` 的响应形状（§3.5 契约照旧）。
+
+**可重放证据**（`evidence/test/P003-T029/config-write.test.js`，10 条）：
+
+```bash
+node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 160ms
+# 真进程手工验三件事（起进程 → 写 → 读 → 杀 → 再起 → 读）
 ```
 
 ## 4. Basic 认证

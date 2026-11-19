@@ -122,6 +122,92 @@ paths:
                       type: string
                       enum: [CLOUDWALKER_URL, CLOUDWALKER_API_TOKEN, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL]
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+    post:
+      tags: [状态]
+      summary: 写配置（运行中改牧云与模型，持久化且不回显）
+      operationId: writeConfig
+      description: |
+        运行中改牧云与模型的五项：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。
+        写成功之后：
+        - `GET /api/config` 立刻报新值（不用重启进程）；
+        - 后续牧云 / 模型调用立刻走新地址与新凭据（进程内客户端原地换值，不新建进程）；
+        - 值落盘到 `.data/config-overrides.json`（同目录临时文件 + `rename`，权限 0600，只存改过的键），
+          **重启进程后仍然生效**；没被改过的键继续读环境变量。
+        部分更新：只改正文里出现的键。表外的键一律 400——`HIDS_HOST`、`HIDS_PORT`、`HIDS_TRIAGE_INPUT_MODE`
+        改起来必须重启进程；Basic 口令与两个管理员令牌是鉴权凭据本身，不通过这条接口改。
+        值的形状按模块级装配处同一套构造器判（URL 必须 http(s)、`CLOUDWALKER_API_TOKEN` 至少 6 位、
+        `LLM_API_KEY` 与 `LLM_MODEL` 非空）；校验对象是合并后的生效值。
+        **不回显**：响应正文与错误正文里都不出现 Token / 密钥原文——机密只以布尔出现在 `config.secrets` 里；
+        日志只落一条 `config.updated`（`keys` 是这次改了的键名），不带值。
+        **鉴权**：和其它业务路由一样过 Basic 认证闸门。没配 `HIDS_BASIC_AUTH_PASSWORD`
+        （Basic 认证未启用）时 `GET /api/config` 与这条写接口都放行——那是合法部署，不是推荐部署；
+        要挡住写就把 Basic 认证配上。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                CLOUDWALKER_URL: { type: string, description: 牧云地址，必须以 http(s):// 开头 }
+                CLOUDWALKER_API_TOKEN: { type: string, description: 牧云 API Token，至少 6 位 }
+                LLM_BASE_URL: { type: string, description: 模型接口基址，必须以 http(s):// 开头 }
+                LLM_API_KEY: { type: string, description: 模型密钥，非空 }
+                LLM_MODEL: { type: string, description: 模型名，非空 }
+            examples:
+              changeModel:
+                summary: 只换模型名（部分更新，其余四项不动）
+                value: { 'LLM_MODEL': qwen2.5-72b-instruct }
+      responses:
+        '200':
+          description: |
+            写成功。`updated` 是这次改了哪几个键（正文里的顺序）；`config` 是写完之后的生效值，
+            与 `GET /api/config` 的 200 正文同形状同机密口径（八键恒在、机密只布尔），字段表见该接口。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated, config]
+                properties:
+                  updated:
+                    type: array
+                    items:
+                      type: string
+                      enum: [CLOUDWALKER_URL, CLOUDWALKER_API_TOKEN, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL]
+                  config:
+                    type: object
+                    additionalProperties: true
+                    description: 生效配置快照，与 `GET /api/config` 的 200 正文同形状（字段表见该接口）
+              examples:
+                changed:
+                  summary: 只换了模型名
+                  value:
+                    updated: [LLM_MODEL]
+                    config:
+                      host: 127.0.0.1
+                      port: 8080
+                      triage_input_mode: syslog
+                      cloudwalker: { configured: true }
+                      model: { configured: true, name: qwen2.5-72b-instruct }
+                      auth: { basic_auth_enabled: true }
+                      secrets:
+                        CLOUDWALKER_API_TOKEN: true
+                        LLM_API_KEY: true
+                        HIDS_BASIC_AUTH_PASSWORD: true
+                        HIDS_PROMPT_ADMIN_TOKEN: false
+                        HIDS_RULE_ADMIN_TOKEN: false
+                      missing_required: []
+        '400':
+          description: |
+            调用方传错（`code=caller_error`）：正文不是 JSON、不是对象、没有可写项、键不在可写表里、
+            值是空串或形状不合法。错误原话只点键名，不回显值。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/status:
     get:
       tags: [状态]
