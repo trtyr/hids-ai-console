@@ -581,7 +581,9 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 | `user` | `payload.user_name`，没有就 `payload.login_username` |
 
 - 空字符串或缺失的字段不进事实对象：规则写到该字段时按 Rego 的 undefined 语义套不上（`rule-store.js:28-31`）；规则没写该字段就仍然不限制。
-- 规则库默认是仓内 `rules/`（`investigation-agent.js:21`、`investigation-agent.js:287`）；构造第 5 个参数可以注入别的 `RuleStore`（测试用临时目录）。
+- 规则库默认是数据根下的 `rules/`（P003-T041）：`server.js:46` 装配的那个 `RuleStore` 由两个 `InvestigationAgent` 共用，构造第 5 个参数传进来
+  （`investigation-agent.js:287`）。没传第 5 个参数时回落到 `investigation-agent.js:21` 的仓内 `rules/`——那是给单测与进程内探针留的缺省，
+  真进程一律走注入。维护者改完规则，下一次研判读到的就是改过的那份。
 - 求值结果写进 `verdict.rego`：`{status, rule_ids}`，`status` 四态 `matched` / `none` / `unavailable` / `not_applicable`（`investigation-agent.js:717`）。`unavailable` 表示规则库读取或解析失败，研判不中断，原因写进系统提示。
 - 系统提示里恒有一段 `# 套上的 Rego 规则`（`investigation-agent.js:105-115`、`investigation-agent.js:484`），四种口径：
 - **RuleStore 按 mtime 缓存已解析规则（P003-T037）**：`list()` / `read()` / `evaluate()` 每次都 `readdir` + 逐文件 `stat`，
@@ -694,7 +696,7 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 
 | 导出 | 签名 / 形态 | 作用 | 证据 |
 | --- | --- | --- | --- |
-| `InvestigationAgent` | `new InvestigationAgent(toolbox, model, promptStore?, knowledgeStore?, ruleStore?)` | 研判智能体。五个构造参数依次是取证工具箱、模型客户端、提示词存储、知识库、Rego 规则库（缺省读仓内 `rules/`） | `investigation-agent.js:285-288` |
+| `InvestigationAgent` | `new InvestigationAgent(toolbox, model, promptStore?, knowledgeStore?, ruleStore?)` | 研判智能体。五个构造参数依次是取证工具箱、模型客户端、提示词存储、知识库、Rego 规则库（`server.js` 传数据根库；不传时缺省读仓内 `rules/`，仅供单测与探针） | `investigation-agent.js:285-288`、`server.js:46`、`server.js:49-52` |
 | `.run(alertId, options)` | `Promise<研判记录>` | 主路径，见 [2.2](#22-主路径的阶段) | `investigation-agent.js:214` |
 | `.runUnmatchedSyslog(input, matchResult, caseInfo, onProgress?)` | `Promise<研判记录>` | 未匹配 syslog 的旁路，见 [2.4](#24-未匹配-syslog-的旁路) | `investigation-agent.js:728` |
 | `.prompts()` / `.updatePrompt(section, content, revision)` | `Promise<…>` | 读 / 改提示词，转调提示词存储 | `investigation-agent.js:211-212` |

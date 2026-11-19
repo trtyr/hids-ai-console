@@ -3,7 +3,7 @@ import { appendFile, mkdir, readFile, readdir, rename, stat as statFile, unlink,
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const defaultDirectory = process.env.HIDS_WIKI_DIR || builtinWikiDirectory(); // 内置目录与历史落点见文件末尾
+const defaultDirectory = process.env.HIDS_WIKI_DIR || wikiLibraryDirectory(); // 库目录与历史落点见文件末尾
 const idPattern = /^[A-Z]{2,3}-\d+[a-z]?$/;
 const pagePattern = /^(?:common|webshell|memwebshell|rasp|revshell|suspicious-command|cmdaudit|malware|bruteforce|honeypot|elevation|abnormal-login|net|customer-experience)\/[A-Z]{2,3}-\d+[a-z]?\.md$/;
 const wikiDirectories = new Set(['common', 'webshell', 'memwebshell', 'rasp', 'revshell',
@@ -27,14 +27,28 @@ function metadata(filename, source) {
 }
 
 export class WikiStore {
-  constructor(directory = defaultDirectory, { historyDirectory = historyDirectoryFor(directory) } = {}) {
+  constructor(directory = defaultDirectory,
+    { historyDirectory = historyDirectoryFor(directory), seedFrom = seedSourceFor(directory) } = {}) {
     this.directory = directory;
-    // 历史版本落点（P003-T034）：内置判据库→数据根，换过的目录→跟目录走，见文件末尾。
+    // 历史版本落点（P003-T034）：数据根库→数据根，换过的目录→跟目录走，见文件末尾。
     this.historyDirectory = historyDirectory;
+    // 种子源（P003-T041 A2）：只有「缺省的数据根库」才从仓内 `wiki/` 初始化一次；注入的目录一律不碰仓库。
+    this.seedSource = seedFrom;
+    this.seeding = null;
     this.pending = Promise.resolve();
     // 目录索引缓存（A7）：按（路径, mtimeMs, size）签名缓存已解析的页面行。
     // 一次研判里 agentIndex / agentPage / agentContextPages 会反复要目录：签名不变就不再读盘、不再重解析头部。
     this.listCache = null;
+  }
+
+  // 数据根里还没有这本库时，从仓内 `wiki/` 初始化一次（A2）。已存在就一个字都不动。
+  // 记忆化在模块级 `ensureWikiLibrary()` 上而不是实例上：`prompt-store.js` 的 SOP 也从这本库读，
+  // 两个消费者共用同一份「只初始化一次」，不会一边刚拷完、另一边又拷一遍。
+  async ready() {
+    if (!this.seedSource) return;
+    this.seeding ||= this.directory === wikiLibraryDirectory()
+      ? ensureWikiLibrary() : seedLibrary(this.directory, this.seedSource);
+    await this.seeding;
   }
 
   file(filename) {
@@ -47,6 +61,7 @@ export class WikiStore {
   }
 
   async browse() {
+    await this.ready();
     const top = await readdir(this.directory, { withFileTypes: true });
     const names = top.filter(item => item.isFile() && /\.md$/.test(item.name)).map(item => item.name);
     const folders = top.filter(item => item.isDirectory() && wikiDirectories.has(item.name));
@@ -90,6 +105,7 @@ export class WikiStore {
   }
 
   async list() {
+    await this.ready();
     const signature = await this.#listSignature();
     if (this.listCache?.signature === signature) return [...this.listCache.rows];
     const groups = await readdir(this.directory, { withFileTypes: true });
@@ -109,6 +125,7 @@ export class WikiStore {
   // 页面不存在时抛 404，正文只给相对路径：readFile 的 ENOENT message 带服务器绝对路径
   // （`open '<directory>/<filename>'`），不能让它经 HTTP 404 回给调用方。
   async get(filename) {
+    await this.ready();
     let source;
     try { source = await readFile(this.file(filename), 'utf8'); }
     catch (cause) {
@@ -194,6 +211,7 @@ export class WikiStore {
 
   update(filename, content, expectedRevision, note = '通过知识库工作台更新') {
     const job = this.pending.then(async () => {
+      await this.ready();
       if (!pagePattern.test(filename)) throw Object.assign(new Error('只允许修订判据页和客户经验页'), { status: 400 });
       const previous = await this.get(filename);
       if (previous.revision !== expectedRevision) throw Object.assign(new Error('知识库页面已更新，请刷新后再提交'), { status: 409 });
@@ -268,6 +286,7 @@ export class WikiStore {
 
   publishBundle(changes, evidence, audit) {
     const job = this.pending.then(async () => {
+      await this.ready();
       if (!Array.isArray(changes) || !changes.length || changes.length > 6 ||
           !audit || typeof audit.reviewer !== 'string' || audit.reviewer.trim().length < 2)
         throw Object.assign(new Error('维护发布需要 1 至 6 条判据修订及审核人'), { status: 400 });
@@ -344,6 +363,7 @@ export class WikiStore {
 
   createExperience(filename, content) {
     const job = this.pending.then(async () => {
+      await this.ready();
       if (!/^customer-experience\/EX-\d+\.md$/.test(filename))
         throw Object.assign(new Error('客户经验页面路径无效'), { status: 400 });
       const page = metadata(filename, content);
@@ -380,23 +400,45 @@ export class WikiStore {
 // ── 判据库目录与历史版本落点（P003-T034）────────────────────────────────────
 // 定义在文件末尾、import 也放末尾（ESM 会提升，模块顶层就能用），是为了不挪动上面所有 `wiki-store.js:NNN`
 // 引用的行号——`server.js` 末尾的 runtimePaths() 是同一个理由。
-//   · 判据库用模块旁**内置**的 `wiki/`：备份落**数据根**下的 `wiki-history/`（数据根见 config-store.js 的
+//   · 活数据（判据页）落**数据根**下的 `wiki/`（数据根见 config-store.js 的
 //     dataRoot()：`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`）——仓库里一个字都不写；
+//     仓内 `wiki/` 退成**只读种子**：数据根里还没有这本库时整目录拷一次（P003-T041 A1/A2）；
+//   · 备份落数据根下的 `wiki-history/`；
 //   · 判据库被 `HIDS_WIKI_DIR` / 构造参数换到别处：备份跟着判据库走（同级 `.data/wiki-history/`）——判据库搬到
-//     别处部署，它的备份该跟它走，也不该让单测往真实全局根写。
-// 判「内置」只能跟模块旁的目录比：`defaultDirectory` 会被 `HIDS_WIKI_DIR` 换掉，拿它当判据等于
-// 「设了 HIDS_WIKI_DIR 就当内置」，历史就落到数据根，与上面这条规则相反（P003-T034 复审打回的那条）。
+//     别处部署，它的备份该跟它走，也不该让单测往真实全局根写；那种目录不种子、不碰仓库。
+// 判「是数据根库」只能拿 `wikiLibraryDirectory()` 比：`defaultDirectory` 会被 `HIDS_WIKI_DIR` 换掉，拿它当判据等于
+// 「设了 HIDS_WIKI_DIR 就当数据根库」，历史就落到数据根，与上面这条规则相反（P003-T034 复审打回的那条）。
+// 仓内 `wiki/` 这个分支留着：单测/探针显式传仓内目录时，历史仍落数据根，不往仓库里写（P003-T034 A3）。
 function builtinWikiDirectory() {
   return path.join(path.dirname(fileURLToPath(import.meta.url)), 'wiki');
 }
 
+/** 判据库缺省目录：数据根下的 `wiki/`（`HIDS_WIKI_DIR` 仍可整个换掉，见文件头 `defaultDirectory`）。 */
+export function wikiLibraryDirectory() {
+  return path.join(dataRoot(), 'wiki');
+}
+
 function historyDirectoryFor(directory) {
-  return directory === builtinWikiDirectory()
+  return directory === wikiLibraryDirectory() || directory === builtinWikiDirectory()
     ? path.join(dataRoot(), 'wiki-history')
     : path.join(path.dirname(directory), '.data', 'wiki-history');
 }
 
+function seedSourceFor(directory) {
+  return directory === wikiLibraryDirectory() ? builtinWikiDirectory() : null;
+}
+
+// 数据根判据库的「只初始化一次」：`WikiStore.ready()` 与 `PromptStore.load()`（SOP 也读这本库）共用这一个
+// 记忆化 promise。模块级而不是实例级——两个消费者各自 new 一个 WikiStore 也只拷一次。
+let wikiSeeded = null;
+
+export function ensureWikiLibrary() {
+  wikiSeeded ||= seedLibrary(wikiLibraryDirectory(), builtinWikiDirectory());
+  return wikiSeeded;
+}
+
 import { dataRoot } from './config-store.js';
+import { seedLibrary } from './rule-store.js';
 
 // P003-T039 A4：判据页给模型的常驻形态不是整页正文，而是「编号 + 标题 + 要点摘要」；
 // 正文按需走 wiki_page，返回摘要 + 命中段。以下两个纯函数只做文本切分，碰不到判定逻辑。

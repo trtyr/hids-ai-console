@@ -11,7 +11,9 @@
 
 **覆盖范围**：本仓根目录下这一批平铺的 `.js` 文件构成的后端。仓库里另有三块内容不在这份文档的射程内：
 
-- `wiki/`——研判判据库，Markdown 页面，由 `wiki-store.js` 读取。本文档只说明「代码怎么用它」，页面正文内容本身归 Wiki 维护流程管。
+- `wiki/`——研判判据库的**种子副本**（Markdown 页面）。判据库的活数据住数据根下的 `wiki/`（§7.2、§8.2），
+  仓内这份只在数据根里还没有库时被整目录拷一次，此后进程只读它。本文档只说明「代码怎么用它」，页面正文内容本身归 Wiki 维护流程管。
+- `rules/`——Rego 规则库的**种子副本**。同样只在数据根里还没有库时被拷一次，活数据住 `<数据根>/rules/`（§7.5）。
 - `prompts/`——提示词与场景卡，由 `prompt-store.js` 读取。同样只讲装载方式，不复述正文。
 - `openapi.yaml`——对外 HTTP 接口契约。它与 `server.js` 的路由是两套独立真源，本文档描述运行期行为时以 `server.js` 的路由分支为准，参数细节请查 `openapi.yaml`。
 
@@ -277,13 +279,15 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 ## 7. 提示词与判据从哪里来
 
-研判的「怎么判」分两处存放：**提示词**在 `prompts/`，**判据**在 `wiki/`。两者都由 `prompt-store.js` 与 `wiki-store.js` 装载。
+研判的「怎么判」分两处存放：**提示词**在 `prompts/`，**判据**在判据库里。判据库的活数据住数据根下的 `wiki/`
+（`wiki-store.js` 的 `wikiLibraryDirectory()`），仓内 `wiki/` 只是种子副本——全文里的 `wiki/…` 若指页面路径，
+指的是库里的相对路径，库根在数据根。提示词由 `prompt-store.js` 装载，SOP 的 12 个场景也从**这本库**读，不再读仓库副本。
 
 ### 7.1 提示词
 
 `prompts/` 下有 6 个核心提示词文件（清单见 `prompt-store.js:18`）：`triage.md`、`deep-investigation.md`、`trace-board.md`、`knowledge-maintenance.md`、`knowledge-reuse.md`、`cross-scenario.md`。另有 `scenarios.json`，当前 13 张场景卡（`prompts/scenarios.json`），版本号 `merged-three-state-2026-11-06`。
 
-SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` 是仓库内文件；其余 12 个场景的 SOP 实际来自 `wiki/` 下的判据页，映射表在 `prompt-store.js:10-16`（例如 `webshell` → `webshell/WS-13.md`）。
+SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` 是仓库内文件；其余 12 个场景的 SOP 实际来自**数据根判据库**下的判据页（`prompt-store.js:12` 的 `wikiDir`），映射表在 `prompt-store.js:13-19`（例如 `webshell` → `webshell/WS-13.md`）。`HIDS_WIKI_DIR` 仍可把整本库换到别处（换了就不种子、不碰仓库）。
 
 `PromptStore.load()`（`prompt-store.js:33-48`）把这三块拼起来，并叠加数据根下 `prompt-overrides.json` 里的本地覆盖（`prompt-store.js:17`、`prompt-store.js:38-44`）。拼完算出一个 `revision`：对 `prompts + scenarios + sop + release` 做 SHA-256 取前 16 位（`prompt-store.js:21-23`、`prompt-store.js:45`）。这个 revision 是整套提示词的版本指纹，写进每份研判记录的 `prompt_version`（形如 `版本号+revision+系统提示摘要`，见 `investigation-agent.js:597`）。
 
@@ -295,9 +299,9 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 
 ### 7.2 判据库
 
-`wiki/` 是一个 Markdown 判据库，目录约定 16 个（`wiki-store.js:9-11`）：`common`、`webshell`、`memwebshell`、`rasp`、`revshell`、`suspicious-command`、`cmdaudit`、`malware`、`bruteforce`、`honeypot`、`elevation`、`abnormal-login`、`net`、`customer-experience`、`_evidence`、`concepts`。页面的写法与审核要求写在 `wiki/_schema.md`。
+判据库（活数据在 `<数据根>/wiki/`，见 §8.2）是一个 Markdown 页面库，目录约定 16 个（`wiki-store.js:9-11`）：`common`、`webshell`、`memwebshell`、`rasp`、`revshell`、`suspicious-command`、`cmdaudit`、`malware`、`bruteforce`、`honeypot`、`elevation`、`abnormal-login`、`net`、`customer-experience`、`_evidence`、`concepts`。页面的写法与审核要求写在 `wiki/_schema.md`。
 
-研判智能体读判据时只拿 `status: active` 且位于 `common/` 或本类目录的页面（`wiki-store.js:134-142`）。事件类型到目录的映射在 `wiki-store.js:12-17`。入口页 `wiki/index.md` 列出当前生效的判定页与首要问题。
+研判智能体读判据时只拿 `status: active` 且位于 `common/` 或本类目录的页面（`wiki-store.js:151-159`）。事件类型到目录的映射在 `wiki-store.js:12-17`。入口页 `wiki/index.md` 列出当前生效的判定页与首要问题。
 
 判据页的硬性要求（`wiki-store.js:195-222`、`wiki-store.js:224-268`）：
 
@@ -305,7 +309,8 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 - 修订时 `id` 不得变，状态只能是 `active` / `draft` / `deprecated`（`wiki-store.js:203-204`）。
 - 正文里必须有 `evidence:` 或 `source:` 之一，否则拒绝（`wiki-store.js:205-206`）。
 - 发布前检查会核编号重复、编号与路径不符、缺 `title` / `applies_to` / `status` / `updated`、引用了不存在的判据或证据页、退役缺 `deprecated_reason`（`wiki-store.js:224-268`）。
-- 每次修订前把上一版存进 `<数据根>/wiki-history/`（判据库目录被换掉时改存它同级 `.data/wiki-history/`，见 §8.1；`wiki-store.js:207-209`），并在 `wiki/log.md` 追加一条记录（`wiki-store.js:215-217`）。
+- 每次修订前把上一版存进 `<数据根>/wiki-history/`（判据库目录被换掉时改存它同级 `.data/wiki-history/`，见 §8.1；`wiki-store.js:225-227`），并在库根 `log.md` 追加一条记录（`wiki-store.js:234-236`）。
+- 库根在数据根（`wikiStore.directory`，`wiki-store.js:6`、`wiki-store.js:417-419`）：运行期读写**只碰这本库**，仓内 `wiki/` 不写。
 
 `health()`（`wiki-store.js:172-193`）是给运维看的一致性体检：重复编号、缺来源、失效引用、缺证据页各报一条。
 
@@ -325,6 +330,33 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 4. `publish()`（`wiki-workbench.js:265`）人工审核后发布。发布前必须先回放，且草案哈希与提示词版本都要与回放时一致（`wiki-workbench.js:294-298`）；`needs_review` 时必须写至少 20 字的人工复核理由（`wiki-workbench.js:300-302`）。
 
 新建客户经验还要多一道：发布时要选定三态结论、未来一年内的复核截止日，并填至少 5 字审核说明（`wiki-workbench.js:271-279`）。
+
+### 7.5 Rego 规则库：活数据、版本与维护会话
+
+规则库（`rule-store.js`）与判据库同一条口径：**活数据在数据根，仓内副本只当种子**。
+
+- **库目录**：`<数据根>/rules/`（`ruleLibraryDirectory()`，`rule-store.js:344`）。仓内 `rules/` 只在数据根里
+  还没有这本库时被整目录拷一次（`seedLibrary()`，`rule-store.js:373`；认领用非递归 `mkdir`，两个进程同时起也只拷一次），
+  此后进程只读它；想回到出厂基线就删掉 `<数据根>/rules/`，下次启动重新种一次。
+- **历史**：`<数据根>/rules-history/<id>-<rev>.rego`（`ruleHistoryDirectory()`，`rule-store.js:348`）。`rev` 是正文
+  sha256 的前 16 位（`ruleRevision()`，`rule-store.js:340`），与判据页 `revision` 同一口径。**每次覆盖前先把旧版存进历史**，
+  正文一字未改时不写盘也不刷历史（`save()` 回 `action: 'unchanged'`）。
+- **维护会话**：`<数据根>/rule-sessions/<uuid>.json`（`RuleSessionStore`，`rule-store.js:388`），形制对齐 `wiki-sessions`：
+  记输入案卷引用（`case_id`/`case_dir`/`event_type`/`reason`/`who`）、模型草案（`id`/`rego`/`rationale`）、
+  校验结果（`validation.ok`）、终态（`status`：`collecting`→`validating`→`updated`/`no_change`/`failed`）与失败原因。
+  会话先落一份再干活，所以模型或校验半路挂掉也留得下「卡在哪一步」。
+- **唯一写入口**：`RuleStore.save(id, rego, { note })`（`rule-store.js:249`）。校验（`validate()`，`rule-store.js:236`，
+  与装载器同一份 `parseRule`，报错带 `<id>.rego:<行>`）→ 旧版进历史 → 临时文件 + `rename` 覆盖。**维护者 Agent 与人工接口
+  调的是同一个方法**，没有第二套直写文件的函数。
+- **回滚**：`rollback(id, rev)`（`rule-store.js:306`）把历史里那一版当新版 `save()` 一次——所以当前版也进历史，回滚可再回滚；
+  历史里没有的 `rev` 直接 404，不动现网那份。
+- **维护者**：`RegoRuleMaintainer`（`server.js:227`）拿已完成的误报案件让模型改/增一条，写盘走 `save()`，每次维护落一份会话。
+  改已有规则时多一道校验：原条件不许更宽（放宽就拒绝落盘，维护记 `failed`）。
+- **研判侧读同一本库**：`server.js:46` 装配的 `regoRuleStore` 同时交给两个 `InvestigationAgent`（构造第 5 个参数），
+  维护者改完规则，下一次研判读到的就是改过的那份（`investigation-agent.js:22` 里的仓内缺省只对没传第 5 个参数的调用方生效）。
+
+维护接口（`server.js:753-828`）见 §9.2 与 `openapi.yaml`；四条新增的是 `PUT /api/rules/{id}`、
+`GET /api/rules/{id}/history`、`POST /api/rules/{id}/rollback`、`GET /api/rules/sessions`。
 
 ## 8. 状态落盘：数据都写在哪
 
@@ -352,7 +384,15 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 进程**不读也不写**；要接着用里面的研判记录 / 基线 / 案卷，只能人工搬进数据根——代码里没有任何 `rename` / `copy` / 迁移脚本。
 
 数据根下还住着提示词覆盖文件与升级包（`prompt-store.js:17`、`update-store.js:62` 从覆盖文件所在目录推出），
-判据页历史版本落 `<数据根>/wiki-history/`（`wiki-store.js:379-397` 定义、`wiki-store.js:30` 注入）。
+判据页历史版本落 `<数据根>/wiki-history/`（`wiki-store.js:421-425` 定义、`wiki-store.js:30` 注入）。
+
+**两本库的活数据也在数据根**（P003-T041）：判据库 `<数据根>/wiki/`（`wikiLibraryDirectory()`，`wiki-store.js:417`）、
+规则库 `<数据根>/rules/` 与其历史、维护会话。仓内 `wiki/`、`rules/` 退成**只读种子**：数据根里没有这本库时整目录拷一次
+（`seedLibrary()`，`rule-store.js:373`；判据库的入口是 `ensureWikiLibrary()`，`wiki-store.js:435`），此后进程不再读仓库副本、
+更不写它。两条推论要记住：
+
+- 升级带来的仓库副本变化**不会**自动进数据根——那正是「变更只发生在数据根」的代价；要让新出厂内容生效，删掉数据根里的库目录重新种一次。
+- 删库重种只在**目录不存在**时发生：目录在、哪怕里面是空的，也不种（避免把「维护者删光了」误当成「没初始化」）。
 
 ### 8.2 目录与文件清单
 
@@ -372,7 +412,11 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 | `<数据根>/config-overrides.json` | 可写配置的覆盖层（只存改过的五项） | `createConfigStore` | `server.js:32`、`config-store.js:37` |
 | `<数据根>/prompt-overrides.json` | 提示词与 SOP 的本地覆盖（`HIDS_PROMPT_STORE_FILE` 可换掉） | `PromptStore` | `prompt-store.js:17` |
 | `<数据根>/update-packages/` | 已上传的升级包（`HIDS_UPDATE_STORE_DIR` 可换掉；默认跟着覆盖文件所在目录走） | `UpdateStore` | `update-store.js:62` |
-| `<数据根>/wiki-history/` | 判据页历史版本（`HIDS_WIKI_DIR` / 构造参数把判据库目录换到别处时改落 `<判据库目录的上一级>/.data/wiki-history/`） | `WikiStore` | `wiki-store.js:389-397`、`wiki-store.js:30`、`wiki-store.js:207`、`wiki-store.js:311` |
+| `<数据根>/wiki/` | 判据库活数据（Markdown 页面） | `WikiStore`、`PromptStore`（SOP） | `wiki-store.js:417`、`wiki-store.js:6`、`prompt-store.js:12` |
+| `<数据根>/wiki-history/` | 判据页历史版本（`HIDS_WIKI_DIR` / 构造参数把判据库目录换到别处时改落 `<判据库目录的上一级>/.data/wiki-history/`） | `WikiStore` | `wiki-store.js:421-425`、`wiki-store.js:30`、`wiki-store.js:225` |
+| `<数据根>/rules/` | Rego 规则库活数据（`<id>.rego`） | `RuleStore` | `rule-store.js:344`、`rule-store.js:249`、`server.js:46` |
+| `<数据根>/rules-history/` | 规则历史版本（`<id>-<rev>.rego`） | `RuleStore.save()` | `rule-store.js:348`、`rule-store.js:249`、`rule-store.js:275` |
+| `<数据根>/rule-sessions/` | 规则维护会话（输入案卷引用 / 模型草案 / 校验结果 / 终态） | `RuleSessionStore` | `rule-store.js:352`、`rule-store.js:388`、`server.js:47` |
 
 `.gitignore` 里还忽略了 `*.hids-policy`（`.gitignore:9`）与 `*.pem`、`*.key`（`.gitignore:7-8`），即签名私钥与加密密钥不进仓。
 
@@ -412,7 +456,8 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 两种令牌，只管各自范围内的写操作，请求头分别是 `x-prompt-admin-token`（知识库，`server.js:71-77`）与 `x-rule-admin-token`（规则，`server.js:79-85`），都用 `timingSafeEqual` 比较。
 
 - 知识库：读接口（`/api/wiki/pages`、`/api/wiki/pages/{path}`）对已通过 Basic 认证的调用方开放；健康检查、维护会话、发布等写操作要求管理员令牌（`server.js:248-249`）。令牌没配置时写接口返回 503。
-- 规则：`GET /api/triage/rules` 开放，并在响应里带 `writable` 字段说明当前能不能写（`server.js:181-187`）；`PUT /api/triage/rules` 要求规则管理员令牌，并要求请求带上 `expected_revision` 做乐观并发控制（`server.js:193-202`）。
+- 规则集（误报规则集 `triage-rules.json`）：`GET /api/triage/rules` 开放，并在响应里带 `writable` 字段说明当前能不能写；`PUT /api/triage/rules` 要求规则管理员令牌，并要求请求带上 `expected_revision` 做乐观并发控制。
+- 规则库（Rego，`server.js:753-828`）：列表 `/api/rules`、读 `/api/rules/{id}`、求值 `/api/rules/evaluate`、历史 `/api/rules/{id}/history`、维护会话 `/api/rules/sessions` 都是读接口，开放；`PUT /api/rules/{id}` 与 `POST /api/rules/{id}/rollback` 要求同一个规则管理员令牌（`x-rule-admin-token`），没配令牌时回 503、令牌不对回 403。`PUT` 必须带 `expected_revision`（新增规则给 `null`），与当前正文指纹不一致回 409；正文不在规则子集内回 400 并带 `<id>.rego:<行>`。
 
 提示词上传在业务端被明确关闭：`POST /api/agent/prompts/upload` 返回 410「提示词更新已迁移到独立维护端，业务端不允许上传」（`server.js:233`）。
 
@@ -466,7 +511,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_SYSLOG_HOST` | `127.0.0.1` | syslog UDP 监听地址 | `server.js:367` |
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
-| `HIDS_DATA_DIR` | `~/.local/share/hids-ai-console` | 运行态数据根：下面九条具名路径 + 覆盖层 / 提示词覆盖 / 升级包 / 判据历史的根（§8.1） | `config-store.js:31` |
+| `HIDS_DATA_DIR` | `~/.local/share/hids-ai-console` | 运行态数据根：下面九条具名路径 + 覆盖层 / 提示词覆盖 / 升级包 / 判据与规则两本库及其历史与维护会话的根（§8.1、§8.2） | `config-store.js:31` |
 | `HIDS_CASES_DIR` | `<数据根>/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:56` |
 | `HIDS_TRIAGE_CONCURRENCY` | `2` | 自动研判同时跑几条；env 里的非法值（0 / 负数 / 小数 / 非数 / 空串）回落 2。**装配处不覆盖**：`poll` 与 `syslog` 两种输入模式都按它生效，`summary().concurrency` 报规范化后的生效值。构造参数显式传数字 0 是「只排队不执行」（测试与停机维护用，P003-T036 × P003-T037 合并后的约定）。P003-T037，改完要重启进程 | `triage-monitor.js:30`、`triage-monitor.js:35`、`triage-monitor.js:109`、`server.js:51-58` |
 | `HIDS_TRIAGE_QUEUE_MAX` | `1000` | 自动研判队列上限（排队 + 在跑）；满了拒收并计入 `summary().dropped`。P003-T037，改完要重启进程 | `triage-monitor.js:31`、`triage-monitor.js:92` |
@@ -477,7 +522,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_BASIC_AUTH_PASSWORD` | 无 | Basic 认证密码；不配则不启用认证 | `server.js:113`、`server.js:59` |
 | `HIDS_PROMPT_ADMIN_TOKEN` | 无 | 知识库写操作令牌（请求头 `x-prompt-admin-token`） | `server.js:114` |
 | `HIDS_RULE_ADMIN_TOKEN` | 无 | 规则写操作令牌（请求头 `x-rule-admin-token`） | `server.js:116` |
-| `HIDS_WIKI_DIR` | 仓内 `wiki/` | 判据库目录 | `wiki-store.js:6`、`prompt-store.js:9` |
+| `HIDS_WIKI_DIR` | `<数据根>/wiki` | 判据库目录；设了就把库整个换到别处（换了就不从仓内种子、历史落 `<该目录的上一级>/.data/wiki-history/`、SOP 也跟着读它） | `wiki-store.js:6`、`prompt-store.js:12` |
 | `HIDS_PROMPT_STORE_FILE` | `<数据根>/prompt-overrides.json` | 提示词覆盖文件 | `prompt-store.js:17` |
 | `HIDS_MAINTENANCE_ENTRY_URL` | 无 | 被读进 `createServer` 的参数，但路由里没有任何地方使用它 | `server.js:115` |
 
@@ -570,7 +615,7 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 
 ### 11.3 接口契约
 
-`openapi.yaml` 是对外 HTTP 契约，声明为 OpenAPI 3.1（`openapi.yaml:1`），头部注明它「依据 backend/server.js 和 backend/maintenance-server.js 的实际路由整理」（`openapi.yaml:6`）。它列了 35 条路径。**它与 `server.js` 是两套独立维护的真源**：改路由时两边都要动。
+`openapi.yaml` 是对外 HTTP 契约，声明为 OpenAPI 3.1（`openapi.yaml:1`），头部注明它「依据 backend/server.js 和 backend/maintenance-server.js 的实际路由整理」（`openapi.yaml:6`）。它列了 43 条路径（P003-T041 补了三条规则维护路径：`/api/rules/sessions`、`/api/rules/{id}/history`、`/api/rules/{id}/rollback`，另给 `/api/rules/{id}` 加了 `PUT`）。**它与 `server.js` 是两套独立维护的真源**：改路由时两边都要动。
 
 ## 12. 模块清单
 

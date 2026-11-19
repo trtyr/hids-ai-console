@@ -854,12 +854,90 @@ paths:
               schema: { $ref: '#/components/schemas/RegoEvaluation' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/rules/sessions:
+    get:
+      tags: [Rego 规则]
+      summary: 列出规则维护会话（摘要）
+      operationId: listRegoSessions
+      description: |
+        每次误报触发的规则维护落一份会话（形制对齐 `wiki-sessions`）：输入案卷引用、模型修订草案、校验结果、终态。
+        会话全文在 `<数据根>/rule-sessions/<uuid>.json`；这里只回摘要，按 `updated_at` 倒序，不含规则正文与误报理由原文。
+        路径必须排在 `/api/rules/{id}` 之前判断——`sessions` 本身是合法规则 id 形状，排后面会被当成规则读。
+      responses:
+        '200':
+          description: 会话摘要列表，按 `updated_at` 倒序；没有会话时是空数组
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/RegoSessionSummary' }
+                additionalProperties: false
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/rules/{id}/history:
+    get:
+      tags: [Rego 规则]
+      summary: 列一条规则的历史版本
+      operationId: listRegoRuleHistory
+      description: |
+        每次覆盖一条规则前，旧版原件先落 `<数据根>/rules-history/<id>-<rev>.rego`。这里列这些副本，按写入时间升序。
+        规则不存在或还没改过时回空数组（不是 404）；正文一字未改的提交不会新增历史。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 规则 id；小写字母开头的标识符，不合格式回 400
+          schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+      responses:
+        '200':
+          description: 该规则的历史版本列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoRuleHistory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/rules/{id}/rollback:
+    post:
+      tags: [Rego 规则]
+      summary: 把一条规则回滚到某个历史版本
+      operationId: rollbackRegoRule
+      description: |
+        回滚＝把历史里那一版当新版再写一次（走同一个 `RuleStore.save()`）：所以当前版也会进历史，回滚本身可再回滚。
+        历史里没有这一版回 404，且不动现网那份；正文写盘失败回 500。
+        与 `PUT /api/rules/{id}` 同一道闸：要求规则管理员令牌 `x-rule-admin-token`，没配令牌回 503、令牌不对回 403。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 规则 id；小写字母开头的标识符，不合格式回 400
+          schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegoRollback' }
+      responses:
+        '200':
+          description: 回滚结果（`action=rollback`，带 `rolled_back_to`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoSaveResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/rules/{id}:
     get:
       tags: [Rego 规则]
       summary: 按 id 读规则的 Rego 原文
       operationId: getRegoRule
-      description: 返回规则元数据与整份 .rego 文件原文（逐字返回，含注释与空行）。id 不存在回 404，id 不合格式回 400。
+      description: |
+        返回规则元数据与整份 .rego 文件原文（逐字返回，含注释与空行）。id 不存在回 404，id 不合格式回 400。
+        `revision` 是正文指纹，`PUT` 的 `expected_revision` 就填它。
+        规则库是数据根里的活数据（`<数据根>/rules/`），不是随部署的只读副本。
       parameters:
         - name: id
           in: path
@@ -875,6 +953,37 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
         '502': { $ref: '#/components/responses/RuleLibraryError' }
+    put:
+      tags: [Rego 规则]
+      summary: 写一条规则（人工维护入口，与维护者 Agent 共用同一套校验与版本化）
+      operationId: putRegoRule
+      description: |
+        写盘走 `RuleStore.save()`——与规则维护者 Agent 是同一个方法，没有第二套直写文件的函数。
+        顺序：语法校验（规则子集，报错带 `<id>.rego:<行>`）→ 旧版进 `<数据根>/rules-history/<id>-<rev>.rego`
+        → 临时文件 + rename 原子替换。正文与原样一致时回 `action=unchanged`，不写盘也不刷历史。
+        已有规则的 id 可能住在别的文件名里：写回它自己那份，不另起同 id 的第二个文件。
+        要求规则管理员令牌 `x-rule-admin-token`：没配令牌回 503、令牌不对回 403。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 规则 id，必须与正文里 `package hids.rules.<id>` 一致，否则回 400
+          schema: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegoRuleWrite' }
+      responses:
+        '200':
+          description: 写入结果（`action` 是 add / update / unchanged）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoSaveResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/wiki/pages:
     get:
       tags: [知识库]
@@ -2163,13 +2272,94 @@ components:
     RegoRule:
       type: object
       description: 单条规则：元数据加 Rego 原文。
-      required: [id, name, description, file, rego]
+      required: [id, name, description, file, rego, revision]
       properties:
         id: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
         name: { type: string }
         description: { type: [string, 'null'] }
         file: { type: string }
         rego: { type: string, description: 整份 .rego 文件原文，逐字返回 }
+        revision:
+          type: string
+          pattern: '^[0-9a-f]{16}$'
+          description: 正文 sha256 的前 16 位；`PUT /api/rules/{id}` 的 `expected_revision` 就填它
+      additionalProperties: false
+    RegoSaveResult:
+      type: object
+      description: |
+        一次规则写入的结果（`PUT /api/rules/{id}` 与 `POST /api/rules/{id}/rollback` 同形）。
+        `action` 三态之外多一个 `rollback`：回滚是「把历史里那一版当新版再写一次」，所以当前版也会进历史，回滚可再回滚。
+      required: [id, file, name, rev, previous_rev, action]
+      properties:
+        id: { type: string, pattern: '^[a-z][a-z0-9_]*$' }
+        file: { type: string, description: 写回的规则文件名（沿用该 id 原来的文件名，不另起同 id 的第二个文件） }
+        name: { type: string }
+        rev: { type: string, pattern: '^[0-9a-f]{16}$', description: 新正文的版本指纹 }
+        previous_rev:
+          type: [string, 'null']
+          description: 被覆盖那一版的版本指纹；新增规则时是 null，`action=unchanged` 时也是 null（没写盘、没进历史）
+        action: { type: string, enum: [add, update, unchanged, rollback] }
+        rolled_back_to: { type: string, pattern: '^[0-9a-f]{16}$', description: 只在 `action=rollback` 时出现：回滚到的历史版本 }
+      additionalProperties: false
+    RegoHistoryEntry:
+      type: object
+      description: 历史版本的一条：`<数据根>/rules-history/<id>-<rev>.rego`。
+      required: [id, rev, file, bytes, saved_at]
+      properties:
+        id: { type: string }
+        rev: { type: string, pattern: '^[0-9a-f]{16}$' }
+        file: { type: string, description: 历史文件名，形如 `<id>-<rev>.rego` }
+        bytes: { type: integer, minimum: 0 }
+        saved_at: { type: string, format: date-time, description: 该历史文件的写入时间 }
+      additionalProperties: false
+    RegoRuleHistory:
+      type: object
+      required: [id, history]
+      properties:
+        id: { type: string }
+        history:
+          type: array
+          description: 按写入时间升序；规则不存在或还没改过时是空数组，不是 404。
+          items: { $ref: '#/components/schemas/RegoHistoryEntry' }
+      additionalProperties: false
+    RegoSessionSummary:
+      type: object
+      description: 规则维护会话摘要（不含规则正文与误报理由原文；全文在 `<数据根>/rule-sessions/<uuid>.json`）。
+      required: [id, case_id, event_type, who, status, rule_id, validated, updated_at]
+      properties:
+        id: { type: string, description: 会话 ID（UUID），也是会话文件名 }
+        case_id: { type: [string, 'null'], description: 触发的案卷 ID }
+        event_type: { type: [string, 'null'] }
+        who: { type: [string, 'null'], description: 登记误报的人 }
+        status:
+          type: string
+          enum: [collecting, validating, updated, no_change, failed]
+          description: 终态是 updated / no_change / failed；collecting 与 validating 是过程态（进程半路挂掉会停在这里）
+        rule_id: { type: [string, 'null'], description: 模型草案改的是哪条规则 }
+        validated: { type: boolean, description: 校验是否通过（`status=failed` 时为 false） }
+        updated_at: { type: string, format: 'date-time' }
+      additionalProperties: false
+    RegoRuleWrite:
+      type: object
+      description: |
+        人工维护一条规则。校验与写盘由 `RuleStore.save()` 完成，与规则维护者 Agent 走同一套：
+        语法必须在规则子集内（`rule-store.js` 文件头）、包名必须与 id 一致、旧版先进 `<数据根>/rules-history/` 再原子替换。
+      required: [rego, expected_revision]
+      properties:
+        rego: { type: string, minLength: 1, description: 整份 .rego 原文 }
+        expected_revision:
+          type: [string, 'null']
+          description: |
+            乐观并发：读到的当前正文指纹（`GET /api/rules/{id}` 的 `revision`）。与当前不一致回 409，别让后写的悄悄盖掉前一份。
+            新增规则时传 null（要求当前不存在）。
+        note: { type: string, maxLength: 200, description: 写进历史备注的一句话（`人工维护：<note>`） }
+      additionalProperties: false
+    RegoRollback:
+      type: object
+      required: [rev]
+      properties:
+        rev: { type: string, pattern: '^[0-9a-f]{16}$', description: 回滚到的历史版本；历史里没有这一版回 404 }
+        who: { type: string, maxLength: 100, description: 操作人，写进历史备注（`人工回滚（<who>）`） }
       additionalProperties: false
     RegoRuleList:
       type: object
@@ -2306,6 +2496,13 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: |
+        乐观并发冲突或状态不允许（调用方传错，`code=caller_error`）：`expected_revision` / `expected` 与当前版本不一致时回它，
+        调用方刷新后重提。正文 `error` 是校验原话，如「规则已更新，请刷新后再提交」。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     ServiceUnavailable:
       description: 依赖的牧云、模型或管理令牌尚未配置（没配置，`code=not_configured`）
       content:
@@ -2318,8 +2515,8 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     RuleLibraryError:
       description: |
-        规则文件读取或解析失败（上游失败，`code=upstream_error`）：规则库是随部署的只读数据源，
-        读不出来按上游类处理。正文 `error` 里带 `rules/<文件>:<行>` 定位。
+        规则文件读取或解析失败（上游失败，`code=upstream_error`）：规则库是数据根里的活数据
+        （`<数据根>/rules/`，P003-T041），读不出来按上游类处理。正文 `error` 里带 `rules/<文件>:<行>` 定位。
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

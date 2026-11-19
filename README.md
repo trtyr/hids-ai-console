@@ -11,4 +11,6 @@ node --env-file=.env.local server.js
 npm test                 # 后端单测（node --test --test-timeout=60000 --test-force-exit *.test.js）
 ```
 
-运行中的案件、研判记录与配置落在机器全局的数据根：`HIDS_DATA_DIR` 指到哪就落哪，没设就是 `~/.local/share/hids-ai-console/`（仓库里不写任何运行态）。Wiki 与提示词在 `wiki/`、`prompts/`。
+运行中的案件、研判记录与配置落在机器全局的数据根：`HIDS_DATA_DIR` 指到哪就落哪，没设就是 `~/.local/share/hids-ai-console/`（仓库里不写任何运行态）。
+提示词在 `prompts/`；判据库（`wiki/`）与 Rego 规则库（`rules/`）的**活数据也在数据根**（`<数据根>/wiki/`、`<数据根>/rules/`，含 `wiki-history/`、`rules-history/`、`rule-sessions/`），
+仓内这两份是**只读种子**：数据根里还没有这本库时整目录拷一次，之后所有变更只发生在数据根。

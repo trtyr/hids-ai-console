@@ -12,7 +12,11 @@ updated: 2026-11-17
 
 这篇讲这模块对外给出什么、拿到什么、失败时是什么样。关键断言标 `文件:行号`，行号对应当前提交 `63f1379`；代码改动后请重新核对。
 
-判据正文本身不在本篇：`wiki/` 下的 Markdown 页面由本模块读写，但页面内容归 Wiki 维护流程管——[docs/index.md](../index.md) 的「文档与代码的关系」表把判据内容列为「不属于本套文档」。
+判据正文本身不在本篇：判据库里的 Markdown 页面由本模块读写，但页面内容归 Wiki 维护流程管——[docs/index.md](../index.md) 的「文档与代码的关系」表把判据内容列为「不属于本套文档」。
+
+**库根在数据根**（P003-T041）：活数据住 `<数据根>/wiki/`（`wikiLibraryDirectory()`，`wiki-store.js:417`），仓内 `wiki/` 只是种子副本——
+数据根里还没有这本库时整目录拷一次（`ensureWikiLibrary()`，`wiki-store.js:435`），此后进程只读它、不写它。下文的「判据库目录」
+一律指**数据根里的那本库**；`HIDS_WIKI_DIR` 仍可把整本换到别处（换了就不种子、不碰仓库）。
 
 三个文件在本篇里分工明确：`wiki-store.js` 管页面与文件，`wiki-workbench.js` 管会话与人工审核，`wiki-replay.js` 管发布前回放。
 
@@ -130,7 +134,8 @@ updated: 2026-11-17
 node --input-type=module -e '
 import { readFile } from "node:fs/promises";
 import { pageSummary, pageExcerpts } from "./wiki-store.js";
-const page = await readFile("wiki/honeypot/HP-10.md", "utf8");
+import { wikiLibraryDirectory } from "./wiki-store.js";
+const page = await readFile(`${wikiLibraryDirectory()}/honeypot/HP-10.md`, "utf8");
 console.log("摘要:", pageSummary(page));
 console.log("命中段:", pageExcerpts(page).map(hit => hit.text.slice(0, 40)));
 '
@@ -251,7 +256,9 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 | 参数 | 出现在 | 含义 | 合法域 | 违反时 | 依据 |
 | --- | --- | --- | --- | --- | --- |
-| `directory` | 构造 | 判据库目录 | 存在的目录 | 后续读写抛文件错误 | `wiki-store.js:30`；缺省取 `HIDS_WIKI_DIR`，再缺省为仓内 `wiki/`（`wiki-store.js:6`） |
+| `directory` | 构造 | 判据库目录 | 存在的目录（缺省库在首次读时自动种出来） | 后续读写抛文件错误 | `wiki-store.js:30`；缺省取 `HIDS_WIKI_DIR`，再缺省为数据根下的 `wiki/`（`wiki-store.js:6`、`wiki-store.js:417`） |
+| `historyDirectory` | 构造 | 历史版本目录 | 可写目录 | 修订时写历史失败则整次修订失败 | `wiki-store.js:30`；缺省：数据根库与仓内 `wiki/` → `<数据根>/wiki-history/`，注入目录 → 它同级 `.data/wiki-history/`（`wiki-store.js:421-425`） |
+| `seedFrom` | 构造 | 种子源目录 | 目录或 `null` | 拷失败抛错并清掉半成品库 | `wiki-store.js:30`；只有缺省的数据根库才从仓内 `wiki/` 种（`wiki-store.js:427-429`） |
 | `filename` | `get` / `update` | 页面路径 | 两段式 `<目录>/<文件名>.md`（目录在 16 个约定目录内）或根文档 `index.md`/`rules.md`/`log.md`/`_schema.md` | 抛 400「知识库页面路径无效」；路径合法但文件不存在抛 404「知识库页面不存在：`<相对路径>`」 | `wiki-store.js:32-38`、`wiki-store.js:75-83` |
 | `expectedRevision` | `update` | 期望的当前版本指纹 | 必须等于当前页的 `revision` | 抛 409「知识库页面已更新，请刷新后再提交」 | `wiki-store.js:163` |
 | `content` | `update` | 新正文 | 1 到 30000 字，不含空字符 | 抛 400「页面正文必须为 1 到 30000 字」 | `wiki-store.js:164-165` |
@@ -297,13 +304,13 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 | 方向 | 对象 | 说明 | 依据 |
 | --- | --- | --- | --- |
-| 下游 | 判据库目录 | `HIDS_WIKI_DIR`，缺省为仓内 `wiki/` | `wiki-store.js:6` |
+| 下游 | 判据库目录 | `HIDS_WIKI_DIR`，缺省为数据根下的 `wiki/`（仓内 `wiki/` 只作种子） | `wiki-store.js:6`、`wiki-store.js:417`、`wiki-store.js:435` |
 | 下游 | 判据库里的 `_schema.md` | 工作台每轮把它当「Wiki 操作手册」读进系统提示，截 14000 字 | `wiki-workbench.js:152`、`wiki-workbench.js:176` |
 | 下游 | 提示词仓 `prompts.load()` | 维护轮取 `knowledge` 提示；回放轮取 `triage` 提示、`sop.common`、场景卡；发布时比对提示词版本 | `wiki-workbench.js:152`、`wiki-workbench.js:176`、`wiki-replay.js:89`、`wiki-workbench.js:296` |
 | 下游 | 模型服务 `model.complete()` | 两处调用：维护会话一轮一次；回放每条样本两次。两处的工具参数都是空数组，第三参都是 `'none'` | `wiki-workbench.js:175`、`wiki-replay.js:64` |
 | 下游 | 事件类型表 `eventTypes` | 校验客户经验的 `scenario_id` 是不是已知场景 | `wiki-workbench.js:4`、`wiki-workbench.js:198` |
 | 下游 | 维护会话目录 | 会话 JSON 落在这里；回放时又把它当样本库扫 | `wiki-workbench.js:79-82`、`wiki-replay.js:21` |
-| 下游 | 历史版本目录 | 数据根下的 `wiki-history/`（判据库目录被 `HIDS_WIKI_DIR` / 构造参数换到别处时改落它同级 `.data/wiki-history/`），存每次修订前的旧版 | `wiki-store.js:389-397`、`wiki-store.js:207`、`wiki-store.js:311` |
+| 下游 | 历史版本目录 | 数据根下的 `wiki-history/`（判据库目录被 `HIDS_WIKI_DIR` / 构造参数换到别处时改落它同级 `.data/wiki-history/`），存每次修订前的旧版 | `wiki-store.js:421-425`、`wiki-store.js:225`、`wiki-store.js:330` |
 | 外部库 | `node:crypto` | `createHash`（三个文件都用）与 `randomUUID`（只有前两个文件用） | `wiki-store.js:1`、`wiki-workbench.js:1`、`wiki-replay.js:5` |
 | 外部库 | `node:fs/promises` | 读写文件、建目录、改名、追加日志 | `wiki-store.js:2`、`wiki-workbench.js:2`、`wiki-replay.js:2` |
 | 外部库 | `node:path` / `node:url` | 拼路径、定位模块所在目录 | `wiki-store.js:3-4`、`wiki-replay.js:3` |
@@ -313,9 +320,9 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 | 数据 | 放在哪 | 生命周期 | 依据 |
 | --- | --- | --- | --- |
-| 判据页 Markdown | 判据库目录下 | 长期；人工与工作台共同维护 | `wiki-store.js:6` |
-| 页面历史版本 | `<数据根>/wiki-history/<编号>-<revision>.md`（判据库目录被换到别处时在它同级 `.data/wiki-history/`） | 长期保留，不清理 | `wiki-store.js:207-210`、`wiki-store.js:311-314` |
-| 变更日志 `log.md` | 判据库目录根 | 追加写，一条变更一段 | `wiki-store.js:216-217`、`wiki-store.js:328-329`、`wiki-store.js:359-360` |
+| 判据页 Markdown | 数据根下的 `wiki/`（判据库目录），仓内 `wiki/` 只是种子副本 | 长期；人工与工作台共同维护；升级带来的仓库副本变化不自动进库，删库重种才回到出厂基线 | `wiki-store.js:6`、`wiki-store.js:417`、`wiki-store.js:435` |
+| 页面历史版本 | `<数据根>/wiki-history/<编号>-<revision>.md`（判据库目录被换到别处时在它同级 `.data/wiki-history/`） | 长期保留，不清理 | `wiki-store.js:225-228`、`wiki-store.js:330-334` |
+| 变更日志 `log.md` | 判据库目录根 | 追加写，一条变更一段 | `wiki-store.js:234-235`、`wiki-store.js:346-347`、`wiki-store.js:378-380` |
 | 证据页 | 判据库目录下的 `_evidence/` | 随引用它的判据页长期存在 | `wiki-workbench.js:37`、`wiki-workbench.js:51` |
 | 客户经验目录页 | 判据库目录下的 `customer-experience/index.md` | 追加写，一页一行 | `wiki-store.js:355-358` |
 | 维护会话 | 会话目录下 `<UUID>.json` | 长期；发布后成为回放样本 | `wiki-workbench.js:70-72`、`wiki-workbench.js:78-83` |
@@ -510,7 +517,7 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 ### 10.2 实测与静态核查
 
-本地没有模型服务与牧云凭据，所以下面对「模型返回什么」的部分用假模型跑——它只验证本模块自己的分支逻辑，不代表模型的实际表现。写盘类探针全部在临时目录里跑，仓内 `wiki/` 未被改动。
+本地没有模型服务与牧云凭据，所以下面对「模型返回什么」的部分用假模型跑——它只验证本模块自己的分支逻辑，不代表模型的实际表现。写盘类探针全部在临时目录里跑（数据根用 `HIDS_DATA_DIR` 或构造参数注入），仓内 `wiki/` 未被改动——本卡新增的验收替身见 `evidence/test/P003-T041/acceptance.test.js`，它连「仓内 `rules/`、`wiki/` 内容摘要前后一致」一起钉住。
 
 **导出面与判据库现状**（只读）：
 

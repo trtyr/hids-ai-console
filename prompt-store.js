@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url';
 const defaults = path.dirname(fileURLToPath(import.meta.url));
 const promptDir = path.join(defaults, 'prompts');
 const sopDir = path.join(promptDir, 'sop');
-const wikiDir = process.env.HIDS_WIKI_DIR || path.join(defaults, 'wiki');
+// SOP 12 个场景的正文来自判据库（P003-T041）：判据库活数据住数据根（`wiki-store.js` 的
+// `wikiLibraryDirectory()`），仓内 `wiki/` 只是种子源——这里跟着库走，别再读仓库副本，否则维护者改的判据
+// 进不了研判提示词。`HIDS_WIKI_DIR` 仍然整个换掉库目录（外部库不种子、不碰仓库）。
+const wikiDir = process.env.HIDS_WIKI_DIR || wikiLibraryDirectory();
+const wikiNeedsSeed = !process.env.HIDS_WIKI_DIR;
 const wikiSop = {
   webshell: 'webshell/WS-13.md', memory_webshell: 'memwebshell/MW-08.md', memory_security: 'rasp/RP-09.md',
   revshell: 'revshell/RS-09.md', suspicious_operation: 'suspicious-command/SC-15.md',
@@ -31,6 +35,8 @@ export class PromptStore {
   }
 
   async load() {
+    // 数据根里还没有判据库时先初始化一次（A2）：SOP 读库，库不在就先种子，与 `WikiStore.ready()` 共用同一份记忆化。
+    if (wikiNeedsSeed) await ensureWikiLibrary();
     const [parts, scenarioText, overrides] = await Promise.all([
       Promise.all(Object.values(coreFiles).map(name => readFile(path.join(promptDir, name), 'utf8'))),
       readFile(path.join(promptDir, 'scenarios.json'), 'utf8'), this.readOverrides()
@@ -124,3 +130,4 @@ export class PromptStore {
 // import 放文件末尾（ESM 会提升，模块顶层就能用）是为了不挪动上面所有 `prompt-store.js:NNN` 引用的行号；
 // `server.js` 末尾的 runtimePaths() 是同一个理由。
 import { dataRoot } from './config-store.js';
+import { ensureWikiLibrary, wikiLibraryDirectory } from './wiki-store.js';
