@@ -97,9 +97,9 @@
 | GET | `/api/rules` | 200 `{count, rules}`（Rego 规则库，活数据在 `<数据根>/rules/`） | 规则库读取失败回 502 | `server.js:752-755` |
 | GET | `/api/rules/sessions` | 200 `{sessions}`（规则维护会话摘要，按 `updated_at` 倒序；不含规则正文与误报理由） | 会话目录不可读回 502 | `server.js:758-761` |
 | POST | `/api/rules/evaluate` | 200 `{count, matched}` | 正文不是对象回 400；求值失败回 502 | `server.js:762-768` |
-| GET | `/api/rules/{id}/history` | 200 `{id, history:[{rev, file, bytes, saved_at}]}` 按写入时间升序；规则不存在时回空数组 | id 不合格式回 400；历史目录不可读回 502 | `server.js:769-778` |
-| POST | `/api/rules/{id}/rollback` | 200 与 `PUT` 同形，另带 `action:"rollback"` 与 `rolled_back_to` | 需规则管理员令牌（没配 503／不对 403）；`rev` 不是 16 位十六进制回 400；历史里没有这一版回 404 | `server.js:779-788` |
-| PUT | `/api/rules/{id}` | 200 `{id, file, name, rev, previous_rev, action}`（`action` 是 `add` / `update` / `unchanged`） | 需规则管理员令牌（没配 503／不对 403）；正文缺 `rego` 或 `expected_revision` 回 400；正文不在规则子集内回 400 并带 `<id>.rego:<行>`；`expected_revision` 与当前指纹不一致回 409；规则目录写失败回 500 | `server.js:790-812` |
+| GET | `/api/rules/{id}/history` | 200 `{id, history:[{rev, file, bytes, saved_at, note}]}` 按写入时间升序；规则不存在时回空数组。`note` 是那条历史副本「为什么被替换」（`人工维护：<note>` / `人工回滚（<who>）` / `误报维护（<who>）：<理由>`），没备注的旧副本是 `null` | id 不合格式回 400；历史目录不可读回 502 | `server.js:769-778` |
+| POST | `/api/rules/{id}/rollback` | 200 与 `PUT` 同形，另带 `action:"rollback"` 与 `rolled_back_to`；被替换那一版进历史，备注 `人工回滚（<who>）` | 需规则管理员令牌（没配 503／不对 403）；`rev` 不是 16 位十六进制回 400；历史里没有这一版回 404 | `server.js:779-788` |
+| PUT | `/api/rules/{id}` | 200 `{id, file, name, rev, previous_rev, action}`（`action` 是 `add` / `update` / `unchanged`） | 需规则管理员令牌（没配 503／不对 403）；正文缺 `rego` 或 `expected_revision` 回 400；正文不在规则子集内回 400 并带 `<id>.rego:<行>`；`expected_revision` 与当前指纹不一致回 409（比对与写在 `RuleStore` 的同一个写队列任务里，并发两个 `PUT` 只成一个）；规则目录写失败回 500 | `server.js:790-812` |
 | GET | `/api/rules/{id}` | 200（含 `revision` = 正文 sha256 前 16 位）/ 404 | id 不合格式回 400；规则库读取失败回 502 | `server.js:814-827` |
 | GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:292-299` |
 | PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503。暂停期间报文进缓冲不丢、恢复不动游标（P003-T036，见 openapi 该路径说明） | `server.js:771-777` |

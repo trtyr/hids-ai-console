@@ -155,6 +155,9 @@ export class RuleStore {
     // 种子源（P003-T041 A2）：只有「缺省库」才从仓内 `rules/` 初始化一次；注入的目录一律不碰仓库。
     this.seedSource = seedFrom;
     this.seeding = null;
+    // 写队列（P003-T041 复审）：与 `WikiStore.pending` 同一口径——读—比对—写是同一个队列任务里的三段，
+    // 并发两次改同一条规则不会都读到旧版再各写一份（后一个在队列里读到前一份，拿 409）。
+    this.pending = Promise.resolve();
     // 已解析规则的缓存（A6）：键是文件名，值是（mtimeMs, size, rule）。
     // 命中时只 stat 不 read/parse——求值不再每条规则重读重解析；文件改了 mtime 就重来。
     this.parsed = new Map();
@@ -166,6 +169,13 @@ export class RuleStore {
     if (!this.seedSource) return;
     this.seeding ||= seedLibrary(this.directory, this.seedSource);
     await this.seeding;
+  }
+
+  // 写盘串行：任务按到达顺序排队，队头失败了队列照样往前走（`this.pending` 只用来串链，不传错误）。
+  #enqueue(job) {
+    const run = this.pending.then(job);
+    this.pending = run.catch(() => {});
+    return run;
   }
 
   async #load() {
@@ -221,14 +231,6 @@ export class RuleStore {
   }
 
   /**
-   * 写一条规则（A3/A5）：**维护者 Agent 与人工接口共用的唯一写入口**，不再有第二套直写文件的函数。
-   *
-   * 顺序是有意的：先校验正文（复用装载器同一份 `parseRule`，过不了就一个字都不落）→ 旧版原件落
-   * `<历史目录>/<id>-<rev>.rego` → 临时文件 + rename 覆盖 `<库>/<id>.rego`。
-   * 返回 `{ id, file, name, rev, previous_rev, action }`；正文与原样一致时 `action: 'unchanged'`，
-   * 既不写盘也不刷历史（同一份内容重复提交不该把历史灌满）。
-   */
-  /**
    * 只校验不落盘（`save()` 与规则维护者共用同一份判据）：
    * 返回 `{ id, name, source, rev }`；id 不合法 / 正文为空 / 语法不在规则子集内 / 包名与 id 不一致都抛。
    * **校验类失败带 `status: 400`**：HTTP 维护接口据此回调用方错误，而不是 500。
@@ -246,22 +248,34 @@ export class RuleStore {
     return { id: parsed.id, name: parsed.name, source, rev: ruleRevision(source) };
   }
 
-  async save(id, rego, { note = '' } = {}) {
-    // `note` 目前只留给调用方传语义（历史文件名不带备注）；返回形状见 `openapi.yaml` 的 `RegoSaveResult`。
+  /**
+   * 写一条规则（A3/A5）：**维护者 Agent 与人工接口共用的唯一写入口**，不再有第二套直写文件的函数。
+   *
+   * 顺序是有意的：先校验正文（复用装载器同一份 `parseRule`，过不了就一个字都不落）→ 比对 `expectedRevision`
+   * （给了才比）→ 旧版原件 + 备注落 `<历史目录>/<id>-<rev>.rego|.json` → 临时文件 + rename 覆盖 `<库>/<id>.rego`。
+   * 返回 `{ id, file, name, rev, previous_rev, action }`；正文与原样一致时 `action: 'unchanged'`，
+   * 既不写盘也不刷历史（同一份内容重复提交不该把历史灌满）。
+   * **整段在实例的写队列里跑**：并发的两次写入按到达顺序串起来，不会交叉着读旧版、各写一份。
+   */
+  async save(id, rego, { note = '', expectedRevision } = {}) {
+    return this.#enqueue(() => this.#write(id, rego, { note, expectedRevision }));
+  }
+
+  // 写盘本体：只在队列任务里被调（`save()` 与 `rollback()` 都从这里进，各自再入队会自锁）。
+  async #write(id, rego, { note = '', expectedRevision } = {}) {
     const { name, source, rev } = this.validate(id, rego);
     await this.ready();
     const existing = await this.read(id);
+    const previousRev = existing ? ruleRevision(existing.rego) : null;
+    // 乐观并发（复审 major）：比对与写在同一个队列任务里。`undefined`＝调用方不做并发校验（回滚、维护者）；
+    // `null`＝要求当前不存在（新增规则）。不一致抛 409，不让后写的悄悄盖掉前一份。
+    if (expectedRevision !== undefined && previousRev !== expectedRevision)
+      throw Object.assign(new Error('规则已更新，请刷新后再提交'), { status: 409 });
     if (existing && existing.rego === source)
       return { id, file: existing.file, name, rev, previous_rev: null, action: 'unchanged' };
     // 已有规则的 id 可能住在别的文件名里：改它就要写回它自己那份，不能另起一个同 id 的文件。
     const file = existing?.file || `${id}.rego`;
-    const previousRev = existing ? ruleRevision(existing.rego) : null;
-    if (existing) {
-      await mkdir(this.historyDirectory, { recursive: true, mode: 0o700 });
-      await writeFile(path.join(this.historyDirectory, `${id}-${previousRev}.rego`), existing.rego,
-        { encoding: 'utf8', mode: 0o600, flag: 'wx' })
-        .catch(error => { if (error.code !== 'EEXIST') throw error; });
-    }
+    if (existing) await this.#archive(id, previousRev, existing.rego, note, rev);
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const target = path.join(this.directory, file);
     const temporary = `${target}.${randomUUID()}.tmp`;
@@ -271,7 +285,34 @@ export class RuleStore {
     return { id, file, name, rev, previous_rev: previousRev, action: existing ? 'update' : 'add' };
   }
 
-  /** 列一条规则的历史版本：`[{ id, rev, file, bytes, saved_at }]`，按写入时间升序（rev 时间戳相同再按 rev）。 */
+  // 旧版进历史（复审 major）：正文副本 `<id>-<rev>.rego` + 备注 sidecar `<id>-<rev>.json`
+  // （`{id, rev, note, saved_at, replaced_by}`）。备注单独一个文件而不是塞进 `.rego`：历史正文要能逐字读回、
+  // 逐字比对（`readRevision()` 就干这个）。同一版被归档第二次（回滚回去又回滚回来）时副本与备注都保留第一次的
+  // ——这条历史描述的是「它当初为什么、被谁替换掉」。
+  async #archive(id, rev, rego, note, replacedBy) {
+    await mkdir(this.historyDirectory, { recursive: true, mode: 0o700 });
+    const copy = path.join(this.historyDirectory, `${id}-${rev}.rego`);
+    try { await writeFile(copy, rego, { encoding: 'utf8', mode: 0o600, flag: 'wx' }); }
+    catch (cause) { if (cause.code === 'EEXIST') return; throw cause; }
+    await writeFile(`${copy.slice(0, -'.rego'.length)}.json`,
+      JSON.stringify({ id, rev, note: String(note || ''), saved_at: new Date().toISOString(), replaced_by: replacedBy }),
+      { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+      .catch(cause => { if (cause.code !== 'EEXIST') throw cause; });
+  }
+
+  // 历史条目的备注：`<id>-<rev>.json` 的 `note`。没这个文件（本卡之前留下的旧历史副本）或内容坏了都当 `null`
+  // ——一条坏备注不该把整页历史接口拖成 502。
+  async #historyNote(id, rev) {
+    try {
+      const record = JSON.parse(await readFile(path.join(this.historyDirectory, `${id}-${rev}.json`), 'utf8'));
+      return typeof record?.note === 'string' && record.note ? record.note : null;
+    } catch (cause) {
+      if (cause.code === 'ENOENT' || cause instanceof SyntaxError) return null;
+      throw cause;
+    }
+  }
+
+  /** 列一条规则的历史版本：`[{ id, rev, file, bytes, saved_at, note }]`，按写入时间升序（rev 时间戳相同再按 rev）。 */
   async history(id) {
     if (!isRuleId(id)) return [];
     let names;
@@ -286,7 +327,8 @@ export class RuleStore {
       let info;
       try { info = await statFile(path.join(this.historyDirectory, name)); }
       catch (cause) { if (cause.code === 'ENOENT') continue; throw cause; }
-      rows.push({ id, rev, file: name, bytes: info.size, saved_at: new Date(info.mtimeMs).toISOString(), at: info.mtimeMs });
+      rows.push({ id, rev, file: name, bytes: info.size, saved_at: new Date(info.mtimeMs).toISOString(),
+        note: await this.#historyNote(id, rev), at: info.mtimeMs });
     }
     return rows.sort((left, right) => left.at - right.at || (left.rev < right.rev ? -1 : 1))
       .map(({ at, ...row }) => row);
@@ -304,10 +346,13 @@ export class RuleStore {
    * 历史里没有这一版时抛错（404 类），不改动现网那份。
    */
   async rollback(id, rev, { note = '' } = {}) {
-    const previous = await this.readRevision(id, rev);
-    if (!previous) throw Object.assign(new Error(`规则历史版本不存在：${id}-${rev}`), { status: 404 });
-    const saved = await this.save(id, previous.rego, { note });
-    return { ...saved, action: 'rollback', rolled_back_to: rev };
+    // 读历史 + 写回也是一次写：进同一个队列，别插到别人的读—比对—写中间。
+    return this.#enqueue(async () => {
+      const previous = await this.readRevision(id, rev);
+      if (!previous) throw Object.assign(new Error(`规则历史版本不存在：${id}-${rev}`), { status: 404 });
+      const saved = await this.#write(id, previous.rego, { note });
+      return { ...saved, action: 'rollback', rolled_back_to: rev };
+    });
   }
 
   /**
@@ -330,7 +375,8 @@ export class RuleStore {
 // 末尾的 `runtimePaths()` 一样：不挪动上面所有 `rule-store.js:NNN` 引用的行号。
 //   · 活数据（规则正文）落**数据根**下的 `rules/`（数据根见 `config-store.js` 的 `dataRoot()`：
 //     `HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`）——仓库里一个字都不写；
-//   · 历史版本落数据根下 `rules-history/`；维护会话落数据根下 `rule-sessions/`；
+//   · 历史版本落数据根下 `rules-history/`（注入的目录跟目录走：同级 `.data/rules-history/`，同 `wiki-store.js`）；
+//     维护会话落数据根下 `rule-sessions/`；
 //   · 仓内 `rules/` 只当种子源：数据根里还没有这本库时整目录拷一次，此后只读（A1/A2）。
 // 判「缺省库」只能拿 `ruleLibraryDirectory()` 比：它只由 `dataRoot()` 决定，注入的目录（单测的 tmp、
 // 构造参数）永远不等于它，于是注入目录既不读仓库也不写仓库。
@@ -345,8 +391,16 @@ export function ruleLibraryDirectory() {
   return path.join(dataRoot(), 'rules');
 }
 
-export function ruleHistoryDirectory() {
-  return path.join(dataRoot(), 'rules-history');
+/**
+ * 历史版本落点：缺省库与仓内种子库 → 数据根 `rules-history/`；换过的目录 → 同级 `.data/rules-history/`
+ * （与 `wiki-store.js:418` 的 `historyDirectoryFor` 同一先例：库搬到别处部署，它的历史该跟它走，
+ * 也不该让单测/注入目录往真实全局根写）。
+ */
+export function ruleHistoryDirectory(directory = ruleLibraryDirectory()) {
+  const target = path.resolve(directory);
+  return target === ruleLibraryDirectory() || target === repositoryRulesDirectory()
+    ? path.join(dataRoot(), 'rules-history')
+    : path.join(path.dirname(target), '.data', 'rules-history');
 }
 
 export function ruleSessionsDirectory() {

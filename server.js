@@ -21,7 +21,7 @@ import { WikiWorkbench } from './wiki-workbench.js';
 import { TraceBoardService } from './trace-board.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
-import { RuleSessionStore, RuleStore, isRuleId, ruleRevision } from './rule-store.js';
+import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
 import { createConfigStore, dataRoot } from './config-store.js';
 
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
@@ -275,15 +275,15 @@ export class RegoRuleMaintainer {
           throw new Error(`规则修订放宽了原有限制条件，拒绝落盘：${widened.join('；').slice(0, 200)}`);
       }
       const saved = await this.ruleStore.save(id, rego, { note: `误报维护（${who}）：${rationale.slice(0, 120)}` });
-      const action = saved.action === 'unchanged' ? 'unchanged' : saved.action;
-      await settle({ status: action === 'unchanged' ? 'no_change' : 'updated',
+      await settle({ status: saved.action === 'unchanged' ? 'no_change' : 'updated',
         validation: { ok: true, name: saved.name, file: saved.file, rev: saved.rev },
-        result: { action, file: saved.file, rev: saved.rev, previous_rev: saved.previous_rev } });
+        result: { action: saved.action, file: saved.file, rev: saved.rev, previous_rev: saved.previous_rev } });
       // 返回形状与 P003-T013 一致（调用方 `maintainFalsePositive` 与既有测试都按这四个字段读）；
       // `rev` / `previous_rev` / 会话 id 落在会话文件里（`GET /api/rules/sessions` 可按 case_id 找到）。
-      return { id, file: saved.file, name: saved.name, action, rationale };
+      return { id, file: saved.file, name: saved.name, action: saved.action, rationale };
     } catch (cause) {
-      await settle({ status: 'failed', error: scrubCredentials(cause?.message || cause).slice(0, 300) });
+      // 会话落盘本身再挂，也不能顶掉原始错误：调用方要看到的是「为什么维护没成」。
+      await settle({ status: 'failed', error: scrubCredentials(cause?.message || cause).slice(0, 300) }).catch(() => {});
       throw cause;
     }
   }
@@ -803,12 +803,12 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           !(expected === null || (typeof expected === 'string' && /^[0-9a-f]{16}$/.test(expected))))
           return callerError(res, '缺少有效的规则版本 expected_revision');
         try {
-          const current = await ruleStore.read(id);
-          const currentRevision = current ? ruleRevision(current.rego) : null;
-          if (currentRevision !== expected) return callerError(res, '规则已更新，请刷新后再提交', 409);
+          // 备注进被替换那一版的历史条目（`<id>-<rev>.json`）：传什么就记什么，不静默丢掉。
           const note = typeof body.note === 'string' && body.note.trim()
             ? `人工维护：${body.note.trim().replace(/\s+/g, ' ').slice(0, 200)}` : '人工维护';
-          return json(res, 200, await ruleStore.save(id, body.rego, { note }));
+          // 版本比对在 `RuleStore` 的写队列里做（与 `WikiStore.update()` 同一口径）：读—比对—写不可分割，
+          // 并发两个 PUT 只有一个能落盘，后到的拿 409，不会悄悄盖掉前一份。
+          return json(res, 200, await ruleStore.save(id, body.rego, { note, expectedRevision: expected }));
         } catch (cause) { return causeError(res, cause, 'internal'); }
       }
       if (url.pathname.startsWith('/api/rules/') && req.method === 'GET') {

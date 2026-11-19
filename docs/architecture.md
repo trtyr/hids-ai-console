@@ -335,21 +335,28 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 
 规则库（`rule-store.js`）与判据库同一条口径：**活数据在数据根，仓内副本只当种子**。
 
-- **库目录**：`<数据根>/rules/`（`ruleLibraryDirectory()`，`rule-store.js:344`）。仓内 `rules/` 只在数据根里
-  还没有这本库时被整目录拷一次（`seedLibrary()`，`rule-store.js:373`；认领用非递归 `mkdir`，两个进程同时起也只拷一次），
+- **库目录**：`<数据根>/rules/`（`ruleLibraryDirectory()`，`rule-store.js:390`）。仓内 `rules/` 只在数据根里
+  还没有这本库时被整目录拷一次（`seedLibrary()`，`rule-store.js:427`；认领用非递归 `mkdir`，两个进程同时起也只拷一次），
   此后进程只读它；想回到出厂基线就删掉 `<数据根>/rules/`，下次启动重新种一次。
-- **历史**：`<数据根>/rules-history/<id>-<rev>.rego`（`ruleHistoryDirectory()`，`rule-store.js:348`）。`rev` 是正文
-  sha256 的前 16 位（`ruleRevision()`，`rule-store.js:340`），与判据页 `revision` 同一口径。**每次覆盖前先把旧版存进历史**，
+- **历史**：`<数据根>/rules-history/<id>-<rev>.rego`（`ruleHistoryDirectory()`，`rule-store.js:399`；缺省库与仓内种子库落
+  数据根，构造参数把库目录换到别处时改落 `<库目录的上一级>/.data/rules-history/`，与判据页历史同一先例）。`rev` 是正文
+  sha256 的前 16 位（`ruleRevision()`，`rule-store.js:386`），与判据页 `revision` 同一口径。**每次覆盖前先把旧版存进历史**，
   正文一字未改时不写盘也不刷历史（`save()` 回 `action: 'unchanged'`）。
-- **维护会话**：`<数据根>/rule-sessions/<uuid>.json`（`RuleSessionStore`，`rule-store.js:388`），形制对齐 `wiki-sessions`：
+- **历史备注**：每条历史副本旁一个 `<id>-<rev>.json`（`rule-store.js:292`）：`{id, rev, note, saved_at, replaced_by}`，
+  `note` 就是「这一版为什么被替换」——`PUT` 存 `人工维护：<note>`、回滚存 `人工回滚（<who>）`、维护者 Agent 存
+  `误报维护（<who>）：<理由>`。备注单独一个文件而不是塞进 `.rego`：历史正文要能逐字读回（`readRevision()`）。
+  没备注的归档与备注落盘之前留下的旧副本，`history()` 回 `note: null`；同一版被归档第二次时副本与备注都保留第一次的。
+- **维护会话**：`<数据根>/rule-sessions/<uuid>.json`（`RuleSessionStore`，`rule-store.js:442`），形制对齐 `wiki-sessions`：
   记输入案卷引用（`case_id`/`case_dir`/`event_type`/`reason`/`who`）、模型草案（`id`/`rego`/`rationale`）、
   校验结果（`validation.ok`）、终态（`status`：`collecting`→`validating`→`updated`/`no_change`/`failed`）与失败原因。
   会话先落一份再干活，所以模型或校验半路挂掉也留得下「卡在哪一步」。
-- **唯一写入口**：`RuleStore.save(id, rego, { note })`（`rule-store.js:249`）。校验（`validate()`，`rule-store.js:236`，
-  与装载器同一份 `parseRule`，报错带 `<id>.rego:<行>`）→ 旧版进历史 → 临时文件 + `rename` 覆盖。**维护者 Agent 与人工接口
-  调的是同一个方法**，没有第二套直写文件的函数。
-- **回滚**：`rollback(id, rev)`（`rule-store.js:306`）把历史里那一版当新版 `save()` 一次——所以当前版也进历史，回滚可再回滚；
-  历史里没有的 `rev` 直接 404，不动现网那份。
+- **唯一写入口**：`RuleStore.save(id, rego, { note, expectedRevision })`（`rule-store.js:260`）。校验（`validate()`，
+  `rule-store.js:238`，与装载器同一份 `parseRule`，报错带 `<id>.rego:<行>`）→ 比对 `expectedRevision`（给了才比，不一致
+  抛 `status: 409`）→ 旧版进历史（含备注）→ 临时文件 + `rename` 覆盖。**维护者 Agent 与人工接口调的是同一个方法**，
+  没有第二套直写文件的函数。**整段在实例的写队列里跑**（`#enqueue()`，`rule-store.js:175`，与 `WikiStore.pending` 同一口径）：
+  读—比对—写不可分割，并发两个 `PUT` 只有一个落盘，另一个拿 409，不会拿旧版本悄悄盖掉前一份。
+- **回滚**：`rollback(id, rev)`（`rule-store.js:348`）把历史里那一版当新版写一次（同一段写队列）——所以当前版也进历史，
+  回滚可再回滚；历史里没有的 `rev` 直接 404，不动现网那份。
 - **维护者**：`RegoRuleMaintainer`（`server.js:226`）拿已完成的误报案件让模型改/增一条，写盘走 `save()`，每次维护落一份会话。
   改已有规则时多一道校验：原条件不许更宽（放宽就拒绝落盘，维护记 `failed`）。
 - **研判侧读同一本库**：`server.js:45` 装配的 `regoRuleStore` 同时交给两个 `InvestigationAgent`（构造第 5 个参数），
@@ -388,7 +395,7 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 
 **两本库的活数据也在数据根**（P003-T041）：判据库 `<数据根>/wiki/`（`wikiLibraryDirectory()`，`wiki-store.js:417`）、
 规则库 `<数据根>/rules/` 与其历史、维护会话。仓内 `wiki/`、`rules/` 退成**只读种子**：数据根里没有这本库时整目录拷一次
-（`seedLibrary()`，`rule-store.js:373`；判据库的入口是 `ensureWikiLibrary()`，`wiki-store.js:435`），此后进程不再读仓库副本、
+（`seedLibrary()`，`rule-store.js:427`；判据库的入口是 `ensureWikiLibrary()`，`wiki-store.js:435`），此后进程不再读仓库副本、
 更不写它。两条推论要记住：
 
 - 升级带来的仓库副本变化**不会**自动进数据根——那正是「变更只发生在数据根」的代价；要让新出厂内容生效，删掉数据根里的库目录重新种一次。
@@ -414,9 +421,9 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 | `<数据根>/update-packages/` | 已上传的升级包（`HIDS_UPDATE_STORE_DIR` 可换掉；默认跟着覆盖文件所在目录走） | `UpdateStore` | `update-store.js:62` |
 | `<数据根>/wiki/` | 判据库活数据（Markdown 页面） | `WikiStore`、`PromptStore`（SOP） | `wiki-store.js:417`、`wiki-store.js:6`、`prompt-store.js:12` |
 | `<数据根>/wiki-history/` | 判据页历史版本（`HIDS_WIKI_DIR` / 构造参数把判据库目录换到别处时改落 `<判据库目录的上一级>/.data/wiki-history/`） | `WikiStore` | `wiki-store.js:421-425`、`wiki-store.js:30`、`wiki-store.js:225` |
-| `<数据根>/rules/` | Rego 规则库活数据（`<id>.rego`） | `RuleStore` | `rule-store.js:344`、`rule-store.js:249`、`server.js:45` |
-| `<数据根>/rules-history/` | 规则历史版本（`<id>-<rev>.rego`） | `RuleStore.save()` | `rule-store.js:348`、`rule-store.js:249`、`rule-store.js:275` |
-| `<数据根>/rule-sessions/` | 规则维护会话（输入案卷引用 / 模型草案 / 校验结果 / 终态） | `RuleSessionStore` | `rule-store.js:352`、`rule-store.js:388`、`server.js:46` |
+| `<数据根>/rules/` | Rego 规则库活数据（`<id>.rego`） | `RuleStore` | `rule-store.js:390`、`rule-store.js:260`、`server.js:45` |
+| `<数据根>/rules-history/` | 规则历史版本（`<id>-<rev>.rego`）与备注（`<id>-<rev>.json`）；构造参数把库目录换到别处时改落 `<库目录的上一级>/.data/rules-history/` | `RuleStore.save()` | `rule-store.js:399`、`rule-store.js:260`、`rule-store.js:316`、`rule-store.js:292` |
+| `<数据根>/rule-sessions/` | 规则维护会话（输入案卷引用 / 模型草案 / 校验结果 / 终态） | `RuleSessionStore` | `rule-store.js:406`、`rule-store.js:442`、`server.js:46` |
 
 `.gitignore` 里还忽略了 `*.hids-policy`（`.gitignore:9`）与 `*.pem`、`*.key`（`.gitignore:7-8`），即签名私钥与加密密钥不进仓。
 

@@ -883,8 +883,12 @@ paths:
       summary: 列一条规则的历史版本
       operationId: listRegoRuleHistory
       description: |
-        每次覆盖一条规则前，旧版原件先落 `<数据根>/rules-history/<id>-<rev>.rego`。这里列这些副本，按写入时间升序。
+        每次覆盖一条规则前，旧版原件先落 `<数据根>/rules-history/<id>-<rev>.rego`，理由（备注）与它并排落在
+        `<数据根>/rules-history/<id>-<rev>.json`（`{id, rev, note, saved_at, replaced_by}`）；`note` 就是那条副本的
+        「为什么被替换」。这里列这些副本，按写入时间升序。
         规则不存在或还没改过时回空数组（不是 404）；正文一字未改的提交不会新增历史。
+        没带备注归档、或本接口备注落盘之前留下的旧历史副本，`note` 是 `null`。同一版被归档第二次
+        （回滚回去又回滚回来）时副本与备注都保留第一次的。
       parameters:
         - name: id
           in: path
@@ -905,9 +909,11 @@ paths:
       summary: 把一条规则回滚到某个历史版本
       operationId: rollbackRegoRule
       description: |
-        回滚＝把历史里那一版当新版再写一次（走同一个 `RuleStore.save()`）：所以当前版也会进历史，回滚本身可再回滚。
+        回滚＝把历史里那一版当新版再写一次（走同一个 `RuleStore.save()`）：所以当前版也会进历史（它的备注就是
+        `人工回滚（<who>）`），回滚本身可再回滚。
         历史里没有这一版回 404，且不动现网那份；正文写盘失败回 500。
         与 `PUT /api/rules/{id}` 同一道闸：要求规则管理员令牌 `x-rule-admin-token`，没配令牌回 503、令牌不对回 403。
+        与 `PUT` 同一段写队列：并发的人工写 / 回滚按到达顺序串起来，不会交叉着读旧版各写一份。
       parameters:
         - name: id
           in: path
@@ -960,8 +966,10 @@ paths:
       description: |
         写盘走 `RuleStore.save()`——与规则维护者 Agent 是同一个方法，没有第二套直写文件的函数。
         顺序：语法校验（规则子集，报错带 `<id>.rego:<行>`）→ 旧版进 `<数据根>/rules-history/<id>-<rev>.rego`
-        → 临时文件 + rename 原子替换。正文与原样一致时回 `action=unchanged`，不写盘也不刷历史。
+        及其备注 `<id>-<rev>.json` → 临时文件 + rename 原子替换。正文与原样一致时回 `action=unchanged`，不写盘也不刷历史。
         已有规则的 id 可能住在别的文件名里：写回它自己那份，不另起同 id 的第二个文件。
+        **读—比对 `expected_revision`—写在同一个写队列任务里**（与 `WikiStore.update()` 同一口径）：并发两个 PUT
+        只有一个能落盘，后到的拿 409，不会拿旧版本悄悄盖掉前一份。
         要求规则管理员令牌 `x-rule-admin-token`：没配令牌回 503、令牌不对回 403。
       parameters:
         - name: id
@@ -2303,14 +2311,20 @@ components:
       additionalProperties: false
     RegoHistoryEntry:
       type: object
-      description: 历史版本的一条：`<数据根>/rules-history/<id>-<rev>.rego`。
-      required: [id, rev, file, bytes, saved_at]
+      description: |
+        历史版本的一条：正文副本 `<数据根>/rules-history/<id>-<rev>.rego`，备注在并排的 `<id>-<rev>.json`。
+      required: [id, rev, file, bytes, saved_at, note]
       properties:
         id: { type: string }
         rev: { type: string, pattern: '^[0-9a-f]{16}$' }
         file: { type: string, description: 历史文件名，形如 `<id>-<rev>.rego` }
         bytes: { type: integer, minimum: 0 }
         saved_at: { type: string, format: date-time, description: 该历史文件的写入时间 }
+        note:
+          type: [string, 'null']
+          description: |
+            这一版为什么被替换掉（`PUT` 的 `note` 存成 `人工维护：<note>`，回滚存成 `人工回滚（<who>）`，
+            维护者 Agent 存成 `误报维护（<who>）：<理由>`）。没备注的归档与旧副本是 `null`。
       additionalProperties: false
     RegoRuleHistory:
       type: object
@@ -2352,14 +2366,14 @@ components:
           description: |
             乐观并发：读到的当前正文指纹（`GET /api/rules/{id}` 的 `revision`）。与当前不一致回 409，别让后写的悄悄盖掉前一份。
             新增规则时传 null（要求当前不存在）。
-        note: { type: string, maxLength: 200, description: 写进历史备注的一句话（`人工维护：<note>`） }
+        note: { type: string, maxLength: 200, description: 写进历史备注的一句话：被替换那一版的历史条目里存成 `人工维护：<note>`（没传就是 `人工维护`） }
       additionalProperties: false
     RegoRollback:
       type: object
       required: [rev]
       properties:
         rev: { type: string, pattern: '^[0-9a-f]{16}$', description: 回滚到的历史版本；历史里没有这一版回 404 }
-        who: { type: string, maxLength: 100, description: 操作人，写进历史备注（`人工回滚（<who>）`） }
+        who: { type: string, maxLength: 100, description: 操作人，写进被替换那一版的历史备注（`人工回滚（<who>）`）；不传就用当前登录用户名 }
       additionalProperties: false
     RegoRuleList:
       type: object

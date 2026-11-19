@@ -45,9 +45,9 @@ export class WikiStore {
   // 记忆化在模块级 `ensureWikiLibrary()` 上而不是实例上：`prompt-store.js` 的 SOP 也从这本库读，
   // 两个消费者共用同一份「只初始化一次」，不会一边刚拷完、另一边又拷一遍。
   async ready() {
-    if (!this.seedSource) return;
-    this.seeding ||= this.directory === wikiLibraryDirectory()
-      ? ensureWikiLibrary() : seedLibrary(this.directory, this.seedSource);
+    if (!this.seedSource) return; // 注入的目录不种子：`seedSourceFor()` 只给数据根库种子源
+    // 走到这里 `this.directory` 必然是数据根库（种子源只在那种情况下非空），所以直接共用模块级的记忆化。
+    this.seeding ||= ensureWikiLibrary();
     await this.seeding;
   }
 

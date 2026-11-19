@@ -185,3 +185,97 @@ test('A4 会话目录不存在时列表回空数组，不抛错（第一次维�
   const root = await tempRoot(t);
   assert.deepEqual(await new RuleSessionStore(path.join(root, 'none')).list(), []);
 });
+
+// ── 复审轮（openapi 承诺的备注 + 并发写）────────────────────────────────────
+test('A3 备注落进历史条目：note 存在 <id>-<rev>.json，history() 逐条回读；同版再归档保留首次备注', async t => {
+  const { store, historyDirectory } = await injected(t);
+  const v1 = rule('alpha', 'input.type == "a"');
+  const v2 = rule('alpha', 'input.type == "b"');
+  const v3 = rule('alpha', 'input.type == "c"');
+  await store.save('alpha', v1);
+  await store.save('alpha', v2, { note: '人工维护：排除运维探针来源' });
+
+  const rows = await store.history('alpha');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].note, '人工维护：排除运维探针来源', 'note 没落进历史条目（openapi 承诺的备注不存在）');
+  const sidecar = JSON.parse(await readFile(path.join(historyDirectory, `alpha-${rows[0].rev}.json`), 'utf8'));
+  assert.equal(sidecar.id, 'alpha');
+  assert.equal(sidecar.rev, ruleRevision(v1));
+  assert.equal(sidecar.note, '人工维护：排除运维探针来源');
+  assert.equal(sidecar.replaced_by, ruleRevision(v2), '备注没记「被哪一版替换」');
+  assert.match(sidecar.saved_at, /^\d{4}-\d{2}-\d{2}T/);
+  // 历史正文仍是逐字原文：备注单独一个文件，不许混进 .rego。
+  assert.equal(await readFile(path.join(historyDirectory, rows[0].file), 'utf8'), v1);
+
+  // 回滚本身也是一次写：它把当前版（二版）归档，备注是调用方给的那句。
+  await store.rollback('alpha', ruleRevision(v1), { note: '人工回滚（值班主任）' });
+  const after = await store.history('alpha');
+  const archived = after.find(row => row.rev === ruleRevision(v2));
+  assert.equal(archived?.note, '人工回滚（值班主任）', '回滚的 who 没写进被归档那一版的历史备注');
+
+  // 同一版被归档第二次（回滚回去又改回三版）：副本与备注都保留第一次的。
+  await store.save('alpha', v3, { note: '人工维护：第三次' });
+  await store.rollback('alpha', ruleRevision(v1), { note: '人工回滚（第二人）' });
+  const again = await store.history('alpha');
+  assert.equal(again.filter(row => row.rev === ruleRevision(v1))[0].note, '人工维护：排除运维探针来源',
+    '同一版被归档第二次时备注被覆盖，先前那条说明就丢了');
+});
+
+test('A3 没有备注的归档与旧历史副本都回 note:null，不让一条坏备注拖垮整页历史', async t => {
+  const { store, historyDirectory } = await injected(t);
+  await store.save('beta', rule('beta', 'input.type == "a"'));
+  await store.save('beta', rule('beta', 'input.type == "b"'));
+  const [bare] = await store.history('beta');
+  assert.equal(bare.note, null);
+
+  // 本卡之前留下的旧历史副本：只有 .rego，没有 sidecar。
+  const legacy = 'a'.repeat(16);
+  await writeFile(path.join(historyDirectory, `beta-${legacy}.rego`), rule('beta'));
+  // 手改坏掉的 sidecar：当没有备注，不是 502。
+  await writeFile(path.join(historyDirectory, `beta-${legacy}.json`), '{ 半截');
+  const rows = await store.history('beta');
+  assert.equal(rows.find(row => row.rev === legacy)?.note, null, '坏备注把整个历史接口拖红了');
+  assert.equal(rows.length, 2);
+});
+
+test('A5 并发改同一条规则：同版本的两个写入只成一个，另一个 409，先写的不会被后写的盖掉', async t => {
+  const { store } = await injected(t);
+  const v1 = rule('alpha', 'input.type == "a"');
+  const rev1 = ruleRevision(v1);
+  await store.save('alpha', v1);
+  const results = await Promise.allSettled([
+    store.save('alpha', rule('alpha', 'input.type == "left"'), { note: '甲', expectedRevision: rev1 }),
+    store.save('alpha', rule('alpha', 'input.type == "right"'), { note: '乙', expectedRevision: rev1 })
+  ]);
+  const won = results.filter(result => result.status === 'fulfilled');
+  const lost = results.filter(result => result.status === 'rejected');
+  assert.equal(won.length, 1, '并发两个同版本写入都落盘了（后写的会悄悄盖前一份）');
+  assert.equal(lost.length, 1);
+  assert.equal(lost[0].reason.status, 409);
+  assert.equal((await store.read('alpha')).revision, won[0].value.rev, '落盘的正文不是「赢的那个」');
+  assert.equal((await store.history('alpha')).length, 1, '并发写把历史灌了多份');
+  assert.equal((await store.history('alpha'))[0].note, won[0].value.rev === ruleRevision(rule('alpha', 'input.type == "left"'))
+    ? '甲' : '乙');
+
+  // 并发的两次「新增同一条」：expected_revision 都是 null，只许一个 add。
+  const adds = await Promise.allSettled([
+    store.save('delta', rule('delta', 'input.type == "x"'), { expectedRevision: null }),
+    store.save('delta', rule('delta', 'input.type == "y"'), { expectedRevision: null })
+  ]);
+  assert.deepEqual(adds.map(result => result.status).sort(), ['fulfilled', 'rejected']);
+  assert.equal(adds.find(result => result.status === 'rejected').reason.status, 409);
+});
+
+test('A1 注入目录的历史跟目录走：同级 `.data/rules-history`，不往真实数据根写', async t => {
+  const root = await tempRoot(t);
+  const directory = path.join(root, 'deploy', 'rules');
+  await mkdir(directory, { recursive: true });
+  const store = new RuleStore(directory); // 不传 historyDirectory：缺省值要跟目录走
+  assert.equal(store.historyDirectory, path.join(root, 'deploy', '.data', 'rules-history'),
+    '注入目录的历史仍写全局数据根（与 wiki 的同级 .data 先例相反）');
+  const v1 = rule('alpha', 'input.type == "a"');
+  await store.save('alpha', v1);
+  await store.save('alpha', rule('alpha', 'input.type == "b"'));
+  assert.deepEqual((await readdir(store.historyDirectory)).sort(),
+    [`alpha-${ruleRevision(v1)}.json`, `alpha-${ruleRevision(v1)}.rego`]);
+});

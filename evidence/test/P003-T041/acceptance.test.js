@@ -99,6 +99,8 @@ test('A5 规则维护接口：列表 / 读 / 改 / 历史 / 回滚，写操作�
 
   const history = await (await fetch(`${base}/api/rules/honeypot_probe/history`)).json();
   assert.deepEqual(history.history.map(row => row.rev), [read.revision]);
+  assert.equal(history.history[0].note, '人工维护：排除运维探针来源',
+    'PUT 的 note 没写进历史备注（openapi 承诺的行为不存在）');
 
   const broken = await fetch(`${base}/api/rules/honeypot_probe`, { method: 'PUT', headers: ruleHeaders(RULE_TOKEN),
     body: JSON.stringify({ rego: rego('honeypot_probe', 'input.host =~ "10.*"'), expected_revision: saved.rev }) });
@@ -111,10 +113,31 @@ test('A5 规则维护接口：列表 / 读 / 改 / 历史 / 回滚，写操作�
   assert.equal((await (await fetch(`${base}/api/rules/honeypot_probe`)).json()).rego, read.rego, '回滚没有恢复原正文');
   const after = await (await fetch(`${base}/api/rules/honeypot_probe/history`)).json();
   assert.equal(after.history.length, 2, '回滚本身那一版没进历史，回滚就不可逆了');
+  assert.equal(after.history.find(row => row.rev === saved.rev)?.note, '人工回滚（值班主任）',
+    '回滚接口的 who 没写进被归档那一版的历史备注');
 
   const badRev = await fetch(`${base}/api/rules/honeypot_probe/rollback`, { method: 'POST',
     headers: ruleHeaders(RULE_TOKEN), body: JSON.stringify({ rev: '0'.repeat(16) }) });
   assert.equal(badRev.status, 404);
+});
+
+test('A5 并发 PUT 同一条规则：同一个 expected_revision 只成一个，另一个 409，不许后写盖前写', async t => {
+  const { ruleStore, ruleSessions } = await rulesFixture(t);
+  const base = await serve(t, { ruleStore, ruleSessions, wiki: (await wikiFixture(t)).wiki });
+  const current = await (await fetch(`${base}/api/rules/honeypot_probe`)).json();
+  const put = source => fetch(`${base}/api/rules/honeypot_probe`, { method: 'PUT', headers: ruleHeaders(RULE_TOKEN),
+    body: JSON.stringify({ rego: source, expected_revision: current.revision }) });
+  const [left, right] = await Promise.all([
+    put(rego('honeypot_probe', 'input.type == "left"', '蜜罐诱捕')),
+    put(rego('honeypot_probe', 'input.type == "right"', '蜜罐诱捕'))
+  ]);
+  assert.deepEqual([left.status, right.status].sort(), [200, 409],
+    '并发两个 PUT 都成功了：一个是拿旧版本盖掉了另一个刚写的正文');
+  const winner = left.status === 200 ? await left.json() : await right.json();
+  assert.equal((await (await fetch(`${base}/api/rules/honeypot_probe`)).json()).revision, winner.rev,
+    '落盘的正文不是「赢的那个」');
+  const history = await (await fetch(`${base}/api/rules/honeypot_probe/history`)).json();
+  assert.equal(history.history.length, 1, '并发写把历史刷了多份');
 });
 
 test('A5 没配规则管理员令牌时写接口 503；`sessions` 路由不被 /api/rules/{id} 抢走', async t => {
