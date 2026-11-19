@@ -61,7 +61,7 @@ updated: 2026-11-17
 | 方法 | 形状 | 返回 | 定义处 |
 | --- | --- | --- | --- |
 | `browse()` | — | 目录下全部 `.md` 页的元数据数组，含 `deprecated` 页，按固定优先级排序 | `wiki-store.js:41` |
-| `list()` | — | 符合判据页路径格式且非 `deprecated` 的页数组，按路径排序 | `wiki-store.js:60` |
+| `list()` | — | 符合判据页路径格式且非 `deprecated` 的页数组，按路径排序。**P003-T037 起按 mtime 缓存**（见 §4.1 末段） | `wiki-store.js:90-105` |
 | `get(filename)` | — | 一页的元数据 + 全文 `content`；页面不存在时抛 404，文案 `知识库页面不存在：<相对路径>` | `wiki-store.js:75-83` |
 | `getById(id)` | — | 按编号取页；编号不合格式或查不到时返回 `null` | `wiki-store.js:85` |
 | `search(query, limit=8)` | — | 编号或标题命中的页数组；关键词为空或超 100 字时返回空数组 | `wiki-store.js:91` |
@@ -106,7 +106,16 @@ updated: 2026-11-17
 1. **按告警类型定分类**。`classForEvent` 把 13 个告警类型映射到 12 个判据目录（`wiki-store.js:12-17`；`suspicious_operation` 与 `command_whitelist` 都落在 `suspicious-command`）；映射不到的类型直接抛「Wiki 没有 `<类型>` 对应的判据分类」（`wiki-store.js:100`）。
 2. **筛出可用判据**。只取 `status: active` 且路径在 `common/` 或本类目录下的页（`wiki-store.js:101-102`）；一页都没有时抛「Wiki 分类 `<类>` 没有可用判据」（`wiki-store.js:103`）。
 3. **读正文**。`agentPage()` 在上一步的目录里找编号，找不到抛「当前场景不可读取 Wiki 判据 `<编号>`」（`wiki-store.js:111`）；读到的正文去掉 frontmatter 并截到 9000 字（`wiki-store.js:114`）。
-4. **检索**。`agentSearch()` 先过一道参数检查：关键词长度不在 2 到 80 字之间直接抛「Wiki 检索词需为 2 到 80 字」（`wiki-store.js:126`）；命中片段取关键词前后各 80 / 120 字，最多 8 条（`wiki-store.js:130-133`）。
+4. **检索**。`agentSearch()` 先过一道参数检查：关键词长度不在 2 到 80 字之间直接抛「Wiki 检索词需为 2 到 80 字」；命中片段取关键词前后各 80 / 120 字，最多 8 条。
+
+**目录索引的 mtime 缓存（P003-T037）。** `agentIndex()` 的数据源只有 `list()`（`wiki-store.js:98-105`），
+它每次先算一个签名：顶层每个判据目录下、路径符合判据页格式的文件，逐个 `stat` 取 `mtimeMs` 与 `size`，
+拼成排序后的字符串（`wiki-store.js:67-88`）。签名与上次相同就直接返回上次解析好的行（浅拷贝，
+调用方排序/改数组改不到缓存），不再逐文件 `readFile` 与解析 frontmatter（`wiki-store.js:90-93`）；
+签名变了才重读重解析并刷新缓存（`wiki-store.js:94-105`）。
+一次研判里 `agentIndex` → `agentPage` → `agentContextPages` 会反复要目录，这里就是它们共用的那一份。
+缓存失效的判据是「文件 mtime 或大小变了」——维护流水线写页面后 mtime 自然变化，不需要额外清缓存；
+**代价**：同一毫秒内改写且字节数不变的页面，要等下一次 mtime 变化才会被看到（§4.1 的代价，不是 bug）。
 
 下面这条命令可以复跑这条路径（输出见 §10.2）：
 

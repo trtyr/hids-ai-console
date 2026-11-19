@@ -83,7 +83,7 @@
 | GET | `/api/config` | 200 生效配置（`{host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required}`） | —（只读环境变量：不探上游、不因缺件 503；机密只在 `secrets` 里给布尔） | `server.js:642` |
 | POST | `/api/config` | 200 `{updated, config}`（写配置，见 §3.6） | 只收可写五键；正文不是 JSON / 键不可写 / 值不合法回 400；落盘失败回 500 | `server.js:646-650` |
 | GET | `/api/updates` | 200 升级包概览 | — | `server.js:215` |
-| GET | `/api/status` | 200 / 502 | 未配牧云回 200（`configured:false`）；配了但连不上回 502，正文仍是 `{configured, connected:false, reason}` | `server.js:216-220` |
+| GET | `/api/status` | 200 / 502 | 未配牧云回 200（`configured:false`）；配了但连不上回 502，正文仍是 `{configured, connected:false, reason}`。**探活结果缓存 45 秒**（`HIDS_STATUS_TTL_MS`，P003-T037）：窗口内不再发牧云 RPC，并发请求共用同一次探活；失败不缓存 | `server.js:216-220`、`cloudwalker.js:120-133` |
 | GET | `/api/agent/tools` | 200 工具清单 | 无 API 工具箱回 503 | `server.js:221-225` |
 | GET | `/api/trace/tools` | 200 工具清单 | 无 MCP 工具箱回 503 | `server.js:226-230` |
 | GET | `/api/agent/status` | 200 | — | `server.js:231-236` |

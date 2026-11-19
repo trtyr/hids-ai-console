@@ -690,3 +690,35 @@ test('model-client 抛「没有返回可用消息」时把不可用回包的摘�
     .complete([{ role: 'user', content: '调查告警' }]);
   assert.equal(message.content, long);
 });
+
+test('A2 syslog 已取的事件详情随 match.event 进研判，入口不再拉第二次', async () => {
+  const calls = [];
+  const detail = { id: 7, host_view: { host_id: 41, host_ip: '10.0.0.5' }, cmdline: 'id' };
+  const toolbox = new AgentToolbox({
+    listTools: async () => [{ name: 'get_suspicious_operation_event',
+      inputSchema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } }],
+    callTool: async (name, args) => { calls.push({ name, args });
+      return name === 'get_suspicious_operation_event' ? detail : { total: 0, events: [] }; }
+  });
+  const model = { model: 'fake', complete: async (_messages, tools) => ({ content: JSON.stringify(tools.length
+    ? { verdict: '存疑', confidence: '低', summary: '需核查命令后续行为',
+      claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }], missing_data: [] }
+    : { assessment: 'supported', concerns: [], missing_evidence: [] }) }) };
+  const agent = new InvestigationAgent(toolbox, model);
+  const context = syslogContext('id');
+  context.match = { matched: true, event_id: 7, event: detail };
+  const result = await agent.run('suspicious_operation:7', { mode: 'triage', streamContext: context });
+  assert.equal(calls.filter(call => call.name === 'get_suspicious_operation_event').length, 0,
+    '入口不再自己拉详情');
+  // 事件详情仍以 cw:1 进证据表，模型引用照常可校验。
+  assert.equal(result.evidence[0].evidence_id, 'cw:1');
+  assert.equal(result.evidence[0].tool, 'get_suspicious_operation_event');
+  assert.equal(result.evidence[0].sha256.length, 64);
+  assert.equal(result.validation.ok, true);
+  assert.ok(result.trace.some(item => item.note === '复用 syslog 匹配已取的事件详情'));
+
+  // 没有 match.event 的轮询入口：照旧拉一次。
+  calls.length = 0;
+  await agent.run('suspicious_operation:7', { mode: 'triage' });
+  assert.equal(calls.filter(call => call.name === 'get_suspicious_operation_event').length, 1);
+});

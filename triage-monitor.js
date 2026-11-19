@@ -9,6 +9,51 @@ import { log } from './log.js';
 // 结论排序的档位：threat 在前，其余同档保持时间倒序；没有结论的记录排最后。
 const verdictRanks = Object.freeze({ threat: 0, uncertain: 1, false_positive: 2 });
 
+// 轮询的一轮一页：一页 50 条（与 cloudwalker 的页上限一致），最多 20 页。
+const POLL_PAGE_SIZE = 50;
+const MAX_POLL_PAGES = 20;
+
+// A4：告警类型风险档位。数值越大越先研判；表外/未知类型按 0 排最后。
+// 档位按「处置时限」排：内存马/WebShell/反弹 Shell/恶意文件是可直接利用的入口，接着是内存安全与蜜罐，
+// 再往下是提权、暴力破解、异常登录、可疑操作、网络审计。改档位就是改优先级，文档里逐类列了值。
+export const typeRisk = Object.freeze({
+  memory_webshell: 11, webshell: 10, revshell: 10, malware: 10, memory_security: 9,
+  honeypot: 8, elevation_process: 8, brute_force: 7, abnormal_login: 6,
+  suspicious_operation: 5, network_audit: 4
+});
+
+// 正整数的配置值：非法（0、负数、小数、空串、非数）回落到默认，不把队列卡死。
+const positiveInteger = (value, fallback) => {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : fallback;
+};
+const envConcurrency = () => positiveInteger(process.env.HIDS_TRIAGE_CONCURRENCY, 2);
+const envQueueLimit = () => positiveInteger(process.env.HIDS_TRIAGE_QUEUE_MAX, 1000);
+
+// 记录的告警类型：syslog 记录从 MsgId 推，轮询记录从 `type:id` 取。
+function recordType(record) {
+  if (record.input?.parsed?.msgid) return eventTypeFor(record.input.parsed.msgid) || '';
+  const text = String(record.alert_id || '');
+  const at = text.indexOf(':');
+  return at > 0 ? text.slice(0, at) : '';
+}
+
+// A4 优先级：（类型风险 desc，occurrence_count desc，created_at asc）。
+export function comparePriority(left, right) {
+  const risk = (typeRisk[recordType(right)] ?? 0) - (typeRisk[recordType(left)] ?? 0);
+  if (risk) return risk;
+  const occurrences = (right.occurrence_count || 1) - (left.occurrence_count || 1);
+  if (occurrences) return occurrences;
+  return String(left.created_at || '').localeCompare(String(right.created_at || ''));
+}
+
+// A2：详情取数的缓存键——只缓存 `get_<type>_event` 且带正整数 id 的调用，其它调用直通。
+function detailKey(name, args) {
+  const id = Number(args?.id);
+  return /^get_[a-z_]+_event$/.test(String(name)) && Number.isSafeInteger(id) && id > 0
+    ? `${name}:${id}` : null;
+}
+
 // 人工登记的误报（误报入口写的就是 verdict=false_positive + decision_source=human）：重跑不覆盖结论区。
 // AI 自己判出的 false_positive 不算——那种重跑仍旧按这次研判覆盖。
 const humanFalsePositive = record => record.verdict === 'false_positive' && record.decision_source === 'human';
@@ -26,7 +71,8 @@ function evidenceSummary(result) {
 
 // syslog 逐条触发常规研判；兼容轮询入口。状态落盘，重启后续跑未完成任务。
 export class TriageMonitor {
-  constructor({ service, investigator, history, file, intervalMs = 30000, concurrency = 2,
+  constructor({ service, investigator, history, file, intervalMs = 30000, concurrency = envConcurrency(),
+    queueLimit = envQueueLimit(), maxBackoffMs = null,
     inputMode = 'poll', eventToolbox = null, wiki = null, casesDirectory = null,
     baselineFile = null, intelFile = null, ruleEngine = null }) {
     this.service = service;
@@ -34,6 +80,14 @@ export class TriageMonitor {
     this.history = history;
     this.file = file;
     this.intervalMs = intervalMs;
+    this.concurrency = positiveInteger(concurrency, envConcurrency());
+    // A5：队列上限管的是「排队 + 在跑」的记录数；满了就拒收并计数（summary().dropped）。
+    this.queueLimit = positiveInteger(queueLimit, envQueueLimit());
+    this.maxBackoffMs = positiveInteger(maxBackoffMs, intervalMs * 16);
+    this.dropped = 0;
+    this.emptyPolls = 0;
+    // 下一轮轮询的延迟：有新增就是 intervalMs，连续空轮翻倍到 maxBackoffMs（A1）。
+    this.backoffMs = intervalMs;
     this.concurrency = concurrency;
     this.inputMode = inputMode;
     this.eventToolbox = eventToolbox;
@@ -58,6 +112,7 @@ export class TriageMonitor {
     this.polling = false;
     this.pollEpoch = 0;
     this.timer = null;
+    this.timerActive = false;
     this.writeChain = Promise.resolve();
     // syslog 输入由 server 注入接收器：绑定成败都记在这里，summary() 才看得出「收不到消息」。
     this.syslog = { listening: false, bind: null, error: null };
@@ -108,11 +163,22 @@ export class TriageMonitor {
     await this.load();
     if (this.inputMode === 'syslog') { this.initialized = true; if (this.enabled) this.drain(); return; }
     if (this.enabled) { await this.poll(); this.drain(); }
-    this.timer = setInterval(() => void this.poll(), this.intervalMs);
+    this.timerActive = true;
+    this.#schedule();
+  }
+
+  // A1：退避靠 setTimeout 链而不是 setInterval——每轮跑完才排下一轮，延迟用这一轮算出的 backoffMs。
+  #schedule() {
+    if (!this.timerActive) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.poll().finally(() => this.#schedule());
+    }, this.backoffMs);
     this.timer.unref?.();
   }
 
-  stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
+  stop() { this.timerActive = false; if (this.timer) clearTimeout(this.timer); this.timer = null; }
 
   status(alertId) {
     const record = this.records.get(alertId) || [...this.records.values()].reverse().find(item => item.matched_alert_id === alertId);
@@ -190,6 +256,8 @@ export class TriageMonitor {
     return { initialized: this.initialized, enabled: this.enabled, input_mode: this.inputMode,
       since: sinceMs == null ? null : new Date(sinceMs).toISOString(),
       last_poll_at: this.lastPollAt, last_error: this.lastError, counts, verdict_counts, type_counts,
+      backoff_ms: this.backoffMs, empty_polls: this.emptyPolls,
+      concurrency: this.concurrency, queue_limit: this.queueLimit, dropped: this.dropped,
       ...(this.inputMode === 'poll' ? { interval_ms: this.intervalMs }
         : { syslog: { ...this.syslog }, last_received_at: this.lastReceivedAt }) };
   }
@@ -211,6 +279,19 @@ export class TriageMonitor {
     return this.summary();
   }
 
+  // A5：队列深度只看「排队 + 在跑」，已完结的记录不占配额。
+  #queueFull() {
+    let depth = 0;
+    for (const record of this.records.values())
+      if (record.status === 'queued' || record.status === 'running') depth += 1;
+    return depth >= this.queueLimit;
+  }
+
+  #countDropped(count, reason) {
+    this.dropped += count;
+    log('triage.dropped', { reason, count, dropped: this.dropped, queue_limit: this.queueLimit }, 'warn');
+  }
+
   async enqueue(alertId, { retry = false } = {}) {
     const existing = this.records.get(alertId);
     if (String(alertId).startsWith('syslog:') && !existing?.input) {
@@ -220,6 +301,12 @@ export class TriageMonitor {
     }
     if (existing && !retry) return this.status(alertId);
     if (existing?.status === 'running') return this.status(alertId);
+    if (this.#queueFull()) {
+      this.#countDropped(1, 'manual');
+      const error = new Error(`研判队列已满（上限 ${this.queueLimit}），稍后再试`);
+      error.status = 429;
+      throw error;
+    }
     const now = new Date().toISOString();
     // 人工登记的误报结论（verdict / verdict_label / summary）跟着记录走进新一轮：run() 收尾靠它认出这条不该被覆盖。
     // 不带上来的话，重排这一下就把误报标记抹掉了，后面根本认不出「已标误报」。
@@ -238,63 +325,79 @@ export class TriageMonitor {
     return this.status(alertId);
   }
 
+  // A1：增量轮询。游标只由 `from`（上一轮最大 createdAt，含端点）决定，不再翻页找边界；
+  // 同秒的`watermarkIds`只用来去重，不参与边界判定。返回本轮结果给 #schedule 算退避。
   async poll() {
-    if (this.inputMode === 'syslog') return;
-    if (this.polling || !this.enabled) return;
+    if (this.inputMode === 'syslog') return null;
+    if (this.polling || !this.enabled) return null;
     this.polling = true;
     const pollEpoch = this.pollEpoch;
+    let found = [];
+    let failed = false;
     try {
+      const query = this.initialized && this.watermark ? { from: this.watermark } : {};
       let offset = 0;
       let newest = this.watermark;
       const newestIds = new Set(this.watermarkIds);
-      let boundaryReached = false;
-      const found = [];
-      for (let page = 0; page < 20; page++) {
-        const response = await this.service.alerts({ count: 50, offset }).catch(error => {
-          log('cloudwalker.call_failed', { op: 'alerts', alert_id: null, error: String(error?.message || error) }, 'error');
-          throw error;
-        });
+      const collected = [];
+      for (let page = 0; page < MAX_POLL_PAGES; page++) {
+        const response = await this.service.alerts({ count: POLL_PAGE_SIZE, offset, sort: 'time', ...query })
+          .catch(error => {
+            log('cloudwalker.call_failed', { op: 'alerts', alert_id: null, error: String(error?.message || error) }, 'error');
+            throw error;
+          });
         if (response.partial) throw new Error('部分牧云事件类型读取失败，暂缓推进自动研判游标');
         const rows = response.alerts || [];
         if (!this.initialized) {
+          // 冷启动只定游标，不排任何告警（与改前一致）。
           newest = rows[0]?.createdAt || new Date().toISOString();
           for (const row of rows) if (row.createdAt === newest) newestIds.add(row.id);
-          boundaryReached = true;
           break;
         }
         for (const row of rows) {
-          if (!row.createdAt || row.createdAt < this.watermark) { boundaryReached = true; continue; }
-          if (row.createdAt === this.watermark) {
-            boundaryReached = true;
-            if (this.watermarkIds.has(row.id)) continue;
-          }
+          // from 是服务端过滤，这里是兜底：平台忽略 from 时也不会把旧告警当新增（不靠它找边界）。
+          if (!row.createdAt || (this.watermark && row.createdAt < this.watermark)) continue;
+          if (row.createdAt === this.watermark && this.watermarkIds.has(row.id)) continue;
           if (!newest || row.createdAt > newest) { newest = row.createdAt; newestIds.clear(); }
           if (row.createdAt === newest) newestIds.add(row.id);
-          if (!this.records.has(row.id)) found.push(row.id);
+          if (!this.records.has(row.id)) collected.push(row.id);
         }
-        if (boundaryReached || rows.length < 50) { boundaryReached = true; break; }
-        offset += 50;
+        // 一页取满了才继续翻页：这是「把本轮新增取完」，不是「翻页找边界」。
+        if (rows.length < POLL_PAGE_SIZE) break;
+        offset += POLL_PAGE_SIZE;
+        if (page === MAX_POLL_PAGES - 1) throw new Error('新增告警超过本轮扫描上限，请检查自动研判积压');
       }
-      if (!boundaryReached) throw new Error('新增告警超过本轮扫描上限，请检查自动研判积压');
-      if (!this.enabled || pollEpoch !== this.pollEpoch) return;
+      if (!this.enabled || pollEpoch !== this.pollEpoch) return null;
       this.initialized = true;
       this.watermark = newest;
       this.watermarkIds = newestIds;
       this.lastPollAt = new Date().toISOString();
       this.lastError = null;
-      for (const alertId of found.reverse()) {
+      found = collected.reverse();
+      let skipped = 0;
+      for (const alertId of found) {
+        if (this.#queueFull()) { skipped += 1; continue; }
         this.records.set(alertId, { alert_id: alertId, status: 'queued', stage: '等待研判',
           detail: '牧云新增告警已进入队列', created_at: this.lastPollAt, updated_at: this.lastPollAt,
           steps: [], attempts: 0 });
         log('triage.enqueued', { alert_id: alertId, source: 'poll' });
       }
+      if (skipped) this.#countDropped(skipped, 'poll');
       await this.persist();
       this.drain();
-    } catch (error) { if (pollEpoch === this.pollEpoch) {
-      this.lastError = error.message;
-      log('triage.poll_failed', { error: error.message }, 'warn');
-    } }
+    } catch (error) {
+      failed = true;
+      if (pollEpoch === this.pollEpoch) {
+        this.lastError = error.message;
+        log('triage.poll_failed', { error: error.message }, 'warn');
+      }
+    }
     finally { this.polling = false; }
+    // 空轮（含失败轮）指数退避；见到新告警立刻回常态（A1）。
+    if (found.length) this.emptyPolls = 0; else this.emptyPolls += 1;
+    this.backoffMs = this.emptyPolls === 0 ? this.intervalMs
+      : Math.min(this.intervalMs * 2 ** this.emptyPolls, this.maxBackoffMs);
+    return { found: found.length, empty: found.length === 0, failed };
   }
 
   acceptSyslog(line) {
@@ -348,6 +451,34 @@ export class TriageMonitor {
     }
     const occurrence = previous && seconds != null && Math.abs(seconds - previous.last_seen) <= 300
       ? previous.occurrence_count + 1 : 1;
+    // A3：同指纹（指纹里已含 host_ip）且上一条已完结——复用结论，只累加 repeat_count，
+    // 不再排一次完整研判。人工要重新研判走 enqueue(alertId, { retry: true })。
+    const concluded = previous ? this.records.get(previous.record_id) : null;
+    if (concluded?.status === 'done' && concluded.verdict) {
+      const at = new Date().toISOString();
+      previous.delivery_count += 1;
+      previous.event_delivery_count += 1;
+      previous.last_delivery_second = seconds;
+      previous.last_seen = seconds ?? previous.last_seen;
+      previous.occurrence_count = occurrence;
+      concluded.repeat_count = previous.event_delivery_count;
+      concluded.occurrence_count = occurrence;
+      concluded.updated_at = at;
+      this.lastReceivedAt = at;
+      if (concluded.result_alert_id) {
+        const saved = await this.history.latest(concluded.result_alert_id, 'triage');
+        if (saved) await this.history.save({ ...saved, repeat_count: concluded.repeat_count,
+          syslog: saved.syslog ? { ...saved.syslog, repeat_count: concluded.repeat_count } : undefined });
+      }
+      await updateSyslogDeliveryCount(concluded.case_dir, concluded.repeat_count);
+      await this.persist();
+      log('syslog.reused_conclusion', { alert_id: concluded.alert_id, repeat_count: concluded.repeat_count, occurrence });
+      return { reused: true, repeat_count: concluded.repeat_count, alert_id: concluded.alert_id };
+    }
+    if (this.#queueFull()) {
+      this.#countDropped(1, 'syslog');
+      return { dropped: true, queue_limit: this.queueLimit };
+    }
     const session = sessionKey(parsed);
     const now = new Date().toISOString();
     const alertId = `syslog:${type}:${fp}:${seconds ?? 'unknown'}:${randomUUID()}`;
@@ -410,7 +541,9 @@ export class TriageMonitor {
 
   drain() {
     while (this.enabled && this.active < this.concurrency) {
-      const next = [...this.records.values()].find(record => record.status === 'queued');
+      // A4：按（类型风险 desc，occurrence_count desc，created_at asc）取最高优先级。
+      const next = [...this.records.values()].filter(record => record.status === 'queued')
+        .sort(comparePriority)[0];
       if (!next) break;
       this.active++;
       next.status = 'running';
@@ -437,13 +570,25 @@ export class TriageMonitor {
 
   // matchSyslogEvent 只用 callTool / listEvents 两个方法：给它一个带日志的薄替身，别碰真 toolbox。
   // 只包真有的方法——替身上凭空多个方法会让原实现的分支判断变掉。
-  observedToolbox() {
+  // A2：detailCache 是一次研判内的详情缓存（get_<type>_event 按 id 只真拉一次），
+  // syslog 匹配与规则评估拿同一个实例；agent 用 match.event 复用（investigation-agent.js）。
+  observedToolbox(detailCache = new Map()) {
     const toolbox = this.eventToolbox;
     if (!toolbox) return toolbox;
     const wrapped = {};
     for (const [name, op] of [['callTool', 'call_tool'], ['listEvents', 'list_events']])
       if (typeof toolbox[name] === 'function')
         wrapped[name] = (...args) => this.cloudwalkerCall(op, () => toolbox[name](...args));
+    if (wrapped.callTool) {
+      const callTool = wrapped.callTool;
+      wrapped.callTool = async (name, args) => {
+        const key = detailKey(name, args);
+        if (key && detailCache.has(key)) return detailCache.get(key);
+        const value = await callTool(name, args);
+        if (key) detailCache.set(key, value);
+        return value;
+      };
+    }
     return wrapped;
   }
 
@@ -455,15 +600,18 @@ export class TriageMonitor {
       let caseInfo = null;
       let match = null;
       let ruleDecision = { status: 'disabled' };
+      // 一次研判一份详情缓存：同一条事件详情不会拉第二次，跨告警不共享。
+      const detailCache = new Map();
+      const toolbox = this.observedToolbox(detailCache);
       if (record.input) {
         record.input.context = await this.contextFor(record);
         record.stage = '关联事件'; record.detail = '优先按事件 ID 精确读取牧云详情，并核对主机身份';
-        match = await matchSyslogEvent(this.observedToolbox(), record.input.parsed);
+        match = await matchSyslogEvent(toolbox, record.input.parsed);
         if (match.matched) { targetId = match.alert_id; record.matched_alert_id = targetId; }
       }
       if (this.ruleEngine) {
         try { ruleDecision = await this.ruleEngine.evaluate({ alertId: targetId,
-          parsed: record.input?.parsed || null, toolbox: this.eventToolbox, match }); }
+          parsed: record.input?.parsed || null, toolbox, match }); }
         catch (error) { ruleDecision = { status: 'error', reason: `规则评估失败：${String(error.message).slice(0, 180)}` }; }
         if (['candidate', 'observed', 'error', 'identity_unverified'].includes(ruleDecision.status)) {
           record.steps.push({ stage: '规则评估', detail: ruleDecision.status === 'candidate' ?

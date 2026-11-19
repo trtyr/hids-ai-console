@@ -274,10 +274,15 @@ export class TriageRuleEngine {
     const id = integer(idText);
     if (!id || id < 1 || parsed && (integer(parsed.payload?.event_id) !== id || match?.matched !== true || match?.event_id !== id))
       return { status: 'identity_unverified', revision, reason: 'syslog 与牧云事件 ID 未精确关联' };
-    if (!toolbox?.callTool) return { status: 'error', revision, reason: '牧云详情接口不可用' };
-    let detail;
-    try { detail = await toolbox.callTool(`get_${type}_event`, { id }); }
-    catch (error) { return { status: 'error', revision, reason: `牧云事件详情读取失败：${error.message}` }; }
+    // A2（P003-T037）：syslog 匹配已经拿到这条事件的详情（`match.event`，身份在上面校验过），
+    // 规则评估直接复用，不再为同一份详情重拉一次。没有 match.event（轮询入口 / 未匹配）才走牧云。
+    const reused = match?.matched === true && match?.event_id === id && match.event ? match.event : null;
+    if (!reused && !toolbox?.callTool) return { status: 'error', revision, reason: '牧云详情接口不可用' };
+    let detail = reused;
+    if (!detail) {
+      try { detail = await toolbox.callTool(`get_${type}_event`, { id }); }
+      catch (error) { return { status: 'error', revision, reason: `牧云事件详情读取失败：${error.message}` }; }
+    }
     const hostId = integer(detail.host_id ?? detail.host_view?.host_id);
     const hostIp = ipValue(detail.host_view?.host_ip || detail.host_ip);
     const level = integer(detail.level);

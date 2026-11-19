@@ -85,7 +85,7 @@
 
 | 阶段 | 做什么 | 证据 |
 | --- | --- | --- |
-| 读原始事件 | `session.callTool('get_<类型>_event', { id })` 取告警详情 | `investigation-agent.js:236` |
+| 读原始事件 | 常规研判且 `streamContext.match` 命中同一条事件（`matched: true` 且 `match.event_id` 等于告警号）时，**直接用匹配阶段已取回的 `match.event`** 造一条 `cw:N` 证据记录，不再调工具；其余情况 `session.callTool('get_<类型>_event', { id })`（P003-T037） | `investigation-agent.js:356-376` |
 | 收 syslog 字段 | 常规研判且带 `streamContext` 时，把 syslog 报文登记为 `syslog:1` | `investigation-agent.js:238-244` |
 | 注入规则 | 用规则库对 syslog 告警事实求值，命中把整段 Rego 写进系统提示，见 [3.8](#38-规则注入知识库必查与结论工具p003-t012) | `investigation-agent.js:333-341` |
 | 载判据目录 | 常规研判且知识库在位时，取本类与通用判据目录及上下文页 | `investigation-agent.js:247-257` |
@@ -475,6 +475,10 @@ const choice = turn === 5 || calls >= 8 ? 'none' : 'auto';   // investigation-ag
 
 - 空字符串或缺失的字段不进事实对象：规则写到该字段时按 Rego 的 undefined 语义套不上（`rule-store.js:28-31`）；规则没写该字段就仍然不限制。
 - 规则库默认是仓内 `rules/`（`investigation-agent.js:21`、`investigation-agent.js:285`）；构造第 5 个参数可以注入别的 `RuleStore`（测试用临时目录）。
+- **RuleStore 按 mtime 缓存已解析规则（P003-T037）**：`list()` / `read()` / `evaluate()` 每次都 `readdir` + 逐文件 `stat`，
+  但只有 `(mtimeMs, size)` 变化的文件才重新 `readFile` 与解析；删掉的文件立刻从结果里消失，重复 `id`、语法错等报错口径不变
+  （`rule-store.js:146-190`）。缓存键是文件名，值是 `{mtimeMs, size, rule}`；同一毫秒内改写且字节数不变的规则要等下一次 mtime 变化才生效。
+- **规则评估复用已取的事件详情（P003-T037）**：`TriageRuleEngine.evaluate()` 在 `match.event` 身份一致时直接用，不再 `callTool`（`triage-rules.js:277-285`）。
 - 求值结果写进 `verdict.rego`：`{status, rule_ids}`，`status` 四态 `matched` / `none` / `unavailable` / `not_applicable`（`investigation-agent.js:694`）。`unavailable` 表示规则库读取或解析失败，研判不中断，原因写进系统提示。
 - 系统提示里恒有一段 `# 套上的 Rego 规则`（`investigation-agent.js:105-115`、`investigation-agent.js:461`），四种口径：
   - 命中：逐条列 `id`、`name` 与整段 Rego 正文（`rego` 围栏），并声明「规则只说明字段命中，不是本次结论」；

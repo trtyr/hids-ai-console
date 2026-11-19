@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFile, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, rename, stat as statFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +27,13 @@ function metadata(filename, source) {
 }
 
 export class WikiStore {
-  constructor(directory = defaultDirectory) { this.directory = directory; this.pending = Promise.resolve(); }
+  constructor(directory = defaultDirectory) {
+    this.directory = directory;
+    this.pending = Promise.resolve();
+    // 目录索引缓存（A7）：按（路径, mtimeMs, size）签名缓存已解析的页面行。
+    // 一次研判里 agentIndex / agentPage / agentContextPages 会反复要目录：签名不变就不再读盘、不再重解析头部。
+    this.listCache = null;
+  }
 
   file(filename) {
     const parts = String(filename || '').split('/');
@@ -57,7 +63,33 @@ export class WikiStore {
     return pages.filter(Boolean).sort((a, b) => rank(a.path) - rank(b.path) || a.path.localeCompare(b.path));
   }
 
+  // 签名只 stat 不 read：文件没动就不必重读正文与头部。
+  async #listSignature() {
+    const groups = await readdir(this.directory, { withFileTypes: true });
+    const parts = [];
+    for (const group of groups.filter(item => item.isDirectory() && !item.name.startsWith('_'))) {
+      const files = await readdir(path.join(this.directory, group.name));
+      for (const file of files) {
+        const filename = `${group.name}/${file}`;
+        if (!pagePattern.test(filename)) continue;
+        let info;
+        try { info = await statFile(this.file(filename)); }
+        catch (cause) {
+          // readdir 与 stat 之间被删掉：当作不存在，不让旧快照借尸还魂。
+          if (cause.code === 'ENOENT') continue;
+          // 文件名过不了 file() 的路径校验：readdir 出的怪文件名跳过，不把整个目录读卡住。
+          if (cause.status === 400) continue;
+          throw cause;
+        }
+        parts.push(`${filename}:${info.mtimeMs}:${info.size}`);
+      }
+    }
+    return parts.sort().join('\n');
+  }
+
   async list() {
+    const signature = await this.#listSignature();
+    if (this.listCache?.signature === signature) return [...this.listCache.rows];
     const groups = await readdir(this.directory, { withFileTypes: true });
     const rows = await Promise.all(groups.filter(item => item.isDirectory() && !item.name.startsWith('_'))
       .map(async group => {
@@ -67,7 +99,9 @@ export class WikiStore {
           return metadata(filename, await readFile(this.file(filename), 'utf8'));
         }));
       }));
-    return rows.flat().filter(item => item.status !== 'deprecated').sort((a, b) => a.path.localeCompare(b.path));
+    const listed = rows.flat().filter(item => item.status !== 'deprecated').sort((a, b) => a.path.localeCompare(b.path));
+    this.listCache = { signature, rows: listed };
+    return [...listed];
   }
 
   // 页面不存在时抛 404，正文只给相对路径：readFile 的 ENOENT message 带服务器绝对路径

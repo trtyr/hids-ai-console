@@ -72,15 +72,24 @@ test('syslog 逐条研判保留材料、三态结果，并区分重复投递与�
   assert.match(await readFile(path.join(monitor.status(first.alert_id).case_dir, '05-研判结果.md'), 'utf8'), /重复投递：2 次/);
   assert.equal((await history.latest('honeypot:7', 'triage')).repeat_count, 2);
 
+  // 跨秒但同指纹、同主机：上一条已完结 → 复用结论只累加 repeat_count（A3），不新排研判。
   const secondRaw = firstRaw.replace('08:00:00" source_ip', '08:00:01" source_ip');
   const second = await monitor.acceptSyslog(secondRaw);
-  assert.notEqual(second.alert_id, first.alert_id);
-  for (let n = 0; n < 100 && monitor.status(second.alert_id)?.status !== 'done'; n++)
+  assert.equal(second.reused, true);
+  assert.equal(second.alert_id, first.alert_id);
+  assert.equal(second.repeat_count, 3);
+  assert.equal(contexts.length, 1, '同一指纹的跨秒告警不再各跑一次完整研判');
+  assert.equal((await readdir(path.join(directory, 'cases', 'cloudwalker-honeypot'))).length, 1);
+
+  // 指纹变了（目标端口不同）才是新的一条：同会话时间窗能看见上一条，occurrence 从 1 起。
+  const thirdRaw = secondRaw.replace('target_port="80"', 'target_port="443"');
+  const third = await monitor.acceptSyslog(thirdRaw);
+  assert.notEqual(third.alert_id, first.alert_id);
+  for (let n = 0; n < 100 && monitor.status(third.alert_id)?.status !== 'done'; n++)
     await new Promise(resolve => setTimeout(resolve, 5));
-  assert.equal(monitor.status(second.alert_id).status, 'done');
-  assert.equal(contexts[0].window.length, 0);
+  assert.equal(monitor.status(third.alert_id).status, 'done');
   assert.equal(contexts[1].window.length, 1);
-  assert.equal(contexts[1].occurrence_count, 2);
+  assert.equal(contexts[1].occurrence_count, 1);
   assert.equal((await readdir(path.join(directory, 'cases', 'cloudwalker-honeypot'))).length, 2);
   const resumed = new TriageMonitor(options);
   await resumed.load();

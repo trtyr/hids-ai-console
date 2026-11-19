@@ -14,6 +14,9 @@ depth: complete
 
 行号基准是提交 `a16e0d5`（这三个文件最后一次进本页时的版本；`docs/architecture.md` 等页用 `35530d8`）。此后 `triage-monitor.js` 又长过两次：`3bb33b7`（+31/−5）与 P003-T009（列表筛选，+17/−2，本卡）；`server.js` 改动更多。所以**本页其余旧引用的行号都偏小，越靠后偏得越多**：读的时候按函数名对齐。§8 / §8.1 / §9 / §10 中本卡改写过的行号已按本卡提交重新取；全页重排留给文档卡。
 
+**P003-T037（本卡）改了取数与队列**：§4.2 多一条「结论复用」、§5.2 / §5.3 / §5.4 与 §8 / §10 / §12 里点名的行已按本卡提交重取；
+其余旧锚点仍按上面的口径偏小。本卡新增行为的完整说明集中在 §5.5。
+
 读法：
 
 - §3 到 §7 是五条关键路径，每条对应一个覆盖构件，按路径顺序读就是一条告警的旅程
@@ -278,8 +281,9 @@ webshell 改 source_ip 后指纹改变 -> true
 | 情形 | 判定 | 处理 | 依据 |
 | --- | --- | --- | --- |
 | **同秒重复** | 上次的 `last_delivery_second` 等于本次事件秒数 | 折叠到原记录，重复次数 +1，不新建记录 | `triage-monitor.js:258-274` |
-| **五分钟内再次到达** | 距上次 `last_seen` 不超过 300 秒 | 新建记录，`occurrence_count` +1 | `triage-monitor.js:276-280` |
-| **超过五分钟** | 距上次 `last_seen` 超过 300 秒 | 新建记录，`occurrence_count` 归 1 | `triage-monitor.js:276-277` |
+| **同指纹 + 上一条已完结** | 距上次 `last_seen` 超过 1 秒（不同秒），且去重表指向的记录 `status='done'` 且有结论 | **复用结论**：不新建记录、不再跑研判，只累加 `repeat_count`（并回写研判记录与案卷） | `triage-monitor.js:456-477` |
+| **五分钟内再次到达** | 距上次 `last_seen` 不超过 300 秒，且上一条未完结（排队 / 在跑 / 失败） | 新建记录，`occurrence_count` +1 | `triage-monitor.js:452-454` |
+| **超过五分钟** | 距上次 `last_seen` 超过 300 秒，且上一条未完结 | 新建记录，`occurrence_count` 归 1 | `triage-monitor.js:452-453` |
 
 同秒折叠时做了四件事（`triage-monitor.js:260-273`）：
 
@@ -356,22 +360,28 @@ EOF
 
 轮询只在 `poll` 模式下跑（`triage-monitor.js:190`），由 `start()` 起的定时器驱动，间隔 `intervalMs` 默认 30000 毫秒，定时器 `unref()`（不影响进程退出）（`triage-monitor.js:20`、`triage-monitor.js:97-98`）。
 
-`poll()`（`triage-monitor.js:189-239`）一轮的规则：
+轮询是**增量取数**（P003-T037）：游标只由查询参数 `from` 决定，不再翻页找时间边界。
+
+`poll()`（`triage-monitor.js:330-407`）一轮的规则：
 
 | 规则 | 依据 |
 | --- | --- |
-| 同一时刻只跑一轮（`polling` 标志） | `triage-monitor.js:191-192` |
-| 每页 50 条，一轮最多 20 页 | `triage-monitor.js:200-201` |
-| 牧云部分事件类型读取失败（`partial`）就中止，**游标不推进** | `triage-monitor.js:202` |
-| 首次轮询只把游标钉在当前页最新时间，**不入队** | `triage-monitor.js:204-209` |
-| 时间早于游标的行跳过；等于游标的行靠 `watermark_ids` 去重 | `triage-monitor.js:211-215` |
-| 遇到更新的时间就推进游标，并清空 `watermark_ids` | `triage-monitor.js:216-217` |
-| 触达边界或本页不足 50 条就停 | `triage-monitor.js:220-221` |
-| 20 页用完还没触达边界 → 报错「新增告警超过本轮扫描上限，请检查自动研判积压」 | `triage-monitor.js:223` |
-| 暂停或 `pollEpoch` 变化 → 丢弃本轮结果 | `triage-monitor.js:224` |
-| 出错只记 `lastError`，游标不动 | `triage-monitor.js:237` |
+| 同一时刻只跑一轮（`polling` 标志）；暂停时不跑 | `triage-monitor.js:331-332` |
+| 查询固定带 `sort: 'time'`（排序键 `created_at desc, id asc`，见 `cloudwalker.js:41-43`） | `triage-monitor.js:340` |
+| 已初始化时带 `from = watermark`（上一轮最大 `createdAt`，含端点）；冷启动不带 | `triage-monitor.js:338` |
+| 每页 50 条，一轮最多 20 页；一页取满才继续翻页——翻页是为了取完本轮新增，不是找边界 | `triage-monitor.js:13-14`、`triage-monitor.js:364-367` |
+| 牧云部分事件类型读取失败（`partial`）就中止，**游标不推进** | `triage-monitor.js:349` |
+| 首次轮询只把游标钉在当前页最新时间，**不入队** | `triage-monitor.js:351-356` |
+| 兜底：平台忽略 `from` 时，早于游标的行也跳过（不靠它找边界） | `triage-monitor.js:359-360` |
+| 等于游标的行靠 `watermark_ids` 去重（`from` 含端点，同一秒会被再取一次） | `triage-monitor.js:361` |
+| 遇到更新的时间就推进游标，并清空 `watermark_ids` | `triage-monitor.js:362-363` |
+| 20 页取满仍没取完 → 报错「新增告警超过本轮扫描上限，请检查自动研判积压」 | `triage-monitor.js:368` |
+| 暂停或 `pollEpoch` 变化 → 丢弃本轮结果 | `triage-monitor.js:369` |
+| 出错只记 `lastError`，游标不动 | `triage-monitor.js:383-387` |
 
-新告警入队时按 `found.reverse()` 的顺序写进 `records`（`triage-monitor.js:230`），即**倒序入队**，先入队的后跑。
+新告警入队时按 `found.reverse()` 的顺序写进 `records`（`triage-monitor.js:378`），即**倒序入队**；实际执行顺序由 §5.3 的优先级决定，不再等于插入序。
+
+**退避**：`poll()` 返回 `{ found, empty, failed }`（`triage-monitor.js:405`）。空轮（含失败轮）把 `emptyPolls` 加一，下一轮延迟 `min(intervalMs × 2^emptyPolls, maxBackoffMs)`；见到新告警立刻回到 `intervalMs` 并清零（`triage-monitor.js:404-405`）。`maxBackoffMs` 缺省是 `intervalMs × 16`（`triage-monitor.js:80`）。定时器是 `setTimeout` 链而不是 `setInterval`：每轮跑完才排下一轮（`triage-monitor.js:171-179`）。
 
 **实测**：
 
@@ -426,10 +436,10 @@ EOF
 
 | 规则 | 依据 |
 | --- | --- |
-| 并发上限 `concurrency`，构造参数默认 2 | `triage-monitor.js:20`、`triage-monitor.js:337` |
-| 取 `records` 里**第一条** `status === 'queued'` 的记录（按插入顺序，无优先级） | `triage-monitor.js:338` |
-| 置为 `running`，阶段写「准备研判」，`attempts` 加 1 | `triage-monitor.js:341-344` |
-| 一条跑完（无论成败）后 `active--` 再调 `drain()` | `triage-monitor.js:345-346` |
+| 并发上限 `concurrency`：构造参数缺省取 `HIDS_TRIAGE_CONCURRENCY`，再缺省 2；非法值回落默认 | `triage-monitor.js:26-30`、`triage-monitor.js:76-77` |
+| 从 `status === 'queued'` 的记录里按**（类型风险 desc，occurrence_count desc，created_at asc）**取第一条 | `triage-monitor.js:542-545`、`triage-monitor.js:42-48` |
+| 置为 `running`，阶段写「准备研判」，`attempts` 加 1 | `triage-monitor.js:546-550` |
+| 一条跑完（无论成败）后 `active--` 再调 `drain()` | `triage-monitor.js:551-554` |
 
 `run(record)`（`triage-monitor.js:350-419`）的阶段顺序：
 
@@ -458,7 +468,8 @@ EOF
 
 | 入口 | 行为 | 依据 |
 | --- | --- | --- |
-| `enqueue(alertId, { retry })` | 已有记录且不是重试 → 直接返回现状；正在跑 → 直接返回 | `triage-monitor.js:176-177` |
+| `enqueue(alertId, { retry })` | 已有记录且不是重试 → 直接返回现状；正在跑 → 直接返回 | `triage-monitor.js:302-303` |
+| | 队列（排队 + 在跑）已达 `queueLimit` → 抛 429「研判队列已满（上限 N），稍后再试」，并计入 `dropped` | `triage-monitor.js:304-308` |
 | | `syslog:` 前缀但没有原始报文 → 抛 404「该 syslog 告警的原始报文不存在，无法重试」 | `triage-monitor.js:171-174` |
 | | 其余情况重新排队，`created_at` 沿用原值 | `triage-monitor.js:179-183` |
 | | 原记录是**人工登记过的误报**（`verdict='false_positive'` 且 `decision_source='human'`）时，新记录带上 `verdict` / `verdict_label` / `summary` / `decision_source` / `feedback`——不带上去的话重排这一下就把误报标记抹掉了 | `triage-monitor.js:219-226` |
@@ -468,8 +479,70 @@ EOF
 | | 恢复后 `poll` 模式会立刻再轮询一次 | `triage-monitor.js:165` |
 | `status(alertId)` | 查不到返回 `null`；返回时去掉 `input`（原始报文与解析结果），只留可见字段与步骤 | `triage-monitor.js:105-107` |
 | `cases({ count, offset, verdicts, type, host, from, to, sort })` | **只列有 `input` 的记录**，也就是走 syslog 进来的那些；先筛后倒序分页，`total` 是过滤后条数（详见 §8.1） | `triage-monitor.js:116-128` |
-| `summary()` | `initialized`、`enabled`、`input_mode`、`last_poll_at`、`last_error`、四种状态计数；`poll` 模式额外带 `interval_ms`；`syslog` 模式带 `syslog: {listening, bind, error}`——绑定成败在这里可见，`listening:false` 等于一条 syslog 也收不到 | `triage-monitor.js:144-150` |
+| `summary()` | `initialized`、`enabled`、`input_mode`、`last_poll_at`、`last_error`、四种状态计数、`backoff_ms`、`empty_polls`、`concurrency`、`queue_limit`、`dropped`；`poll` 模式额外带 `interval_ms`；`syslog` 模式带 `syslog: {listening, bind, error}`——绑定成败在这里可见，`listening:false` 等于一条 syslog 也收不到 | `triage-monitor.js:240-252` |
 | `attachSyslog(receiver)` | 启动 syslog 接收器：绑上记 `bind`（`udp://<address>:<port>`），失败记 `error`（截 300 字）且**不抛**，队列与 HTTP 继续服务 | `triage-monitor.js:133-142` |
+
+### 5.5 取数效率与队列能力（P003-T037）
+
+**A1 增量轮询。** 规则见 §5.2：`from` 是唯一游标，排序键固定 `created_at desc, id asc`；连续空轮回退 `/` 指数退避，见到新告警立刻回 `intervalMs`。实测（仓根跑，退出码 0）：
+
+```bash
+cat <<'EOF' | node --input-type=module
+import { rm } from 'node:fs/promises';
+import { TriageMonitor } from './triage-monitor.js';
+await rm('/tmp/tp37-doc', { recursive: true, force: true });
+const queries = [];
+let rows = [{ id: 'honeypot:1', createdAt: '2026-11-17T10:00:00Z' }];
+const service = { async alerts(query) { queries.push(query); return { alerts: rows, partial: false }; } };
+const monitor = new TriageMonitor({ service, file: '/tmp/tp37-doc/state.json', inputMode: 'poll', concurrency: 1,
+  intervalMs: 1000, maxBackoffMs: 8000, history: { async save(r) { return { alert_id: 'x', saved_at: '', verdict: r.verdict }; }, async latest() { return null; } },
+  investigator: { async run(id) { return { alert_id: id, verdict: {} }; } } });
+await monitor.load();
+await monitor.poll();
+console.log('冷启动查询 ->', JSON.stringify(queries[0]), '| watermark=' + monitor.watermark);
+rows = [...rows, { id: 'honeypot:2', createdAt: '2026-11-17T10:00:10Z' }];
+const incremental = await monitor.poll();
+console.log('增量查询 ->', JSON.stringify(queries[1]), '| found=' + incremental.found);
+await monitor.poll();
+console.log('空轮 -> backoff_ms=' + monitor.backoffMs, 'empty_polls=' + monitor.emptyPolls);
+await monitor.poll();
+console.log('再空一轮 -> backoff_ms=' + monitor.backoffMs);
+rows = [{ id: 'honeypot:3', createdAt: '2026-11-17T10:01:00Z' }, ...rows];
+await monitor.poll();
+console.log('见到新告警 -> backoff_ms=' + monitor.backoffMs, 'empty_polls=' + monitor.emptyPolls);
+EOF
+```
+
+```
+冷启动查询 -> {"count":50,"offset":0,"sort":"time"} | watermark=2026-11-17T10:00:00Z
+增量查询 -> {"count":50,"offset":0,"sort":"time","from":"2026-11-17T10:00:00Z"} | found=1
+空轮 -> backoff_ms=2000 empty_polls=1
+再空一轮 -> backoff_ms=4000
+见到新告警 -> backoff_ms=1000 empty_polls=0
+```
+
+**A2 事件详情一次一拉。** 一次研判（`run()`）建一份详情缓存（`triage-monitor.js:604`），`observedToolbox(detailCache)` 只缓存 `get_<type>_event`（键 `工具:事件ID`，`triage-monitor.js:51-55`、`triage-monitor.js:575-593`）。三个取数点共用：
+
+| 取数点 | 现在怎么拿详情 | 依据 |
+| --- | --- | --- |
+| syslog 匹配 | `matchSyslogEvent` 经包装后的 toolbox 真拉一次，结果随 `match.event` 带出 | `syslog-case.js:32`、`triage-monitor.js:610-611` |
+| 规则评估 | `match.event` 身份一致（`matched && event_id == id`）直接复用，否则才 `callTool` | `triage-rules.js:279` |
+| agent 研判 | `streamContext.match.event` 身份一致时构造同形证据记录（`cw:N`），不再入口取数 | `investigation-agent.js:360-374` |
+
+缓存的粒度是**一次 `run()`**：不跨告警共享（`triage-monitor.js:604` 在 `run()` 内部新建）。trace-board 的第四条路径走它自己的 `analysis` 复用分支（`trace-board.js:341-350`），本卡不改实现、只锁测试。
+
+**A3 结论复用。** 同指纹（指纹已含 `host_ip`）、不同秒、上一条已完结且有结论 → 不新建记录、不排研判，只累加 `repeat_count`（`triage-monitor.js:456-477`），并同步三处：研判记录 `repeat_count`、案卷 `result.json`、`05-研判结果.md` 的「重复投递」。返回 `{ reused: true, repeat_count, alert_id }`。上一条未完结（排队 / 在跑 / 失败）时不复用，照常新排（`triage-monitor.js:452-454`）。要在复用之后再研判一次，走 `enqueue(alertId, { retry: true })`。
+
+**A4 优先级。** 类型风险档位表在 `triage-monitor.js:19-23`，逐类值：`memory_webshell` 11、`webshell`/`revshell`/`malware` 10、`memory_security` 9、`honeypot`/`elevation_process` 8、`brute_force` 7、`abnormal_login` 6、`suspicious_operation` 5、`network_audit` 4，表外 / 未知类型 0。`drain()` 按（风险 desc，`occurrence_count` desc，`created_at` asc）取第一条（`triage-monitor.js:542-545`）。syslog 记录的类型从 `input.parsed.msgid` 映射，轮询记录从 `alert_id` 的 `type:` 前缀取（`triage-monitor.js:34-40`）。
+
+**A5 队列上限与配置。** 两个启动参数（改完要重启进程）：
+
+| 环境变量 | 缺省 | 含义 | 读取位置 |
+| --- | --- | --- | --- |
+| `HIDS_TRIAGE_CONCURRENCY` | 2 | 同时研判条数 | `triage-monitor.js:30`、`triage-monitor.js:76` |
+| `HIDS_TRIAGE_QUEUE_MAX` | 1000 | 「排队 + 在跑」的记录上限 | `triage-monitor.js:31`、`triage-monitor.js:78` |
+
+非法值（0、负数、小数、非数）回落到默认（`triage-monitor.js:26-29`）。队列满时：手动 `enqueue` 抛 429（`triage-monitor.js:304-308`）；轮询批量入队与 syslog 收包只丢弃并计数，不抛（`triage-monitor.js:378-382`、`triage-monitor.js:478-481`）。丢弃总数在 `summary().dropped`，每次丢弃记 `triage.dropped` 日志（`triage-monitor.js:290-293`）。
 
 ## 6 关键路径四：案件目录
 
@@ -643,7 +716,7 @@ md 行 -> 重复投递：2 次
 | --- | --- |
 | `syslog-input.js` | `parseSyslog`、`eventTypeFor`、`eventSeconds`、`sessionKey`、`fingerprint`、`SyslogReceiver` |
 | `syslog-case.js` | `matchSyslogEvent`、`writeSyslogCase`、`writeSyslogResult`、`updateSyslogDeliveryCount`、`readCaseFile` |
-| `triage-monitor.js` | `TriageMonitor` |
+| `triage-monitor.js` | `TriageMonitor`、`typeRisk`、`comparePriority`（P003-T037 新增后两个） |
 
 ```bash
 for f in syslog-input.js syslog-case.js triage-monitor.js; do printf "%s: " "$f"; node -e "import('./$f').then(m=>console.log(Object.keys(m).sort().join(', ')))"; done
@@ -652,27 +725,27 @@ for f in syslog-input.js syslog-case.js triage-monitor.js; do printf "%s: " "$f"
 ```
 syslog-input.js: SyslogReceiver, eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey
 syslog-case.js: matchSyslogEvent, readCaseFile, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult
-triage-monitor.js: TriageMonitor
+triage-monitor.js: TriageMonitor, comparePriority, typeRisk
 ```
 
 `TriageMonitor` 的公开方法：
 
 | 方法 | 用途 | 依据 |
 | --- | --- | --- |
-| `load()` | 读状态文件，把中断留下的 `running` 记录改回 `queued` | `triage-monitor.js:55` |
-| `persist()` | 落盘快照 | `triage-monitor.js:80` |
-| `start()` | 启动：读盘 → 按输入模式轮询或直接排空 | `triage-monitor.js:93` |
-| `stop()` | 停掉轮询定时器 | `triage-monitor.js:101` |
-| `status(alertId)` | 单条记录现状（去掉原始报文） | `triage-monitor.js:103` |
-| `cases({ count, offset, verdicts, type, host, from, to, sort })` | 案件列表（只列 syslog 来源）；筛选与排序语义见 §8.1 | `triage-monitor.js:116` |
-| `summary()` | 运行态概览 | `triage-monitor.js:144` |
-| `attachSyslog(receiver)` | 启动 syslog 接收器，绑定成败入 `summary().syslog` | `triage-monitor.js:133` |
-| `setEnabled(enabled)` | 暂停 / 恢复 | `triage-monitor.js:152` |
-| `enqueue(alertId, { retry })` | 手动入队或重试 | `triage-monitor.js:169` |
-| `poll()` | 跑一轮轮询 | `triage-monitor.js:189` |
-| `acceptSyslog(line)` | 收一条 syslog；内部串行化，不会并发处理 | `triage-monitor.js:241-244` |
-| `drain()` | 调度队列 | `triage-monitor.js:336` |
-| `run(record)` | 跑一条记录的完整流程 | `triage-monitor.js:350` |
+| `load()` | 读状态文件，把中断留下的 `running` 记录改回 `queued` | `triage-monitor.js:121` |
+| `persist()` | 落盘快照 | `triage-monitor.js:147` |
+| `start()` | 启动：读盘 → 按输入模式轮询或直接排空；poll 模式起退避定时器 | `triage-monitor.js:162` |
+| `stop()` | 停掉轮询定时器 | `triage-monitor.js:181` |
+| `status(alertId)` | 单条记录现状（去掉原始报文） | `triage-monitor.js:183` |
+| `cases({ count, offset, verdicts, type, host, from, to, sort })` | 案件列表（只列 syslog 来源）；筛选与排序语义见 §8.1 | `triage-monitor.js:193` |
+| `summary()` | 运行态概览 | `triage-monitor.js:240` |
+| `attachSyslog(receiver)` | 启动 syslog 接收器，绑定成败入 `summary().syslog` | `triage-monitor.js:225` |
+| `setEnabled(enabled)` | 暂停 / 恢复 | `triage-monitor.js:265` |
+| `enqueue(alertId, { retry })` | 手动入队或重试；队列满回 429 | `triage-monitor.js:295` |
+| `poll()` | 跑一轮增量轮询，返回 `{found, empty, failed}` 并更新退避 | `triage-monitor.js:330` |
+| `acceptSyslog(line)` | 收一条 syslog；内部串行化，不会并发处理 | `triage-monitor.js:403-407` |
+| `drain()` | 调度队列（按优先级） | `triage-monitor.js:542` |
+| `run(record)` | 跑一条记录的完整流程 | `triage-monitor.js:595` |
 
 三个文件之间的依赖方向是单向的：`triage-monitor.js` 依赖 `syslog-input.js` 与 `syslog-case.js`（`triage-monitor.js:4-5`），`syslog-case.js` 依赖 `syslog-input.js`（`syslog-case.js:4`），`syslog-input.js` 不依赖本模块其他文件（`syslog-input.js:1-2` 只 import node 内置模块）。
 
@@ -780,6 +853,10 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | `R-TRIAGE-06` | 从暂停恢复时，暂停期间积压的 `queued` 记录被删除，不补跑 | 恢复后积压任务被自动执行 | `triage-monitor.js:155-162` | 恢复即触发一批旧告警 |
 | `R-TRIAGE-07` | 牧云部分事件类型读取失败时游标不推进 | 部分失败后游标仍前移 | `triage-monitor.js:202`、`212` | 中间那批告警被静默跳过 |
 | `R-TRIAGE-08` | 匹配不到牧云事件时，这条告警仍走完流程并产出结果 | 未匹配时直接丢弃 | `triage-monitor.js:385-386`、`366` | 告警没有结果 |
+| `R-TRIAGE-09` | 轮询用 `from` 增量取数，排序键固定 `created_at desc, id asc`；一轮里同一秒已处理过的 id 不会再排一次 | 同一批新增在一轮里被排两次；或游标靠翻页比较时间推进 | `triage-monitor.js:338-363` | 漏告警 / 重复研判 |
+| `R-TRIAGE-10` | 一次研判内同一条事件详情只真拉一次；syslog 匹配、规则评估、agent 共用 `match.event` | 同一条告警详情在一次研判里被拉两次以上 | `triage-monitor.js:575-593`、`triage-monitor.js:604`、`triage-rules.js:279`、`investigation-agent.js:360` | 取数重复、配额浪费 |
+| `R-TRIAGE-11` | 队列按（类型风险，`occurrence_count`，`created_at`）取最高优先级；并发与上限可配 | 后到的高风险告警排在一堆低风险后面 | `triage-monitor.js:19-48`、`triage-monitor.js:542-545` | 处置顺序错 |
+| `R-TRIAGE-12` | 队列（排队 + 在跑）达到上限就拒收并计入 `dropped`，`summary().dropped` 只增不减（进程重启归零） | 无上限地吃内存；或丢弃了但不计数 | `triage-monitor.js:283-293`、`triage-monitor.js:304-308`、`triage-monitor.js:378-382` | 内存涨满、丢告警不留痕 |
 
 `R-TRIAGE-02` 那两条例外是实测过的：对一条已经 `done` 的记录调 `enqueue(alertId, { retry: true })`，状态回到 `queued` 并重新执行，`attempts` 从 1 变 2。
 
@@ -788,7 +865,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | 不保证 | 依据 |
 | --- | --- |
 | 不保证每条告警都匹配到牧云事件；匹配失败是正常分支 | `syslog-case.js:27-83` |
-| 不保证同一告警只研判一次；不同秒的重复投递会生成新记录 | `triage-monitor.js:276-280` |
+| 不保证同一告警只研判一次；不同秒但**上一条未完结**的重复投递会生成新记录（上一条已完结时只累加 `repeat_count`，见 §5.5 A3） | `triage-monitor.js:452-477` |
 | 不保证 `cases()` 能列出研判记录；它只列有原始报文的记录 | `triage-monitor.js:117` |
 | 不保证结论正确；结论由 `investigator` 产出，本模块只搬运 | `triage-monitor.js:385-389` |
 | 不保证事件时间准确；取决于部署方给的偏移量，越界按 0 | `syslog-input.js:61`、`69` |
@@ -820,10 +897,11 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 
 | 项 | 值 | 依据 | 怎么知道的 |
 | --- | --- | --- | --- |
-| 同时研判的告警数 | 默认 2 | `triage-monitor.js:20`、`312` | 构造参数默认值 |
-| 轮询单页条数 | 50 | `triage-monitor.js:201` | 代码常量 |
-| 轮询单轮页数上限 | 20（单轮最多看 1000 条） | `triage-monitor.js:200` | 代码常量 |
-| 队列长度 | 无容量上限（`records` 是 `Map`）；删记录的语句只有一处：恢复运行时清掉 `queued` 记录（§5.4），另加 `load()` 整表重建 | `triage-monitor.js:39`、`triage-monitor.js:62`、`triage-monitor.js:161` | 代码里没有按容量裁剪的分支 |
+| 同时研判的告警数 | `HIDS_TRIAGE_CONCURRENCY`，缺省 2 | `triage-monitor.js:30`、`triage-monitor.js:76-77` | 环境变量缺省 |
+| 轮询单页条数 | 50 | `triage-monitor.js:13` | 代码常量 |
+| 轮询单轮页数上限 | 20（单轮最多取 1000 条新增） | `triage-monitor.js:14` | 代码常量 |
+| 轮询退避上界 | `maxBackoffMs`，缺省 `intervalMs × 16` | `triage-monitor.js:80`、`triage-monitor.js:404-405` | 构造参数缺省 |
+| 队列长度 | `HIDS_TRIAGE_QUEUE_MAX`，缺省 1000（排队 + 在跑）；到上限后新告警被拒收并计入 `dropped`。`records` 里已完结的记录不占配额，也仍不裁剪 | `triage-monitor.js:31`、`triage-monitor.js:78`、`triage-monitor.js:283-288` | 环境变量缺省 + `#queueFull()` |
 | 去重表 `dedupe` | 无上限：每出现一个新指纹加一条，代码里没有删这张表的语句（`grep -n 'dedupe\.delete' triage-monitor.js` 无命中） | `triage-monitor.js:36`、`triage-monitor.js:285` | 代码结构 |
 | 每会话保留的时间窗条目 | 200 | `triage-monitor.js:306`、`306` | 代码常量 |
 | 会话清理阈值 | 与当前事件相差超过 1200 秒的会话被删 | `triage-monitor.js:332-333` | 代码常量 |

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { WikiStore } from './wiki-store.js';
@@ -288,4 +288,51 @@ test('triage reads a Wiki criterion while current alert facts come from the API 
   assert.equal(result.verdict.verdict, 'uncertain');
   assert.ok(result.trace.some(item => item.kind === 'rule' && item.action === 'candidate'));
   assert.ok(result.trace.some(item => item.kind === 'wiki' && item.id === 'HP-01'));
+});
+
+// ---- A7：目录索引按 mtime 缓存 ----
+
+// 固定 mtime 写盘：造出「内容变了、mtime 与字节数都没变」的前置态。
+// （utimes 回原值不行：文件系统 mtime 有亚毫秒精度，Date 只有毫秒。）
+const FIXED_MTIME = new Date(1_793_600_000_000);
+async function writeWithMtime(filename, content, at = FIXED_MTIME) {
+  await writeFile(filename, content);
+  await utimes(filename, at, at);
+  assert.equal((await stat(filename)).mtimeMs, at.getTime(), '测试前置：mtime 必须是固定整毫秒');
+}
+
+test('A7 agentIndex 按 mtime 缓存：同 mtime 同大小不重读，mtime 一变立刻生效', async t => {
+  const { directory, wiki } = await fixture(t);
+  const page = path.join(directory, 'honeypot', 'HP-01.md');
+  const original = await readFile(page, 'utf8');
+  await writeWithMtime(page, original);
+
+  const first = await wiki.agentIndex('honeypot');
+  assert.deepEqual(first.pages.map(item => item.id), ['GEN-01', 'HP-01']);
+
+  // 同 mtime、同字节数换标题：签名不变，目录索引必须还是旧值（证明没重读重解析）。
+  const renamed = original.replace('蜜罐背景扫描', '蜜罐背景巡检');
+  assert.equal(Buffer.byteLength(renamed), Buffer.byteLength(original), '测试前置：新旧内容等长');
+  await writeWithMtime(page, renamed);
+  const cached = await wiki.agentIndex('honeypot');
+  assert.equal(cached.pages.find(item => item.id === 'HP-01').title, '蜜罐背景扫描', '同签名走缓存');
+
+  // mtime 变了：重新读盘，标题跟着变。
+  await writeWithMtime(page, renamed, new Date(FIXED_MTIME.getTime() + 1000));
+  const fresh = await wiki.agentIndex('honeypot');
+  assert.equal(fresh.pages.find(item => item.id === 'HP-01').title, '蜜罐背景巡检');
+});
+
+test('A7 一次研判里反复要目录只读一遍：agentPage 与 agentContextPages 共用缓存', async t => {
+  const { directory, wiki } = await fixture(t);
+  const page = path.join(directory, 'honeypot', 'HP-01.md');
+  await writeWithMtime(page, await readFile(page, 'utf8'));
+  await wiki.agentIndex('honeypot');
+  // 目录内容换成另一份（同 mtime 同大小）后，索引与取页仍走同一份旧快照。
+  const renamed = (await readFile(page, 'utf8')).replace('蜜罐背景扫描', '蜜罐背景巡检');
+  await writeWithMtime(page, renamed);
+  const context = await wiki.agentContextPages('honeypot');
+  assert.deepEqual(context.map(item => item.id), ['GEN-01', 'HP-01']);
+  const index = await wiki.agentIndex('honeypot');
+  assert.equal(index.pages.find(item => item.id === 'HP-01').title, '蜜罐背景扫描');
 });

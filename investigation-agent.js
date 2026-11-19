@@ -5,7 +5,7 @@ import { eventTypes } from './cloudwalker.js';
 import { RuleStore } from './rule-store.js';
 import { eventTypeFor } from './syslog-input.js';
 import { PromptStore } from './prompt-store.js';
-import { boundEvidenceView } from './evidence-view.js';
+import { boundEvidenceView, projectEvidence } from './evidence-view.js';
 import { readCaseFile } from './syslog-case.js';
 import { finalizeTriageOutput } from './triage-output.js';
 import { appendEvidenceReport, collectRequiredEvidence, requiredEvidenceGaps, requiredEvidencePlan } from './required-evidence.js';
@@ -355,8 +355,24 @@ export class InvestigationAgent {
         revision: ruleContext.revision });
     }
     onProgress('读取告警', '正在获取原始事件详情');
-    const original = await session.callTool(getName, { id: Number(match[2]) });
-    trace.push({ kind: 'tool', name: getName, evidence_id: original.evidenceId, note: '读取原始告警详情' });
+    // A2（P003-T037）：syslog 匹配已经取回了这条事件的详情（streamContext.match.event，身份已校验），
+    // 一次研判不再拉第二次。记录形状与 EvidenceSession.callTool 一致：证据 ID 接在当前 session 后面。
+    const cachedEvent = mode === 'triage' && streamContext?.match?.matched === true &&
+      Number(streamContext.match.event_id) === Number(match[2]) && streamContext.match.event
+      ? streamContext.match.event : null;
+    let original;
+    if (cachedEvent) {
+      const args = { id: Number(match[2]) };
+      const evidenceId = `cw:${++session.started}`;
+      original = { evidenceId, tool: getName, args, fetchedAt: new Date().toISOString(),
+        sha256: createHash('sha256').update(JSON.stringify({ name: getName, args, result: cachedEvent })).digest('hex'),
+        result: cachedEvent, view: boundEvidenceView(projectEvidence(getName, cachedEvent)) };
+      session.records.set(evidenceId, original);
+      trace.push({ kind: 'tool', name: getName, evidence_id: evidenceId, note: '复用 syslog 匹配已取的事件详情' });
+    } else {
+      original = await session.callTool(getName, { id: Number(match[2]) });
+      trace.push({ kind: 'tool', name: getName, evidence_id: original.evidenceId, note: '读取原始告警详情' });
+    }
     if (mode === 'triage' && streamContext) {
       const result = streamContext.parsed;
       session.records.set('syslog:1', { evidenceId: 'syslog:1', tool: 'received_syslog', args: {},

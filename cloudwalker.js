@@ -90,12 +90,75 @@ function eventMissing(type, id) {
   return error;
 }
 
-export class CloudwalkerGateway {
-  constructor(rpc) { this.rpc = rpc; }
+// 取数缓存三档 TTL（P003-T037）。默认值就是文档口径；env 与构造参数可覆盖，0 表示不缓存。
+// 非法值回落到默认：配置写坏了不能把缓存变成「永不过期」或「永不命中」这两头。
+export const defaultTtls = Object.freeze({ status: 45_000, probe: 5_000, snapshot: 15_000 });
+const ttlOf = (value, fallback) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+};
+// 快照表只按「类型 × 批大小 × 起点」存，条目有限；超上限先清过期项，过期项也没有才丢最早的一条。
+const MAX_SNAPSHOTS = 256;
 
+// 判活缓存：`{ at, value }`，at 用注入的 now()，测试给假时钟即可过期。
+const fresh = (entry, at, ttl) => Boolean(entry) && at - entry.at >= 0 && at - entry.at < ttl;
+
+export class CloudwalkerGateway {
+  constructor(rpc, { now = Date.now, statusTtlMs, probeTtlMs, snapshotTtlMs } = {}) {
+    this.rpc = rpc;
+    this.now = now;
+    this.statusTtlMs = ttlOf(statusTtlMs ?? process.env.HIDS_STATUS_TTL_MS, defaultTtls.status);
+    this.probeTtlMs = ttlOf(probeTtlMs ?? process.env.HIDS_PROBE_TTL_MS, defaultTtls.probe);
+    this.snapshotTtlMs = ttlOf(snapshotTtlMs ?? process.env.HIDS_LIST_SNAPSHOT_TTL_MS, defaultTtls.snapshot);
+    this.statusCache = null;
+    this.probeCache = new Map();
+    this.snapshotCache = new Map();
+  }
+
+  // /api/status 每次请求都会打到这里（server.js 的路由不改）：只缓存成功探活，30~60 秒内不再发 RPC。
+  // 存的是 promise，并发的状态请求共用同一次探活；失败不写缓存——牧云刚恢复时下一次请求要立刻看到 connected。
   async status() {
-    await this.rpc.call('RevshellEventService.GetEventList', { count: 1, offset: 0 });
-    return { connected: true, eventTypes: Object.keys(eventTypes), transport: '牧云 /rpc' };
+    const cached = this.statusCache;
+    if (fresh(cached, this.now(), this.statusTtlMs)) return { ...(await cached.promise) };
+    const promise = this.rpc.call('RevshellEventService.GetEventList', { count: 1, offset: 0 })
+      .then(() => ({ connected: true, eventTypes: Object.keys(eventTypes), transport: '牧云 /rpc' }))
+      .catch(error => {
+        if (this.statusCache?.promise === promise) this.statusCache = null;
+        throw error;
+      });
+    this.statusCache = { at: this.now(), promise };
+    return { ...(await promise) };
+  }
+
+  // 详情失败后的探活（alert 的失败路径）：同类型短期内只探一次。
+  // 返回值只表示「这个类型列表探得通」，探活自己抛了什么不往外带——调用方要看的是详情那个原错。
+  async #probeReachable(type) {
+    const cached = this.probeCache.get(type);
+    if (fresh(cached, this.now(), this.probeTtlMs)) return cached.reachable;
+    let reachable = true;
+    try { await this.rpc.call(listMethod(type), { count: 1, offset: 0 }); }
+    catch { reachable = false; }
+    this.probeCache.set(type, { at: this.now(), reachable });
+    return reachable;
+  }
+
+  // 快照存的是 promise：并发的研判筛选与轮询同时到达时共用同一次取数（A10），不只共用已完成的结果。
+  // 失败不缓存（失败的那个 promise 从表里摘掉）。
+  #snapshot(key, load) {
+    const cached = this.snapshotCache.get(key);
+    if (fresh(cached, this.now(), this.snapshotTtlMs)) return cached.promise;
+    const promise = load().catch(error => {
+      if (this.snapshotCache.get(key)?.promise === promise) this.snapshotCache.delete(key);
+      throw error;
+    });
+    if (this.snapshotCache.size >= MAX_SNAPSHOTS) {
+      const at = this.now();
+      for (const [entryKey, entry] of this.snapshotCache)
+        if (!fresh(entry, at, this.snapshotTtlMs)) this.snapshotCache.delete(entryKey);
+      if (this.snapshotCache.size >= MAX_SNAPSHOTS) this.snapshotCache.delete(this.snapshotCache.keys().next().value);
+    }
+    this.snapshotCache.set(key, { at: this.now(), promise });
+    return promise;
   }
 
   async alerts({ count = 20, offset = 0, type, level, q, from, to, sort = 'time' } = {}) {
@@ -120,16 +183,21 @@ export class CloudwalkerGateway {
     };
     // 无后置筛选且按时间排时沿用流式归并（不额外扫描）；否则要扫窗口才能过滤计数与排序。
     const scanMode = Boolean(levels || needle || from || to) || sort === 'level';
+    // 首批结果按（类型, 批大小, 起点）做 TTL 快照：研判侧筛选与自动研判轮询读的是同一批列表，
+    // 同一窗口里只发一次 RPC。返回浅拷贝——调用方会排序/切页，不能让它改到缓存里的数组。
     const fetchBatch = async (type, start) => {
       const method = listMethod(type);
-      const data = await this.rpc.call(method, { count: batchSize, offset: start });
-      const rows = data.events ?? data.data ?? data.list;
-      if (!Array.isArray(rows) || !Number.isSafeInteger(Number(data.total)) || Number(data.total) < 0) {
-        throw new Error(`${type} 列表响应格式无效`);
-      }
-      const events = rows.map(row => normalizeAlert(type, row));
-      events.sort(compareAlerts);
-      return { total: Number(data.total), events };
+      const snapshot = await this.#snapshot(`${type}|${batchSize}|${start}`, async () => {
+        const data = await this.rpc.call(method, { count: batchSize, offset: start });
+        const rows = data.events ?? data.data ?? data.list;
+        if (!Array.isArray(rows) || !Number.isSafeInteger(Number(data.total)) || Number(data.total) < 0) {
+          throw new Error(`${type} 列表响应格式无效`);
+        }
+        const events = rows.map(row => normalizeAlert(type, row));
+        events.sort(compareAlerts);
+        return { total: Number(data.total), events };
+      });
+      return { total: snapshot.total, events: [...snapshot.events] };
     };
     const settled = await Promise.allSettled(types.map(type => fetchBatch(type, 0)));
     const sources = [], totals = {}, errors = {};
@@ -196,8 +264,8 @@ export class CloudwalkerGateway {
     catch (cause) {
       // 拿不到「不可达」的结构化错误码（RpcClient 不在本卡 scope），只能再探一次同类列表：
       // 探得通说明故障只属于这条事件（通常就是 ID 不存在）→ 404；探不通算牧云不可达 → 原错上抛（502）。
-      try { await this.rpc.call(listMethod(type), { count: 1, offset: 0 }); }
-      catch { throw cause; }
+      // 探活本身带短 TTL：一批详情同时失败时不会一条一个探活请求（A9）。
+      if (!await this.#probeReachable(type)) throw cause;
       throw eventMissing(type, id);
     }
     const detail = raw && typeof raw === 'object' && raw.event && typeof raw.event === 'object' ? raw.event : raw;

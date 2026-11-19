@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RuleStore } from './rule-store.js';
@@ -221,4 +221,57 @@ test('HTTP 列规则 / 按 id 读原文 / 求值：命中给正文，没命中�
   assert.deepEqual(await (await evaluate({ type: 'webshell' })).json(), { count: 0, matched: [] });
   assert.equal((await evaluate([])).status, 400);
   assert.equal((await evaluate('x')).status, 400);
+});
+
+// ---- A6：按 mtime 缓存已解析规则 ----
+
+// 固定 mtime 写盘：同一毫秒内改写内容也能造出「内容变了、mtime 没变」的前置态。
+// （直接 utimes 回原值不行：文件系统 mtime 有亚毫秒精度，Date 只有毫秒。）
+const FIXED_MTIME = new Date(1_793_600_000_000);
+async function writeWithMtime(filename, content, at = FIXED_MTIME) {
+  await writeFile(filename, content);
+  await utimes(filename, at, at);
+  assert.equal((await stat(filename)).mtimeMs, at.getTime(), '测试前置：mtime 必须是固定整毫秒');
+}
+
+test('A6 求值命中 mtime 缓存：同 mtime 改写内容不重读重解析，mtime 一变立刻生效', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-rules-cache-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filename = path.join(directory, 'alpha.rego');
+  await writeWithMtime(filename, rule('alpha', ['input.type == "webshell"']));
+  const rules = new RuleStore(directory);
+  assert.equal((await rules.evaluate({ type: 'webshell' })).count, 1);
+  assert.equal((await rules.evaluate({ type: 'honeypot' })).count, 0);
+
+  // 同 mtime 改成 honeypot 规则：命中缓存时行为不应变化（还是旧规则）。
+  await writeWithMtime(filename, rule('alpha', ['input.type == "honeypot"']));
+  assert.equal((await rules.evaluate({ type: 'webshell' })).count, 1, '同 mtime 走缓存：旧规则仍生效');
+  assert.equal((await rules.evaluate({ type: 'honeypot' })).count, 0);
+
+  // 只碰 mtime（内容不变）：必须重新读，但没有行为差异——用下面这一步改内容 + 新 mtime 验生效。
+  await writeWithMtime(filename, rule('alpha', ['input.type == "honeypot"']), new Date(FIXED_MTIME.getTime() + 1000));
+  assert.equal((await rules.evaluate({ type: 'honeypot' })).count, 1, 'mtime 变化后重读重解析，新规则生效');
+  assert.equal((await rules.evaluate({ type: 'webshell' })).count, 0);
+});
+
+test('A6 语法错在同 mtime 下不重解析；mtime 变化后才报错；删掉的规则立即消失', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-rules-cache-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filename = path.join(directory, 'alpha.rego');
+  await writeWithMtime(filename, rule('alpha', ['input.type == "webshell"']));
+  const rules = new RuleStore(directory);
+  assert.equal((await rules.list()).count, 1);
+
+  // 同 mtime、同字节数的坏内容：缓存键（mtimeMs, size）都没变，不许重解析，也不许报错。
+  const broken = rule('alpha', ['input.type == "webshell"']).replace('default match := false', 'default match := falsy');
+  assert.equal(Buffer.byteLength(broken), Buffer.byteLength(rule('alpha', ['input.type == "webshell"'])), '测试前置：坏内容与好内容等长');
+  await writeWithMtime(filename, broken);
+  assert.equal((await rules.list()).count, 1, '同 mtime 同大小不重解析：坏内容被缓存挡下');
+  await writeWithMtime(filename, broken, new Date(FIXED_MTIME.getTime() + 1000));
+  await assert.rejects(() => rules.list(), /rules\/alpha\.rego:\d+: 不支持的语法/);
+
+  await writeWithMtime(path.join(directory, 'beta.rego'), rule('beta', ['input.type == "honeypot"']));
+  await rm(filename);
+  const listed = await rules.list();
+  assert.deepEqual(listed.rules.map(item => item.id), ['beta'], '删掉的文件连同缓存一起消失');
 });
