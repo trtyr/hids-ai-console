@@ -43,7 +43,7 @@ const investigationStore = new InvestigationStore(runtime.investigations);
 const triageRuleEngine = new TriageRuleEngine(runtime.triageRules);
 // Rego 规则库跟着代码走（不是 .data/ 运行态）：默认读仓根的 rules/ 目录。
 const regoRuleStore = new RuleStore(path.join(moduleDirectory, 'rules'));
-const triageInputMode = process.env.HIDS_TRIAGE_INPUT_MODE || 'syslog';
+const triageInputMode = triageInputModeOf();
 const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, investigator: agent,
   history: investigationStore, file: runtime.triageMonitor,
   inputMode: triageInputMode, concurrency: triageInputMode === 'syslog' ? 1 : 2,
@@ -607,6 +607,9 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           : { authenticated: true, user: null, role: null });
       }
       if (url.pathname === '/api/updates' && req.method === 'GET') return json(res, 200, await new UpdateStore(prompts).overview());
+      // 生效值一览（P003-T025）：地址、端口、研判输入模式、牧云与模型配了没有、模型名。
+      // 机密只给有/没有——本路由的响应体里不出现任何 Token 与密码原文（A3）。
+      if (url.pathname === '/api/config' && req.method === 'GET') return json(res, 200, configSummary());
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
         try { return json(res, 200, { configured: true, ...(await viaCloudwalker('status', null, () => service.status())) }); }
@@ -971,14 +974,74 @@ export function runtimePaths(directory = moduleDirectory) {
   };
 }
 
+// ── 启动配置核对（P003-T025）─────────────────────────────────────────────────
+// 三件事共用一份判定，别在别处另写一套：进程入口拿它当启动闸门（缺必填、取到表外的值都拒绝启动），
+// `GET /api/config` 拿它对外报生效值，模块级装配拿它决定研判输入模式。
+// 「有没有」只判在不在——值的形状（URL 前缀、Token 长度）仍由装配处抛（rpc-client.js:4-5、model-client.js:22-24）；
+// 唯一进闸门的取值校验是 HIDS_TRIAGE_INPUT_MODE：它有两个合法值，坏值不许静默退 poll（那会把 syslog 接收器关掉）。
+// 机密只出现在 secrets 里，值是布尔：响应体与日志里都不出现 Token / 密码原文（A3）。
+const REQUIRED_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN', 'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL']);
+const SECRET_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_API_TOKEN', 'LLM_API_KEY', 'HIDS_BASIC_AUTH_PASSWORD',
+  'HIDS_PROMPT_ADMIN_TOKEN', 'HIDS_RULE_ADMIN_TOKEN']);
+// 研判输入模式的取值表。写成函数（不是模块级 const）是因为装配处 server.js:46 在模块加载时就要用它：
+// 函数声明会提升，`const` 不会——末尾的 const 拿到那时还在 TDZ 里。
+export function triageInputModes() {
+  return ['syslog', 'poll'];
+}
+
+// 生效的研判输入模式：合法值原样返回，空值走缺省 syslog，**坏值不在这里兜**——真进程由启动闸门拒掉；
+// 这条回落只对进程内 createServer（测试、探针）生效，且落在文档写的缺省值上，不会静默跑去 poll 分支。
+export function triageInputModeOf(env = process.env) {
+  const raw = env.HIDS_TRIAGE_INPUT_MODE;
+  return triageInputModes().includes(raw) ? raw : 'syslog';
+}
+
+// 取值非法的键：空值算「没配」（走缺省），非空且不在取值表里才算坏值。启动闸门拿它与「缺必填」同一个出口。
+export function invalidConfigValues(env = process.env) {
+  const raw = env.HIDS_TRIAGE_INPUT_MODE;
+  if (raw == null || raw === '') return [];
+  const allowed = triageInputModes();
+  return allowed.includes(raw) ? [] : [{ key: 'HIDS_TRIAGE_INPUT_MODE', value: String(raw), allowed }];
+}
+
+// env 可注入：单测直接传一个字面量对象，不碰真实 process.env。
+// 缺省值与装配处逐条对齐——HIDS_HOST/HIDS_PORT 见 server.js:29-30、研判输入模式见 triageInputModeOf()。
+export function configSummary(env = process.env) {
+  return {
+    host: env.HIDS_HOST || '127.0.0.1',
+    port: Number(env.HIDS_PORT || 8080),
+    triage_input_mode: triageInputModeOf(env),
+    cloudwalker: { configured: Boolean(env.CLOUDWALKER_URL && env.CLOUDWALKER_API_TOKEN) },
+    model: { configured: Boolean(env.LLM_BASE_URL && env.LLM_API_KEY && env.LLM_MODEL), name: env.LLM_MODEL || null },
+    // 不配 Basic 口令 = 不启用鉴权（hasAccess 见 server.js:408），这是合法部署，不是缺配置。
+    auth: { basic_auth_enabled: Boolean(env.HIDS_BASIC_AUTH_PASSWORD) },
+    secrets: Object.fromEntries(SECRET_CONFIG_KEYS.map(name => [name, Boolean(env[name])])),
+    missing_required: REQUIRED_CONFIG_KEYS.filter(name => !env[name])
+  };
+}
+
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  createServer().listen(port, host, () => log('server.started', { host, port }));
-  if (triageMonitor) void triageMonitor.start().then(async () => {
-    if (triageInputMode === 'syslog') {
-      const receiver = new SyslogReceiver({ host: process.env.HIDS_SYSLOG_HOST || '127.0.0.1',
-        port: Number(process.env.HIDS_SYSLOG_PORT || 15514), onLine: line => triageMonitor.acceptSyslog(line) });
-      // 绑定失败（端口被占 / 权限不足）只打日志会让队列静默收不到消息：状态记进 summary()，日志由 monitor 记。
-      await triageMonitor.attachSyslog(receiver);
-    }
-  }).catch(error => log('server.start_failed', { what: 'triage', error: error.message }, 'error'));
+  // 启动闸门（P003-T025）：两类配置问题都不监听——缺必填、取值非法。缺的键名与坏值逐个列到 stderr，退出码非 0。
+  // 只拦这一条入口：createServer 仍可被测试与探针注入替身在进程内起来（缺能力就置空，路由 503）。
+  const config = configSummary();
+  const invalid = invalidConfigValues();
+  if (config.missing_required.length || invalid.length) {
+    const lines = [];
+    if (config.missing_required.length) lines.push(`缺少必填配置：${config.missing_required.join('、')}`);
+    for (const item of invalid) lines.push(`配置值无效：${item.key}=${item.value}（只能是 ${item.allowed.join(' 或 ')}）`);
+    const message = lines.join('；');
+    log('server.start_failed', { what: 'config', missing: config.missing_required, invalid, error: message }, 'error');
+    process.stderr.write(`${lines.join('\n')}\n`);
+    process.exitCode = 1;
+  } else {
+    createServer().listen(port, host, () => log('server.started', { host, port }));
+    if (triageMonitor) void triageMonitor.start().then(async () => {
+      if (triageInputMode === 'syslog') {
+        const receiver = new SyslogReceiver({ host: process.env.HIDS_SYSLOG_HOST || '127.0.0.1',
+          port: Number(process.env.HIDS_SYSLOG_PORT || 15514), onLine: line => triageMonitor.acceptSyslog(line) });
+        // 绑定失败（端口被占 / 权限不足）只打日志会让队列静默收不到消息：状态记进 summary()，日志由 monitor 记。
+        await triageMonitor.attachSyslog(receiver);
+      }
+    }).catch(error => log('server.start_failed', { what: 'triage', error: error.message }, 'error'));
+  }
 }

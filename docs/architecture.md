@@ -73,15 +73,33 @@
 
 ### 3.5 缺配置时会怎样
 
-后端不会因为配置不全而拒绝启动，而是把缺的那部分能力置空，相关路由返回 503 并写明缺什么：
+**启动看闸门，起来看实效**（P003-T025）。三处共用一份判定：导出的 `configSummary(env)`（`server.js:1009`）、`triageInputModeOf(env)`（`server.js:994`）与 `invalidConfigValues(env)`（`server.js:1000`）。
+
+**闸门两类问题，一个出口**：缺必填、取值非法，都是「不监听」。
+
+**(1) 缺必填**：下面五项缺任一项（**空串算缺**），`node server.js` 就不监听——把缺的键名逐个写到 stderr（`缺少必填配置：…`）、退出码非 0，并打一条 `server.start_failed` 日志（`server.js:1026-1035`）：
+
+| 必填项 | 作用 |
+| --- | --- |
+| `CLOUDWALKER_URL` | 牧云地址，同时用于 RPC 与 MCP |
+| `CLOUDWALKER_API_TOKEN` | 牧云 Token（少于 6 位由 `rpc-client.js:4-5` 在装配时拒） |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 模型服务地址、密钥、模型名 |
+
+**(2) 取值非法**：`HIDS_TRIAGE_INPUT_MODE` 只能是 `syslog` 或 `poll`（不设或空串＝缺省 `syslog`，不算非法）。其他值同样拒启动：stderr 写 `配置值无效：HIDS_TRIAGE_INPUT_MODE=<坏值>（只能是 syslog 或 poll）`，`server.start_failed` 里 `invalid` 每条带 `{key, value, allowed}`。**不许静默按 `poll` 跑**：那等于打错一个字就悄悄关掉 syslog 接收器，而 `/api/config` 还会回显那个错值——契约（`openapi.yaml` 的 enum）与实测就会对不上。
+
+**在闸门之外**（不配不算缺配置，只是那项能力空着）：
 
 | 缺什么 | 结果 | 证据 |
 | --- | --- | --- |
-| `CLOUDWALKER_URL` 或 `CLOUDWALKER_API_TOKEN` | `gateway`、`apiToolbox` 为 null，自动研判与深度溯源整体不启用 | `server.js:29-30`、`server.js:97` |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 任一 | `model` 为 null，两个研判器均为 null | `server.js:33`、`server.js:36-37`、`server.js:305` |
-| 牧云 MCP 不可用 | `agentToolbox` 为 null，深度溯源路由返回 503 | `server.js:31`、`server.js:147` |
+| `HIDS_BASIC_AUTH_PASSWORD` | 不启用 Basic 认证：谁都能进，`/api/session` 的 `user`/`role` 都是 null | `server.js:384-386`、`server.js:602-607` |
+| `HIDS_PROMPT_ADMIN_TOKEN` / `HIDS_RULE_ADMIN_TOKEN` | 知识库 / 规则写操作一律 403 | `server.js:399-410` |
+| 牧云 MCP 客户建不起来 | `agentToolbox` 为 null，深度溯源路由返回 503（用的就是上面那两个牧云键，`agent-tools.js:119-121`） | `server.js:35` |
 
-`/api/status` 是例外：它不 503，而是返回 `{configured:false, connected:false, reason:'请设置牧云地址和 API Token'}`（`server.js:136-139`），供前端判断「是没配还是连不上」。
+**进程内注入路径不受闸门影响**：`createServer()` 被测试与探针直接调用时（不经过 `process.argv[1]` 那条入口），缺件仍按老办法置空——`gateway` 为 null（`server.js:33`）、`model` 为 null（`server.js:37`），相关路由返回 503 并写明缺什么。这条路径是故意留的：闸门只拦真进程启动，不拦注入替身的用例。
+
+`/api/status` 是例外：它不 503，而是返回 `{configured:false, connected:false, reason:'请设置牧云地址和 API Token'}`（`server.js:613-614`），供前端判断「是没配还是连不上」。
+
+**一处看生效值**：`GET /api/config`（`server.js:612`）报监听地址、端口、研判输入模式、牧云与模型「配了没有」、模型名；机密（两个 Token、模型密钥、Basic 口令）只在 `secrets` 里给布尔值，响应正文里不出现任何 Token 与密码原文。形状见 [modules/http-api.md](modules/http-api.md#2-启动与依赖装配) 与 `openapi.yaml` 的 `getConfig`。
 
 ### 3.6 日志（`log.js`）
 
@@ -104,7 +122,7 @@
 | 事件 | 何时写 | 关键字段 |
 | --- | --- | --- |
 | `server.started` | 业务 API 监听成功 | `host` `port` |
-| `server.start_failed` | 自动研判 / syslog 接收器启动失败 | `what` `error` |
+| `server.start_failed` | 启动失败：`what: config`＝闸门拒启动（P003-T025：`missing` 是缺的键名数组，`invalid` 每条 `{key, value, allowed}`）；`what: triage`＝自动研判 / syslog 接收器启动失败 | `what` `error` |
 | `http.request` | 每个请求收尾（`res` 的 `finish` 事件） | `method` `path`（无 query）`status` `duration_ms` |
 | `http.unauthorized` | Basic 认证失败（401） | `method` `path` `status` |
 | `http.failed` | 路由没接住的失败（多为牧云 / 模型调用） | `method` `path` `status` `error` |
@@ -408,7 +426,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `LLM_API_KEY` | 无 | 模型服务密钥 | `model-client.js:4` |
 | `LLM_MODEL` | 无 | 模型名 | `model-client.js:5` |
 | `LLM_TIMEOUT_MS` | `90000` | 单次模型请求超时（毫秒） | `model-client.js:36` |
-| `HIDS_TRIAGE_INPUT_MODE` | `syslog` | 自动研判输入方式：`syslog` 或 `poll` | `server.js:40` |
+| `HIDS_TRIAGE_INPUT_MODE` | `syslog` | 自动研判输入方式：`syslog` 或 `poll`；**其他值拒绝启动**（空串＝缺省，见 §3.5 闸门 (2)） | `server.js:46`、`server.js:994` |
 | `HIDS_SYSLOG_HOST` | `127.0.0.1` | syslog UDP 监听地址 | `server.js:367` |
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
@@ -435,7 +453,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_UPDATE_STORE_DIR` | `<提示词覆盖目录>/update-packages` | 已上传升级包的存放目录 | `maintenance-server.js:160`、`update-store.js:62` |
 | `HIDS_UPDATE_TARGET` | 无 | 目标环境标识，包与环境的匹配依据 | `maintenance-server.js:160`、`package-policy.js:21` |
 
-`.env.example` 只列了业务侧的一部分变量（14 个），维护与升级相关的变量不在其中，需要按 `openapi.yaml` 与本表自行补齐。
+`.env.example` 已列全上表与 §10.2、前端（`web/serve.js`）用到的 32 个键（P003-T025）：键名与代码一一对应，两个方向都要齐（代码读的必须列、列出来的必须真有人读），改键名得同时改代码与本表。其中五项必填在文件注释里点名标出。
 
 ## 11. 怎么验证
 
