@@ -123,7 +123,7 @@ test('case feedback stays pending until reviewed and publishes evidence with the
   assert.match(await readFile(path.join(wiki.directory, 'log.md'), 'utf8'), /值班主管/);
 });
 
-test('case feedback with missing data stays out of the Wiki publication path', async t => {
+test('case feedback with missing data fails the maintenance turn and leaves the reason behind', async t => {
   const { root, wiki } = await fixture(t);
   const caseDir = path.join(root, 'case');
   await mkdir(caseDir);
@@ -137,13 +137,79 @@ test('case feedback with missing data stays out of the Wiki publication path', a
   const session = await workbench.create(page.path, { case_id: 'syslog:case-8', case_dir: caseDir,
     event_type: 'honeypot', reason: '告警只有来源地址，原始请求记录未能查询到',
     expected_verdict: 'uncertain', who: '值班分析员' });
-  const result = await workbench.reply(session.id, '先补齐原始请求记录，再复核这条案件');
-  assert.equal(result.status, 'needs_non_wiki_fix');
-  assert.equal(result.diagnosis, 'data_gap');
-  assert.match(result.follow_up.target, /Syslog/);
-  assert.equal(result.proposal, null);
-  await assert.rejects(() => workbench.publish(session.id, { reviewer: '值班主管', note: '已复核数据' }), /没有可审核/);
+  // 误报维护回合没写上一页就是维护失败：错误正文里要有「为什么没改」，不能只剩一个状态词。
+  await assert.rejects(() => workbench.reply(session.id, '先补齐原始请求记录，再复核这条案件'), cause => {
+    assert.equal(cause.status, 502);
+    assert.match(cause.message, /知识库维护未改判据/);
+    assert.match(cause.message, /data_gap·数据缺口/);
+    assert.match(cause.message, /判据本身未发现错误/);
+    assert.match(cause.message, /Syslog 解析、牧云事件匹配与取证接口/);
+    assert.doesNotMatch(cause.message, /状态 needs_non_wiki_fix/);
+    assert.ok(cause.message.length <= 300, `失败原因要能整句进 maintenance.wiki.error：${cause.message.length} 字`);
+    return true;
+  });
+  // 失败不留白：会话里的诊断、后续责任方、原始输入都在，页面一个字节没改。
+  const saved = await workbench.get(session.id);
+  assert.equal(saved.status, 'needs_non_wiki_fix');
+  assert.equal(saved.diagnosis, 'data_gap');
+  assert.equal(saved.diagnosis_note, '判据本身未发现错误');
+  assert.equal(saved.proposal, null);
+  assert.match(saved.follow_up.target, /Syslog/);
+  assert.equal(saved.messages.at(1).content, '先补齐原始请求记录，再复核这条案件');
   assert.equal((await wiki.get(page.path)).revision, page.revision);
+  await assert.rejects(() => workbench.publish(session.id, { reviewer: '值班主管', note: '已复核数据' }), /没有可审核/);
+});
+
+test('case feedback that is a criterion gap but has no draft says what is missing', async t => {
+  const { root, wiki } = await fixture(t);
+  const caseDir = path.join(root, 'case');
+  await mkdir(caseDir);
+  await writeFile(path.join(caseDir, '01-原始告警.txt'), 'cloudwalker-honeypot source_ip=192.0.2.9');
+  await writeFile(path.join(caseDir, '03-研判事实.md'), '# 事实\n仅有一次根路径请求');
+  const page = await wiki.get('honeypot/HP-01.md');
+  const model = { complete: async () => ({ content: JSON.stringify({ diagnosis: 'criterion_gap', ready: false,
+    reply: '请补充这次扫描的工单原文。', rationale: '缺工单原文，无法确定授权范围' }) }) };
+  const workbench = new WikiWorkbench(wiki, model, { load: async () => ({ prompts: { knowledge: '维护' } }) }, path.join(root, 'sessions'));
+  const session = await workbench.create(page.path, { case_id: 'syslog:case-9', case_dir: caseDir,
+    event_type: 'honeypot', reason: '人工核对后发现这是一次授权扫描', expected_verdict: 'false_positive', who: '值班分析员' });
+  await assert.rejects(() => workbench.reply(session.id, '工单号还没查到'), cause => {
+    assert.equal(cause.status, 502);
+    assert.match(cause.message, /criterion_gap·判据缺口/);
+    assert.match(cause.message, /缺工单原文/);
+    assert.doesNotMatch(cause.message, /criterion_gap·判据缺口[^；]*；后续由/,
+      '判据缺口没有后续责任方可言，不能凭空指一个');
+    return true;
+  });
+  const saved = await workbench.get(session.id);
+  assert.equal(saved.status, 'collecting');
+  assert.equal(saved.follow_up, null);
+  assert.equal((await wiki.get(page.path)).revision, page.revision);
+});
+
+test('a broken model turn on a feedback session fails with its cause while plain sessions keep the record', async t => {
+  const { root, wiki } = await fixture(t);
+  const caseDir = path.join(root, 'case');
+  await mkdir(caseDir);
+  await writeFile(path.join(caseDir, '01-原始告警.txt'), 'cloudwalker-honeypot source_ip=192.0.2.10');
+  await writeFile(path.join(caseDir, '03-研判事实.md'), '# 事实\n仅有一次根路径请求');
+  const workbench = new WikiWorkbench(wiki, { complete: async () => ({ content: '不是 JSON' }) },
+    { load: async () => ({ prompts: { knowledge: '维护' } }) }, path.join(root, 'sessions'));
+  const feedback = await workbench.create('honeypot/HP-01.md', { case_id: 'syslog:case-10', case_dir: caseDir,
+    event_type: 'honeypot', reason: '运维的蜜罐探针，不是攻击', expected_verdict: 'false_positive', who: '值班分析员' });
+  await assert.rejects(() => workbench.reply(feedback.id, '工单 OPS-7 说明这次扫描已获授权'), cause => {
+    assert.equal(cause.status, 502);
+    assert.match(cause.message, /知识库维护未改判据（未给诊断）/);
+    assert.match(cause.message, /未返回合法 JSON/);
+    return true;
+  });
+  const failed = await workbench.get(feedback.id);
+  assert.match(failed.messages.at(-1).content, /自动整理暂时失败/);
+  assert.equal(failed.proposal, null);
+  // 不带 feedback 的人工会话不受影响：这一轮不成形只是还没到可审核状态。
+  const plain = await workbench.create('honeypot/HP-01.md');
+  const record = await workbench.reply(plain.id, '我认为这次是误报');
+  assert.equal(record.status, 'collecting');
+  assert.match(record.messages.at(-1).content, /自动整理暂时失败/);
 });
 
 test('new external source is published only after original text review', async t => {

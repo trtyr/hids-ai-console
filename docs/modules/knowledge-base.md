@@ -81,16 +81,21 @@ updated: 2026-11-17
 
 | 方法 | 形状 | 说明 | 定义处 |
 | --- | --- | --- | --- |
-| `create(page, feedback=null)` | — | 开一个维护会话；`page` 取 `'new-experience'` 表示新建客户经验 | `wiki-workbench.js:94` |
-| `reply(id, content)` | — | 推进一轮对话，产出或更新草案 | `wiki-workbench.js:135` |
-| `replay(id)` | — | 对当前草案跑发布前回放 | `wiki-workbench.js:249` |
-| `publish(id, review)` | — | 人工审核后落库 | `wiki-workbench.js:265` |
-| `get(id)` | — | 读会话；不存在时返回 `null` | `wiki-workbench.js:74` |
-| `list()` | — | 会话摘要列表，按更新时间倒序 | `wiki-workbench.js:85` |
-| `save(record)` | — | 落盘一个会话 | `wiki-workbench.js:78` |
-| `file(id)` | — | 会话文件路径；ID 不是 UUID 时抛 400 | `wiki-workbench.js:70` |
+| `create(page, feedback=null)` | — | 开一个维护会话；`page` 取 `'new-experience'` 表示新建客户经验 | `wiki-workbench.js:106` |
+| `reply(id, content)` | — | 推进一轮对话，产出或更新草案；带 `feedback` 的回合写不成一页就抛 502 | `wiki-workbench.js:147` |
+| `replay(id)` | — | 对当前草案跑发布前回放 | `wiki-workbench.js:270` |
+| `publish(id, review)` | — | 人工审核后落库 | `wiki-workbench.js:286` |
+| `get(id)` | — | 读会话；不存在时返回 `null` | `wiki-workbench.js:86` |
+| `list()` | — | 会话摘要列表，按更新时间倒序 | `wiki-workbench.js:97` |
+| `save(record)` | — | 落盘一个会话 | `wiki-workbench.js:90` |
+| `file(id)` | — | 会话文件路径；ID 不是 UUID 时抛 400 | `wiki-workbench.js:82` |
 
-会话的状态机有四个取值：`collecting`（收集信息中）、`ready_for_review`（草案可审核）、`published`（已发布）、`needs_non_wiki_fix`（问题不归判据库管）。`collecting` 既是默认值（`wiki-workbench.js:129`），也是反馈类会话诊断为 `criterion_gap` 或 `needs_info` 时的取值（`wiki-workbench.js:18`），草案生不出来时也落回它（`wiki-workbench.js:238`）。
+会话的状态机有四个取值：`collecting`（收集信息中）、`ready_for_review`（草案可审核）、`published`（已发布）、`needs_non_wiki_fix`（问题不归判据库管）。`collecting` 既是默认值（`wiki-workbench.js:141`），也是反馈类会话诊断为 `criterion_gap` 或 `needs_info` 时的取值（`wiki-workbench.js:20`），草案生不出来时也落回它（`wiki-workbench.js:253`）。
+
+**带 `feedback` 的回合必须真的写上一页**（P003-T021）：误报登记起的那个维护回合没有人接话，`reply` 要么给出可发布草案（`status: ready_for_review`，由调用方 `publishBundle` 写库），要么把「为什么没改」写进错误正文——先把会话（诊断、`follow_up`、原始输入、失败消息）落盘，再抛 `status: 502` 的错误，正文形如
+`知识库维护未改判据（data_gap·数据缺口）：判据本身未发现错误；后续由「Syslog 解析、牧云事件匹配与取证接口」处置`（`wiki-workbench.js:31`、`:264`，整条 ≤300 字，好让调用方原封写进 `maintenance.wiki.error`）。
+两种沉默不算结果：`criterion_gap` 却没给草案、模型输出不是合法 JSON，都按这一条失败处理，原因分别是诊断说明与 `知识维护模型未返回合法 JSON，本轮无法整理`。
+不带 `feedback` 的人工会话不受影响：这一轮没成形只是还没到可审核状态，照旧返回 200 与会话记录（`wiki-workbench.js:147`）。
 
 ## 4 关键路径
 

@@ -96,11 +96,11 @@
 | GET | `/api/wiki/pages/{path}` | 200 / 404 | — | `server.js:340-343` |
 | GET | `/api/wiki/health` | 200 | 需知识库管理员令牌 | `server.js:355` |
 | GET | `/api/wiki/sessions` | 200 | 需知识库管理员令牌 | `server.js:356` |
-| POST | `/api/wiki/sessions` | 201 | 需知识库管理员令牌 | `server.js:357-405` |
-| GET | `/api/wiki/sessions/{id}` | 200 / 404 | 需知识库管理员令牌 | `server.js:383-404` |
-| POST | `/api/wiki/sessions/{id}/messages` | 200 | 需知识库管理员令牌 | `server.js:383-404` |
-| POST | `/api/wiki/sessions/{id}/replay` | 200 | 需知识库管理员令牌 | `server.js:383-404` |
-| POST | `/api/wiki/sessions/{id}/publish` | 200 | 需知识库管理员令牌 | `server.js:383-404` |
+| POST | `/api/wiki/sessions` | 201 | 需知识库管理员令牌 | `server.js:683-699` |
+| GET | `/api/wiki/sessions/{id}` | 200 / 404 | 需知识库管理员令牌 | `server.js:702-705` |
+| POST | `/api/wiki/sessions/{id}/messages` | 200 / 502 | 需知识库管理员令牌；带 `feedback` 的会话没产出可发布草案时 502，正文写为什么没改 | `server.js:706-709` |
+| POST | `/api/wiki/sessions/{id}/replay` | 200 | 需知识库管理员令牌 | `server.js:711-714` |
+| POST | `/api/wiki/sessions/{id}/publish` | 200 | 需知识库管理员令牌 | `server.js:715-719` |
 | POST | `/api/agent/investigations` | 200 | 无研判器回 503 | `server.js:406-430` |
 | GET | `/api/agent/investigations/{alertId}` | 200 / 404 | — | `server.js:431-439` |
 | GET | `/api/alerts` | 200 | 无牧云服务回 503 | `server.js:440-454` |
@@ -114,9 +114,9 @@
 | --- | --- | --- | --- |
 | `/api/agent/prompts` 用了非 GET 方法 | 405 | 请使用提示词文件上传入口 | `server.js:319` |
 | `/api/agent/prompts/upload` | 410 | 提示词更新已迁移到独立维护端，业务端不允许上传 | `server.js:316-320` |
-| `/api/` 开头的未知路径 | 404 | 接口不存在 | `server.js:476-477` |
+| `/api/` 开头的未知路径 | 404 | 接口不存在 | `server.js:793-794` |
 
-405 在整个文件里只有这一处（`grep -n "405" server.js` 只命中 `server.js:319`）。**方法对不上的路径，除这一处外都落到 404**：`POST /api/session` 与 `POST /api/triage/rules` 都回 404「接口不存在」。非 API 路径（如 `/`）也回同一句 404（`server.js:476-477`）。但 404 有两种文案——`/api/` 下的未知路径回「接口不存在」（`server.js:476-477`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:383-404`）。
+405 在整个文件里只有这一处（`grep -n "405" server.js` 只命中 `server.js:319`）。**方法对不上的路径，除这一处外都落到 404**：`POST /api/session` 与 `POST /api/triage/rules` 都回 404「接口不存在」。非 API 路径（如 `/`）也回同一句 404（`server.js:793-794`）。但 404 有两种文案——`/api/` 下的未知路径回「接口不存在」（`server.js:793-794`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:721`）。
 
 ### 3.3 路径里的 ID
 
@@ -168,6 +168,12 @@
 wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.create` + 一轮 `reply`），再把草案用 `publishBundle` 写进判据页；
 只出草案、页没写上就算 `failed`。选页口径与 `POST /api/wiki/sessions` 共用 `wikiFeedbackTarget`（`server.js:193-205`）：
 优先分析时引用过的判据页，其次本场景第一页。审计字段里 `reviewer` 记登记人、`note` 记他给的理由。
+
+「页没写上」不能再是一个光秃秃的状态词（P003-T021）：带 `feedback` 的回合里维护者真没改判据时，`reply` 以 502 抛错，正文就是**为什么没改**——
+`知识库维护未改判据（data_gap·数据缺口）：判据本身未发现错误；后续由「Syslog 解析、牧云事件匹配与取证接口」处置`
+（诊断、`rationale` 原文、后续责任方，整条 ≤300 字，`wiki-workbench.js:31`）。`settle` 把这条 message 原封写进
+`maintenance.wiki.error`，所以运维看到的仍是「为什么没改」而不是「状态 needs_non_wiki_fix」。`needs_non_wiki_fix` 这个会话状态照旧落在
+`WikiWorkbench` 的会话记录里（诊断与 `follow_up` 都在），只是这一轮同时算维护失败。
 
 **状态词表只有三个**（A4）：`updating` / `updated` / `failed`，总态与单边态同一套（`server.js:106-109`）：
 
@@ -341,8 +347,8 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 | --- | --- | --- |
 | 8192（缺省） | `PUT /api/agent/triage/control`、`POST /api/wiki/sessions`、`POST /api/agent/investigations` | `server.js:300-305`、`server.js:355-382`、`server.js:406-430` |
 | 100000 | `POST /api/triage/rules/validate`、`PUT /api/triage/rules` | `server.js:270-278`、`server.js:280-290` |
-| 12000 | `POST /api/wiki/sessions/{id}/messages`、`POST /api/agent/triage/{alertId}/false-positive` | `server.js:383-404`、`server.js:597-632` |
-| 8192（显式传值） | `POST /api/wiki/sessions/{id}/publish` | `server.js:383-404` |
+| 12000 | `POST /api/wiki/sessions/{id}/messages`、`POST /api/agent/triage/{alertId}/false-positive` | `server.js:706-709`、`server.js:597-632` |
+| 8192（显式传值） | `POST /api/wiki/sessions/{id}/publish` | `server.js:715-719` |
 
 ### 8.2 正文形状
 
@@ -370,7 +376,7 @@ F2 POST /api/agent/investigations 正文 8192 字节 | 400 | {"error":"请求正
 ### 9.2 状态码用得不太齐的地方（只陈述现状）
 
 - **405 只有一处**（`server.js:319`）。方法对不上的路径，除这一处外都落到 404。
-- **404 有两种文案**：未知 API 与非 API 路径回「接口不存在」（`server.js:476-477`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:383-404`）。
+- **404 有两种文案**：未知 API 与非 API 路径回「接口不存在」（`server.js:793-794`），`/api/wiki/` 下的未知路径回「知识库接口不存在」（`server.js:721`）。
 - **503 有两类含义**：后端某一类件没配好（牧云整体没配 `server.js:97-101`、研判队列未配置 `server.js:262-263`、工具箱未配置 `server.js:221-229`），与管理员令牌没配（`server.js:281-282`、`server.js:353-354`），文案不一样。
 - **`/api/status` 不走 503**：没配牧云时回 200，用 `configured` / `connected` 两个字段说明状态；配了但连不上时回 **502**，正文仍是同一组字段（`connected:false` + `reason` 是上游错误原文）——502 在这里是业务体，不是“整个服务不可用”，前端按正文处理（`server.js:216-221`）。
 - **SSE 里没有状态码级的失败**：研判抛错也是 200，错误在帧里（`server.js:421`）。
