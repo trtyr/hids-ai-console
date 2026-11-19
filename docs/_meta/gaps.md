@@ -148,3 +148,4 @@ P003-T032 把上一轮现场（192.168.24.21，2026-11-19 上午）留下的四�
 
 **顺带看到的行号漂移（不在 P003-T032 scope，未改）**：`docs/modules/triage-pipeline.md` 里 `setEnabled` 引 `triage-monitor.js:153`，当前 `setEnabled` 在 `triage-monitor.js:197`；同段 `poll()` 引 `:189`，当前在 `:240`。属于 P003-T023 之后新增代码造成的漂移。
 合并含 server.js 的卡：合并提交前必须 node --check server.js（T044 事故：自动合并造出重名声明，语法错差点带进主枝过夜）
+T034 集成期旧审查席派单作废（对象=中间态），最终链在集成落地后全量重走 —— 2026-11-20 03:1x
