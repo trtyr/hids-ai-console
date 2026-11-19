@@ -355,7 +355,11 @@ test('401 例外：正文是纯文本「需要登录后访问」，没有 code�
 });
 
 // ---------------- e2e：真进程起 server.js ----------------
-test('e2e 真进程：node server.js 未配牧云/模型时，503/404/405 的 code 与 JSON 形状都成立', async t => {
+// P003-T025 起五项必填（CLOUDWALKER_URL/CLOUDWALKER_API_TOKEN/LLM_BASE_URL/LLM_API_KEY/LLM_MODEL）是启动硬门槛：
+// 一个必填都没配的真进程根本起不来，「未配牧云 → 503」的场景在真进程里已不存在（那是 createServer 注入替身的场景，
+// 上面几条进程内用例覆盖）。这条 e2e 因此换成「配了假地址但连不上」：JSON 形状与四类 code 的断言强度不变。
+// 假值只求形状合法（URL 前缀、Token ≥6 位），一个都不是真凭据。
+test('e2e 真进程：node server.js 配了牧云但与上游不通时，502/404/405 的 code 与 JSON 形状都成立', async t => {
   const port = await new Promise((resolve, reject) => {
     const probe = netCreateServer();
     probe.on('error', reject);
@@ -364,7 +368,11 @@ test('e2e 真进程：node server.js 未配牧云/模型时，503/404/405 的 co
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t024-e2e-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const child = spawn(process.execPath, ['server.js'], { cwd: ROOT,
-    env: { PATH: process.env.PATH, HIDS_HOST: '127.0.0.1', HIDS_PORT: String(port) },
+    env: { PATH: process.env.PATH, HIDS_HOST: '127.0.0.1', HIDS_PORT: String(port),
+      CLOUDWALKER_URL: 'http://127.0.0.1:1', CLOUDWALKER_API_TOKEN: 'fake-token-123456',
+      LLM_BASE_URL: 'http://127.0.0.1:1/v1', LLM_API_KEY: 'fake-key-abcdef', LLM_MODEL: 'fake-model',
+      // 五项齐后研判队列会起 syslog 接收器：端口设 0 让它自己挑，别抢 15514。
+      HIDS_SYSLOG_PORT: '0' },
     stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
@@ -394,18 +402,22 @@ test('e2e 真进程：node server.js 未配牧云/模型时，503/404/405 的 co
   });
 
   const base = `http://127.0.0.1:${port}`;
-  await expectError(await call(base, '/api/alerts'), { status: 503, code: 'not_configured' }, '真进程 /api/alerts');
+  // 牧云算「配了」（两个键都在），于是真去连假地址 → 上游失败 502；不是 not_configured 的 503。
+  const alerts = await call(base, '/api/alerts');
+  assert.equal(alerts.status, 502);
+  const alertsBody = await alerts.json();
+  assert.equal(alertsBody.code, 'upstream_error');
   await expectError(await call(base, '/api/nope'), { status: 404, code: 'caller_error', error: '接口不存在' }, '真进程 未知 API');
   await expectError(await call(base, '/api/agent/prompts', { method: 'POST' }),
     { status: 405, code: 'caller_error', error: '请使用提示词文件上传入口' }, '真进程 405');
 
-  // 成功响应对照：/api/status 未配牧云回 200 且不带 code（code 只在失败体里；文档 §9.2 只钉 configured:false）
+  // /api/status 配了却连不上：502，正文仍是业务体 {configured, connected, reason} + 末位 code（文档 §9.2 的例外那条）
   const status = await call(base, '/api/status');
-  assert.equal(status.status, 200);
+  assert.equal(status.status, 502);
   const statusBody = await status.json();
-  assert.equal(statusBody.configured, false);
+  assert.equal(statusBody.configured, true);
   assert.equal(statusBody.connected, false);
   assert.equal(typeof statusBody.reason, 'string');
   assert.ok(statusBody.reason.length > 0);
-  assert.equal('code' in statusBody, false, '成功体里不该有 code');
+  assert.equal(statusBody.code, 'upstream_error');
 });

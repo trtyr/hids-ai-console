@@ -8,6 +8,10 @@ info:
     业务 Basic 认证仅在 HIDS_BASIC_AUTH_PASSWORD 已配置时启用。所有业务 API 都沿用该认证；业务认证失败返回纯文本 401。
     Syslog 是 15514/UDP 输入，不属于 HTTP OpenAPI；深度研判与常规研判的 HTTP 接口分别列出。
 
+    启动闸门（P003-T025）：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 五项必填，
+    缺任一项 `node server.js` 不监听、把缺的键名逐个列到 stderr 并以非 0 退出码结束；进程起来后生效值与非机密状态看 `GET /api/config`。
+    Basic 鉴权口令、两个管理员令牌与知识库凭据不是必填：不配只是那项能力空着。
+
     错误口径（P003-T024）：业务接口的失败分四类，每类一个稳定 `code`，状态码由类决定，同一类在哪条路由上都是同一对：
     `caller_error` → 4xx（400 参数/正文、403 权限、404 不存在、405 方法、409 状态冲突、410 已下线、422 无法溯源）；
     `not_configured` → 503；`upstream_error` → 502；`internal_error` → 500（正文固定「服务器内部错误」，异常原文与堆栈只进服务端日志）。
@@ -52,6 +56,62 @@ paths:
                   authenticated: { type: boolean, const: true }
                   user: { type: [string, 'null'], description: 业务 Basic 账号名；未启用 Basic 认证时为 null }
                   role: { type: [string, 'null'], enum: [operator, null], description: 固定 operator；未启用 Basic 认证时为 null }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/config:
+    get:
+      tags: [状态]
+      summary: 获取非机密的生效配置
+      description: |
+        报进程实际生效的配置：监听地址与端口、研判输入模式、牧云与模型「配了没有」、模型名。
+        机密（`CLOUDWALKER_API_TOKEN`、`LLM_API_KEY`、`HIDS_BASIC_AUTH_PASSWORD`、`HIDS_PROMPT_ADMIN_TOKEN`、`HIDS_RULE_ADMIN_TOKEN`）
+        只在 `secrets` 里给布尔值——响应正文里不出现任何 Token 与密码原文。
+        `missing_required` 就是启动闸门用的那份必填差额（P003-T025）：正常起着的进程里恒为空数组。
+        全部字段读环境变量，不读上游；不返回 503，也不做上游探测。
+      operationId: getConfig
+      responses:
+        '200':
+          description: 生效配置（机密只有布尔）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required]
+                properties:
+                  host: { type: string, description: 监听地址，缺省 127.0.0.1 }
+                  port: { type: integer, description: 监听端口，缺省 8080 }
+                  triage_input_mode: { type: string, enum: [syslog, poll], description: 自动研判输入方式，缺省 syslog }
+                  cloudwalker:
+                    type: object
+                    required: [configured]
+                    properties:
+                      configured: { type: boolean, description: CLOUDWALKER_URL 与 CLOUDWALKER_API_TOKEN 是否都在 }
+                  model:
+                    type: object
+                    required: [configured, name]
+                    properties:
+                      configured: { type: boolean, description: LLM_BASE_URL / LLM_API_KEY / LLM_MODEL 三项是否齐全 }
+                      name: { type: [string, 'null'], description: LLM_MODEL 的值；未配为 null }
+                  auth:
+                    type: object
+                    required: [basic_auth_enabled]
+                    properties:
+                      basic_auth_enabled: { type: boolean, description: 配了 HIDS_BASIC_AUTH_PASSWORD 才启用 Basic 认证 }
+                  secrets:
+                    type: object
+                    description: 每条机密只报「有或没有」，不报值
+                    required: [CLOUDWALKER_API_TOKEN, LLM_API_KEY, HIDS_BASIC_AUTH_PASSWORD, HIDS_PROMPT_ADMIN_TOKEN, HIDS_RULE_ADMIN_TOKEN]
+                    properties:
+                      CLOUDWALKER_API_TOKEN: { type: boolean }
+                      LLM_API_KEY: { type: boolean }
+                      HIDS_BASIC_AUTH_PASSWORD: { type: boolean }
+                      HIDS_PROMPT_ADMIN_TOKEN: { type: boolean }
+                      HIDS_RULE_ADMIN_TOKEN: { type: boolean }
+                  missing_required:
+                    type: array
+                    description: 缺哪几项必填；正常起着的进程是空数组
+                    items:
+                      type: string
+                      enum: [CLOUDWALKER_URL, CLOUDWALKER_API_TOKEN, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL]
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
   /api/status:
     get:

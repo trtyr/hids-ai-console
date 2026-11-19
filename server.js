@@ -607,6 +607,9 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           : { authenticated: true, user: null, role: null });
       }
       if (url.pathname === '/api/updates' && req.method === 'GET') return json(res, 200, await new UpdateStore(prompts).overview());
+      // 生效值一览（P003-T025）：地址、端口、研判输入模式、牧云与模型配了没有、模型名。
+      // 机密只给有/没有——本路由的响应体里不出现任何 Token 与密码原文（A3）。
+      if (url.pathname === '/api/config' && req.method === 'GET') return json(res, 200, configSummary());
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
         try { return json(res, 200, { configured: true, ...(await viaCloudwalker('status', null, () => service.status())) }); }
@@ -971,14 +974,48 @@ export function runtimePaths(directory = moduleDirectory) {
   };
 }
 
+// ── 启动配置核对（P003-T025）─────────────────────────────────────────────────
+// 两件事共用一份判定，别在别处另写一套：进程入口拿它当启动闸门（缺必填就拒绝启动），
+// `GET /api/config` 拿它对外报生效值。判定只认「有或没有」——值的形状仍由装配处抛（rpc-client.js:4-5、model-client.js:22-24）。
+// 机密只出现在 secrets 里，值是布尔：响应体与日志里都不出现 Token / 密码原文（A3）。
+const REQUIRED_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN', 'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL']);
+const SECRET_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_API_TOKEN', 'LLM_API_KEY', 'HIDS_BASIC_AUTH_PASSWORD',
+  'HIDS_PROMPT_ADMIN_TOKEN', 'HIDS_RULE_ADMIN_TOKEN']);
+
+// env 可注入：单测直接传一个字面量对象，不碰真实 process.env。
+// 缺省值与装配处逐条对齐——HIDS_HOST/HIDS_PORT 见 server.js:29-30、研判输入模式见 server.js:46。
+export function configSummary(env = process.env) {
+  return {
+    host: env.HIDS_HOST || '127.0.0.1',
+    port: Number(env.HIDS_PORT || 8080),
+    triage_input_mode: env.HIDS_TRIAGE_INPUT_MODE || 'syslog',
+    cloudwalker: { configured: Boolean(env.CLOUDWALKER_URL && env.CLOUDWALKER_API_TOKEN) },
+    model: { configured: Boolean(env.LLM_BASE_URL && env.LLM_API_KEY && env.LLM_MODEL), name: env.LLM_MODEL || null },
+    // 不配 Basic 口令 = 不启用鉴权（hasAccess 见 server.js:408），这是合法部署，不是缺配置。
+    auth: { basic_auth_enabled: Boolean(env.HIDS_BASIC_AUTH_PASSWORD) },
+    secrets: Object.fromEntries(SECRET_CONFIG_KEYS.map(name => [name, Boolean(env[name])])),
+    missing_required: REQUIRED_CONFIG_KEYS.filter(name => !env[name])
+  };
+}
+
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  createServer().listen(port, host, () => log('server.started', { host, port }));
-  if (triageMonitor) void triageMonitor.start().then(async () => {
-    if (triageInputMode === 'syslog') {
-      const receiver = new SyslogReceiver({ host: process.env.HIDS_SYSLOG_HOST || '127.0.0.1',
-        port: Number(process.env.HIDS_SYSLOG_PORT || 15514), onLine: line => triageMonitor.acceptSyslog(line) });
-      // 绑定失败（端口被占 / 权限不足）只打日志会让队列静默收不到消息：状态记进 summary()，日志由 monitor 记。
-      await triageMonitor.attachSyslog(receiver);
-    }
-  }).catch(error => log('server.start_failed', { what: 'triage', error: error.message }, 'error'));
+  // 启动闸门（P003-T025）：五项必填缺任一就不监听——把缺的键名逐个列到 stderr，退出码非 0。
+  // 只拦这一条入口：createServer 仍可被测试与探针注入替身在进程内起来（缺能力就置空，路由 503）。
+  const config = configSummary();
+  if (config.missing_required.length) {
+    const message = `缺少必填配置：${config.missing_required.join('、')}`;
+    log('server.start_failed', { what: 'config', missing: config.missing_required, error: message }, 'error');
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  } else {
+    createServer().listen(port, host, () => log('server.started', { host, port }));
+    if (triageMonitor) void triageMonitor.start().then(async () => {
+      if (triageInputMode === 'syslog') {
+        const receiver = new SyslogReceiver({ host: process.env.HIDS_SYSLOG_HOST || '127.0.0.1',
+          port: Number(process.env.HIDS_SYSLOG_PORT || 15514), onLine: line => triageMonitor.acceptSyslog(line) });
+        // 绑定失败（端口被占 / 权限不足）只打日志会让队列静默收不到消息：状态记进 summary()，日志由 monitor 记。
+        await triageMonitor.attachSyslog(receiver);
+      }
+    }).catch(error => log('server.start_failed', { what: 'triage', error: error.message }, 'error'));
+  }
 }
