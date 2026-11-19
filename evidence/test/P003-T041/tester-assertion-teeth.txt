@@ -1,0 +1,69 @@
+# 断言有没有牙（不是永真）：只改测试自己的输入，看断言是否恰红。都在 /tmp 副本里做，本树零改动。
+
+## 牙 1：A4 夹具 validation.ok 由 true 改成 false → validated===true 这条必须红
+$ sed -i "s/updated\x27, { ok: true })/updated\x27, { ok: false })/" evidence/test/P003-T041/http-contract.test.js
+$ node --test --test-name-pattern="sessions 路由" ... http-contract.test.js
+✖ A5 sessions 路由不被 /api/rules/{id} 抢走；摘要只回元数据、按 updated_at 倒序 (139.164419ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 196.817377
+
+✖ failing tests:
+
+test at evidence/test/P003-T041/http-contract.test.js:550:1
+✖ A5 sessions 路由不被 /api/rules/{id} 抢走；摘要只回元数据、按 updated_at 倒序 (139.164419ms)
+  AssertionError [ERR_ASSERTION]: validation.ok=true 的会话摘要 validated 应为 true
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///tmp/t041-teeth/evidence/test/P003-T041/http-contract.test.js:589:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+EXIT=1
+
+## 牙 2：慢 body PUT 改带「回滚后的当前版」当 expected_revision → 它该成功，409 那条必须红
+$ sed -i "s/expected_revision: v2.body.rev, note: \x27回滚先到\x27/expected_revision: r0, note: \x27回滚先到\x27/" evidence/test/P003-T041/http-contract.test.js
+$ node --test --test-name-pattern="两种到达顺序" ... http-contract.test.js
+✖ A5 并发：新增规则的两路写只成一个；PUT 与回滚同队列——两种到达顺序各钉一遍 + 真并发断顺序无关性质 (146.04887ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 204.222633
+
+✖ failing tests:
+
+test at evidence/test/P003-T041/http-contract.test.js:471:1
+✖ A5 并发：新增规则的两路写只成一个；PUT 与回滚同队列——两种到达顺序各钉一遍 + 真并发断顺序无关性质 (146.04887ms)
+  AssertionError [ERR_ASSERTION]: 回滚先到后放行的 PUT 应 409（Conflict），实测 200：{"id":"manual_rule","file":"manual_rule.rego","name":"规则 manual_rule","rev":"81bcaeb97fab8fd6","previous_rev":"0a436332b5873830","action":"update"}
+  
+  200 !== 409
+  
+      at TestContext.<anonymous> (file:///tmp/t041-teeth/evidence/test/P003-T041/http-contract.test.js:514:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 200,
+    expected: 409,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+EXIT=1

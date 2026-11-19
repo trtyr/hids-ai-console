@@ -22,10 +22,9 @@ import { WikiWorkbench } from './wiki-workbench.js';
 import { TraceBoardService } from './trace-board.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
-import { RuleStore, isRuleId } from './rule-store.js';
+import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
 import { createConfigStore, dataRoot } from './config-store.js';
 
-const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
 // 可写配置的覆盖层（P003-T029）：**必须在下面这批模块级装配之前建**——它把改过的键盖进 process.env，
 // 装配才看得到；「重启进程后改过的值仍生效」全靠这一行。没改过的键继续读环境变量。
@@ -40,13 +39,18 @@ const agentToolbox = createAgentToolboxFromEnv();
 const triageToolbox = apiToolbox && agentToolbox ? new TriageEvidenceToolbox(apiToolbox, agentToolbox) : apiToolbox;
 const model = createModelFromEnv();
 const promptStore = new PromptStore();
+// 判据库（P003-T041）：缺省库＝数据根下的 `wiki/`，仓内 `wiki/` 只当种子源，首次读时初始化一次。
 const wikiStore = new WikiStore();
-const agent = triageToolbox && model ? new InvestigationAgent(triageToolbox, model, promptStore, wikiStore) : null;
-const deepInvestigator = agentToolbox && model ? new InvestigationAgent(agentToolbox, model, promptStore, wikiStore) : null;
+// Rego 规则库（P003-T041 A1）：同样住数据根下的 `rules/`，仓内 `rules/` 只当种子源。
+// 研判 Agent 与维护者**共用这一个实例**：维护者改了规则，下一次研判读到的就是改过的那份。
+const regoRuleStore = new RuleStore();
+const defaultRuleSessions = new RuleSessionStore();
+const agent = triageToolbox && model
+  ? new InvestigationAgent(triageToolbox, model, promptStore, wikiStore, regoRuleStore) : null;
+const deepInvestigator = agentToolbox && model
+  ? new InvestigationAgent(agentToolbox, model, promptStore, wikiStore, regoRuleStore) : null;
 const investigationStore = new InvestigationStore(runtime.investigations);
 const triageRuleEngine = new TriageRuleEngine(runtime.triageRules);
-// Rego 规则库跟着代码走（不是 .data/ 运行态）：默认读仓根的 rules/ 目录。
-const regoRuleStore = new RuleStore(path.join(moduleDirectory, 'rules'));
 const triageInputMode = triageInputModeOf();
 const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, investigator: agent,
   history: investigationStore, file: runtime.triageMonitor,
@@ -146,17 +150,6 @@ function ruleProposal(text) {
   return output;
 }
 
-// 校验：候选规则在临时目录里用真的 RuleStore 解析——只有规则子集内的语法能过，过不了就不落盘。
-async function validateRego(id, rego) {
-  const directory = await mkdtemp(path.join(tmpdir(), 'hids-rego-'));
-  try {
-    await writeFile(path.join(directory, `${id}.rego`), rego, { encoding: 'utf8', mode: 0o600 });
-    const rule = await new RuleStore(directory).read(id);
-    if (!rule) throw new Error(`规则正文的 package 与规则 id 不一致：${id}`);
-    return rule;
-  } finally { await rm(directory, { recursive: true, force: true }); }
-}
-
 // 一份规则正文里的条件行（`match if { }` 体内，按出现顺序）。
 // **这里不校验语法**：候选正文先过 `validateRego`、原规则由装载器读进来，两边都是规则子集内的合法正文，
 // 抽取只为比对。认不出的行留着 `raw` 原文，比对时按「无法证明没放宽」处理（见 `atLeastAsStrict`）。
@@ -222,62 +215,82 @@ function widenedConditions(previousRego, nextRego) {
   return widened;
 }
 
-// 写一份规则：临时文件 + rename，写完再整库装载一次——宁可这次维护失败，也不留半截规则或重复 id。
-async function writeRuleFile(directory, file, rego) {
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const temporary = path.join(directory, `.${file}.${randomUUID()}.tmp`);
-  await writeFile(temporary, rego, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  try { await rename(temporary, path.join(directory, file)); }
-  catch (cause) { await rm(temporary, { force: true }); throw cause; }
-  await new RuleStore(directory).list();
-}
-
 /**
- * 规则维护者：拿一条已完成的误报案件，让模型改一条 Rego 或新增一条，校验通过才写进 `rules/<id>.rego`。
- * 返回 `{ id, file, name, action, rationale }`；任何一步不成立都抛错，调用方记 failed。
- * 不重写整本：只写这一份文件，同目录其它 `.rego` 一个字节都不动。
+ * 规则维护者（P003-T041 A4/A5）：拿一条已完成的误报案件，让模型改一条 Rego 或新增一条。
+ *
+ * - **写盘只有一条路**：`RuleStore.save()`——与人工维护接口 `PUT /api/rules/{id}` 是同一个方法，
+ *   校验、旧版进历史、原子替换都在那里；这里不再有第二套直写文件的函数。
+ * - **每次维护落一份会话**（`<数据根>/rule-sessions/<uuid>.json`，形制对齐 wiki-sessions）：
+ *   输入案卷引用、模型草案、校验结果、终态。会话先落一份再干活，模型或校验半路挂掉也留得下「卡在哪」。
+ * 返回 `{ id, file, name, action, rationale, rev, previous_rev, session_id }`；任何一步不成立都抛错，调用方记 failed。
  */
 export class RegoRuleMaintainer {
-  constructor(model, ruleStore, prompts) { this.model = model; this.ruleStore = ruleStore; this.prompts = prompts; }
+  constructor(model, ruleStore, prompts, sessions = null) {
+    this.model = model; this.ruleStore = ruleStore; this.prompts = prompts; this.sessions = sessions;
+  }
 
-  async maintain({ caseId, eventType, reason, who, alert, ruleIds = [] }) {
-    const inventory = await this.ruleStore.list();
-    const matched = [];
-    for (const id of ruleIds) {
-      const rule = await this.ruleStore.read(id);
-      if (rule) matched.push({ id: rule.id, name: rule.name, rego: rule.rego });
+  async maintain({ caseId, caseDir = null, eventType, reason, who, alert, ruleIds = [] }) {
+    const now = new Date().toISOString();
+    const session = this.sessions ? await this.sessions.save({ id: randomUUID(),
+      case_id: caseId, case_dir: caseDir, event_type: eventType, reason, who, status: 'collecting',
+      proposal: null, validation: null, result: null, error: null, created_at: now, updated_at: now }) : null;
+    // 会话的每次状态推进都落盘：维护跑在后台，进程挂掉后数据根里还能看出这次维护到哪一步。
+    // 累积在 `record` 上（不是在原始 `session` 上）——后一次推进不能把前一次记下的草案/校验结果冲掉。
+    let record = session;
+    const settle = async patch => {
+      if (!record) return;
+      record = { ...record, ...patch, updated_at: new Date().toISOString() };
+      await this.sessions.save(record);
+    };
+    try {
+      const inventory = await this.ruleStore.list();
+      const matched = [];
+      for (const id of ruleIds) {
+        const rule = await this.ruleStore.read(id);
+        if (rule) matched.push({ id: rule.id, name: rule.name, rego: rule.rego });
+      }
+      const prompt = (await this.prompts.load())?.prompts?.rule;
+      if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('规则维护提示词未配置');
+      const message = await this.model.complete([
+        { role: 'system', content: prompt },
+        { role: 'user', content: JSON.stringify({ case_id: caseId, event_type: eventType, false_positive_reason: reason,
+          reported_by: who, alert, matched_rules: matched, existing_rules: inventory.rules }) }
+      ], [], 'none');
+      const output = ruleProposal(message.content);
+      if (output.ready === false)
+        throw new Error(`规则维护者没有给出可落盘的修订：${String(output.reason || '').slice(0, 200) || '未说明原因'}`);
+      const id = String(output.id || '').trim();
+      if (!isRuleId(id)) throw new Error(`规则 id 不合法：${id || '(空)'}`);
+      const rego = String(output.rego || '');
+      if (!rego.trim()) throw new Error('规则正文为空');
+      const rationale = String(output.reason || '').slice(0, 500);
+      // 草案先记进会话：即便下面校验不过，数据根里也留得下模型当时提了什么。
+      await settle({ status: 'validating', proposal: { id, rego, rationale } });
+      // 第一道校验：语法必须在规则子集内（与装载器同一份 `parseRule`，报错带 file:line）。
+      this.ruleStore.validate(id, rego);
+      const existing = await this.ruleStore.read(id);
+      // 第二道校验：改已有规则时原条件不许更宽。放在写盘之前——校验不过就一个字都不落，维护判 failed。
+      if (existing) {
+        const widened = widenedConditions(existing.rego, rego);
+        if (widened.length)
+          throw new Error(`规则修订放宽了原有限制条件，拒绝落盘：${widened.join('；').slice(0, 200)}`);
+      }
+      const saved = await this.ruleStore.save(id, rego, { note: `误报维护（${who}）：${rationale.slice(0, 120)}` });
+      await settle({ status: saved.action === 'unchanged' ? 'no_change' : 'updated',
+        validation: { ok: true, name: saved.name, file: saved.file, rev: saved.rev },
+        result: { action: saved.action, file: saved.file, rev: saved.rev, previous_rev: saved.previous_rev } });
+      // 返回形状与 P003-T013 一致（调用方 `maintainFalsePositive` 与既有测试都按这四个字段读）；
+      // `rev` / `previous_rev` / 会话 id 落在会话文件里（`GET /api/rules/sessions` 可按 case_id 找到）。
+      return { id, file: saved.file, name: saved.name, action: saved.action, rationale };
+    } catch (cause) {
+      // 会话落盘本身再挂，也不能顶掉原始错误：调用方要看到的是「为什么维护没成」。
+      await settle({ status: 'failed', error: scrubCredentials(cause?.message || cause).slice(0, 300) }).catch(() => {});
+      throw cause;
     }
-    const prompt = (await this.prompts.load())?.prompts?.rule;
-    if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('规则维护提示词未配置');
-    const message = await this.model.complete([
-      { role: 'system', content: prompt },
-      { role: 'user', content: JSON.stringify({ case_id: caseId, event_type: eventType, false_positive_reason: reason,
-        reported_by: who, alert, matched_rules: matched, existing_rules: inventory.rules }) }
-    ], [], 'none');
-    const output = ruleProposal(message.content);
-    if (output.ready === false)
-      throw new Error(`规则维护者没有给出可落盘的修订：${String(output.reason || '').slice(0, 200) || '未说明原因'}`);
-    const id = String(output.id || '').trim();
-    if (!isRuleId(id)) throw new Error(`规则 id 不合法：${id || '(空)'}`);
-    const rego = String(output.rego || '');
-    if (!rego.trim()) throw new Error('规则正文为空');
-    const read = await validateRego(id, rego);
-    const existing = await this.ruleStore.read(id);
-    // 第三道校验：改已有规则时原条件不许更宽。放在写盘之前——校验不过就一个字都不落，维护判 failed。
-    if (existing) {
-      const widened = widenedConditions(existing.rego, rego);
-      if (widened.length)
-        throw new Error(`规则修订放宽了原有限制条件，拒绝落盘：${widened.join('；').slice(0, 200)}`);
-    }
-    // 已有规则的 id 可能住在别的文件名里：改它就要写回它自己那份，不能另起一个同 id 的文件。
-    const file = existing?.file || `${id}.rego`;
-    await writeRuleFile(this.ruleStore.directory, file, rego);
-    return { id, file, name: read.name, action: existing ? 'update' : 'add',
-      rationale: String(output.reason || '').slice(0, 500) };
   }
 }
 
-const regoMaintainer = model ? new RegoRuleMaintainer(model, regoRuleStore, promptStore) : null;
+const regoMaintainer = model ? new RegoRuleMaintainer(model, regoRuleStore, promptStore, defaultRuleSessions) : null;
 
 // 案件里命中的 Rego 规则 id：结果落盘的 result.json 里就有，没有就当没命中（旧案件可能没有这条轨迹）。
 async function caseRegoRuleIds(record) {
@@ -322,8 +335,8 @@ async function maintainFalsePositive({ monitor, record, wiki, wikiAgent, ruleMai
   const ruleJob = async () => {
     if (!ruleMaintainer) throw new Error('规则维护者未配置');
     const parsed = record.input?.parsed;
-    return ruleMaintainer.maintain({ caseId: record.alert_id, eventType: eventTypeFor(parsed?.msgid),
-      reason: record.feedback.reason, who: record.feedback.who,
+    return ruleMaintainer.maintain({ caseId: record.alert_id, caseDir: record.case_dir || null,
+      eventType: eventTypeFor(parsed?.msgid), reason: record.feedback.reason, who: record.feedback.who,
       alert: parsed ? { msgid: parsed.msgid, payload: parsed.payload } : null,
       ruleIds: await caseRegoRuleIds(record) });
   };
@@ -804,7 +817,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
   maintenanceEntry = process.env.HIDS_MAINTENANCE_ENTRY_URL,
   ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore,
-  ruleMaintainer = regoMaintainer, config = configStore) {
+  ruleMaintainer = regoMaintainer, config = configStore, ruleSessions = defaultRuleSessions) {
   // 注入的 TraceBoardService 没有取数器时，用本次的 monitor / history 现接一条：
   // 测试与部署走同一套接线，不再靠测试里手塞假 analysis。
   if (boardService instanceof TraceBoardService && !boardService.analysis)
@@ -960,12 +973,63 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         try { return json(res, 200, await ruleStore.list()); }
         catch (cause) { return upstreamError(res, `规则库读取失败：${cause.message}`); }
       }
+      // 规则维护接口（P003-T041 A5）。读开放、写要规则管理员令牌，与 `PUT /api/triage/rules` 同一道闸。
+      // `sessions` 必须排在 `/api/rules/{id}` 之前：`sessions` 本身是合法规则 id 形状，排后面会被当成规则读。
+      if (url.pathname === '/api/rules/sessions' && req.method === 'GET') {
+        try { return json(res, 200, { sessions: await ruleSessions.list() }); }
+        catch (cause) { return upstreamError(res, `规则维护会话读取失败：${cause.message}`); }
+      }
       if (url.pathname === '/api/rules/evaluate' && req.method === 'POST') {
         let fact;
         try { fact = await readJSON(req); } catch (cause) { return callerError(res, cause.message); }
         if (fact === null || typeof fact !== 'object' || Array.isArray(fact)) return callerError(res, '告警事实必须是 JSON 对象');
         try { return json(res, 200, await ruleStore.evaluate(fact)); }
         catch (cause) { return upstreamError(res, `规则求值失败：${cause.message}`); }
+      }
+      const ruleMaintenance = url.pathname.match(/^\/api\/rules\/([^/]+)\/(history|rollback)$/);
+      if (ruleMaintenance) {
+        let id;
+        try { id = decodeURIComponent(ruleMaintenance[1]); }
+        catch { return callerError(res, '规则 id 编码无效'); }
+        if (!isRuleId(id)) return callerError(res, '规则 id 无效');
+        if (ruleMaintenance[2] === 'history' && req.method === 'GET') {
+          try { return json(res, 200, { id, history: await ruleStore.history(id) }); }
+          catch (cause) { return upstreamError(res, `规则历史读取失败：${cause.message}`); }
+        }
+        if (ruleMaintenance[2] === 'rollback' && req.method === 'POST') {
+          if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');
+          if (!hasRuleAdminAccess(req, ruleAdminToken)) return callerError(res, '规则管理员令牌无效', 403);
+          const body = await readJSON(req, 20000);
+          const rev = typeof body?.rev === 'string' ? body.rev.trim() : '';
+          if (!/^[0-9a-f]{16}$/.test(rev)) return callerError(res, '缺少有效的目标版本 rev');
+          const who = String(body.who ?? access?.user ?? 'operator').trim().replace(/\s+/g, ' ').slice(0, 100);
+          try { return json(res, 200, await ruleStore.rollback(id, rev, { note: `人工回滚（${who}）` })); }
+          catch (cause) { return causeError(res, cause, 'internal'); }
+        }
+      }
+      if (url.pathname.startsWith('/api/rules/') && req.method === 'PUT') {
+        if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');
+        if (!hasRuleAdminAccess(req, ruleAdminToken)) return callerError(res, '规则管理员令牌无效', 403);
+        let id;
+        try { id = decodeURIComponent(url.pathname.slice('/api/rules/'.length)); }
+        catch { return callerError(res, '规则 id 编码无效'); }
+        if (!isRuleId(id)) return callerError(res, '规则 id 无效');
+        const body = await readJSON(req, 200000);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return callerError(res, '请求正文无效');
+        if (typeof body.rego !== 'string' || !body.rego.trim()) return callerError(res, '请求正文缺少规则正文 rego');
+        // 乐观并发（与 wiki 页面、triage 规则集同一口径）：改了别处就 409，别让后写的悄悄盖掉前一份。
+        const expected = body.expected_revision;
+        if (!Object.hasOwn(body, 'expected_revision') ||
+          !(expected === null || (typeof expected === 'string' && /^[0-9a-f]{16}$/.test(expected))))
+          return callerError(res, '缺少有效的规则版本 expected_revision');
+        try {
+          // 备注进被替换那一版的历史条目（`<id>-<rev>.json`）：传什么就记什么，不静默丢掉。
+          const note = typeof body.note === 'string' && body.note.trim()
+            ? `人工维护：${body.note.trim().replace(/\s+/g, ' ').slice(0, 200)}` : '人工维护';
+          // 版本比对在 `RuleStore` 的写队列里做（与 `WikiStore.update()` 同一口径）：读—比对—写不可分割，
+          // 并发两个 PUT 只有一个能落盘，后到的拿 409，不会悄悄盖掉前一份。
+          return json(res, 200, await ruleStore.save(id, body.rego, { note, expectedRevision: expected }));
+        } catch (cause) { return causeError(res, cause, 'internal'); }
       }
       if (url.pathname.startsWith('/api/rules/') && req.method === 'GET') {
         let id;

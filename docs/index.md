@@ -22,7 +22,7 @@
 | --- | --- |
 | `docs/architecture.md` | 仓库根目录的 `.js` 文件、`package.json`、`openapi.yaml` |
 | `docs/modules/*.md` | 对应模块的实现文件（见 `docs/modules/_breakdown.json` 的 `files` 字段） |
-| 判据内容（不属于本套文档） | `wiki/` 目录，由知识库维护流程管 |
+| 判据内容（不属于本套文档） | 数据根下的判据库 `wiki/`（仓内 `wiki/` 只是只读种子），由知识库维护流程管 |
 | 提示词内容（不属于本套文档） | `prompts/` 目录 |
 
 ## 快速上手

@@ -1,0 +1,28 @@
+# A7 契约面：openapi 解析 + 本卡四条维护路由 / 备注 schema / 会话 schema（测试席终端实跑）
+$ python3 -c "import yaml; d=yaml.safe_load(open(openapi.yaml)); ..."
+openapi paths = 43
+/api/rules in paths: True
+/api/rules/{id} in paths: True
+/api/rules/{id}/history in paths: True
+/api/rules/{id}/rollback in paths: True
+/api/rules/sessions in paths: True
+PUT in /api/rules/{id}: True
+RegoHistoryEntry.required = ['id', 'rev', 'file', 'bytes', 'saved_at', 'note']
+RegoHistoryEntry.note.type = ['string', 'null']
+RegoRuleWrite.note.maxLength = 200
+RegoSessionSummary.required = ['id', 'case_id', 'event_type', 'who', 'status', 'rule_id', 'validated', 'updated_at']
+RegoSessionSummary.validated = {'type': 'boolean', 'description': '校验是否通过（`status=failed` 时为 false）'}
+Conflict in components.responses: True
+EXIT=0
+
+$ grep -n "/api/rules/{id}/history\|/api/rules/{id}/rollback\|/api/rules/sessions" docs/modules/http-api.md
+77:> 比历史版本多的四条：P003-T011 的三条 Rego 规则路由（`/api/rules`、`/api/rules/evaluate`、`/api/rules/{id}`）与本卡 P003-T013 的误报入口。P003-T029 又加了一条 `POST /api/config`（写配置，见 §3.6）。P003-T041 把规则维护做成正式接口，补了 `PUT /api/rules/{id}`、`GET /api/rules/{id}/history`、`POST /api/rules/{id}/rollback`、`GET /api/rules/sessions` 四条。
+98:| GET | `/api/rules/sessions` | 200 `{sessions}`（规则维护会话摘要，按 `updated_at` 倒序；不含规则正文与误报理由） | 会话目录不可读回 502 | `server.js:758-761` |
+100:| GET | `/api/rules/{id}/history` | 200 `{id, history:[{rev, file, bytes, saved_at, note}]}` 按写入时间升序；规则不存在时回空数组。`note` 是那条历史副本「为什么被替换」（`人工维护：<note>` / `人工回滚（<who>）` / `误报维护（<who>）：<理由>`），没备注的旧副本是 `null` | id 不合格式回 400；历史目录不可读回 502 | `server.js:769-778` |
+101:| POST | `/api/rules/{id}/rollback` | 200 与 `PUT` 同形，另带 `action:"rollback"` 与 `rolled_back_to`；被替换那一版进历史，备注 `人工回滚（<who>）` | 需规则管理员令牌（没配 503／不对 403）；`rev` 不是 16 位十六进制回 400；历史里没有这一版回 404 | `server.js:779-788` |
+
+$ grep -c "<数据根>/rules/\|rule-sessions" docs/architecture.md
+7
+
+$ grep -rn "规则库跟着代码走\|规则库在仓内\|规则住在仓内" docs/ openapi.yaml | wc -l
+0
