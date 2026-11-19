@@ -1,0 +1,18 @@
+== 变异 A：假上游去掉 created_at ==
+A EXIT=1 ==== 16/17 PASS ==== 失败项：A2-3 time_window 分支（窗外有候选，且本轮恰 1 条）
+== 变异 B：不发第一条报文 ==
+B EXIT=1 ==== 14/17 PASS ==== 失败项：A2-1 payload 分支（缺 host_ip） | A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行） | A3-1 真管道日志不出现凭据（正控：三类 match_failed + [redacted] 到齐）
+== 变异 C：文档事件表 type -> event_type ==
+C EXIT=1 ==== 16/17 PASS ==== 失败项：A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行）
+== 变异 D：删掉文档事件表整行 ==
+D EXIT=1 ==== 16/17 PASS ==== 失败项：A4-1 文档事件表字段名与真日志一致（architecture.md 事件名表 syslog.match_failed 行）
+== 变异 E：隔离失效（把 .data 复制进运行根） ==
+E EXIT=1 ==== 16/17 PASS ==== 失败项：A2-3 time_window 分支（窗外有候选，且本轮恰 1 条）
+== 还原校验 ==
+6fac53ef26841f5d164426fae6fb3e13ecb86e25a87d38ac13d77bf9c2a5e627  evidence/test/P003-T027/acceptance-e2e.mjs
+87119c19dc8590744325fa3b0820591431d6a985e2240c4c9c28f40c770440db  docs/architecture.md
+探针与备份一致
+文档与备份一致
+还原后绿跑 EXIT=0 ==== 17/17 PASS ====
+== 汇总 ==
+MUTATIONS OK（5 个变异全部恰红到期望项，还原后复绿；日志在 /tmp/p27-mut-QSWzVt）

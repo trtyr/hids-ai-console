@@ -12,6 +12,11 @@
 //
 // 可靠性：不等固定 sleep——起进程/收日志/收尾一律 waitUntil 轮询到哨兵或 deadline（P003-T027 审计打回项 1）。
 // 正控：A3-1 除「凭据零命中」外要求三类 match_failed 真到齐且出现 [redacted]，管道空转必红（审计打回项 2）。
+// 隔离：每次跑把源码树复制到独立临时根（不带 .data），server / maintenance / CLI 全在里面跑，跑完删掉（审计打回项 5）。
+//   运行态目录恒为「模块所在目录/.data」且不吃环境变量（docs/modules/http-api.md:42），上次进程留下的
+//   running/queued 记录会在下次 start() 时改判 queued 重新排队（docs/modules/triage-pipeline.md §5.1），
+//   拿上一轮的 parsed 配本轮的假上游 → nearest_gap 漂（实测 481 而非 480）；跨轮同指纹报文还会被去重表折叠。
+//   nonce 改指纹那套是无效修法：指纹只取固定字段 + 分类型字段（triage-pipeline.md §4.1），nonce 不进指纹，已撤。
 //
 // 跑法：node evidence/test/P003-T027/acceptance-e2e.mjs
 // 退出码 0 = 全部断言过；1 = 有断言失败（失败项逐条打印 文档说 / 实测）。
@@ -20,6 +25,7 @@ import { spawn } from 'node:child_process';
 import dgram from 'node:dgram';
 import http from 'node:http';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -65,9 +71,24 @@ function waitExit(proc, timeout = 10000) {
 const BASE = Math.floor(Date.now() / 1000);
 const EVENT_TIME = BASE + 120;          // 第三条报文（时间窗外）的事件时间
 const CANDIDATE_GAPS = [600, 900];      // 假上游候选事件的 created_at 相对 BASE
-// 去重表（.data/triage-monitor.json，跨进程持久）按报文内容指纹合并：每轮给报文塞独立 nonce，
-// 否则同一探针连跑时上一轮的同一报文会被 syslog.collapsed 合并掉，match_failed 一条都不出（实测）。
-const RUN_NONCE = `${process.pid}-${BASE}`;
+
+// 独立运行根：源码树整份复制到临时目录（不含 .git / .data / evidence），运行态从空开始，
+// 跑完删。这样上一轮的队列/去重表/记录一条都进不来；仓内 .data 一个字节都不碰（A2-5 校验）。
+function makeRunRoot() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'p27-root-'));
+  const skip = new Set(['.git', '.data', 'evidence']);
+  fs.cpSync(WT, root, {
+    recursive: true,
+    filter: (src) => {
+      const rel = path.relative(WT, src);
+      return rel === '' || !skip.has(rel.split(path.sep)[0]);
+    },
+  });
+  return root;
+}
+const RUN_ROOT = makeRunRoot();
+console.log(`[run-root] ${RUN_ROOT}（.data 是否随树带过来：${fs.existsSync(path.join(RUN_ROOT, '.data'))}）`);
+process.on('exit', () => { try { fs.rmSync(RUN_ROOT, { recursive: true, force: true }); } catch {} });
 function fakeUpstream() {
   // created_at 是 time_window 分支算 nearest_gap_seconds 取的时间字段（给出即有值，审计确认）：
   // 最近一条候选 +600s、事件时间 +120s → 期望 480。
@@ -104,13 +125,11 @@ const iso = (epoch) => new Date(epoch * 1000).toISOString().replace('.000Z', 'Z'
 // ---------- 2. 拉真 server.js ----------
 async function runSyslogPipeline() {
   const up = await fakeUpstream();
-  const casesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'p27-cases-'));
   const env = {
     ...process.env,
     HIDS_PORT: '0',
     HIDS_SYSLOG_HOST: SYSLOG_HOST,
     HIDS_SYSLOG_PORT: '0',
-    HIDS_CASES_DIR: casesDir,
     CLOUDWALKER_URL: `http://127.0.0.1:${up.port}`,
     CLOUDWALKER_API_TOKEN: 'tok-abcdef',
     LLM_BASE_URL: 'http://127.0.0.1:9',
@@ -120,7 +139,7 @@ async function runSyslogPipeline() {
     HIDS_BASIC_AUTH_PASSWORD: 'BasicPassword987',
     HIDS_MAINTENANCE_PASSWORD: 'MaintPassword987',
   };
-  const proc = spawn(process.execPath, ['server.js'], { cwd: WT, env });
+  const proc = spawn(process.execPath, ['server.js'], { cwd: RUN_ROOT, env });
   let out = '';
   proc.stdout.on('data', (d) => (out += d));
   proc.stderr.on('data', (d) => (out += d));
@@ -131,11 +150,11 @@ async function runSyslogPipeline() {
     const m = up1 ? /udp:\/\/127\.0\.0\.1:(\d+)/.exec(out) : null;
     if (!m) throw new Error('syslog 接收器没起来：' + out);
     const port = Number(m[1]);
-    // 四条报文各差 60 秒，避开同秒去重（去重表按 指纹+秒 合并）
-    await send(port, `<134>1 ${iso(BASE)} host app - cloudwalker-webshell nonce=${RUN_NONCE}-1 event_create_time="${fmtWall(BASE)}"`);                       // 缺 host_ip
-    await send(port, `<134>1 ${iso(BASE + 60)} host app - cloudwalker-webshell event_id=7 host_ip=10.0.0.5 host_id=1 nonce=${RUN_NONCE}-2 event_create_time="${fmtWall(BASE + 60)}"`); // 详情主机不符
-    await send(port, `<134>1 ${iso(EVENT_TIME)} host app - cloudwalker-honeypot host_ip=10.0.0.5 host_id=1 nonce=${RUN_NONCE}-3 event_create_time="${fmtWall(EVENT_TIME)}"`);          // 时间窗外
-    await send(port, `<134>1 ${iso(BASE + 180)} host app - cloudwalker-suspicious-command host_ip=10.0.0.5 host_id=1 nonce=${RUN_NONCE}-4 api_token=SECRET123456 password=hunter2 authorization=Bearer+abcdef123456 event_create_time="${fmtWall(BASE + 180)}"`); // A3
+    // 四条报文各差 60 秒、msgid 不同，跨报文的 match_failed 断言不会被「同秒重复」折叠（triage-pipeline.md §4.2）
+    await send(port, `<134>1 ${iso(BASE)} host app - cloudwalker-webshell event_create_time="${fmtWall(BASE)}"`);                       // 缺 host_ip
+    await send(port, `<134>1 ${iso(BASE + 60)} host app - cloudwalker-webshell event_id=7 host_ip=10.0.0.5 host_id=1 event_create_time="${fmtWall(BASE + 60)}"`); // 详情主机不符
+    await send(port, `<134>1 ${iso(EVENT_TIME)} host app - cloudwalker-honeypot host_ip=10.0.0.5 host_id=1 event_create_time="${fmtWall(EVENT_TIME)}"`);          // 时间窗外
+    await send(port, `<134>1 ${iso(BASE + 180)} host app - cloudwalker-suspicious-command host_ip=10.0.0.5 host_id=1 api_token=SECRET123456 password=hunter2 authorization=Bearer+abcdef123456 event_create_time="${fmtWall(BASE + 180)}"`); // A3
     // 哨兵：三条基础分支真到齐（不等固定时长；缺哪条后面断言自己会红）。
     // time_window 必须点名 honeypot 那条——否则 suspicious-command 的 time_window 先到就会提前放行，
     // 上一条上游开关还没开就把 honeypot 的查询打成 500（审计 load 假红的真根）。
@@ -147,7 +166,7 @@ async function runSyslogPipeline() {
           && !String(l.reason || '').startsWith('牧云事件查询失败'));
     }, { timeout: 60000, label: 'payload/event_id + honeypot time_window 三条 match_failed' });
     fs.writeFileSync(up.failFlag, '1');
-    await send(port, `<134>1 ${iso(BASE + 240)} host app - cloudwalker-malware host_ip=10.0.0.5 host_id=1 nonce=${RUN_NONCE}-5 event_create_time="${fmtWall(BASE + 240)}"`);           // 上游 500
+    await send(port, `<134>1 ${iso(BASE + 240)} host app - cloudwalker-malware host_ip=10.0.0.5 host_id=1 event_create_time="${fmtWall(BASE + 240)}"`);           // 上游 500
     // 哨兵：上游失败分支落日志
     await waitUntil(() => lines(out).some((l) => l.event === 'syslog.match_failed'
       && String(l.reason || '').startsWith('牧云事件查询失败')), { timeout: 60000, label: 'time_window 上游失败分支（reason=牧云事件查询失败）' });
@@ -163,7 +182,7 @@ async function runSyslogPipeline() {
 // ---------- 3. 维护端 ----------
 async function runMaintenance() {
   const proc = spawn(process.execPath, ['maintenance-server.js', '--preview'], {
-    cwd: WT,
+    cwd: RUN_ROOT,
     env: { ...process.env, HIDS_MAINTENANCE_PORT: '18593', HIDS_MAINTENANCE_PASSWORD: 'MaintPassword987' },
   });
   let out = '';
@@ -181,7 +200,7 @@ async function runMaintenance() {
 // ---------- 4. package-policy ----------
 function runNode(args, env = {}) {
   return new Promise((resolve) => {
-    const p = spawn(process.execPath, ['package-policy.js', ...args], { cwd: WT, env: { ...process.env, ...env } });
+    const p = spawn(process.execPath, ['package-policy.js', ...args], { cwd: RUN_ROOT, env: { ...process.env, ...env } });
     let out = '';
     p.stdout.on('data', (d) => (out += d));
     p.stderr.on('data', (d) => (out += d));
@@ -223,7 +242,17 @@ async function runPackagePolicy() {
 const lines = (out) => out.split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l));
 const pick = (ls, ev) => ls.filter((l) => l.event === ev);
 
+// 隔离正控：仓内 .data/triage-monitor.json 是跨进程持久运行态（http-api.md:42），本轮跑完必须一字节不变。
+const REPO_STATE = path.join(WT, '.data', 'triage-monitor.json');
+const repoState = () => {
+  if (!fs.existsSync(REPO_STATE)) return 'absent';
+  const st = fs.statSync(REPO_STATE);
+  return `${st.mtimeMs}:${st.size}:${crypto.createHash('sha256').update(fs.readFileSync(REPO_STATE)).digest('hex').slice(0, 16)}`;
+};
+const repoStateBefore = repoState();
+
 const pipe = await runSyslogPipeline();
+const repoStateAfter = repoState();
 const L = lines(pipe.out);
 const matchFailed = pick(L, 'syslog.match_failed');
 
@@ -238,12 +267,16 @@ check('A2-2 event_id 分支（主机不符）',
   'mismatch 只列真对不上的项，每项 {wanted, returned}（ID 对得上 → 不出现 event_id 项）',
   JSON.stringify(evId || null));
 
-const tw = matchFailed.find((l) => l.rule === 'time_window' && l.msgid === 'cloudwalker-honeypot' && l.reason && !String(l.reason).startsWith('牧云事件查询失败'));
+const twAll = matchFailed.filter((l) => l.rule === 'time_window' && l.msgid === 'cloudwalker-honeypot'
+  && l.reason && !String(l.reason).startsWith('牧云事件查询失败'));
+const tw = twAll[0];
 const EXPECT_NEAREST_GAP = (BASE + CANDIDATE_GAPS[0]) - EVENT_TIME;   // 600 - 120 = 480
-check('A2-3 time_window 分支（窗外有候选）',
-  Boolean(tw && tw.window_seconds === 300 && tw.candidates === 2 && tw.nearest_gap_seconds === EXPECT_NEAREST_GAP),
-  'window_seconds=300、candidates=本次取到的条数（假上游 2 条）、nearest_gap_seconds=最近一条差多远（候选 created_at +600s、事件时间 +120s → 480）',
-  JSON.stringify(tw || null));
+// 恰 1 条：上一轮重放出来的旧记录拿自己那轮的事件时间配本轮假上游，会多出一条同 rule 的 match_failed、
+// 或抢在本轮报文之前先到（两种都实测过：nearest_gap 481 / 583）。条数就是隔离是否真生效的正控——不是 1 就红。
+check('A2-3 time_window 分支（窗外有候选，且本轮恰 1 条）',
+  twAll.length === 1 && tw.window_seconds === 300 && tw.candidates === 2 && tw.nearest_gap_seconds === EXPECT_NEAREST_GAP,
+  'window_seconds=300、candidates=本次取到的条数（假上游 2 条）、nearest_gap_seconds=最近一条差多远（候选 created_at +600s、事件时间 +120s → 480）；同一条只应出现一次',
+  `条数=${twAll.length} 首条=${JSON.stringify(tw || null)}`);
 
 const twErr = matchFailed.find((l) => l.rule === 'time_window' && String(l.reason || '').startsWith('牧云事件查询失败'));
 check('A2-4 time_window 分支（上游查询失败）',
@@ -275,6 +308,11 @@ check('A3-1 真管道日志不出现凭据（正控：三类 match_failed + [red
   missingRules.length === 0 && redactedSeen && leak.length === 0,
   '日志不出现 Token 与密码；文本里的 token=… / Bearer … 擦成 [redacted]；正控要求 payload/event_id/time_window 三条真日志到齐',
   `凭据命中：${leak.length ? leak.join(',') : '无'}；[redacted] 出现=${redactedSeen}；缺分支=[${missingRules.join(',')}]`);
+
+check('A2-5 独立运行根：本轮不碰仓内 .data（triage-monitor.json 前后一致）',
+  repoStateBefore === repoStateAfter,
+  '运行态目录恒为「模块所在目录/.data」（http-api.md:42），且上次中断留在 running 的记录下次 start() 改判 queued 重新排队（triage-pipeline.md §5.1）；探针在临时根里跑，上一轮的队列/去重表/记录一条都进不来',
+  `前=${repoStateBefore} 后=${repoStateAfter} 运行根=${RUN_ROOT}`);
 
 // ---------- 维护端 ----------
 const mOut = await runMaintenance();

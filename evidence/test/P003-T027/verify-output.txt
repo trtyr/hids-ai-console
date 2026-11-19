@@ -1,0 +1,26 @@
+== 0. 探针不含固定 sleep ==
+sleep( 计数 = 0
+== 1. 仓内运行态基线 ==
+before=a9efbf09d1c3d5eb54b23a4a4a1c9b66fb2f0540892bf5b4bcab825cf6595ea8
+== 2. 连跑 6 遍 ==
+run1 EXIT=0 ==== 17/17 PASS ==== [run-root] /tmp/p27-root-y6rozU
+run2 EXIT=0 ==== 17/17 PASS ==== [run-root] /tmp/p27-root-emv8J1
+run3 EXIT=0 ==== 17/17 PASS ==== [run-root] /tmp/p27-root-0uSRu1
+run4 EXIT=0 ==== 17/17 PASS ==== [run-root] /tmp/p27-root-iLfQpD
+run5 EXIT=0 ==== 17/17 PASS ==== [run-root] /tmp/p27-root-9CHAkQ
+run6 EXIT=0 ==== 17/17 PASS ==== [run-root] /tmp/p27-root-HYyjvg
+== 3. sleep 2 前后对照 ==
+gap0-A EXIT=0 ==== 17/17 PASS ====
+gap0-B EXIT=0 ==== 17/17 PASS ====
+gap2-C EXIT=0 ==== 17/17 PASS ====
+gap2-D EXIT=0 ==== 17/17 PASS ====
+== 4. 写者门禁 ==
+gate EXIT=0
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+== 5. 隔离校验 ==
+after=a9efbf09d1c3d5eb54b23a4a4a1c9b66fb2f0540892bf5b4bcab825cf6595ea8
+运行根残留=0
+== 汇总 ==
+ALL GREEN（日志在 /tmp/p27-verify-7uQ40x）

@@ -1,0 +1,19 @@
+# 审计复现法：修前探针（HEAD 版本，nonce 修法）在同一棵树上连跑 2 遍
+# 拿上一轮运行态（persisted running/queued 记录 + 去重表）配本轮假上游 → A2-3 nearest_gap 漂
+# 命令：git show HEAD:evidence/test/P003-T027/acceptance-e2e.mjs > _old.tmp.mjs && node _old.tmp.mjs（连跑两遍）
+
+--- old-run1 EXIT=1
+FAIL A2-3 time_window 分支（窗外有候选）
+  文档说: window_seconds=300、candidates=本次取到的条数（假上游 2 条）、nearest_gap_seconds=最近一条差多远（候选 created_at +600s、事件时间 +120s → 480）
+  实测  : {"time":"2026-11-19T13:28:28.813Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":2,"nearest_gap_seconds":724,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+==== 15/16 PASS ====
+失败项：A2-3 time_window 分支（窗外有候选）
+
+--- old-run2 EXIT=1
+FAIL A2-3 time_window 分支（窗外有候选）
+  文档说: window_seconds=300、candidates=本次取到的条数（假上游 2 条）、nearest_gap_seconds=最近一条差多远（候选 created_at +600s、事件时间 +120s → 480）
+  实测  : {"time":"2026-11-19T13:28:30.183Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":2,"nearest_gap_seconds":482,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+==== 15/16 PASS ====
+失败项：A2-3 time_window 分支（窗外有候选）
+
+# 对照：修后探针（临时根隔离）同样的树、连续 6 遍 + sleep 2 前后对照全绿 → verify-output.txt

@@ -1,0 +1,6 @@
+# 「nonce 不进指纹」的实测（用 docs/modules/triage-pipeline.md §4.1 里文档给出的 fingerprint() 用法）
+$ node --input-type=module <<< "（脚本见下）"
+nonce=run1-1 -> 57ec0c75b67a4010
+nonce=run2-2 -> 57ec0c75b67a4010
+换 nonce 后指纹是否相同 -> true
+EXIT=0
