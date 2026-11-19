@@ -1,0 +1,12 @@
+控制组（原始日志 24 条，替身计数 {"decision":6,"rule":4,"wiki":2}）：绿
+
+变异 1（每个 role 的第 2/4 次调用整对不落事件，删 10 条）：恰红
+ai.model_call 事件不符合文档口径（A5）：
+- 事件总条数 14，期望 24（替身共收到 12 次调用，每次一对）
+- role=fp_maintainer 的 request 事件 4 条，替身实际收到 6 次调用
+- role=fp_maintainer 的 response 事件 4 条，替身实际收到 6 次调用
+- role=rule_maintainer 的 request 事件 2 条，替身实际收到 4 次调用
+- role=rule_maintainer 的 response 事件 2 条，替身实际收到 4 次调用
+变异 2（规则维护调用挪到同一轮决策之前）：恰红
+ai.model_call 事件不符合文档口径（A5）：
+- 会话 23fd3158-ab08-49e1-bd8f-d6ea3df53a0b：规则维护调用出现在决策轮之前

@@ -3,6 +3,9 @@
 - 工作树：`/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T047`（HEAD `1c90121`，分支 `task/hids-ai-console-P003-T047`）
 - 被测判词：`P003-T047-gc-backend-code-review-mwo6jjow.json`（二轮复审 PASS）
 - 测试者：何东阳（`gc-backend-tester`）。本报告里的每条数字都是我在**这棵树里亲手跑出来的**，没有转录。
+> **审计退回后重跑过一轮**：§二/§三 的条数是首轮的数字；A5/A6 的断言已按审计意见改成绝对次数 + 顺序，
+> 新增 `libraries.uniqueItems` 契约用例（本轮唯一红，见 §八 finding 1）。以 **§八** 为准。
+
 - 判定依据只取文档：`docs/modules/http-api.md` §3.1/§3.4/§8.3、`docs/modules/triage-pipeline.md` §7.4、`openapi.yaml`
   （误报入口 `:817-877`、会话两条路径 `:1184-1232`、`MaintenanceSide`/`CaseMaintenance`/`FpAutoVerdict`/`FpMaintenanceSession*` `:2552-2700`）。
   没读实现文件正文；`fp-maintainer.js` / `server.js` 一个字未看。
@@ -121,3 +124,132 @@ $ node --test evidence/p003-t047-verify/acceptance.test.js
    再发布 409」证明它还在链路上。
 5. **重启残留**（进程死在维护中途停在 `updating`）按文档是已知不恢复行为，本卡未测。
 6. 替身模型的回包是**我自己编的**，只按 `prompts/*.md` 的输出契约造形；真实模型回包的长尾没有覆盖。
+
+## 八、审计退回整改（本轮：四条断言强度 + `libraries.uniqueItems` 契约）
+
+审计打回的四条全是**断言强度**问题，逐条改完重跑。改的文件只有我自己的三份：
+`acceptance.test.js`、`model-call-events-check.mjs`（新，A5 判定逻辑抽出来给探针共用）、`probe-a5-mutant.mjs`（新，A5 变异自证）。
+
+### 1. A5：从「只断成对」改成「绝对条数 + 逐轮唯一 + 顺序 + 成对」
+
+审计那个变异（把每 role 第 2/4 次调用的事件整条不落，成对关系不变 → 首轮套件照样绿）现在必红。判定挪进
+`model-call-events-check.mjs`，七道检查：
+
+| # | 检查 | 口径出处 |
+| --- | --- | --- |
+| 1 | 事件总条数 == 2 × (decision+rule+wiki)，一条不多一条不少 | `docs/architecture.md:151`「一次调用必是一对」 |
+| 2 | 每个 role 的 request / response 条数 == **替身真实收到的调用数**（替身计数是独立真值，调用没打到替身就不算） | `docs/modules/http-api.md:293-295`「每轮 AI 调用都进事件」 |
+| 3 | 每个 `(role, session_id, turn, attempt)` 每方向**只许一条**（漏记第 2/4 次、重复记都在这里红） | 同上 |
+| 4 | 定位键 `(role, session_id, turn, phase, attempt)` 两侧一一对应 | `docs/architecture.md:159` |
+| 5 | response 的 `outcome` 在四值里、`duration_ms` 是数字 | `docs/architecture.md:151` |
+| 6 | 决策轮 `turn=3`、`phase=propose` | `docs/modules/http-api.md:293` |
+| 7 | **顺序**：同一轮里决策轮（propose）的 request 行在规则 / 知识维护的 request 行之前（日志追加写，行序＝发生序） | `docs/modules/http-api.md:293-295` |
+
+本轮实测（`A5 实测` 那行 diagnostic 原文）：
+
+```
+A5 实测 {"total":24,"requests":12,"responses":12,"byRole":{"fp_maintainer":6,"rule_maintainer":4,"wiki_maintainer":2}}
+        ；替身计数 {"decision":6,"rule":4,"wiki":2}；逐轮累加 {"decision":6,"rule":4,"wiki":2}
+```
+
+**可失败性自证**（我自己的探针，真跑出来的日志，变异只在内存里做，不碰任何实现文件）：
+
+```
+$ node evidence/p003-t047-verify/probe-a5-mutant.mjs        # exit=0
+控制组（原始日志 24 条，替身计数 {"decision":6,"rule":4,"wiki":2}）：绿
+变异 1（每个 role 的第 2/4 次调用整对不落事件，删 10 条）：恰红
+  - 事件总条数 14，期望 24（替身共收到 12 次调用，每次一对）
+  - role=fp_maintainer 的 request 事件 4 条，替身实际收到 6 次调用
+  - role=fp_maintainer 的 response 事件 4 条，替身实际收到 6 次调用
+  - role=rule_maintainer 的 request 事件 2 条，替身实际收到 4 次调用
+  - role=rule_maintainer 的 response 事件 2 条，替身实际收到 4 次调用
+变异 2（规则维护调用挪到同一轮决策之前）：恰红
+  - 会话 4c12e40e-…：规则维护调用出现在决策轮之前
+```
+
+### 2. A6：每轮补绝对次数（`decision` / `rule` / `wiki` 逐轮 delta 写死）
+
+每轮 POST 前快照替身计数，`waitTerminal` 后断言这一轮的**绝对 delta**（不符就红），并把 delta 累加成 `ledger`；A5 开头先断
+`替身计数 == ledger`，再断事件条数。逐轮期望与出处：
+
+| 轮 | 期望 (decision/rule/wiki) | 文档出处 |
+| --- | --- | --- |
+| who 超长那一轮（决策给空库） | 1 / 0 / 0 | `http-api.md:202-209`（决策只决定动哪边，列在三条路径表） |
+| 只动规则 | 1 / 1 / 0 | `http-api.md:207` 三条路径表 |
+| 单腿补跑（幂等命中） | 0 / 0 / 0 | `http-api.md:273-274`「不调模型、不写盘」 |
+| 全量再登记（两侧同版本） | 0 / 0 / 0 | 同上（wiki 上一轮 skipped 但记着 revision → 同按已成功过处理，`:279-282`） |
+| 只请求规则侧（幂等） | 0 / 0 / 0 | 同上 |
+| 只动知识库 | 1 / 0 / 1 | `http-api.md:208` |
+| 知识库幂等再登记 | 0 / 0 / 0 | 同上 |
+| 两边都动 | 1 / 1 / 1 | `http-api.md:209` |
+| 失败那一轮（决策只给规则侧） | 1 / 1 / 0 | `:207` + 决策回包 |
+| 失败侧单腿补跑 | 1 / 1 / 0 | `:280-282`「本次只补跑」＝未请求侧不发调用 |
+
+合计 6 / 4 / 2 次调用、24 条事件——与首轮相比少了一次决策调用，原因是我把 uniqueItems 那条边界轮挪到 A5 之后（它是契约红用例，不该混进去当正常轮）。
+
+### 3. SUT 起不来得当场报错，不许挂死
+
+`makeLlmStub()` / `startServer()` 全挪进 `try`，`finally` 里 `child.kill('SIGKILL')` + `llm.server.close()`；
+`startServer` 的探活循环**同时看子进程是否已退出**，起来不成就 `assert.fail`（带子进程最后 800 字输出）并当场回收。
+另外探活不再只看「端口有人应答」：`/api/status` 必须回 `{configured:boolean, connected:boolean}`（`openapi.yaml` `/api/status`），
+否则端口被别的进程占着会把别人的服务当成 SUT。
+
+实测（占位监听先占住 18147，模拟 SUT 起不来）：
+
+```
+$ node -e 'require("http").createServer((q,s)=>s.end("busy")).listen(18147,"127.0.0.1"); …' &
+$ timeout 120 node --test evidence/p003-t047-verify/acceptance.test.js
+  AssertionError [ERR_ASSERTION]: 服务没起来（exit={"code":1,"signal":null}）：Error: listen EADDRINUSE …
+real 0m0.377s        EXIT=1
+```
+
+首轮那版在这种情形下会一直挂在读请求上（`exit=124`）；现在 0.377 秒就报错退出（原文见 `evidence/p003-t047-verify/sut-boot-fail.txt`）。
+跑完扫了一遍 `/proc/*/cwd`，本树没有残留 `node` 进程，18147 / 18149 两个端口都已释放。
+
+### 4. `who` 超长与 `libraries` 重复项：从「永真式」改成契约断言
+
+- `who` 101 字：**显式断 202 + 截到 100 字**（现行口径是截断，群主已拍板），并读回记录核对落盘值：
+  `assert.equal(who.json.feedback.who, '何'.repeat(100))`。原来那条 `202 || 400` 的模糊式已删掉。
+- `libraries: ['rule','rule']`：`openapi.yaml:859-866` 写的是 `minItems: 1` + **`uniqueItems: true`** + `items.enum:[rule,wiki]`，
+  按契约重复项该 400。原来的 `202 || 400` 已删，改成 `assertErrorBody(dup, 400, 'caller_error')`（并断被拒请求不起维护轮）。
+  **实测 202 → 本条红**，见 finding 1。
+
+### 5. 本轮门禁（全在我这棵树的终端里跑的）
+
+| 命令 | 结果 |
+| --- | --- |
+| `node --test evidence/p003-t047-verify/acceptance.test.js`（连跑 3 次） | `tests 17 / pass 15 / fail 2`，exit=1，三次完全一致（fail 2 = 唯一那条 uniqueItems 契约用例 + 它的父测试；其余 14 条子测试全绿） |
+| `node evidence/p003-t047-verify/probe-a5-mutant.mjs` | 控制组绿、两处变异恰红，exit=0 |
+| SUT 起不来探针（占 18147 后跑套件） | 0.377s exit=1，「服务没起来（exit={code:1}）」 |
+| `node --check evidence/p003-t047-verify/acceptance.test.js` | exit=0 |
+| `PGREP w/ /proc/*/cwd` | 无残留 node 进程；18147 / 18149 已释放 |
+
+原文：`evidence/p003-t047-verify/last-run.txt`（末次套件输出）、`probe-a5-mutant.out.txt`、`sut-boot-fail.txt`。
+
+### 6. 本轮 findings
+
+**F1（major，实现违约 → 写者）`libraries` 的 `uniqueItems` 契约没被校验**
+
+- 文档出处：`openapi.yaml:861-862`（`minItems: 1` + `uniqueItems: true`，items 枚举 `rule` / `wiki`）。
+- 文档说：重复项不是合法正文（`uniqueItems: true`）。
+- 实测：`POST /api/agent/triage/<done 案件>/false-positive`，正文 `{"reason":"…","libraries":["rule","rule"]}` → **202**，
+  按去重后的库起了一轮维护（会话落盘、决策模型被调用一次）。
+- 复现：`node --test evidence/p003-t047-verify/acceptance.test.js` 最后一条子测试
+  「契约（openapi:862）：libraries uniqueItems —— 重复项应被拒 400」；或直接对任意 `status=done` 的案件发上面那条正文。
+- 建议二选一：① 入口按 `uniqueItems` 回 400 `caller_error`（文案沿用「维护库必须是 rule 或 wiki 组成的一到两项」）；
+  ② 认这是「重复项按去重处理」，那就把 `openapi.yaml` 的 `uniqueItems: true` 删掉，并在 `http-api.md` §3.4 的 400 表隔壁补一句
+  「重复项去重后照常受理」。选 ② 时记得同步告诉我，我把这条用例的期望改成 202。
+
+**F2（minor，doc-side）`who` 超长的处置口径没写进契约**
+
+- 文档出处：`openapi.yaml:857` 的 `who.maxLength: 100`；`docs/modules/http-api.md:178` 的 400 表（只列「登记人短于 2 字」）。
+- 文档说：`maxLength: 100`（读作「超长不合法」）。
+- 实测：101 字 → 202，落盘 `feedback.who` 截到 100 字（现行口径＝截断，群主已拍板；我的用例按这个口径断）。
+- 建议：`openapi.yaml` 的 `who` 描述与 `http-api.md` §3.4 的 400 表各补一句「超过 100 字截断到 100 字，不拒收」，
+  否则读契约的人会以为要回 400。
+
+### 7. 残余风险（本轮新增）
+
+1. A5 的「条数 == 替身计数」抓的是**漏记**；如果实现**多发**调用，替身计数与事件条数会一起涨，这条断不出来——
+   兜底是 A6 的逐轮绝对 delta（每轮期望写死），多发一次就红。两层都要在，别只留一层。
+2. `uniqueItems` 未校验时，重复项那轮会被当成正常维护轮跑掉（决策模型多调一次）；等 F1 落定后这条风险消失。

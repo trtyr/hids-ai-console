@@ -1,6 +1,7 @@
 // P003-T047 验收：误报统一维护 Agent（多轮会话操控双库，单腿可补跑）
 // 黑盒：起真进程（node server.js），上游（牧云 / 模型）用本文件内的替身 HTTP 服务；
-// 全部断言只依据 docs/modules/http-api.md §3.4、docs/modules/triage-pipeline.md §7.4、openapi.yaml。
+// 全部断言只依据 docs/modules/http-api.md §3.4、docs/modules/triage-pipeline.md §7.4、
+// docs/architecture.md §3.6、openapi.yaml（误报入口 :817-877、会话两条路径 :1184-1232）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -8,6 +9,7 @@ import { mkdir, writeFile, readFile, readdir, chmod, rm } from 'node:fs/promises
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
+import { checkModelCallEvents } from './model-call-events-check.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname.replace(/\/$/, '');
 const TMP = '/tmp/p003-t047-acceptance';
@@ -34,22 +36,6 @@ match if {
   not input.source_ip == "203.0.113.9"
 }
 `;
-const GOOD_RULE_B = `package hids.rules.honeypot_probe
-
-# name: 蜜罐探测（root 用户）
-# description: 排除已登记的扫描账号
-
-default match := false
-
-match if {
-  input.type == "honeypot"
-  input.peer != ""
-  input.source_ip != ""
-  input.user == "root"
-  not input.source_ip == "203.0.113.9"
-  not input.user == "scanner"
-}
-`;
 // 放宽：删掉 peer / source_ip 两条原条件 + 加一条无关限制，必被落盘前校验拒绝
 const WIDE_RULE = `package hids.rules.honeypot_probe
 
@@ -69,7 +55,6 @@ const wikiSource = readFileSync(`${ROOT}/wiki/${WIKI_PAGE}`, 'utf8');
 function makeLlmStub() {
   const counters = { decision: 0, rule: 0, wiki: 0 };
   const attemptsByMarker = new Map();
-  const seen = [];
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => (raw += c));
@@ -89,7 +74,6 @@ function makeLlmStub() {
         content = JSON.stringify({ libraries: libs, why: `决策理由（${libs.join('+')}）` });
       } else if (system.includes('Rego 规则维护助手')) {
         counters.rule += 1;
-        seen.push(`rule#${counters.rule}:${user.slice(0, 0)}`);
         const marker = ['PATH-BOTH', 'PATH-WIKI', 'PATH-FAIL'].find((m) => user.includes(m)) || 'PATH-RULE';
         const attempt = (attemptsByMarker.get(marker) || 0) + 1;
         attemptsByMarker.set(marker, attempt);
@@ -118,7 +102,7 @@ function makeLlmStub() {
       res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }));
     });
   });
-  return { server, counters, seen };
+  return { server, counters };
 }
 
 const mkAlert = (tag) => `syslog:honeypot:${tag.repeat(16).slice(0, 16)}:${1763373600 + tag.charCodeAt(0)}:${randomUUID()}`;
@@ -171,6 +155,15 @@ async function seed() {
   return alerts;
 }
 
+// 认服务：/api/status 的正文必须带 configured / connected 两个 boolean（openapi /api/status，502 也是这个形状）。
+// 只看「端口有人应答」会把占用端口的别的进程当成 SUT——那样后面全跑在别人的服务上。
+async function isOurServer(url) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(1000) });
+  let body = null;
+  try { body = await res.json(); } catch { return false; }
+  return !!body && typeof body.configured === 'boolean' && typeof body.connected === 'boolean';
+}
+
 async function startServer({ env = {}, port = PORT } = {}) {
   const child = spawn(process.execPath, ['server.js'], {
     cwd: ROOT,
@@ -188,23 +181,28 @@ async function startServer({ env = {}, port = PORT } = {}) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '';
+  let exit = null;
   child.stdout.on('data', (d) => (stdout += d));
   child.stderr.on('data', (d) => (stdout += d));
+  child.on('exit', (code, signal) => { exit = { code, signal }; });
   const base = `http://127.0.0.1:${port}`;
   let up = false;
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 100 && !up && !exit; i++) {
     try {
-      await fetch(`${base}/api/status`);
-      up = true;
-      break;
-    } catch { await sleep(100); }
+      up = await isOurServer(`${base}/api/status`);
+    } catch { /* 还没起来 */ }
+    if (!up) await sleep(100);
   }
-  assert.ok(up, `服务没起来：${stdout.slice(-800)}`);
+  if (!up) {
+    // SUT 起不来就当场报错并回收子进程，绝不让读请求挂死（挂死会变成 exit=124）
+    try { child.kill('SIGKILL'); } catch { /* 已退出 */ }
+    assert.fail(`服务没起来（exit=${JSON.stringify(exit)}）：${stdout.slice(-800)}`);
+  }
   return { child, base, log: () => stdout };
 }
 
 async function call(base, method, path, { body, headers = {}, raw } = {}) {
-  const init = { method, headers: { ...headers } };
+  const init = { method, headers: { ...headers }, signal: AbortSignal.timeout(20000) };
   if (body !== undefined || raw !== undefined) {
     init.body = raw !== undefined ? raw : JSON.stringify(body);
     init.headers['content-type'] = init.headers['content-type'] || 'application/json';
@@ -244,22 +242,44 @@ function onlyKnownKeys(obj, allowed, where) {
 }
 
 test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 + 错误码）', async (t) => {
-  const alerts = await seed();
+  // 替身计数器是「真实发生过多少次模型调用」的唯一真值（调用打不到替身上就不算）；
+  // 每一轮维护都按文档口径登记「这一轮该调几次」，逐轮累加成 ledger，再与替身计数对账。
   const llm = makeLlmStub();
-  await new Promise((r) => llm.server.listen(LLM_PORT_FREE, '127.0.0.1', r));
-  const llmPort = llm.server.address().port;
-  const { child, base } = await startServer({
-    env: {
-      CLOUDWALKER_URL: 'http://127.0.0.1:1',
-      CLOUDWALKER_API_TOKEN: 'stub-token-123',
-      LLM_BASE_URL: `http://127.0.0.1:${llmPort}/v1`,
-      LLM_API_KEY: 'sk-stub',
-      LLM_MODEL: 'stub-model',
-      HIDS_PROMPT_ADMIN_TOKEN: ADMIN_TOKEN,
-    },
-  });
-
+  const ledger = { decision: 0, rule: 0, wiki: 0 };
+  let sessionsExpected = 0;
+  let child = null;
+  const alerts = await seed();
+  const snapshot = () => ({ ...llm.counters });
+  // 一次 202 = 一份维护会话落盘（http-api.md §3.4：每一轮推进都落盘）
+  const roundStarted = () => { sessionsExpected += 1; return snapshot(); };
+  function expectCalls(before, expected, where) {
+    const actual = {
+      decision: llm.counters.decision - before.decision,
+      rule: llm.counters.rule - before.rule,
+      wiki: llm.counters.wiki - before.wiki,
+    };
+    assert.deepEqual(actual, expected, `${where}：模型调用绝对次数不符文档口径（实测 ${JSON.stringify(actual)} / 文档 ${JSON.stringify(expected)}）`);
+    for (const k of Object.keys(expected)) ledger[k] += expected[k];
+  }
   try {
+    await new Promise((resolve, reject) => {
+      llm.server.once('error', reject);
+      llm.server.listen(LLM_PORT_FREE, '127.0.0.1', resolve);
+    });
+    const llmPort = llm.server.address().port;
+    const started = await startServer({
+      env: {
+        CLOUDWALKER_URL: 'http://127.0.0.1:1',
+        CLOUDWALKER_API_TOKEN: 'stub-token-123',
+        LLM_BASE_URL: `http://127.0.0.1:${llmPort}/v1`,
+        LLM_API_KEY: 'sk-stub',
+        LLM_MODEL: 'stub-model',
+        HIDS_PROMPT_ADMIN_TOKEN: ADMIN_TOKEN,
+      },
+    });
+    child = started.child;
+    const base = started.base;
+
     await t.test('契约形状：会话列表与空态（openapi /api/false-positive/sessions）', async () => {
       const r = await call(base, 'GET', '/api/false-positive/sessions');
       assert.equal(r.status, 200);
@@ -283,7 +303,6 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
         { name: 'reason 9 字', body: { reason: '短'.repeat(9), who: '何东阳' }, status: 400 },
         { name: 'reason 4001 字', body: { reason: '长'.repeat(4001), who: '何东阳' }, status: 400 },
         { name: 'who 1 字', body: { reason: '这是一条合法的误报理由', who: '何' }, status: 400 },
-
         { name: 'libraries 不是数组', body: { reason: '这是一条合法的误报理由', libraries: 'rule' }, status: 400 },
         { name: 'libraries 空数组', body: { reason: '这是一条合法的误报理由', libraries: [] }, status: 400 },
         { name: 'libraries 含未知值', body: { reason: '这是一条合法的误报理由', libraries: ['rule', 'bogus'] }, status: 400 },
@@ -294,19 +313,20 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       }
       const sessions = await call(base, 'GET', '/api/false-positive/sessions');
       assert.equal(sessions.json.sessions.filter((x) => x.case_id === alerts.rule).length, 0, '非法请求不该落下维护会话');
+      assert.equal(sessions.json.sessions.length, sessionsExpected, '被拒的请求不该多出会话');
+      assert.deepEqual(llm.counters, { decision: 0, rule: 0, wiki: 0 }, '被拒的请求不该起维护轮');
     });
 
-    await t.test('边界（严格契约）：who 上限 100 字、libraries uniqueItems', async () => {
+    await t.test('边界（契约）：who 超长按现行口径截到 100 字后照常受理', async () => {
+      const before = roundStarted();
       const who = await call(base, 'POST', fpPath(alerts.edge), { body: { reason: '这条不动机器库，只验长度（PATH-NONE）', who: '何'.repeat(101) } });
-      assert.equal(who.status, 202, `who 超 100 字实测 ${who.status}（文档 §3.4 的 400 表不含这一档）`);
+      assert.equal(who.status, 202, `who 101 字实测 ${who.status}：${who.text.slice(0, 200)}`);
+      assert.equal(who.json.feedback.who, '何'.repeat(100), 'who 超长应截到 100 字（现行口径：截断而不是拒收）');
       const rec = await call(base, 'GET', `/api/agent/triage/${encodeURIComponent(alerts.edge)}`);
-      assert.equal(rec.json.feedback.who.length, 100, `落盘 who 应截到 100：实测 ${rec.json.feedback.who.length}`);
+      assert.equal(rec.json.feedback.who, '何'.repeat(100), '落盘 who 应截到 100 字');
       await waitTerminal(base, alerts.edge);
-      const dup = await call(base, 'POST', fpPath(alerts.edge), { body: { reason: '这条不动机器库，只验唯一性（PATH-NONE）', libraries: ['rule', 'rule'] } });
-      assert.ok(dup.status === 202 || dup.status === 400, `重复库名实测 ${dup.status}`);
-      // 实测：202（服务端不校验 uniqueItems，只按去重后的库跑）；文档 §3.4 的 400 表不含这一档 → doc-side 记录
-      t.diagnostic(`who=101 字 → 202、落盘截到 ${rec.json.feedback.who.length} 字；libraries=['rule','rule'] → ${dup.status}`);
-      if (dup.status === 202) await waitTerminal(base, alerts.edge);
+      // 决策轮（替身）回 libraries:[] → 两侧都不动，只该有那一次决策调用
+      expectCalls(before, { decision: 1, rule: 0, wiki: 0 }, 'who 超长那一轮（决策给空库，两侧不动）');
     });
 
     await t.test('错误码：案件不存在 404、研判未完成 409、reason 4000 字合法（用到长度上限）', async () => {
@@ -322,8 +342,9 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
     let ruleRev;
     let ruleSessionId;
 
-    await t.test('A1/A2/A7 只动规则：202 形状 → 四轮会话落盘 → 维护侧口径', async () => {
+    await t.test('A1/A2/A6/A7 只动规则：202 形状 → 四轮会话落盘 → 维护侧口径', async () => {
       const reason = '这条是运维授权扫描（PATH-RULE），不是攻击';
+      const before = roundStarted();
       const post = await call(base, 'POST', fpPath(alerts.rule), { body: { reason, who: '何东阳' } });
       assert.equal(post.status, 202, post.text.slice(0, 400));
       onlyKnownKeys(post.json, ['alert_id', 'verdict', 'feedback', 'maintenance'], '202 响应');
@@ -344,6 +365,8 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       assert.equal(immediate.json.decision_source, 'human');
 
       const rec = await waitTerminal(base, alerts.rule);
+      // A6：只动规则那条路径 = 决策 1 次 + 规则维护 1 次 + 知识维护 0 次（绝对次数）
+      expectCalls(before, { decision: 1, rule: 1, wiki: 0 }, '只动规则这一轮');
       const m = rec.maintenance;
       assert.equal(m.status, 'updated');
       assert.deepEqual(m.sides, ['rule']);
@@ -418,29 +441,37 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       assert.deepEqual(files.filter((f) => !f.endsWith('.rego')), [], `规则目录有残留：${files.join(',')}`);
     });
 
-    await t.test('A4 单腿补跑不洗掉已成功一侧的判据（成功 → 单腿 → 全量 仍只跑一次）', async () => {
+    await t.test('A4/A6 单腿补跑不洗掉已成功一侧的判据（成功 → 单腿 → 全量 仍只跑一次）', async () => {
       const rulesBefore = llm.counters.rule;
+      const b1 = roundStarted();
       const leg = await call(base, 'POST', fpPath(alerts.rule), { body: { reason: '补跑规则侧（PATH-RULE）', libraries: ['rule'] } });
       assert.equal(leg.status, 202);
       const rec1 = await waitTerminal(base, alerts.rule);
+      // A6：请求的库都已在同一版本上 → 幂等，不调决策模型、不写盘（http-api.md §3.4「补跑与幂等」）
+      expectCalls(b1, { decision: 0, rule: 0, wiki: 0 }, '单腿补跑（幂等命中）');
+      assert.equal(rec1.maintenance.decision.source, 'idempotent');
       assert.equal(rec1.maintenance.rule.state, 'skipped');
       assert.equal(rec1.maintenance.rule.idempotency_key, ruleKey, '单腿补跑把幂等键洗掉了');
       assert.equal(rec1.maintenance.rule.revision, ruleRev, '单腿补跑把 revision 洗掉了');
       assert.equal(llm.counters.rule, rulesBefore, '已成功的一侧被重跑了');
       assert.equal(rec1.maintenance.status, 'updated');
 
+      const b2 = roundStarted();
       const full = await call(base, 'POST', fpPath(alerts.rule), { body: { reason: '再登记一次全量（PATH-RULE）' } });
       assert.equal(full.status, 202);
       const rec2 = await waitTerminal(base, alerts.rule);
+      expectCalls(b2, { decision: 0, rule: 0, wiki: 0 }, '全量再登记（两侧都已在同一版本，幂等）');
       assert.equal(rec2.maintenance.rule.state, 'skipped', '全量再登记时已成功的一侧被重跑');
       assert.equal(rec2.maintenance.rule.idempotency_key, ruleKey);
       assert.equal(llm.counters.rule, rulesBefore, '全量再登记重跑了已成功的一侧');
       assert.deepEqual(rec2.maintenance.sides, []);
 
       const decisionBefore = llm.counters.decision;
+      const b3 = roundStarted();
       const again = await call(base, 'POST', fpPath(alerts.rule), { body: { reason: '只请求规则侧（PATH-RULE）', libraries: ['rule'] } });
       assert.equal(again.status, 202);
       const rec3 = await waitTerminal(base, alerts.rule);
+      expectCalls(b3, { decision: 0, rule: 0, wiki: 0 }, '幂等再登记（只请求规则侧）');
       assert.equal(rec3.maintenance.decision.source, 'idempotent');
       assert.deepEqual(rec3.maintenance.sides, []);
       assert.equal(llm.counters.decision, decisionBefore, '幂等轮不该再调决策模型');
@@ -452,12 +483,14 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
 
     let wikiSessionId;
 
-    await t.test('A2/A3 只动知识库：规则库一字不动、判据页过发布闸、发布后会话终态、无重复发布口子', async () => {
+    await t.test('A2/A3/A6 只动知识库：规则库一字不动、判据页过发布闸、发布后会话终态、无重复发布口子', async () => {
       const ruleBefore = await readFile(`${DATA}/rules/${RULE_ID}.rego`, 'utf8');
-      const ruleCallsBefore = llm.counters.rule;
+      const before = roundStarted();
       const post = await call(base, 'POST', fpPath(alerts.wiki), { body: { reason: '规则没错，判据页缺边界（PATH-WIKI）', who: '何东阳' } });
       assert.equal(post.status, 202);
       const rec = await waitTerminal(base, alerts.wiki);
+      // A6：只动知识库那条路径 = 决策 1 次 + 规则维护 0 次 + 知识维护 1 次（绝对次数）
+      expectCalls(before, { decision: 1, rule: 0, wiki: 1 }, '只动知识库这一轮');
       const m = rec.maintenance;
       assert.equal(m.status, 'updated');
       assert.deepEqual(m.sides, ['wiki']);
@@ -466,7 +499,6 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       assert.equal(m.wiki.page, WIKI_PAGE);
       assert.equal(typeof m.wiki.revision, 'string');
       assert.equal(m.wiki.wiki_session_status, 'published');
-      assert.equal(llm.counters.rule, ruleCallsBefore, '只动知识库时规则维护者被调用了');
       assert.equal(await readFile(`${DATA}/rules/${RULE_ID}.rego`, 'utf8'), ruleBefore, '只动知识库时规则文件被改写');
       const page = await readFile(`${DATA}/wiki/${WIKI_PAGE}`, 'utf8');
       assert.match(page, /补充（2026-11-20）/);
@@ -479,19 +511,22 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       assertErrorBody(republish, 409, 'caller_error');
 
       // 同一库同一版本上再登记 → 幂等跳过，不再发布一次
-      const wikiCallsBefore = llm.counters.wiki;
+      const b2 = roundStarted();
       const again = await call(base, 'POST', fpPath(alerts.wiki), { body: { reason: '再登记一次（PATH-WIKI）', libraries: ['wiki'] } });
       assert.equal(again.status, 202);
       const rec2 = await waitTerminal(base, alerts.wiki);
+      expectCalls(b2, { decision: 0, rule: 0, wiki: 0 }, '知识库幂等再登记');
       assert.equal(rec2.maintenance.wiki.state, 'skipped');
       assert.deepEqual(rec2.maintenance.sides, []);
-      assert.equal(llm.counters.wiki, wikiCallsBefore, '幂等跳过时又调了知识维护模型');
     });
 
     await t.test('A2/A6 两边都动：两侧都写、sides 与决策可见', async () => {
+      const before = roundStarted();
       const post = await call(base, 'POST', fpPath(alerts.both), { body: { reason: '规则与判据各有缺口（PATH-BOTH）', who: '何东阳' } });
       assert.equal(post.status, 202);
       const rec = await waitTerminal(base, alerts.both);
+      // A6：两边都动 = 决策 1 次 + 规则 1 次 + 知识 1 次（绝对次数）
+      expectCalls(before, { decision: 1, rule: 1, wiki: 1 }, '两边都动这一轮');
       const m = rec.maintenance;
       assert.equal(m.status, 'updated');
       assert.deepEqual(m.sides, ['rule', 'wiki']);
@@ -502,10 +537,13 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       assert.match(disk, /not input\.user == "scanner"/);
     });
 
-    await t.test('A4 单库失败可补跑：失败侧重跑，维护失败不改结论', async () => {
+    await t.test('A4/A6 单库失败可补跑：失败侧重跑、未请求侧不重发，维护失败不改结论', async () => {
+      const before = roundStarted();
       const widen = await call(base, 'POST', fpPath(alerts.fail), { body: { reason: '规则改宽试试（PATH-FAIL）', who: '何东阳' } });
       assert.equal(widen.status, 202);
       const bad = await waitTerminal(base, alerts.fail);
+      // 决策说只动规则 → 规则维护 1 次（这一轮失败）、知识维护 0 次
+      expectCalls(before, { decision: 1, rule: 1, wiki: 0 }, '失败那一轮（决策只给规则侧）');
       assert.equal(bad.maintenance.status, 'failed');
       assert.equal(bad.maintenance.rule.state, 'failed');
       assert.match(bad.maintenance.rule.error, /放宽/);
@@ -516,38 +554,41 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       const files = await readdir(`${DATA}/rules`);
       assert.deepEqual(files.filter((f) => !f.endsWith('.rego')), [], `规则目录有残留：${files.join(',')}`);
 
+      const b2 = roundStarted();
       const retry = await call(base, 'POST', fpPath(alerts.fail), { body: { reason: '补跑规则侧（PATH-FAIL）', libraries: ['rule'] } });
       assert.equal(retry.status, 202);
       const ok = await waitTerminal(base, alerts.fail);
+      // A6 补跑不重发：只请求规则侧 → 规则维护 1 次，知识维护 0 次（未请求侧不许发调用）
+      expectCalls(b2, { decision: 1, rule: 1, wiki: 0 }, '失败侧单腿补跑');
       assert.equal(ok.maintenance.status, 'updated');
       assert.equal(ok.maintenance.rule.state, 'updated');
       assert.equal(ok.maintenance.wiki.state, 'skipped');
       assert.match(ok.maintenance.wiki.why || '', /本次只补跑/);
     });
 
-    await t.test('A5 每轮 AI 调用都进 T046 事件（域＝误报维护），request/response 成对', async () => {
-      let lines = [];
-      for (let i = 0; i < 20; i++) {
-        lines = (await readFile(`${TMP}/server.log`, 'utf8')).split('\n').filter(Boolean);
-        if (lines.length) break;
+    await t.test('A5 每轮 AI 调用都进 T046 事件（域＝误报维护）：绝对条数 + 逐轮唯一 + 顺序', async () => {
+      assert.deepEqual(llm.counters, ledger, `替身计数 ${JSON.stringify(llm.counters)} 与逐轮累加 ${JSON.stringify(ledger)} 不一致`);
+      const expect = { ...llm.counters };
+      const expectedEvents = 2 * (expect.decision + expect.rule + expect.wiki);
+      let events = [];
+      for (let i = 0; i < 60; i++) {
+        const lines = (await readFile(`${TMP}/server.log`, 'utf8')).split('\n').filter(Boolean);
+        events = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
+          .filter((e) => e.event === 'ai.model_call' && e.domain === 'false_positive');
+        if (events.length >= expectedEvents) break;
         await sleep(50);
       }
-      const events = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
-        .filter((e) => e.event === 'ai.model_call' && e.domain === 'false_positive');
-      assert.ok(events.length > 0, '没有 false_positive 域的 ai.model_call 事件');
-      const roles = new Set(events.map((e) => e.role));
-      for (const role of ['fp_maintainer', 'rule_maintainer', 'wiki_maintainer']) {
-        assert.ok(roles.has(role), `缺角色 ${role} 的事件；实到 ${[...roles].join(',')}`);
+      // 会话 → 它那一轮的知识维护会话 id（顺序断言用；wiki 维护轮的 session_id 是它自己那份）
+      const wikiSessionOf = {};
+      const all = await call(base, 'GET', '/api/false-positive/sessions');
+      for (const s of all.json.sessions) {
+        const d = await call(base, 'GET', `/api/false-positive/sessions/${s.id}`);
+        const w = d.json?.outcomes?.wiki?.session_id;
+        if (w) wikiSessionOf[s.id] = w;
       }
-      const key = (e) => `${e.role}|${e.turn}|${e.attempt}|${e.session_id ?? '-'}`;
-      const req = new Map();
-      const res = new Map();
-      for (const e of events) {
-        const m = e.direction === 'request' ? req : res;
-        m.set(key(e), (m.get(key(e)) || 0) + 1);
-      }
-      for (const [k, n] of req) assert.equal(res.get(k), n, `调用 ${k} 的 request/response 不成对`);
-      assert.ok(events.some((e) => e.role === 'fp_maintainer' && e.phase === 'propose'));
+      const stats = checkModelCallEvents(events, { expect, wikiSessionOf });
+      t.diagnostic(`A5 实测 ${JSON.stringify(stats)}；替身计数 ${JSON.stringify(expect)}；逐轮累加 ${JSON.stringify(ledger)}`);
+      assert.equal(stats.total, expectedEvents);
     });
 
     await t.test('错误码 502：会话目录不可读时列表回 502（不是空列表）', async () => {
@@ -562,11 +603,22 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       }
       const back = await call(base, 'GET', '/api/false-positive/sessions');
       assert.equal(back.status, 200);
-      assert.ok(back.json.sessions.length >= 4);
+      // 一份 202 = 一份会话（幂等轮也算一轮，也落盘）；被拒的请求一份都不该多
+      assert.equal(back.json.sessions.length, sessionsExpected, `会话数 ${back.json.sessions.length} 与 202 次数 ${sessionsExpected} 不符`);
+      const at = back.json.sessions.map((s) => Date.parse(s.updated_at));
+      for (let i = 1; i < at.length; i++) assert.ok(at[i - 1] >= at[i], '会话摘要应按 updated_at 倒序');
+    });
+
+    await t.test('契约（openapi:862）：libraries uniqueItems —— 重复项应被拒 400', async () => {
+      // openapi.yaml 的误报请求正文写了 `libraries: {minItems: 1, uniqueItems: true, items: enum:[rule, wiki]}`
+      const before = snapshot();
+      const dup = await call(base, 'POST', fpPath(alerts.edge), { body: { reason: '这条不动机器库，只验唯一性（PATH-NONE）', libraries: ['rule', 'rule'] } });
+      assertErrorBody(dup, 400, 'caller_error');
+      assert.deepEqual(snapshot(), before, '被拒的请求不该起维护轮');
     });
   } finally {
-    child.kill('SIGKILL');
-    await new Promise((r) => llm.server.close(r));
+    if (child) child.kill('SIGKILL');
+    await new Promise((r) => llm.server.close(() => r()));
   }
 });
 
@@ -580,14 +632,19 @@ test('错误码 503：无研判队列的进程里登记误报回 503 not_configu
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let out = '';
+  let exit = null;
   child.stdout.on('data', (d) => (out += d));
   child.stderr.on('data', (d) => (out += d));
+  child.on('exit', (code, signal) => { exit = { code, signal }; });
   try {
     let up = false;
-    for (let i = 0; i < 80; i++) {
-      try { await fetch(`http://127.0.0.1:${port}/api/status`); up = true; break; } catch { await sleep(100); }
+    for (let i = 0; i < 80 && !up && !exit; i++) {
+      try {
+        up = await isOurServer(`http://127.0.0.1:${port}/api/status`);
+      } catch { /* 还没起来 */ }
+      if (!up) await sleep(100);
     }
-    assert.ok(up, `缺件进程没起来：${out.slice(-500)}`);
+    assert.ok(up, `缺件进程没起来（exit=${JSON.stringify(exit)}）：${out.slice(-500)}`);
     const id = 'syslog:honeypot:aaaaaaaaaaaaaaaa:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43';
     const r = await call(`http://127.0.0.1:${port}`, 'POST', `/api/agent/triage/${encodeURIComponent(id)}/false-positive`, { body: { reason: '无队列进程下的误报登记' } });
     assertErrorBody(r, 503, 'not_configured');

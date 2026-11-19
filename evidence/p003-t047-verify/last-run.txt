@@ -1,0 +1,50 @@
+▶ P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 + 错误码）
+  ✔ 契约形状：会话列表与空态（openapi /api/false-positive/sessions） (3.84238ms)
+  ✔ 错误码：会话 ID 非 UUID 回 400、合法 UUID 不存在回 404 (4.143117ms)
+  ✔ 边界：正文/理由/登记人/libraries 逐条 400，且不落半份会话 (16.515545ms)
+  ✔ 边界（契约）：who 超长按现行口径截到 100 字后照常受理 (88.383272ms)
+  ✔ 错误码：案件不存在 404、研判未完成 409、reason 4000 字合法（用到长度上限） (4.964239ms)
+  ✔ A1/A2/A6/A7 只动规则：202 形状 → 四轮会话落盘 → 维护侧口径 (90.764854ms)
+  ✔ A3 写入走版本化：规则文件已收紧、旧版进 rules-history、目录无临时文件 (4.28671ms)
+  ✔ A4/A6 单腿补跑不洗掉已成功一侧的判据（成功 → 单腿 → 全量 仍只跑一次） (256.940966ms)
+  ✔ A2/A3/A6 只动知识库：规则库一字不动、判据页过发布闸、发布后会话终态、无重复发布口子 (173.776015ms)
+  ✔ A2/A6 两边都动：两侧都写、sides 与决策可见 (86.230838ms)
+  ✔ A4/A6 单库失败可补跑：失败侧重跑、未请求侧不重发，维护失败不改结论 (173.507965ms)
+  ✔ A5 每轮 AI 调用都进 T046 事件（域＝误报维护）：绝对条数 + 逐轮唯一 + 顺序 (16.967208ms)
+  ✔ 错误码 502：会话目录不可读时列表回 502（不是空列表） (2.76089ms)
+  ✖ 契约（openapi:862）：libraries uniqueItems —— 重复项应被拒 400 (2.221577ms)
+✖ P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 + 错误码） (1075.07635ms)
+ℹ A5 实测 {"total":24,"requests":12,"responses":12,"byRole":{"fp_maintainer":6,"rule_maintainer":4,"wiki_maintainer":2}}；替身计数 {"decision":6,"rule":4,"wiki":2}；逐轮累加 {"decision":6,"rule":4,"wiki":2}
+✔ 错误码 503：无研判队列的进程里登记误报回 503 not_configured（createServer() 缺件路径，文档 §2） (116.537355ms)
+✔ 契约静态口径（A7）：openapi 与两页文档同一口径，「待启用/待拍板」清零 (2.765291ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 15
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1269.697015
+
+✖ failing tests:
+
+test at evidence/p003-t047-verify/acceptance.test.js:612:13
+✖ 契约（openapi:862）：libraries uniqueItems —— 重复项应被拒 400 (2.221577ms)
+  AssertionError [ERR_ASSERTION]: 期望 400，实测 202：{"alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1763373697:6877d00d-04a5-4505-b244-e8e87ca82074","verdict":{"verdict":"false_positive","verdict_label":"误报","source":"human"},"feedback":{"reason":"这条不动机器库，只验唯一性（PATH-NONE）","who":"operator","recorded_at":"2026-11-19T23:49:05.630Z"},"maintenance":{"statu
+  
+  202 !== 400
+  
+      at assertErrorBody (file:///home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T047/evidence/p003-t047-verify/acceptance.test.js:233:10)
+      at TestContext.<anonymous> (file:///home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T047/evidence/p003-t047-verify/acceptance.test.js:616:7)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file:///home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T047/evidence/p003-t047-verify/acceptance.test.js:612:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 202,
+    expected: 400,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
