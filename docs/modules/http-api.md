@@ -4,7 +4,7 @@
 
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
-- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。P003-T042 的模型分层按 1387 行的 `server.js` 标号（见 [evidence/recon/P003-T042.md](../../evidence/recon/P003-T042.md)）：新增装配在 `server.js:42`（五个角色实例）与 `configSummary` 的 `model.roles`（`server.js:1355`），`applyLiveConfig` 涨到 `server.js:74-95`，路由行号整体 +5（`GET /api/config` 在 `server.js:871`、`POST` 在 `server.js:875-879`）；§3.5 与 §3.6 的表与样例已按本卡更新，其余章节的旧锚点没挪。
+- 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。P003-T042 的模型分层按 1387 行的 `server.js` 标号（见 [evidence/recon/P003-T042.md](../../evidence/recon/P003-T042.md)）：新增装配在 `server.js:42`（五个角色实例）与 `configSummary` 的 `model.roles`（`server.js:1355`），`applyLiveConfig` 涨到 `server.js:74-95`，路由行号整体 +5（`GET /api/config` 在 `server.js:871`、`POST` 在 `server.js:875-879`）；§3.5 与 §3.6 的表与样例已按本卡更新，其余章节的旧锚点没挪。P003-T030 只重取了 §3.1 路由表里 `POST /api/agent/triage/{alertId}` 那一格的行号（`server.js:826` → `server.js:1169-1179`，按本卡提交时 1449 行的 `server.js`，见 [evidence/recon/P003-T030.md](../../evidence/recon/P003-T030.md)），并新增 §3.9；本轮没改代码，其余锚点一律未动。
 P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inventory` 与 `POST /api/data/cleanup`、新增 §3.7）按本卡提交时的 `server.js` 标号（1309 行，`server.js:598-799` 的 helper、`server.js:864-870` 的两个分支、`server.js:829` 的 `dataDeps`）与 `triage-monitor.js` 标号（924 行，`triage-monitor.js:349-407` 的三个新方法，见 [evidence/recon/P003-T044.md](../../evidence/recon/P003-T044.md)）：新代码全部落在文件末尾与 `server.js:864-870`，前面所有锚点没挪。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
 
@@ -114,7 +114,7 @@ P003-T045 加了两条日志路由（`GET /api/logs`、`POST /api/logs/cleanup`�
 | GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:292-299` |
 | PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503。暂停期间报文进缓冲不丢、恢复不动游标（P003-T036，见 openapi 该路径说明） | `server.js:771-777` |
 | GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:825` |
-| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503；队列（排队 + 在跑）已达 `HIDS_TRIAGE_QUEUE_MAX` 回 429「研判队列已满（上限 N），稍后再试」并计入 `summary().dropped` | `server.js:826` |
+| POST | `/api/agent/triage/{alertId}` | 202 `TriageCase`（**现查告警送研判也走这一条**：按牧云事件 ID 入队） | 无研判队列回 503；队列（排队 + 在跑）已达 `HIDS_TRIAGE_QUEUE_MAX` 回 429「研判队列已满（上限 N），稍后再试」并计入 `summary().dropped`；同一 alert ID 只有一条记录——排队中重复 POST 幂等、在跑中不重启、已完成/失败的按人工重试重跑（详见 §3.9） | `server.js:1169-1179` |
 | DELETE | `/api/agent/triage/{alertId}` | 200 `{alert_id, status:"not_queued", cancelled:true}`（取消排队中的记录） | 无研判队列回 503；没有这条记录回 404；已在研判中或已完成（running / done）回 409 | `server.js:828-831` |
 | POST | `/api/agent/triage/{alertId}/false-positive` | 202（结论已落盘为误报，两个维护者开始） | 无研判队列回 503；理由不符格式回 400；无此案件回 404；研判未完成回 409 | `server.js:597-632` |
 | GET | `/api/agent/prompts` | 200 | — | `server.js:316-318` |
@@ -637,6 +637,46 @@ grep -cE '^[A-Z0-9_]+=' .env.example                          # 41（头部注�
 ```
 
 单测全在 tmp 目录跑：注入时钟与写入器，进程内 HTTP 请求；只有 A1 那条真进程小样碰 `spawn`（验「同份落文件」）。
+
+### 3.9 现查告警送研判（按牧云事件 ID 入队，P003-T030）
+
+**入口只有一条：`POST /api/agent/triage/{alertId}`**（`server.js:1176`）——它同时是「人工入队」「人工重试」与「现查送研判」
+三个说法的同一个接口，没有另起一条路径。`{alertId}` 就是 `GET /api/alerts` 列表里那条事件的 `id`（`webshell:62169` 这种
+`<类型>:<正整数>`，校验在 `validAlertId`，`server.js:489-493`）；不要求先收到 syslog 报文，也不要求这条事件进过队列。
+
+**链路**（每一步都有能重放的单测，见 `evidence/test/P003-T030/live-alert-to-triage.test.js`）：
+
+1. **入队**：`monitor.enqueue(alertId, {retry:true})`（`triage-monitor.js:670-702`）在 `records` 里落一条 `status=queued` 的
+   记录并 `persist()` 到 `<数据根>/triage-monitor.json`；紧接着 `drain()`（`triage-monitor.js:942-959`）排工，
+   所以 202 回包里 `status` 可能已经是 `running`。回包是 `TriageCase`。
+2. **研判**：现查记录没有 `record.input`，`run()` 跳过 syslog 关联（不建案卷、不写 `syslog` 键），直接
+   `investigator.run(alertId, {mode:'triage'})`（`triage-monitor.js:1042`）→ `InvestigationAgent.run` 按事件 ID 调
+   `get_<类型>_event` 从牧云拉详情（`investigation-agent.js:438-459`）。配了规则预筛时照常评估，只是没有解析后的报文（`parsed=null`）。
+3. **记录**：结果 `history.save(result)` 按 `alert_id + mode=triage` 落 `<数据根>/investigations/`（`triage-monitor.js:1053`），
+   随后记录置 `done` 并把 `verdict` / `summary` / `evidence` / `result_alert_id` 挂回去（`triage-monitor.js:1056-1073`）。
+
+**与推送路径一致的三件事**：同一个队列、同一套状态机（`queued → running → done/failed`）、同一份研判记录存储。
+**不同的两件事**：现查记录没有 `input`，所以没有 `syslog` / `case_dir` 键，也不会出现在
+`GET /api/agent/triage/cases`（那个列表只列有原始报文的案件，`triage-monitor.js:531`）；`dedupe` / `repeat_count`
+这套重复投递归并只服务 syslog，现查记录不参与。
+
+**重复入队语义**：同一 alert ID 只有一条记录（`records` 的键就是 `alert_id`，`triage-monitor.js:670-697`），
+重复 POST 不会产生第二条、也不会排第二份工：
+
+| 当前状态 | 重复 POST 的结果 |
+| --- | --- |
+| 没有记录 | 新建一条 `queued` 记录，202 |
+| `queued` | 幂等：仍是一条，回 `queued`，不返回 409 |
+| `running` | 不重启：202 回当前记录（`running`），`attempts` 不变 |
+| `done` / `failed`（含死信） | **人工重试**：状态回 `queued`，`attempts` 加 1，`created_at` 沿用，重跑一轮 |
+
+队列（排队 + 在跑）满 `HIDS_TRIAGE_QUEUE_MAX` 时回 429，不建记录；撤掉排队中的记录走 `DELETE`（§3.1）。
+
+**替身纪律**：下面那条单测只用假 `service`（任何方法被调即抛）、假 `investigator` 与临时目录，不连真牧云、不读真数据根。
+
+```bash
+node --test evidence/test/P003-T030/live-alert-to-triage.test.js
+```
 
 ## 4. Basic 认证
 

@@ -765,8 +765,18 @@ paths:
       summary: 手动入队或重试指定告警
       operationId: retryTriage
       description: |
-        重试一条已完成 / 失败的记录：状态回到 `queued`，`attempts` 加 1，`created_at` 沿用原值。
-        **人工登记过误报的记录**（`verdict=false_positive` 且 `decision_source=human`）重跑只刷新 `report` / `evidence` / `saved_at` 等，
+        按牧云事件 ID 入队——**现查告警送研判走的就是这一条**：`{alertId}` 是 `GET /api/alerts` 里那条事件的 `id`
+        （形如 `webshell:62169`），不要求先有 syslog 报文。入队后由研判队列按事件 ID 从牧云读 `get_<类型>_event`
+        详情、跑一轮常规研判（`mode=triage`），结果按同一 ID 落研判记录——与推送（syslog）入队同一套状态机、同一个
+        `TriageCase` 形状，只是记录上没有 `syslog` / `case_dir` 键。
+
+        **重复入队语义**：同一 alert ID 只有一条记录（键就是 `alert_id`），重复 POST 不会产生第二条、也不会排第二份工。
+        - 排队中（`queued`）：幂等——刷新这条记录的排队信息，仍是一条，不返回 409；
+        - 在跑中（`running`）：不重启，202 回当前记录（`status=running`）；
+        - 已完成 / 失败（`done` / `failed`，含死信）：按**人工重试**处理——状态回到 `queued`，`attempts` 加 1，
+          `created_at` 沿用原值，重跑一轮。
+
+        重跑时 **人工登记过误报的记录**（`verdict=false_positive` 且 `decision_source=human`）只刷新 `report` / `evidence` / `saved_at` 等，
         `verdict` / `verdict_label` / `summary` / `decision_source` 与 `feedback` 原样保留；AI 自己判出的 `false_positive` 不在此列，照常被这次研判覆盖。
       responses:
         '202':
