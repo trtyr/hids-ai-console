@@ -5,7 +5,7 @@
 - 模块清单条目：[docs/modules/_breakdown.json](_breakdown.json) 里的 `http-api`
 - 全局背景（进程入口、分层依赖、访问边界）：[docs/architecture.md](../architecture.md)
 - 行号基准：本页的 `文件:行号` 指向 `server.js` 共 496 行的版本（commit `63f1379`）。改了代码要重新核。P003-T013 新增的误报入口一行与第 3.4 节按本卡提交时的 `server.js` 标号（808 行，见 [evidence/recon/P003-T013.md](../../evidence/recon/P003-T013.md)），其余锚点仍指向 496 行版本。P003-T025 加的两处（§2 的启动闸门与第 3 节路由表的 `GET /api/config`）按 1021 行的 `server.js` 标号（见 [evidence/recon/P003-T025.md](../../evidence/recon/P003-T025.md)）：新代码全部落在文件末尾与 `server.js:612` 一行，前面所有锚点没挪。P003-T029 加的写配置（§3.1 表里 `POST /api/config`、§3.5 的两处小改、新增 §3.6）按 1085 行的 `server.js` 标号（见 [evidence/recon/P003-T029.md](../../evidence/recon/P003-T029.md)）：新代码落在 `server.js:32`、`server.js:65-84`、`server.js:646-650` 与新文件 `config-store.js`，前面所有锚点没挪。P003-T036 加的取消接口（§3 路由表的 `DELETE /api/agent/triage/{alertId}`）按本卡提交时的 `server.js` 标号（`server.js:825-828`，见 [evidence/recon/P003-T036.md](../../evidence/recon/P003-T036.md)）：新代码只在 triage 单条路由那一块加了一个分支，前面所有锚点没挪。P003-T037 并入 P003-T036 之后：`server.js` 仍是 1090 行（只有 triage 装配处一行不同），历史锚点没挪；`triage-monitor.js` 由 860 行涨到 1011 行，本页改到的两处锚点按合并版本重取（`triage-monitor.js:622-631`、`triage-monitor.js:995-1002`），其余行号见 [coding-reports/P003-T037.md](../../coding-reports/P003-T037.md) 的未决小节。P003-T042 的模型分层按 1387 行的 `server.js` 标号（见 [evidence/recon/P003-T042.md](../../evidence/recon/P003-T042.md)）：新增装配在 `server.js:42`（五个角色实例）与 `configSummary` 的 `model.roles`（`server.js:1355`），`applyLiveConfig` 涨到 `server.js:74-95`，路由行号整体 +5（`GET /api/config` 在 `server.js:871`、`POST` 在 `server.js:875-879`）；§3.5 与 §3.6 的表与样例已按本卡更新，其余章节的旧锚点没挪。P003-T046 新增的研判回放（§3.1 表里 `GET /api/agent/investigations/{alertId}/replay`、新增 §3.10）按本卡提交时 1466 行的 `server.js` 标号（回放分支 `server.js:1301-1312`、既有单条研判阅读分支 `server.js:1313-1321`），其余章节的旧锚点本轮没动。P003-T047 收掉两个维护者、换成统一维护 Agent（新增 `fp-maintainer.js` 与两条会话查询路由），按本卡提交时 1486 行的 `server.js` 标号
-（误报路由 `server.js:1133-1196`、维护侧映射 `server.js:325-356`、会话查询 `server.js:1039-1053`、`createServer` 新增三个注入参数在 `server.js:849-852`），
+（误报路由 `server.js:1134-1191`、维护侧映射 `server.js:325-356`、会话查询 `server.js:1040-1053`、`createServer` 新增三个注入参数在 `server.js:851-852`），
 `wiki-workbench.js` 由 355 行涨到 386 行（`recordPublished` 在 `:365-396`），其余章节的旧锚点本轮没动。P003-T030 只重取了 §3.1 路由表里 `POST /api/agent/triage/{alertId}` 那一格的行号（`server.js:826` → `server.js:1169-1179`，按本卡提交时 1449 行的 `server.js`，见 [evidence/recon/P003-T030.md](../../evidence/recon/P003-T030.md)），并新增 §3.9；本轮没改代码，其余锚点一律未动。
 P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inventory` 与 `POST /api/data/cleanup`、新增 §3.7）按本卡提交时的 `server.js` 标号（1309 行，`server.js:598-799` 的 helper、`server.js:864-870` 的两个分支、`server.js:829` 的 `dataDeps`）与 `triage-monitor.js` 标号（924 行，`triage-monitor.js:349-407` 的三个新方法，见 [evidence/recon/P003-T044.md](../../evidence/recon/P003-T044.md)）：新代码全部落在文件末尾与 `server.js:864-870`，前面所有锚点没挪。
 - 证据清单：本页每条断言的出处与验证方式见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md)；P003-T006 新增的分页与身份断言见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)；P003-T014 改动的三条溯源路由（列表筛选、`POST` 200/202/422/502、详情形状）见 [evidence/recon/P003-T014.md](../../evidence/recon/P003-T014.md)，这三行行号按 P003-T014 复审提交
@@ -115,7 +115,7 @@ P003-T047 又加了两条误报维护会话查询（`/api/false-positive/session
 | GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:825` |
 | POST | `/api/agent/triage/{alertId}` | 202 `TriageCase`（**现查告警送研判也走这一条**：按牧云事件 ID 入队） | 无研判队列回 503；队列（排队 + 在跑）已达 `HIDS_TRIAGE_QUEUE_MAX` 回 429「研判队列已满（上限 N），稍后再试」并计入 `summary().dropped`；同一 alert ID 只有一条记录——排队中重复 POST 幂等、在跑中不重启、已完成/失败的按人工重试重跑（详见 §3.9） | `server.js:1169-1179` |
 | DELETE | `/api/agent/triage/{alertId}` | 200 `{alert_id, status:"not_queued", cancelled:true}`（取消排队中的记录） | 无研判队列回 503；没有这条记录回 404；已在研判中或已完成（running / done）回 409 | `server.js:828-831` |
-| POST | `/api/agent/triage/{alertId}/false-positive` | 202（结论已落盘为误报，统一维护 Agent 开始；正文 `{reason, who?, libraries?}`，`libraries` 是补跑选择器） | 无研判队列回 503；理由不符格式、`libraries` 不是 `rule`/`wiki` 组成的非空数组回 400；无此案件回 404；研判未完成回 409 | `server.js:1133-1196` |
+| POST | `/api/agent/triage/{alertId}/false-positive` | 202（结论已落盘为误报，统一维护 Agent 开始；正文 `{reason, who?, libraries?}`，`libraries` 是补跑选择器） | 无研判队列回 503；理由不符格式、`libraries` 不是 `rule`/`wiki` 组成的非空数组回 400；无此案件回 404；研判未完成回 409 | `server.js:1134-1191` |
 | GET | `/api/false-positive/sessions` | 200 `{sessions}`（误报维护会话摘要，按 `updated_at` 倒序；含 `status`/`terminal`/`libraries`/`sides`/`decision_source`，不含案卷快照与模型正文） | 会话目录不可读回 502 | `server.js:1039-1043` |
 | GET | `/api/false-positive/sessions/{id}` | 200（整份维护会话：`turns[]`、`messages[]`、`decision`、`outcomes`、`validation`、`auto_verdict`）/ 404 | ID 不是 36 位 UUID 回 400；会话目录不可读回 502 | `server.js:1044-1053` |
 | GET | `/api/agent/prompts` | 200 | — | `server.js:316-318` |
@@ -160,9 +160,9 @@ P003-T047 又加了两条误报维护会话查询（`/api/false-positive/session
 
 ### 3.4 误报登记与统一维护 Agent（P003-T013 立，P003-T047 收成一个 Agent）
 
-**关键路径**：`server.js:1133-1196`（误报路由）、`server.js:325-356`（会话 outcomes → `record.maintenance` 的映射）、
-`fp-maintainer.js:163-472`（统一维护 Agent：四轮会话 + 补跑幂等 + 自校验）、`server.js:315-340`（规则维护者 `RegoRuleMaintainer`）、
-`fp-maintainer.js:59-73`（知识库目标页口径）、`wiki-workbench.js:365-396`（发布后置终态）。
+**关键路径**：`server.js:1134-1191`（误报路由）、`server.js:325-356`（会话 outcomes → `record.maintenance` 的映射）、
+`fp-maintainer.js:163-470`（统一维护 Agent：四轮会话 + 补跑幂等 + 自校验）、`server.js:236-313`（规则维护者 `RegoRuleMaintainer`）、
+`fp-maintainer.js:62-73`（知识库目标页口径）、`wiki-workbench.js:365-396`（发布后置终态）。
 
 **入口**：`POST /api/agent/triage/{alertId}/false-positive`，正文 `{reason, who?, libraries?}`。「分析员把这一条判成误报」只走这一个入口：
 理由必填（10 到 4000 字），登记人省略时取业务账号名，没配 Basic 认证时是 `operator`（登记人至少 2 字）。
@@ -220,7 +220,7 @@ P003-T047 又加了两条误报维护会话查询（`/api/false-positive/session
 过不了就不写，目录里不留临时文件，已有规则一字不动。它一次只碰一个文件：已有规则的 id 住在别的文件名里时，改的就是那份文件。
 
 **不许放宽（P003-T020，A1）**：`output.id` 命中已有规则时，那条规则的每一条旧条件都要在候选正文里找到一条「至少同样严」的新条件
-（`server.js:150-210`：`ruleExpressions` 抽 `match if { }` 体内的行，`atLeastAsStrict` 逐条比，`widenedConditions` 一对一配对）。认不出的行按「无法证明没放宽」处理，
+（`server.js:170-210`：`ruleExpressions` 抽 `match if { }` 体内的行，`atLeastAsStrict` 逐条比，`widenedConditions` 一对一配对）。认不出的行按「无法证明没放宽」处理，
 所以未知语法不是拒绝的理由——候选正文先过 `RuleStore` 解析，认不出的只剩被改过的行，同样算放宽。
 
 | 旧条件 | 候选 | 判定 |
@@ -245,7 +245,7 @@ P003-T047 又加了两条误报维护会话查询（`/api/false-positive/session
 知识库侧：走知识维护会话（`wikiAgent.create` + 一轮 `reply`），再把草案用 `publishBundle`（发布闸：结构、断链、证据引用、页面版本）
 写进判据页；**写完再 `recordPublished()` 把会话置终态 `published`**（`wiki-workbench.js:365-396`）——已发布的会话再发布一次直接 409，
 这就是「无重复发布口子」。只出草案、页没写上就算 `failed`。选页口径与 `POST /api/wiki/sessions` 共用 `wikiFeedbackTarget`
-（`fp-maintainer.js:59-73`）：优先分析时引用过的判据页，其次本场景第一页。审计字段里 `reviewer` 记登记人、`note` 记他给的理由、`via` 记 `fp_maintainer`。
+（`fp-maintainer.js:62-73`）：优先分析时引用过的判据页，其次本场景第一页。审计字段里 `reviewer` 记登记人、`note` 记他给的理由、`via` 记 `fp_maintainer`。
 
 「页没写上」不能再是一个光秃秃的状态词（P003-T021）：带 `feedback` 的回合里维护者真没改判据时，`reply` 以 502 抛错，正文就是**为什么没改**——
 `知识库维护未改判据（data_gap·数据缺口）：判据本身未发现错误；后续由「Syslog 解析、牧云事件匹配与取证接口」处置`
@@ -254,7 +254,7 @@ P003-T047 又加了两条误报维护会话查询（`/api/false-positive/session
 `WikiWorkbench` 的会话记录里（诊断与 `follow_up` 都在），只是这一轮同时算维护失败。
 
 **状态两格：`status` 与 `state`**（A4）：`maintenance.<边>.status` 仍只有三个值——`updating` / `updated` / `failed`，总态与单边态同一套
-（`server.js:153-156`）。P003-T047 新增的两类结果（`no_change` 没动这侧 / `skipped` 幂等跳过 / `updated` 真写了）落在 `maintenance.<边>.state` 上，
+（`server.js:154-157`）。P003-T047 新增的两类结果（`no_change` 没动这侧 / `skipped` 幂等跳过 / `updated` 真写了）落在 `maintenance.<边>.state` 上，
 `status` 照旧是 `updated`（这一边已收尾、不需要人工介入）——老客户端只读 `status` 不会读错，新客户端看 `state` 知道到底动没动。
 
 - 还有一边在跑 → 总态 `updating`；
@@ -283,7 +283,7 @@ A/B 口径没拍板之前，Agent 的维护产出照写（规则 / 判据页该�
 决策轮与规则维护轮带误报维护会话 id，知识维护轮带它自己那份 wiki 维护会话 id（那一份 id 就记在误报会话的 wiki outcome 上）。
 
 维护状态随记录一起 `persist()`，所以 `GET /api/agent/triage/{alertId}` 能读到同一组字段。同一轮维护还在本进程里跑时再次登记只回当前进度，
-不重起一轮（`server.js:1161`）；挡它的是 `runningMaintenance` 集合（`server.js:871-873`）——**不是**记录上的 `maintenance.status`：
+不重起一轮（`server.js:1160`）；挡它的是 `runningMaintenance` 集合（`server.js:872`）——**不是**记录上的 `maintenance.status`：
 进程重启后记录会停在 `updating`，拿那个当锁会把案件永久锁死。重启后的残留不挡重新登记，但也不会自动恢复（见 P003-T013 报告「未决」）。
 
 ### 3.5 生效配置（`GET /api/config`，P003-T025）
@@ -1035,7 +1035,7 @@ C3 /api/agent/triage/cases?count=0（无 monitor） | 503 | {"error":"自动研�
 | 403 | 管理令牌不对 | 规则管理员令牌（`server.js:962`）、知识库管理员凭据（`server.js:1153`） |
 | 404 | 目标不存在 | 未知 API（`server.js:943-944`）、知识库页面/会话、研判记录、告警事件 |
 | 405 | 方法不对（只有提示词入口一处，`server.js:790`） | `POST /api/agent/prompts` |
-| 409 | 状态冲突 | 研判未完成不能登记误报（`server.js:1159`）、页面版本过期、缺可维护判据页、知识维护会话已发布又发布一次（`wiki-workbench.js:369`） |
+| 409 | 状态冲突 | 研判未完成不能登记误报（`server.js:1157`）、页面版本过期、缺可维护判据页、知识维护会话已发布又发布一次（`wiki-workbench.js:368`） |
 | 410 | 入口已下线 | `POST /api/agent/prompts/upload`（`server.js:791`） |
 | 422 | 目标无法溯源 | 白板启动时告警没资产（`trace-board.js:344-355`） |
 
