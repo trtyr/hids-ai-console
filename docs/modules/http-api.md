@@ -39,13 +39,13 @@
 
 | 件 | 位置 | 缺配置时的结果 |
 | --- | --- | --- |
-| 运行态目录 `runtime`（9 条路径） | `server.js:29`、`server.js:1005-1018` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
+| 运行态目录 `runtime`（9 条路径） | `server.js:27`、`server.js:1073-1085` | 根由 `HIDS_DATA_DIR` 定，没设就是 `~/.local/share/hids-ai-console/`（§8.1）；**不在仓库内** |
 | 监听地址与端口 | `server.js:28-29` | `HIDS_HOST` 缺省 `127.0.0.1`，`HIDS_PORT` 缺省 `8080` |
 | 牧云网关 `gateway` 与 API 工具箱 `apiToolbox` | `server.js:30-34` | 牧云地址或 Token 缺一个 → 两者为 `null` |
 | 模型 `model` 与两个研判器 | `server.js:35-40` | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项 → `model` 为 `null`，两个研判器也是 `null` |
 | 研判记录、规则集、研判队列、判据工作台、溯源白板 | `server.js:46-59`、`server.js:126` | 队列要 `gateway` 与研判器、白板要 MCP 工具箱与模型，缺任一则该件为 `null` |
 
-运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1005-1018`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
+运行态路径的默认值全出自导出的 `runtimePaths(root = dataRoot())`（`server.js:1073-1085`，单测直接拿它对照）：`data` / `investigations` / `triageRules` / `triageMonitor` / `cases` / `baseline` / `intel` / `wikiSessions` / `traceBoards`，根由 `dataRoot()`（`config-store.js:31-35`）算：`HIDS_DATA_DIR` 指向哪就落哪，没设就是 `~/.local/share/hids-ai-console/`。**仓库里一个字都不写。** 整仓规则的完整说明在 [architecture.md](../architecture.md) 第 8.1 节。
 
 **`createServer` 是依赖注入点**（`server.js:257-261`）：14 个参数都带默认值，默认指向模块级单例。测试与探针靠传替身换掉 `service`、`investigator`、`history`、`monitor`、`wiki`、`wikiAgent` 这些件。其中 `monitor` 与 `boardService` 的默认值写成「`service` 是不是模块级 `gateway`」的条件式——换了 `service`，就不再挂默认的研判队列与溯源白板。
 
@@ -94,13 +94,13 @@
 | GET | `/api/triage/rules` | 200 | 读取失败回 502 | `server.js:265-269` |
 | POST | `/api/triage/rules/validate` | 200 `{valid:true,count}` | 正文不是对象 / 缺 `config` 键回 400「请求正文缺少 config」；`config` 不是合法规则集回 400「规则集格式无效」 | `server.js:270-279` |
 | PUT | `/api/triage/rules` | 200 | 需规则管理员令牌 | `server.js:280-291` |
-| GET | `/api/rules` | 200 `{count, rules}`（Rego 规则库，活数据在 `<数据根>/rules/`） | 规则库读取失败回 502 | `server.js:753-756` |
-| GET | `/api/rules/sessions` | 200 `{sessions}`（规则维护会话摘要，按 `updated_at` 倒序；不含规则正文与误报理由） | 会话目录不可读回 502 | `server.js:759-762` |
-| POST | `/api/rules/evaluate` | 200 `{count, matched}` | 正文不是对象回 400；求值失败回 502 | `server.js:763-769` |
-| GET | `/api/rules/{id}/history` | 200 `{id, history:[{rev, file, bytes, saved_at}]}` 按写入时间升序；规则不存在时回空数组 | id 不合格式回 400；历史目录不可读回 502 | `server.js:770-779` |
-| POST | `/api/rules/{id}/rollback` | 200 与 `PUT` 同形，另带 `action:"rollback"` 与 `rolled_back_to` | 需规则管理员令牌（没配 503／不对 403）；`rev` 不是 16 位十六进制回 400；历史里没有这一版回 404 | `server.js:780-789` |
-| PUT | `/api/rules/{id}` | 200 `{id, file, name, rev, previous_rev, action}`（`action` 是 `add` / `update` / `unchanged`） | 需规则管理员令牌（没配 503／不对 403）；正文缺 `rego` 或 `expected_revision` 回 400；正文不在规则子集内回 400 并带 `<id>.rego:<行>`；`expected_revision` 与当前指纹不一致回 409；规则目录写失败回 500 | `server.js:791-813` |
-| GET | `/api/rules/{id}` | 200（含 `revision` = 正文 sha256 前 16 位）/ 404 | id 不合格式回 400；规则库读取失败回 502 | `server.js:815-828` |
+| GET | `/api/rules` | 200 `{count, rules}`（Rego 规则库，活数据在 `<数据根>/rules/`） | 规则库读取失败回 502 | `server.js:752-755` |
+| GET | `/api/rules/sessions` | 200 `{sessions}`（规则维护会话摘要，按 `updated_at` 倒序；不含规则正文与误报理由） | 会话目录不可读回 502 | `server.js:758-761` |
+| POST | `/api/rules/evaluate` | 200 `{count, matched}` | 正文不是对象回 400；求值失败回 502 | `server.js:762-768` |
+| GET | `/api/rules/{id}/history` | 200 `{id, history:[{rev, file, bytes, saved_at}]}` 按写入时间升序；规则不存在时回空数组 | id 不合格式回 400；历史目录不可读回 502 | `server.js:769-778` |
+| POST | `/api/rules/{id}/rollback` | 200 与 `PUT` 同形，另带 `action:"rollback"` 与 `rolled_back_to` | 需规则管理员令牌（没配 503／不对 403）；`rev` 不是 16 位十六进制回 400；历史里没有这一版回 404 | `server.js:779-788` |
+| PUT | `/api/rules/{id}` | 200 `{id, file, name, rev, previous_rev, action}`（`action` 是 `add` / `update` / `unchanged`） | 需规则管理员令牌（没配 503／不对 403）；正文缺 `rego` 或 `expected_revision` 回 400；正文不在规则子集内回 400 并带 `<id>.rego:<行>`；`expected_revision` 与当前指纹不一致回 409；规则目录写失败回 500 | `server.js:790-812` |
+| GET | `/api/rules/{id}` | 200（含 `revision` = 正文 sha256 前 16 位）/ 404 | id 不合格式回 400；规则库读取失败回 502 | `server.js:814-827` |
 | GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:292-299` |
 | PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503。暂停期间报文进缓冲不丢、恢复不动游标（P003-T036，见 openapi 该路径说明） | `server.js:771-777` |
 | GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:825` |

@@ -350,19 +350,19 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
   调的是同一个方法**，没有第二套直写文件的函数。
 - **回滚**：`rollback(id, rev)`（`rule-store.js:306`）把历史里那一版当新版 `save()` 一次——所以当前版也进历史，回滚可再回滚；
   历史里没有的 `rev` 直接 404，不动现网那份。
-- **维护者**：`RegoRuleMaintainer`（`server.js:227`）拿已完成的误报案件让模型改/增一条，写盘走 `save()`，每次维护落一份会话。
+- **维护者**：`RegoRuleMaintainer`（`server.js:226`）拿已完成的误报案件让模型改/增一条，写盘走 `save()`，每次维护落一份会话。
   改已有规则时多一道校验：原条件不许更宽（放宽就拒绝落盘，维护记 `failed`）。
-- **研判侧读同一本库**：`server.js:46` 装配的 `regoRuleStore` 同时交给两个 `InvestigationAgent`（构造第 5 个参数），
+- **研判侧读同一本库**：`server.js:45` 装配的 `regoRuleStore` 同时交给两个 `InvestigationAgent`（构造第 5 个参数），
   维护者改完规则，下一次研判读到的就是改过的那份（`investigation-agent.js:22` 里的仓内缺省只对没传第 5 个参数的调用方生效）。
 
-维护接口（`server.js:753-828`）见 §9.2 与 `openapi.yaml`；四条新增的是 `PUT /api/rules/{id}`、
+维护接口（`server.js:752-827`）见 §9.2 与 `openapi.yaml`；四条新增的是 `PUT /api/rules/{id}`、
 `GET /api/rules/{id}/history`、`POST /api/rules/{id}/rollback`、`GET /api/rules/sessions`。
 
 ## 8. 状态落盘：数据都写在哪
 
 ### 8.1 运行态目录的解析规则
 
-`server.js:29` 取模块级常量 `runtime`；具体路径清单由导出的 `runtimePaths(root = dataRoot())`（`server.js:1010-1022`）给出。
+`server.js:27` 取模块级常量 `runtime`；具体路径清单由导出的 `runtimePaths(root = dataRoot())`（`server.js:1073-1085`）给出。
 数据根 `dataRoot()` **只有一处定义**（`config-store.js:31-35`）：`server.js` 与 `prompt-store.js`、`wiki-store.js` 共用这一份，别在别处另拼一套。
 
 ```js
@@ -376,7 +376,7 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 - 没设就落 `~/.local/share/hids-ai-console/`——本机是 `/home/trtyr/.local/share/hids-ai-console/`。
 - **不读** `XDG_DATA_HOME`：卡面只点名 `HIDS_DATA_DIR` 与 `~/.local/share/hids-ai-console`，多一个开关就是多一条没人维护的路径。
 
-`server.js` 里定义的运行态路径一律取自 `runtime.*`（`server.js:32`、`server.js:46-59`、`server.js:126`），
+`server.js` 里定义的运行态路径一律取自 `runtime.*`（`server.js:30`、`server.js:42-62`、`server.js:128`），
 **仓库里一个字都不写**：部署时仓库目录往往只读，运行态落进去没人知道该去哪找。九条具名路径的子结构与 P003-T019 时仓内
 `.data/` 逐字一致（见 8.2），换的只是「根在哪」。
 
@@ -397,26 +397,26 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 ### 8.2 目录与文件清单
 
 下表路径均相对于**数据根**（第 8.1 节：`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console/`）。
-前九条的默认值由 `runtimePaths()`（`server.js:1010-1022`）给出，`server.js:32`、`server.js:46-59`、`server.js:126` 把它们交给各构件。
+前九条的默认值由 `runtimePaths()`（`server.js:1073-1085`）给出，`server.js:30`、`server.js:42-62`、`server.js:128` 把它们交给各构件。
 
 | 路径 | 存什么 | 谁写 | 证据 |
 | --- | --- | --- | --- |
-| `<数据根>/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:46` |
-| `<数据根>/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:47` |
-| `<数据根>/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:52`、`triage-monitor.js:240` |
-| `<数据根>/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:56`、`syslog-case.js:92` |
-| `<数据根>/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:57`、`triage-monitor.js:849` |
-| `<数据根>/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:58`、`triage-monitor.js:851` |
-| `<数据根>/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:59` |
-| `<数据根>/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:126` |
-| `<数据根>/config-overrides.json` | 可写配置的覆盖层（只存改过的五项） | `createConfigStore` | `server.js:32`、`config-store.js:37` |
+| `<数据根>/investigations/` | 研判记录，同一告警同一模式只留最近一次 | `InvestigationStore` | `server.js:51` |
+| `<数据根>/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:52` |
+| `<数据根>/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:54`、`triage-monitor.js:240` |
+| `<数据根>/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:59`、`syslog-case.js:92` |
+| `<数据根>/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:60`、`triage-monitor.js:849` |
+| `<数据根>/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:61`、`triage-monitor.js:851` |
+| `<数据根>/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:62` |
+| `<数据根>/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:128` |
+| `<数据根>/config-overrides.json` | 可写配置的覆盖层（只存改过的五项） | `createConfigStore` | `server.js:30`、`config-store.js:37` |
 | `<数据根>/prompt-overrides.json` | 提示词与 SOP 的本地覆盖（`HIDS_PROMPT_STORE_FILE` 可换掉） | `PromptStore` | `prompt-store.js:17` |
 | `<数据根>/update-packages/` | 已上传的升级包（`HIDS_UPDATE_STORE_DIR` 可换掉；默认跟着覆盖文件所在目录走） | `UpdateStore` | `update-store.js:62` |
 | `<数据根>/wiki/` | 判据库活数据（Markdown 页面） | `WikiStore`、`PromptStore`（SOP） | `wiki-store.js:417`、`wiki-store.js:6`、`prompt-store.js:12` |
 | `<数据根>/wiki-history/` | 判据页历史版本（`HIDS_WIKI_DIR` / 构造参数把判据库目录换到别处时改落 `<判据库目录的上一级>/.data/wiki-history/`） | `WikiStore` | `wiki-store.js:421-425`、`wiki-store.js:30`、`wiki-store.js:225` |
-| `<数据根>/rules/` | Rego 规则库活数据（`<id>.rego`） | `RuleStore` | `rule-store.js:344`、`rule-store.js:249`、`server.js:46` |
+| `<数据根>/rules/` | Rego 规则库活数据（`<id>.rego`） | `RuleStore` | `rule-store.js:344`、`rule-store.js:249`、`server.js:45` |
 | `<数据根>/rules-history/` | 规则历史版本（`<id>-<rev>.rego`） | `RuleStore.save()` | `rule-store.js:348`、`rule-store.js:249`、`rule-store.js:275` |
-| `<数据根>/rule-sessions/` | 规则维护会话（输入案卷引用 / 模型草案 / 校验结果 / 终态） | `RuleSessionStore` | `rule-store.js:352`、`rule-store.js:388`、`server.js:47` |
+| `<数据根>/rule-sessions/` | 规则维护会话（输入案卷引用 / 模型草案 / 校验结果 / 终态） | `RuleSessionStore` | `rule-store.js:352`、`rule-store.js:388`、`server.js:46` |
 
 `.gitignore` 里还忽略了 `*.hids-policy`（`.gitignore:9`）与 `*.pem`、`*.key`（`.gitignore:7-8`），即签名私钥与加密密钥不进仓。
 
@@ -457,7 +457,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 - 知识库：读接口（`/api/wiki/pages`、`/api/wiki/pages/{path}`）对已通过 Basic 认证的调用方开放；健康检查、维护会话、发布等写操作要求管理员令牌（`server.js:248-249`）。令牌没配置时写接口返回 503。
 - 规则集（误报规则集 `triage-rules.json`）：`GET /api/triage/rules` 开放，并在响应里带 `writable` 字段说明当前能不能写；`PUT /api/triage/rules` 要求规则管理员令牌，并要求请求带上 `expected_revision` 做乐观并发控制。
-- 规则库（Rego，`server.js:753-828`）：列表 `/api/rules`、读 `/api/rules/{id}`、求值 `/api/rules/evaluate`、历史 `/api/rules/{id}/history`、维护会话 `/api/rules/sessions` 都是读接口，开放；`PUT /api/rules/{id}` 与 `POST /api/rules/{id}/rollback` 要求同一个规则管理员令牌（`x-rule-admin-token`），没配令牌时回 503、令牌不对回 403。`PUT` 必须带 `expected_revision`（新增规则给 `null`），与当前正文指纹不一致回 409；正文不在规则子集内回 400 并带 `<id>.rego:<行>`。
+- 规则库（Rego，`server.js:752-827`）：列表 `/api/rules`、读 `/api/rules/{id}`、求值 `/api/rules/evaluate`、历史 `/api/rules/{id}/history`、维护会话 `/api/rules/sessions` 都是读接口，开放；`PUT /api/rules/{id}` 与 `POST /api/rules/{id}/rollback` 要求同一个规则管理员令牌（`x-rule-admin-token`），没配令牌时回 503、令牌不对回 403。`PUT` 必须带 `expected_revision`（新增规则给 `null`），与当前正文指纹不一致回 409；正文不在规则子集内回 400 并带 `<id>.rego:<行>`。
 
 提示词上传在业务端被明确关闭：`POST /api/agent/prompts/upload` 返回 410「提示词更新已迁移到独立维护端，业务端不允许上传」（`server.js:233`）。
 
@@ -512,7 +512,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
 | `HIDS_DATA_DIR` | `~/.local/share/hids-ai-console` | 运行态数据根：下面九条具名路径 + 覆盖层 / 提示词覆盖 / 升级包 / 判据与规则两本库及其历史与维护会话的根（§8.1、§8.2） | `config-store.js:31` |
-| `HIDS_CASES_DIR` | `<数据根>/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:56` |
+| `HIDS_CASES_DIR` | `<数据根>/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:59` |
 | `HIDS_TRIAGE_CONCURRENCY` | `2` | 自动研判同时跑几条；env 里的非法值（0 / 负数 / 小数 / 非数 / 空串）回落 2。**装配处不覆盖**：`poll` 与 `syslog` 两种输入模式都按它生效，`summary().concurrency` 报规范化后的生效值。构造参数显式传数字 0 是「只排队不执行」（测试与停机维护用，P003-T036 × P003-T037 合并后的约定）。P003-T037，改完要重启进程 | `triage-monitor.js:30`、`triage-monitor.js:35`、`triage-monitor.js:109`、`server.js:51-58` |
 | `HIDS_TRIAGE_QUEUE_MAX` | `1000` | 自动研判队列上限（排队 + 在跑）；满了拒收并计入 `summary().dropped`。P003-T037，改完要重启进程 | `triage-monitor.js:31`、`triage-monitor.js:92` |
 | `HIDS_STATUS_TTL_MS` | `45000` | `/api/status` 探活缓存窗口，落 30~60 秒；`0` 关闭缓存。P003-T037 | `cloudwalker.js:110` |
