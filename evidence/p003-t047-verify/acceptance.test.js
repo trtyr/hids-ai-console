@@ -1,0 +1,613 @@
+// P003-T047 验收：误报统一维护 Agent（多轮会话操控双库，单腿可补跑）
+// 黑盒：起真进程（node server.js），上游（牧云 / 模型）用本文件内的替身 HTTP 服务；
+// 全部断言只依据 docs/modules/http-api.md §3.4、docs/modules/triage-pipeline.md §7.4、openapi.yaml。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdir, writeFile, readFile, readdir, chmod, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import http from 'node:http';
+
+const ROOT = new URL('../../', import.meta.url).pathname.replace(/\/$/, '');
+const TMP = '/tmp/p003-t047-acceptance';
+const DATA = `${TMP}/data`;
+const PORT = 18147;
+const LLM_PORT_FREE = 0;
+const RULE_ID = 'honeypot_probe';
+const WIKI_PAGE = 'honeypot/HP-10.md';
+const ADMIN_TOKEN = 't047-admin-token';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const GOOD_RULE_A = `package hids.rules.honeypot_probe
+
+# name: 蜜罐探测（root 用户）
+# description: 排除已登记的授权扫描来源
+
+default match := false
+
+match if {
+  input.type == "honeypot"
+  input.peer != ""
+  input.source_ip != ""
+  input.user == "root"
+  not input.source_ip == "203.0.113.9"
+}
+`;
+const GOOD_RULE_B = `package hids.rules.honeypot_probe
+
+# name: 蜜罐探测（root 用户）
+# description: 排除已登记的扫描账号
+
+default match := false
+
+match if {
+  input.type == "honeypot"
+  input.peer != ""
+  input.source_ip != ""
+  input.user == "root"
+  not input.source_ip == "203.0.113.9"
+  not input.user == "scanner"
+}
+`;
+// 放宽：删掉 peer / source_ip 两条原条件 + 加一条无关限制，必被落盘前校验拒绝
+const WIDE_RULE = `package hids.rules.honeypot_probe
+
+# name: 蜜罐探测（root 用户）
+# description: 放宽版
+
+default match := false
+
+match if {
+  input.type == "honeypot"
+  input.user == "root"
+}
+`;
+
+const wikiSource = readFileSync(`${ROOT}/wiki/${WIKI_PAGE}`, 'utf8');
+
+function makeLlmStub() {
+  const counters = { decision: 0, rule: 0, wiki: 0 };
+  const attemptsByMarker = new Map();
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => (raw += c));
+    req.on('end', () => {
+      let body = {};
+      try { body = JSON.parse(raw); } catch { /* 留空 */ }
+      const system = body.messages?.[0]?.content || '';
+      const user = typeof body.messages?.[1]?.content === 'string' ? body.messages[1].content : JSON.stringify(body.messages?.[1] || '');
+      let content = '{}';
+      if (system.includes('决策轮')) {
+        counters.decision += 1;
+        const libs = user.includes('PATH-BOTH') ? ['rule', 'wiki']
+          : user.includes('PATH-WIKI') ? ['wiki']
+          : user.includes('PATH-FAIL') ? ['rule']
+          : user.includes('PATH-NONE') ? []
+          : ['rule'];
+        content = JSON.stringify({ libraries: libs, why: `决策理由（${libs.join('+')}）` });
+      } else if (system.includes('Rego 规则维护助手')) {
+        counters.rule += 1;
+        seen.push(`rule#${counters.rule}:${user.slice(0, 0)}`);
+        const marker = ['PATH-BOTH', 'PATH-WIKI', 'PATH-FAIL'].find((m) => user.includes(m)) || 'PATH-RULE';
+        const attempt = (attemptsByMarker.get(marker) || 0) + 1;
+        attemptsByMarker.set(marker, attempt);
+        const widen = marker === 'PATH-FAIL' && attempt === 1;
+        const diskRule = readFileSync(`${DATA}/rules/${RULE_ID}.rego`, 'utf8');
+        const tighten = (text, line) => (text.includes(line) ? text : text.replace(/\n\}\s*$/, `\n  ${line}\n}\n`));
+        const rego = widen ? WIDE_RULE
+          : marker === 'PATH-BOTH' ? tighten(diskRule, 'not input.user == "scanner"')
+          : marker === 'PATH-FAIL' ? tighten(diskRule, 'not input.peer == "10.9.9.9"')
+          : GOOD_RULE_A;
+        content = JSON.stringify({
+          ready: true, id: RULE_ID, name: '蜜罐探测（root 用户）', description: '排除已登记来源',
+          reason: widen ? '放宽以消化本次误报' : '收紧条件，排除已登记的授权来源', rego,
+        });
+      } else if (system.includes('判据 Wiki 维护助手')) {
+        counters.wiki += 1;
+        const extra = user.includes('PATH-BOTH')
+          ? '\n\n**补充（2026-11-20）**：同来源反复触碰且已登记为授权扫描的，按误报处置并回填扫描器登记编号。\n'
+          : '\n\n**补充（2026-11-20）**：已登记扫描器来源的触碰，核对登记记录后按误报处置。\n';
+        content = JSON.stringify({
+          reply: '判据补了适用边界。', diagnosis: 'criterion_gap', ready: true,
+          proposed_content: wikiSource + extra, rationale: '判据缺适用边界（登记扫描器来源）',
+        });
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }));
+    });
+  });
+  return { server, counters, seen };
+}
+
+const mkAlert = (tag) => `syslog:honeypot:${tag.repeat(16).slice(0, 16)}:${1763373600 + tag.charCodeAt(0)}:${randomUUID()}`;
+
+async function seed() {
+  await rm(TMP, { recursive: true, force: true });
+  await mkdir(`${DATA}/cases`, { recursive: true });
+  const alerts = {
+    rule: mkAlert('a'),
+    wiki: mkAlert('b'),
+    both: mkAlert('c'),
+    fail: mkAlert('d'),
+    running: mkAlert('e'),
+    unknown: mkAlert('f'),
+    edge: mkAlert('a'),
+  };
+  for (const key of ['rule', 'wiki', 'both', 'fail', 'edge']) {
+    const dir = `${DATA}/cases/${key}`;
+    await mkdir(dir, { recursive: true });
+    await writeFile(`${dir}/01-原始告警.txt`, `<134>1 2026-11-17T10:00:00Z host app - cloudwalker-honeypot event_id=7 host_ip=10.0.0.5\n`);
+    await writeFile(`${dir}/03-研判事实.md`, `# 研判事实\n主机 10.0.0.5 触碰蜜罐诱饵（${key}）\n`);
+    await writeFile(`${dir}/result.json`, JSON.stringify({
+      verdict: { verdict: 'threat', verdict_label: '威胁', summary: '疑似蜜罐探测' },
+      rego_rule_ids: [RULE_ID],
+      cited_wiki_ids: [WIKI_PAGE],
+    }, null, 2));
+  }
+  const now = new Date().toISOString();
+  const rec = (alert_id, status, caseKey) => ({
+    alert_id, status, verdict: 'threat', verdict_label: '威胁', summary: '疑似蜜罐探测',
+    case_dir: caseKey ? `${DATA}/cases/${caseKey}` : null,
+    repeat_count: 1, attempts: 0, created_at: now, updated_at: now,
+    input: { raw: 'RAW', parsed: { msgid: 'cloudwalker-honeypot', ts: '2026-11-17T10:00:00Z', payload: { host_ip: '10.0.0.5' } } },
+    evidence: [], steps: [],
+  });
+  await writeFile(`${DATA}/triage-monitor.json`, JSON.stringify({
+    initialized: true, enabled: false, watermark: null, watermark_ids: [],
+    last_received_at: null, archived_count: 0,
+    paused: { since: null, received: 0, dropped: 0, replayed: 0, buffer: [] },
+    records: [
+      rec(alerts.rule, 'done', 'rule'),
+      rec(alerts.wiki, 'done', 'wiki'),
+      rec(alerts.both, 'done', 'both'),
+      rec(alerts.fail, 'done', 'fail'),
+      rec(alerts.running, 'running', null),
+      rec(alerts.edge, 'done', 'edge'),
+    ],
+    dedupe: [], windows: [],
+  }, null, 2));
+  return alerts;
+}
+
+async function startServer({ env = {}, port = PORT } = {}) {
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      HIDS_DATA_DIR: DATA,
+      HIDS_PORT: String(port),
+      HIDS_HOST: '127.0.0.1',
+      HIDS_TRIAGE_INPUT_MODE: 'syslog',
+      HIDS_SYSLOG_PORT: String(28500 + (port % 100)),
+      HIDS_STATUS_TTL_MS: '0',
+      HIDS_LOG_FILE: `${TMP}/server.log`,
+      ...env,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  child.stdout.on('data', (d) => (stdout += d));
+  child.stderr.on('data', (d) => (stdout += d));
+  const base = `http://127.0.0.1:${port}`;
+  let up = false;
+  for (let i = 0; i < 100; i++) {
+    try {
+      await fetch(`${base}/api/status`);
+      up = true;
+      break;
+    } catch { await sleep(100); }
+  }
+  assert.ok(up, `服务没起来：${stdout.slice(-800)}`);
+  return { child, base, log: () => stdout };
+}
+
+async function call(base, method, path, { body, headers = {}, raw } = {}) {
+  const init = { method, headers: { ...headers } };
+  if (body !== undefined || raw !== undefined) {
+    init.body = raw !== undefined ? raw : JSON.stringify(body);
+    init.headers['content-type'] = init.headers['content-type'] || 'application/json';
+  }
+  const res = await fetch(`${base}${path}`, init);
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { /* 保留 text */ }
+  return { status: res.status, json, text, headers: res.headers };
+}
+
+const fpPath = (id) => `/api/agent/triage/${encodeURIComponent(id)}/false-positive`;
+
+async function waitTerminal(base, alertId, { timeoutMs = 15000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let last;
+  while (Date.now() < deadline) {
+    const r = await call(base, 'GET', `/api/agent/triage/${encodeURIComponent(alertId)}`);
+    last = r;
+    if (r.status === 200 && r.json?.maintenance && r.json.maintenance.status !== 'updating') return r.json;
+    await sleep(80);
+  }
+  assert.fail(`维护没在 ${timeoutMs}ms 内收尾：${last?.text?.slice(0, 400)}`);
+}
+
+const ALLOWED_ERROR_CODES = new Set(['caller_error', 'not_configured', 'upstream_error', 'internal_error']);
+function assertErrorBody(res, status, code) {
+  assert.equal(res.status, status, `期望 ${status}，实测 ${res.status}：${res.text.slice(0, 300)}`);
+  assert.equal(typeof res.json?.error, 'string', `错误体缺 error：${res.text.slice(0, 200)}`);
+  assert.ok(ALLOWED_ERROR_CODES.has(res.json?.code), `错误体 code 不在四类里：${res.json?.code}`);
+  if (code) assert.equal(res.json.code, code, `错误体 code 期望 ${code}：${res.json?.code}`);
+}
+
+function onlyKnownKeys(obj, allowed, where) {
+  const extra = Object.keys(obj).filter((k) => !allowed.includes(k));
+  assert.deepEqual(extra, [], `${where} 出现契约外字段：${extra.join(',')}`);
+}
+
+test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 + 错误码）', async (t) => {
+  const alerts = await seed();
+  const llm = makeLlmStub();
+  await new Promise((r) => llm.server.listen(LLM_PORT_FREE, '127.0.0.1', r));
+  const llmPort = llm.server.address().port;
+  const { child, base } = await startServer({
+    env: {
+      CLOUDWALKER_URL: 'http://127.0.0.1:1',
+      CLOUDWALKER_API_TOKEN: 'stub-token-123',
+      LLM_BASE_URL: `http://127.0.0.1:${llmPort}/v1`,
+      LLM_API_KEY: 'sk-stub',
+      LLM_MODEL: 'stub-model',
+      HIDS_PROMPT_ADMIN_TOKEN: ADMIN_TOKEN,
+    },
+  });
+
+  try {
+    await t.test('契约形状：会话列表与空态（openapi /api/false-positive/sessions）', async () => {
+      const r = await call(base, 'GET', '/api/false-positive/sessions');
+      assert.equal(r.status, 200);
+      assert.deepEqual(Object.keys(r.json), ['sessions']);
+      assert.ok(Array.isArray(r.json.sessions));
+      assert.equal(r.json.sessions.length, 0);
+    });
+
+    await t.test('错误码：会话 ID 非 UUID 回 400、合法 UUID 不存在回 404', async () => {
+      const bad = await call(base, 'GET', '/api/false-positive/sessions/not-a-uuid');
+      assertErrorBody(bad, 400, 'caller_error');
+      const missing = await call(base, 'GET', `/api/false-positive/sessions/${randomUUID()}`);
+      assertErrorBody(missing, 404, 'caller_error');
+    });
+
+    await t.test('边界：正文/理由/登记人/libraries 逐条 400，且不落半份会话', async () => {
+      const cases = [
+        { name: '正文不是 JSON', raw: '{oops', status: 400 },
+        { name: '正文是数组', body: [], status: 400 },
+        { name: '缺 reason', body: { who: '何东阳' }, status: 400 },
+        { name: 'reason 9 字', body: { reason: '短'.repeat(9), who: '何东阳' }, status: 400 },
+        { name: 'reason 4001 字', body: { reason: '长'.repeat(4001), who: '何东阳' }, status: 400 },
+        { name: 'who 1 字', body: { reason: '这是一条合法的误报理由', who: '何' }, status: 400 },
+
+        { name: 'libraries 不是数组', body: { reason: '这是一条合法的误报理由', libraries: 'rule' }, status: 400 },
+        { name: 'libraries 空数组', body: { reason: '这是一条合法的误报理由', libraries: [] }, status: 400 },
+        { name: 'libraries 含未知值', body: { reason: '这是一条合法的误报理由', libraries: ['rule', 'bogus'] }, status: 400 },
+      ];
+      for (const c of cases) {
+        const r = await call(base, 'POST', fpPath(alerts.rule), { body: c.body, raw: c.raw });
+        assertErrorBody(r, c.status, 'caller_error');
+      }
+      const sessions = await call(base, 'GET', '/api/false-positive/sessions');
+      assert.equal(sessions.json.sessions.filter((x) => x.case_id === alerts.rule).length, 0, '非法请求不该落下维护会话');
+    });
+
+    await t.test('边界（严格契约）：who 上限 100 字、libraries uniqueItems', async () => {
+      const who = await call(base, 'POST', fpPath(alerts.edge), { body: { reason: '这条不动机器库，只验长度（PATH-NONE）', who: '何'.repeat(101) } });
+      assert.equal(who.status, 202, `who 超 100 字实测 ${who.status}（文档 §3.4 的 400 表不含这一档）`);
+      const rec = await call(base, 'GET', `/api/agent/triage/${encodeURIComponent(alerts.edge)}`);
+      assert.equal(rec.json.feedback.who.length, 100, `落盘 who 应截到 100：实测 ${rec.json.feedback.who.length}`);
+      await waitTerminal(base, alerts.edge);
+      const dup = await call(base, 'POST', fpPath(alerts.edge), { body: { reason: '这条不动机器库，只验唯一性（PATH-NONE）', libraries: ['rule', 'rule'] } });
+      assert.ok(dup.status === 202 || dup.status === 400, `重复库名实测 ${dup.status}`);
+      // 实测：202（服务端不校验 uniqueItems，只按去重后的库跑）；文档 §3.4 的 400 表不含这一档 → doc-side 记录
+      t.diagnostic(`who=101 字 → 202、落盘截到 ${rec.json.feedback.who.length} 字；libraries=['rule','rule'] → ${dup.status}`);
+      if (dup.status === 202) await waitTerminal(base, alerts.edge);
+    });
+
+    await t.test('错误码：案件不存在 404、研判未完成 409、reason 4000 字合法（用到长度上限）', async () => {
+      assertErrorBody(await call(base, 'POST', fpPath(alerts.unknown), { body: { reason: '这是一条合法的误报理由' } }), 404, 'caller_error');
+      const running = await call(base, 'POST', fpPath(alerts.running), { body: { reason: '这是一条合法的误报理由' } });
+      assertErrorBody(running, 409, 'caller_error');
+      assert.match(running.json.error, /研判还没结束/);
+      const max = await call(base, 'POST', fpPath(alerts.running), { body: { reason: '长'.repeat(4000) } });
+      assert.equal(max.status, 409, `4000 字应在长度上限内（该被 409 拦在状态上，而不是 400）：${max.text.slice(0, 200)}`);
+    });
+
+    let ruleKey;
+    let ruleRev;
+    let ruleSessionId;
+
+    await t.test('A1/A2/A7 只动规则：202 形状 → 四轮会话落盘 → 维护侧口径', async () => {
+      const reason = '这条是运维授权扫描（PATH-RULE），不是攻击';
+      const post = await call(base, 'POST', fpPath(alerts.rule), { body: { reason, who: '何东阳' } });
+      assert.equal(post.status, 202, post.text.slice(0, 400));
+      onlyKnownKeys(post.json, ['alert_id', 'verdict', 'feedback', 'maintenance'], '202 响应');
+      assert.equal(post.json.alert_id, alerts.rule);
+      assert.deepEqual(post.json.verdict, { verdict: 'false_positive', verdict_label: '误报', source: 'human' });
+      onlyKnownKeys(post.json.feedback, ['reason', 'who', 'recorded_at'], 'feedback');
+      assert.equal(post.json.feedback.reason, reason);
+      assert.equal(post.json.feedback.who, '何东阳');
+      assert.ok(!Number.isNaN(Date.parse(post.json.feedback.recorded_at)));
+      assert.equal(post.json.maintenance.status, 'updating');
+      assert.equal(post.json.maintenance.rule.status, 'updating');
+      assert.equal(post.json.maintenance.wiki.status, 'updating');
+
+      // 先结论后维护：202 之后立刻读记录已经是误报
+      const immediate = await call(base, 'GET', `/api/agent/triage/${encodeURIComponent(alerts.rule)}`);
+      assert.equal(immediate.json.verdict, 'false_positive');
+      assert.equal(immediate.json.verdict_label, '误报');
+      assert.equal(immediate.json.decision_source, 'human');
+
+      const rec = await waitTerminal(base, alerts.rule);
+      const m = rec.maintenance;
+      assert.equal(m.status, 'updated');
+      assert.deepEqual(m.sides, ['rule']);
+      assert.deepEqual(m.libraries, ['rule', 'wiki']);
+      assert.equal(m.decision.source, 'model');
+      assert.deepEqual(m.decision.libraries, ['rule']);
+      assert.equal(typeof m.decision.why, 'string');
+      // A7：生效口径是 Rego，且已启用（不再是「待启用」）
+      assert.equal(m.auto_verdict.enabled, true);
+      assert.equal(m.auto_verdict.criterion, 'rego');
+      assert.equal(m.auto_verdict.trust, 'single');
+      assert.match(m.auto_verdict.note, /JSON 规则集/);
+      // 单边
+      assert.equal(m.rule.status, 'updated');
+      assert.equal(m.rule.state, 'updated');
+      assert.equal(m.rule.id, RULE_ID);
+      assert.equal(m.rule.action, 'update');
+      assert.match(m.rule.idempotency_key, new RegExp(`^${alerts.rule.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:rule:[0-9a-f]{16}$`));
+      assert.equal(m.wiki.status, 'updated');
+      assert.equal(m.wiki.state, 'no_change');
+      assert.equal(typeof m.wiki.why, 'string');
+      assert.match(m.session_id, /^[0-9a-f-]{36}$/);
+      ruleKey = m.rule.idempotency_key;
+      ruleRev = m.rule.revision;
+      ruleSessionId = m.session_id;
+
+      // 会话全文（openapi FpMaintenanceSession）
+      const detail = await call(base, 'GET', `/api/false-positive/sessions/${ruleSessionId}`);
+      assert.equal(detail.status, 200, detail.text.slice(0, 300));
+      const s = detail.json;
+      for (const k of ['id', 'case_id', 'status', 'turns', 'messages', 'outcomes']) assert.ok(k in s, `会话缺 ${k}`);
+      assert.equal(s.id, ruleSessionId);
+      assert.equal(s.case_id, alerts.rule);
+      assert.equal(s.status, 'done');
+      assert.equal(s.terminal, true);
+      assert.deepEqual(s.turns.map((x) => x.phase), ['case', 'libraries', 'propose', 'verify']);
+      for (const turn of s.turns) onlyKnownKeys(turn, ['n', 'phase', 'at', 'summary'], 'turns[]');
+      assert.ok(s.messages.some((x) => x.kind === 'case'));
+      assert.ok(s.messages.some((x) => x.kind === 'libraries'));
+      assert.ok(s.messages.some((x) => x.kind === 'decision'));
+      assert.ok(s.messages.some((x) => x.kind === 'verify'));
+      for (const msg of s.messages) assert.ok(msg.role === 'user' || msg.role === 'assistant');
+      assert.equal(s.decision.source, 'model');
+      assert.ok(s.outcomes.rule && s.outcomes.wiki);
+      assert.equal(s.validation.ok, true);
+      assert.ok(Array.isArray(s.validation.checks) && s.validation.checks.length > 0);
+      assert.equal(s.auto_verdict.criterion, 'rego');
+
+      // 摘要（openapi FpMaintenanceSessionSummary，additionalProperties:false）
+      const list = await call(base, 'GET', '/api/false-positive/sessions');
+      const item = list.json.sessions.find((x) => x.id === ruleSessionId);
+      assert.ok(item, '摘要列表里找不到这份会话');
+      onlyKnownKeys(item, ['id', 'case_id', 'event_type', 'who', 'status', 'terminal', 'libraries', 'sides', 'decision_source', 'updated_at'], '会话摘要');
+      assert.equal(item.id, ruleSessionId);
+      assert.equal(item.status, 'done');
+      assert.equal(item.terminal, true);
+      assert.deepEqual(item.sides, ['rule']);
+    });
+
+    await t.test('A3 写入走版本化：规则文件已收紧、旧版进 rules-history、目录无临时文件', async () => {
+      const one = await call(base, 'GET', `/api/rules/${RULE_ID}`);
+      assert.equal(one.status, 200);
+      assert.match(one.json.rego || one.json.content || '', /not input\.source_ip == "203\.0\.113\.9"/);
+      const disk = await readFile(`${DATA}/rules/${RULE_ID}.rego`, 'utf8');
+      assert.match(disk, /not input\.source_ip == "203\.0\.113\.9"/);
+      const hist = await call(base, 'GET', `/api/rules/${RULE_ID}/history`);
+      assert.equal(hist.status, 200);
+      assert.ok(hist.json.history.length >= 1);
+      const note = hist.json.history.at(-1).note || '';
+      assert.match(note, /误报维护（何东阳）/);
+      const files = await readdir(`${DATA}/rules`);
+      assert.deepEqual(files.filter((f) => !f.endsWith('.rego')), [], `规则目录有残留：${files.join(',')}`);
+    });
+
+    await t.test('A4 单腿补跑不洗掉已成功一侧的判据（成功 → 单腿 → 全量 仍只跑一次）', async () => {
+      const rulesBefore = llm.counters.rule;
+      const leg = await call(base, 'POST', fpPath(alerts.rule), { body: { reason: '补跑规则侧（PATH-RULE）', libraries: ['rule'] } });
+      assert.equal(leg.status, 202);
+      const rec1 = await waitTerminal(base, alerts.rule);
+      assert.equal(rec1.maintenance.rule.state, 'skipped');
+      assert.equal(rec1.maintenance.rule.idempotency_key, ruleKey, '单腿补跑把幂等键洗掉了');
+      assert.equal(rec1.maintenance.rule.revision, ruleRev, '单腿补跑把 revision 洗掉了');
+      assert.equal(llm.counters.rule, rulesBefore, '已成功的一侧被重跑了');
+      assert.equal(rec1.maintenance.status, 'updated');
+
+      const full = await call(base, 'POST', fpPath(alerts.rule), { body: { reason: '再登记一次全量（PATH-RULE）' } });
+      assert.equal(full.status, 202);
+      const rec2 = await waitTerminal(base, alerts.rule);
+      assert.equal(rec2.maintenance.rule.state, 'skipped', '全量再登记时已成功的一侧被重跑');
+      assert.equal(rec2.maintenance.rule.idempotency_key, ruleKey);
+      assert.equal(llm.counters.rule, rulesBefore, '全量再登记重跑了已成功的一侧');
+      assert.deepEqual(rec2.maintenance.sides, []);
+
+      const decisionBefore = llm.counters.decision;
+      const again = await call(base, 'POST', fpPath(alerts.rule), { body: { reason: '只请求规则侧（PATH-RULE）', libraries: ['rule'] } });
+      assert.equal(again.status, 202);
+      const rec3 = await waitTerminal(base, alerts.rule);
+      assert.equal(rec3.maintenance.decision.source, 'idempotent');
+      assert.deepEqual(rec3.maintenance.sides, []);
+      assert.equal(llm.counters.decision, decisionBefore, '幂等轮不该再调决策模型');
+      assert.equal(llm.counters.rule, rulesBefore);
+      // 记录上的 maintenance 原样供 GET 读
+      const viaRecord = await call(base, 'GET', `/api/agent/triage/${encodeURIComponent(alerts.rule)}`);
+      assert.equal(viaRecord.json.maintenance.decision.source, 'idempotent');
+    });
+
+    let wikiSessionId;
+
+    await t.test('A2/A3 只动知识库：规则库一字不动、判据页过发布闸、发布后会话终态、无重复发布口子', async () => {
+      const ruleBefore = await readFile(`${DATA}/rules/${RULE_ID}.rego`, 'utf8');
+      const ruleCallsBefore = llm.counters.rule;
+      const post = await call(base, 'POST', fpPath(alerts.wiki), { body: { reason: '规则没错，判据页缺边界（PATH-WIKI）', who: '何东阳' } });
+      assert.equal(post.status, 202);
+      const rec = await waitTerminal(base, alerts.wiki);
+      const m = rec.maintenance;
+      assert.equal(m.status, 'updated');
+      assert.deepEqual(m.sides, ['wiki']);
+      assert.equal(m.rule.state, 'no_change');
+      assert.equal(m.wiki.state, 'updated');
+      assert.equal(m.wiki.page, WIKI_PAGE);
+      assert.equal(typeof m.wiki.revision, 'string');
+      assert.equal(m.wiki.wiki_session_status, 'published');
+      assert.equal(llm.counters.rule, ruleCallsBefore, '只动知识库时规则维护者被调用了');
+      assert.equal(await readFile(`${DATA}/rules/${RULE_ID}.rego`, 'utf8'), ruleBefore, '只动知识库时规则文件被改写');
+      const page = await readFile(`${DATA}/wiki/${WIKI_PAGE}`, 'utf8');
+      assert.match(page, /补充（2026-11-20）/);
+      wikiSessionId = m.wiki.session_id;
+
+      // 无重复发布口子：同一份 wiki 维护会话再发布一次 409
+      const republish = await call(base, 'POST', `/api/wiki/sessions/${wikiSessionId}/publish`, {
+        headers: { 'x-prompt-admin-token': ADMIN_TOKEN }, body: {},
+      });
+      assertErrorBody(republish, 409, 'caller_error');
+
+      // 同一库同一版本上再登记 → 幂等跳过，不再发布一次
+      const wikiCallsBefore = llm.counters.wiki;
+      const again = await call(base, 'POST', fpPath(alerts.wiki), { body: { reason: '再登记一次（PATH-WIKI）', libraries: ['wiki'] } });
+      assert.equal(again.status, 202);
+      const rec2 = await waitTerminal(base, alerts.wiki);
+      assert.equal(rec2.maintenance.wiki.state, 'skipped');
+      assert.deepEqual(rec2.maintenance.sides, []);
+      assert.equal(llm.counters.wiki, wikiCallsBefore, '幂等跳过时又调了知识维护模型');
+    });
+
+    await t.test('A2/A6 两边都动：两侧都写、sides 与决策可见', async () => {
+      const post = await call(base, 'POST', fpPath(alerts.both), { body: { reason: '规则与判据各有缺口（PATH-BOTH）', who: '何东阳' } });
+      assert.equal(post.status, 202);
+      const rec = await waitTerminal(base, alerts.both);
+      const m = rec.maintenance;
+      assert.equal(m.status, 'updated');
+      assert.deepEqual(m.sides, ['rule', 'wiki']);
+      assert.deepEqual(m.decision.libraries, ['rule', 'wiki']);
+      assert.equal(m.rule.state, 'updated');
+      assert.equal(m.wiki.state, 'updated');
+      const disk = await readFile(`${DATA}/rules/${RULE_ID}.rego`, 'utf8');
+      assert.match(disk, /not input\.user == "scanner"/);
+    });
+
+    await t.test('A4 单库失败可补跑：失败侧重跑，维护失败不改结论', async () => {
+      const widen = await call(base, 'POST', fpPath(alerts.fail), { body: { reason: '规则改宽试试（PATH-FAIL）', who: '何东阳' } });
+      assert.equal(widen.status, 202);
+      const bad = await waitTerminal(base, alerts.fail);
+      assert.equal(bad.maintenance.status, 'failed');
+      assert.equal(bad.maintenance.rule.state, 'failed');
+      assert.match(bad.maintenance.rule.error, /放宽/);
+      assert.equal(bad.verdict, 'false_positive', '维护失败不该改结论');
+      assert.equal(bad.decision_source, 'human');
+      const disk = await readFile(`${DATA}/rules/${RULE_ID}.rego`, 'utf8');
+      assert.doesNotMatch(disk, /放宽版/, '失败候选不该落盘');
+      const files = await readdir(`${DATA}/rules`);
+      assert.deepEqual(files.filter((f) => !f.endsWith('.rego')), [], `规则目录有残留：${files.join(',')}`);
+
+      const retry = await call(base, 'POST', fpPath(alerts.fail), { body: { reason: '补跑规则侧（PATH-FAIL）', libraries: ['rule'] } });
+      assert.equal(retry.status, 202);
+      const ok = await waitTerminal(base, alerts.fail);
+      assert.equal(ok.maintenance.status, 'updated');
+      assert.equal(ok.maintenance.rule.state, 'updated');
+      assert.equal(ok.maintenance.wiki.state, 'skipped');
+      assert.match(ok.maintenance.wiki.why || '', /本次只补跑/);
+    });
+
+    await t.test('A5 每轮 AI 调用都进 T046 事件（域＝误报维护），request/response 成对', async () => {
+      let lines = [];
+      for (let i = 0; i < 20; i++) {
+        lines = (await readFile(`${TMP}/server.log`, 'utf8')).split('\n').filter(Boolean);
+        if (lines.length) break;
+        await sleep(50);
+      }
+      const events = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
+        .filter((e) => e.event === 'ai.model_call' && e.domain === 'false_positive');
+      assert.ok(events.length > 0, '没有 false_positive 域的 ai.model_call 事件');
+      const roles = new Set(events.map((e) => e.role));
+      for (const role of ['fp_maintainer', 'rule_maintainer', 'wiki_maintainer']) {
+        assert.ok(roles.has(role), `缺角色 ${role} 的事件；实到 ${[...roles].join(',')}`);
+      }
+      const key = (e) => `${e.role}|${e.turn}|${e.attempt}|${e.session_id ?? '-'}`;
+      const req = new Map();
+      const res = new Map();
+      for (const e of events) {
+        const m = e.direction === 'request' ? req : res;
+        m.set(key(e), (m.get(key(e)) || 0) + 1);
+      }
+      for (const [k, n] of req) assert.equal(res.get(k), n, `调用 ${k} 的 request/response 不成对`);
+      assert.ok(events.some((e) => e.role === 'fp_maintainer' && e.phase === 'propose'));
+    });
+
+    await t.test('错误码 502：会话目录不可读时列表回 502（不是空列表）', async () => {
+      const dir = `${DATA}/fp-sessions`;
+      await mkdir(dir, { recursive: true });
+      await chmod(dir, 0o000);
+      try {
+        const r = await call(base, 'GET', '/api/false-positive/sessions');
+        assertErrorBody(r, 502, 'upstream_error');
+      } finally {
+        await chmod(dir, 0o700);
+      }
+      const back = await call(base, 'GET', '/api/false-positive/sessions');
+      assert.equal(back.status, 200);
+      assert.ok(back.json.sessions.length >= 4);
+    });
+  } finally {
+    child.kill('SIGKILL');
+    await new Promise((r) => llm.server.close(r));
+  }
+});
+
+test('错误码 503：无研判队列的进程里登记误报回 503 not_configured（createServer() 缺件路径，文档 §2）', async () => {
+  const port = 18149;
+  const dir = `${TMP}/nodeps-data`;
+  await mkdir(dir, { recursive: true });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', `import('${ROOT}/server.js').then((m) => { m.createServer().listen(${port}, '127.0.0.1'); });`], {
+    cwd: ROOT,
+    env: { PATH: process.env.PATH, HOME: process.env.HOME, HIDS_PORT: String(port), HIDS_HOST: '127.0.0.1', HIDS_DATA_DIR: dir },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let out = '';
+  child.stdout.on('data', (d) => (out += d));
+  child.stderr.on('data', (d) => (out += d));
+  try {
+    let up = false;
+    for (let i = 0; i < 80; i++) {
+      try { await fetch(`http://127.0.0.1:${port}/api/status`); up = true; break; } catch { await sleep(100); }
+    }
+    assert.ok(up, `缺件进程没起来：${out.slice(-500)}`);
+    const id = 'syslog:honeypot:aaaaaaaaaaaaaaaa:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43';
+    const r = await call(`http://127.0.0.1:${port}`, 'POST', `/api/agent/triage/${encodeURIComponent(id)}/false-positive`, { body: { reason: '无队列进程下的误报登记' } });
+    assertErrorBody(r, 503, 'not_configured');
+    assert.match(r.json.error, /自动研判尚未配置/);
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
+test('契约静态口径（A7）：openapi 与两页文档同一口径，「待启用/待拍板」清零', async () => {
+  const files = ['openapi.yaml', 'docs/modules/http-api.md', 'docs/modules/triage-pipeline.md'];
+  for (const f of files) {
+    const text = await readFile(`${ROOT}/${f}`, 'utf8');
+    assert.doesNotMatch(text, /待启用|待拍板/, `${f} 里还留着旧口径`);
+  }
+  const spec = await readFile(`${ROOT}/openapi.yaml`, 'utf8');
+  assert.match(spec, /以 Rego 规则库为准/);
+  const block = spec.slice(spec.indexOf('    FpAutoVerdict:'));
+  const head = block.slice(0, block.indexOf('    FpMaintenanceSessionSummary:'));
+  assert.match(head, /required: \[enabled, criterion\]/);
+  assert.match(head, /criterion:.*enum: \[rego\]/);
+  assert.match(head, /trust:.*enum: \[single\]/);
+});
