@@ -1,9 +1,10 @@
 // P003-T025：启动时核配置，能看生效值但不回显密钥。
-// 口径见 docs/modules/http-api.md §2（启动闸门）与第 3 节 GET /api/config 那一行：
-//   A1 五项必填缺任一 → 不监听、stderr 逐个列出缺的键、退出码非 0
-//   A2 GET /api/config 报地址、端口、研判输入模式、牧云与模型配了没有、模型名
-//   A3 机密只回布尔，响应正文里不出现 Token 与密码原文
-// 真进程只起两个：一个缺必填（验拒绝启动），一个五项齐（验生效值 + 机密不外泄）。
+// 口径见 docs/modules/http-api.md §2（启动闸门）与 §3.5（GET /api/config）：
+//   A1 五项必填缺任一 → 不监听、stderr 逐个列出缺的键、退出码非 0（空串算缺，边界也测）
+//   A1 取值非法（HIDS_TRIAGE_INPUT_MODE 不在 syslog/poll 里）→ 同一个出口拒启动：stderr 点名键与坏值、退出码非 0
+//   A2 GET /api/config 报地址、端口、研判输入模式、牧云与模型配了没有、模型名——只报生效值，triage_input_mode 永远在 enum 里
+//   A3 机密只回布尔，响应正文里不出现五个机密值里任何一个的原文
+// 真进程三条：缺必填（拒启动）、坏值（拒启动）、五项齐（验生效值 + 机密不外泄）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -11,7 +12,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer, configSummary } from '../../../server.js';
+import { createServer, configSummary, triageInputModeOf, invalidConfigValues } from '../../../server.js';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -31,6 +32,9 @@ const FAKE_ENV = Object.freeze({
   LLM_MODEL: 'fake-model',
   HIDS_BASIC_AUTH_USER: 'ops',
   HIDS_BASIC_AUTH_PASSWORD: 'fake-pass-abcdef',
+  // 两个 admin 令牌也要有值：A3 的「正文无原文」必须盖住五个机密，缺值的键等于没测。
+  HIDS_PROMPT_ADMIN_TOKEN: 'fake-prompt-token-abcdef',
+  HIDS_RULE_ADMIN_TOKEN: 'fake-rule-token-abcdef',
   HIDS_TRIAGE_INPUT_MODE: 'poll'
 });
 
@@ -120,20 +124,58 @@ test('A1 Basic 口令与两个 admin Token 不算必填：不配只是那项能�
   assert.equal(config.auth.basic_auth_enabled, false);
 });
 
+test('A1 空串也算缺：五项必填逐个给空串 → missing_required 只列那一项', () => {
+  for (const key of REQUIRED) {
+    const env = completeEnv();
+    env[key] = '';
+    assert.deepEqual(configSummary(env).missing_required, [key], `${key} 给空串应算缺（.env.example 的占位就是空串）`);
+  }
+});
+
+test('A1 取值非法：HIDS_TRIAGE_INPUT_MODE 不在 syslog/poll 里 → 进闸门；报出来的永远是生效值', () => {
+  const invalid = invalidConfigValues(completeEnv({ HIDS_TRIAGE_INPUT_MODE: 'pirate' }));
+  assert.deepEqual(invalid, [{ key: 'HIDS_TRIAGE_INPUT_MODE', value: 'pirate', allowed: ['syslog', 'poll'] }],
+    '坏值要带键名、坏值与允许取值，闸门靠它写 stderr 与日志');
+
+  // 空值/未设＝没配（走文档写的缺省 syslog），非空且在表里＝合法，其余一律非法。
+  assert.deepEqual(invalidConfigValues(completeEnv({ HIDS_TRIAGE_INPUT_MODE: '' })), []);
+  assert.deepEqual(invalidConfigValues(completeEnv({ HIDS_TRIAGE_INPUT_MODE: 'syslog' })), []);
+  assert.deepEqual(invalidConfigValues(completeEnv({ HIDS_TRIAGE_INPUT_MODE: 'poll' })), []);
+  const env = completeEnv(); delete env.HIDS_TRIAGE_INPUT_MODE;
+  assert.deepEqual(invalidConfigValues(env), []);
+
+  // 只报生效值：大小写、空白、表外词都落回缺省，绝不让域外值从 triage_input_mode 漏出去（openapi enum 两个值）。
+  for (const raw of ['pirate', 'POLL', 'Syslog', ' syslog', 'poll ', 'poll\n']) {
+    const config = configSummary(completeEnv({ HIDS_TRIAGE_INPUT_MODE: raw }));
+    assert.equal(config.triage_input_mode, 'syslog', `${JSON.stringify(raw)} 不该原样出现在响应里`);
+    assert.ok(['syslog', 'poll'].includes(config.triage_input_mode), 'triage_input_mode 恒在 openapi 声明的 enum 内');
+    assert.equal(invalidConfigValues(completeEnv({ HIDS_TRIAGE_INPUT_MODE: raw })).length, 1, `${JSON.stringify(raw)} 应判为坏值`);
+  }
+  assert.equal(triageInputModeOf({ HIDS_TRIAGE_INPUT_MODE: 'poll' }), 'poll', '合法第二值原样生效');
+  assert.equal(triageInputModeOf({}), 'syslog', '未设取缺省');
+});
+
 // ---------------- A3：机密只回布尔 ----------------
 test('A3 机密只报有或没有：五个机密键都是布尔，序列化后不带任何原文', () => {
   const config = configSummary(completeEnv());
   assert.deepEqual(Object.keys(config.secrets).sort(), [...SECRETS].sort());
-  for (const name of SECRETS) assert.equal(typeof config.secrets[name], 'boolean', `${name} 应只回布尔`);
-  assert.equal(config.secrets.CLOUDWALKER_API_TOKEN, true);
-  assert.equal(config.secrets.LLM_API_KEY, true);
-  assert.equal(config.secrets.HIDS_BASIC_AUTH_PASSWORD, true);
-  assert.equal(config.secrets.HIDS_PROMPT_ADMIN_TOKEN, false);
-  assert.equal(config.secrets.HIDS_RULE_ADMIN_TOKEN, false);
+  for (const name of SECRETS) {
+    assert.equal(typeof config.secrets[name], 'boolean', `${name} 应只回布尔`);
+    assert.equal(config.secrets[name], true, `${name} 配了假值 → true`);
+  }
 
   const text = JSON.stringify(config);
-  for (const value of [FAKE_ENV.CLOUDWALKER_API_TOKEN, FAKE_ENV.LLM_API_KEY, FAKE_ENV.HIDS_BASIC_AUTH_PASSWORD])
-    assert.equal(text.includes(value), false, `响应里不该出现机密原文 ${value}`);
+  for (const name of SECRETS)
+    assert.equal(text.includes(FAKE_ENV[name]), false, `响应里不该出现 ${name} 的原文 ${FAKE_ENV[name]}`);
+});
+
+test('A3 空串算没有：五个机密给空串 → 全是 false，不是空串本身', () => {
+  const blank = Object.fromEntries(SECRETS.map(name => [name, '']));
+  const config = configSummary(completeEnv(blank));
+  for (const name of SECRETS) assert.equal(config.secrets[name], false, `${name} 空串应报 false`);
+  assert.equal(config.auth.basic_auth_enabled, false, '空口令 → 不启用 Basic 认证');
+  const text = JSON.stringify(config);
+  for (const name of SECRETS) assert.equal(text.includes(`${name}":""`), false, `${name} 不该以空串出现在正文里`);
 });
 
 // ---------------- A2：GET /api/config 的生效值 ----------------
@@ -174,6 +216,35 @@ test('A1 真进程缺必填：不监听、退出码非 0、stderr 逐个列出�
   assert.ok(seen.stdout.includes('"event":"server.start_failed"'), `应有 server.start_failed 日志：${seen.stdout}`);
 });
 
+test('A1 真进程必填给空串：exit≠0、stderr 只点名那一项、无 server.started', async t => {
+  const port = await freePort();
+  const { seen, exited } = await runServer(t, { ...FAKE_ENV, HIDS_PORT: String(port), LLM_MODEL: '' },
+    (seen, child) => child.exitCode !== null);
+  assert.notEqual(await exited, 0, '空串必填等于缺 → 退出码非 0');
+  assert.equal(seen.stderr.trim(), '缺少必填配置：LLM_MODEL', `stderr 只该点名空串那一项：${seen.stderr}`);
+  assert.equal(seen.stdout.includes('"event":"server.started"'), false, '拒绝启动时不该打 server.started');
+});
+
+test('A1 真进程取值非法：HIDS_TRIAGE_INPUT_MODE=pirate → 拒启动、stderr 点名键与坏值、日志 what=config', async t => {
+  const port = await freePort();
+  const { seen, exited } = await runServer(t, { ...FAKE_ENV, HIDS_PORT: String(port), HIDS_TRIAGE_INPUT_MODE: 'pirate' },
+    (seen, child) => child.exitCode !== null);
+  const code = await exited;
+  assert.notEqual(code, 0, '坏值必须拒启动、退出码非 0');
+  assert.equal(seen.stdout.includes('"event":"server.started"'), false, '坏值不该起来监听');
+  assert.equal(seen.stderr.includes('缺少必填配置'), false, '五项都在，不该报「缺少必填配置」');
+  assert.match(seen.stderr, /配置值无效：HIDS_TRIAGE_INPUT_MODE=pirate/, `stderr 要点名键与坏值：${seen.stderr}`);
+  assert.match(seen.stderr, /syslog 或 poll/, 'stderr 要写允许的取值，别让人去翻文档');
+
+  const line = seen.stdout.trim().split('\n').find(item => item.includes('server.start_failed'));
+  assert.ok(line, `应有 server.start_failed 日志：${seen.stdout}`);
+  const event = JSON.parse(line);
+  assert.equal(event.what, 'config', '与缺必填同一个事件出口');
+  assert.deepEqual(event.missing, [], '五项都在 → missing 为空');
+  assert.deepEqual(event.invalid, [{ key: 'HIDS_TRIAGE_INPUT_MODE', value: 'pirate', allowed: ['syslog', 'poll'] }],
+    'invalid 带键名、坏值、允许取值');
+});
+
 test('A2/A3 真进程五项齐：起得来，/api/config 报生效值且正文没有机密原文', async t => {
   const port = await freePort();
   const { seen } = await runServer(t, { ...FAKE_ENV, HIDS_PORT: String(port), HIDS_SYSLOG_PORT: '0' },
@@ -184,8 +255,8 @@ test('A2/A3 真进程五项齐：起得来，/api/config 报生效值且正文�
   const response = await fetch(`http://127.0.0.1:${port}/api/config`, { headers: { Authorization: authorization } });
   assert.equal(response.status, 200);
   const text = await response.text();
-  for (const value of [FAKE_ENV.CLOUDWALKER_API_TOKEN, FAKE_ENV.LLM_API_KEY, FAKE_ENV.HIDS_BASIC_AUTH_PASSWORD])
-    assert.equal(text.includes(value), false, `响应正文里不该出现机密原文 ${value}`);
+  for (const name of SECRETS)
+    assert.equal(text.includes(FAKE_ENV[name]), false, `响应正文里不该出现 ${name} 的原文 ${FAKE_ENV[name]}`);
 
   const body = JSON.parse(text);
   assert.equal(body.port, port);
@@ -193,9 +264,10 @@ test('A2/A3 真进程五项齐：起得来，/api/config 报生效值且正文�
   assert.equal(body.cloudwalker.configured, true);
   assert.equal(body.model.configured, true);
   assert.equal(body.auth.basic_auth_enabled, true);
-  for (const name of SECRETS) assert.equal(typeof body.secrets[name], 'boolean');
-  assert.equal(body.secrets.CLOUDWALKER_API_TOKEN, true);
-  assert.equal(body.secrets.HIDS_PROMPT_ADMIN_TOKEN, false);
+  for (const name of SECRETS) {
+    assert.equal(typeof body.secrets[name], 'boolean');
+    assert.equal(body.secrets[name], true, `${name} 配了假值 → 只报 true`);
+  }
 });
 
 // ---------------- A4：.env.example 与代码读取的键一致 ----------------

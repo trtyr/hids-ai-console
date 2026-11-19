@@ -51,14 +51,16 @@
 
 **规则预筛挂在 `investigate()` 闭包上**（`server.js:262-273`）：`mode === 'triage'` 且 `monitor.ruleEngine` 存在时，先跑一次规则评估，把结果作为 `rule_evaluation` 挂到结论上；评估抛错就记成 `{ status: 'error' }` 继续往下走，不中断研判。
 
-**进程入口**（`server.js:1001-1021`，P003-T025 扩过）：`process.argv[1]` 的真实路径等于本文件路径时才算真进程启动，顺序是「先核配置，再监听」：
+**进程入口**（`server.js:1023-1047`，P003-T025 扩过）：`process.argv[1]` 的真实路径等于本文件路径时才算真进程启动，顺序是「先核配置，再监听」。闸门有**两类问题，一个出口**（`server.js:1026-1035`）：
 
-1. **启动闸门**——`configSummary()`（`server.js:987`）算一遍必填差额。五项必填 `CLOUDWALKER_URL` / `CLOUDWALKER_API_TOKEN` / `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项：不 `listen`，把缺的键名逐个写进 stderr（`缺少必填配置：A、B、…`）、`process.exitCode = 1`，并打一条 `server.start_failed` 日志（`what: "config"`，`server.js:1004-1010`）。**退出码非 0 是契约**，部署脚本按它判「起来没起来」。
-2. 五项齐了才 `createServer().listen(...)` 并打 `server.started`（`host`/`port` 两个字段）；随后若输入模式是 `syslog`，再起一个 UDP 接收器（`server.js:1011-1021`）。
+1. **缺必填**——`configSummary()`（`server.js:1009`）算一遍必填差额。五项必填 `CLOUDWALKER_URL` / `CLOUDWALKER_API_TOKEN` / `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 缺任一项（**空串算缺**，`.env.example` 的占位就是空串）：不 `listen`，把缺的键名逐个写进 stderr（`缺少必填配置：A、B、…`）。
+2. **取值非法**——`invalidConfigValues()`（`server.js:1000`）管唯一一处取值校验：`HIDS_TRIAGE_INPUT_MODE` 只能是 `syslog` 或 `poll`；不设或空串＝缺省 `syslog`（不算非法），其他值一律拒启动，stderr 写 `配置值无效：HIDS_TRIAGE_INPUT_MODE=<坏值>（只能是 syslog 或 poll）`。**不许静默按 `poll` 跑**——那会把 syslog 接收器悄悄关掉，而配置页还回显那个错值。
+3. 两类都有时两行都写，然后统一 `process.exitCode = 1`，并打一条 `server.start_failed`（`what: "config"`；`missing` 是缺的键名数组，`invalid` 每条 `{key, value, allowed}`，`error` 是 stderr 那几行拼起来的原话）。**退出码非 0 是契约**，部署脚本按它判「起来没起来」。
+4. 两类都干净才 `createServer().listen(...)` 并打 `server.started`（`host`/`port` 两个字段）；随后若生效的输入模式是 `syslog`，再起一个 UDP 接收器（`server.js:1037-1047`）。
 
-**闸门只拦真进程**：`createServer()` 被直接调用（测试、探针、别的入口）时不核必填，缺件照旧置空、相关路由 503（见 [architecture.md §3.5](../architecture.md)）。要有意造一个缺件进程做实验，用 `createServer()` 起，别指望 `node server.js` 能起来。
+**闸门只拦真进程**：`createServer()` 被直接调用（测试、探针、别的入口）时不跑闸门，缺件照旧置空、相关路由 503（见 [architecture.md §3.5](../architecture.md)）。要有意造一个缺件进程做实验，用 `createServer()` 起，别指望 `node server.js` 能起来。
 
-**`configSummary(env = process.env)` 是这套判定的唯一真源**（`server.js:987`）：进程入口拿它当闸门，`GET /api/config` 拿它报生效值——一处改，两处同时变。它只读环境变量、不探上游、不碰模块级单例：判的是「键在不在」，值的形状（URL 前缀、Token 长度）仍由装配处抛（`rpc-client.js:4-5`、`model-client.js:22-24`）。
+**一份判定三处用**：`configSummary(env = process.env)`（`server.js:1009`）报生效值，`triageInputModeOf(env)`（`server.js:994`）给模块级装配与 `/api/config` 定生效模式（合法值原样、空值缺省 `syslog`、**坏值不在这里兜**），`invalidConfigValues(env)`（`server.js:1000`）给闸门判坏值——取值表只有一份（`triageInputModes()`，`server.js:988`）。三者都只读环境变量、不探上游、不碰模块级单例：判的是「键在不在、值在不在表里」，值的形状（URL 前缀、Token 长度）仍由装配处抛（`rpc-client.js:4-5`、`model-client.js:22-24`）。
 
 ## 3. 路由分发
 
@@ -229,7 +231,7 @@ wiki 维护者只改方法论：走已有的知识维护会话（`wikiAgent.crea
 | --- | --- | --- | --- |
 | `host` | string | 缺省 `127.0.0.1` | `HIDS_HOST` 的生效值 |
 | `port` | number | 缺省 `8080` | `HIDS_PORT` 的生效值 |
-| `triage_input_mode` | string | `syslog` / `poll`，缺省 `syslog` | `HIDS_TRIAGE_INPUT_MODE` 的生效值 |
+| `triage_input_mode` | string | `syslog` / `poll`，**恒在这两个值里**；未设或空串为缺省 `syslog` | `HIDS_TRIAGE_INPUT_MODE` 的生效值——表外值（如 `pirate`）不会出现在这里：真进程被闸门拦下（§2 第 2 条），进程内 `createServer()` 按缺省 `syslog` 生效 |
 | `cloudwalker.configured` | boolean | — | `CLOUDWALKER_URL` 与 `CLOUDWALKER_API_TOKEN` 是否都在（两个都在才算 `true`） |
 | `model.configured` | boolean | — | `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` 三项是否齐全 |
 | `model.name` | string \| null | `LLM_MODEL` 原值，未配为 `null` | 模型名 |
@@ -530,14 +532,18 @@ grep -n "url.pathname ===\|url.pathname.startsWith\|decodedPath.match\|url.pathn
 grep -c '^  /' openapi.yaml
 
 # 4. P003-T025 的启动闸门与生效值（A1/A2/A3/A4）
-node --test evidence/test/P003-T025/config-check.test.js            # 9 条：必填矩阵 / 真进程拒绝启动 / 生效值与机密 / 键集双向一致
+node --test evidence/test/P003-T025/config-check.test.js            # 14 条：必填矩阵（含空串）/ 取值非法 / 真进程拒绝启动 / 生效值与机密（五个）/ 键集双向一致
 env -i PATH="$PATH" HIDS_HOST=127.0.0.1 HIDS_PORT=18099 node server.js; echo "退出码=$?"
 #   ↑ 五项必填一个不给：stderr 逐个列名、退出码 1、不打 server.started
 CLOUDWALKER_URL=http://127.0.0.1:1 CLOUDWALKER_API_TOKEN=fake-token-123456 \
 LLM_BASE_URL=http://127.0.0.1:1/v1 LLM_API_KEY=fake-key-abcdef LLM_MODEL=fake-model \
-HIDS_PORT=18099 HIDS_SYSLOG_PORT=0 node server.js & sleep 1
-curl -s 127.0.0.1:18099/api/config; kill %1
+HIDS_PORT=18099 HIDS_SYSLOG_PORT=0 node server.js & PID=$!; sleep 1
+curl -s 127.0.0.1:18099/api/config; kill $PID
 #   ↑ 五项齐才起得来；正文里只有布尔，没有 Token / 密码原文
+env -i PATH="$PATH" HIDS_HOST=127.0.0.1 HIDS_PORT=18099 CLOUDWALKER_URL=http://127.0.0.1:1 \
+CLOUDWALKER_API_TOKEN=fake-token-123456 LLM_BASE_URL=http://127.0.0.1:1/v1 \
+LLM_API_KEY=fake-key-abcdef LLM_MODEL=fake-model HIDS_TRIAGE_INPUT_MODE=pirate node server.js
+#   ↑ 取值非法：stderr「配置值无效：HIDS_TRIAGE_INPUT_MODE=pirate（只能是 syslog 或 poll）」、退出码 1、不监听（不许静默按 poll 跑）
 ```
 
 探针不写任何文件、不连外部服务；它注入替身服务跑真实 HTTP 请求，输出见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md) 第四节。

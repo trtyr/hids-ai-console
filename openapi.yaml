@@ -10,6 +10,10 @@ info:
 
     启动闸门（P003-T025）：`CLOUDWALKER_URL`、`CLOUDWALKER_API_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 五项必填，
     缺任一项 `node server.js` 不监听、把缺的键名逐个列到 stderr 并以非 0 退出码结束；进程起来后生效值与非机密状态看 `GET /api/config`。
+    取值校验（同属闸门）：`HIDS_TRIAGE_INPUT_MODE` 只能是 `syslog` 或 `poll`（不设或空串＝缺省 `syslog`），
+    其他值同样拒绝启动——stderr 点名键与坏值（`配置值无效：HIDS_TRIAGE_INPUT_MODE=<坏值>（只能是 syslog 或 poll）`），
+    并落一条 `server.start_failed`（`what: "config"`，`invalid` 每条含 `key` / `value` / `allowed`）。
+    **不许静默按 `poll` 跑**：打错一个字会让 syslog 接收器悄悄关掉。
     Basic 鉴权口令、两个管理员令牌与知识库凭据不是必填：不配只是那项能力空着。
 
     错误口径（P003-T024）：业务接口的失败分四类，每类一个稳定 `code`，状态码由类决定，同一类在哪条路由上都是同一对：
@@ -66,6 +70,8 @@ paths:
         机密（`CLOUDWALKER_API_TOKEN`、`LLM_API_KEY`、`HIDS_BASIC_AUTH_PASSWORD`、`HIDS_PROMPT_ADMIN_TOKEN`、`HIDS_RULE_ADMIN_TOKEN`）
         只在 `secrets` 里给布尔值——响应正文里不出现任何 Token 与密码原文。
         `missing_required` 就是启动闸门用的那份必填差额（P003-T025）：正常起着的进程里恒为空数组。
+        `triage_input_mode` 只报**生效值**（恒在 `syslog` / `poll` 里）：未设或空串报缺省 `syslog`；
+        表外值（如 `pirate`）不会出现在这里——真进程已被启动闸门拒掉，进程内 `createServer()` 按缺省 `syslog` 生效。
         全部字段读环境变量，不读上游；不返回 503，也不做上游探测。
       operationId: getConfig
       responses:
@@ -79,7 +85,10 @@ paths:
                 properties:
                   host: { type: string, description: 监听地址，缺省 127.0.0.1 }
                   port: { type: integer, description: 监听端口，缺省 8080 }
-                  triage_input_mode: { type: string, enum: [syslog, poll], description: 自动研判输入方式，缺省 syslog }
+                  triage_input_mode:
+                    type: string
+                    enum: [syslog, poll]
+                    description: 自动研判输入方式的生效值；未设或空串为 syslog，表外值不会出现（启动闸门已拒）
                   cloudwalker:
                     type: object
                     required: [configured]

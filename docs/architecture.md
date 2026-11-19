@@ -73,15 +73,19 @@
 
 ### 3.5 缺配置时会怎样
 
-**启动看闸门，起来看实效**（P003-T025）。两件事共用同一份判定：导出的 `configSummary(env)`（`server.js:987`）。
+**启动看闸门，起来看实效**（P003-T025）。三处共用一份判定：导出的 `configSummary(env)`（`server.js:1009`）、`triageInputModeOf(env)`（`server.js:994`）与 `invalidConfigValues(env)`（`server.js:1000`）。
 
-**闸门**：下面五项缺任一项，`node server.js` 就不监听——把缺的键名逐个写到 stderr（`缺少必填配置：…`）、退出码非 0，并打一条 `server.start_failed` 日志（`server.js:1001-1009`）：
+**闸门两类问题，一个出口**：缺必填、取值非法，都是「不监听」。
+
+**(1) 缺必填**：下面五项缺任一项（**空串算缺**），`node server.js` 就不监听——把缺的键名逐个写到 stderr（`缺少必填配置：…`）、退出码非 0，并打一条 `server.start_failed` 日志（`server.js:1026-1035`）：
 
 | 必填项 | 作用 |
 | --- | --- |
 | `CLOUDWALKER_URL` | 牧云地址，同时用于 RPC 与 MCP |
 | `CLOUDWALKER_API_TOKEN` | 牧云 Token（少于 6 位由 `rpc-client.js:4-5` 在装配时拒） |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 模型服务地址、密钥、模型名 |
+
+**(2) 取值非法**：`HIDS_TRIAGE_INPUT_MODE` 只能是 `syslog` 或 `poll`（不设或空串＝缺省 `syslog`，不算非法）。其他值同样拒启动：stderr 写 `配置值无效：HIDS_TRIAGE_INPUT_MODE=<坏值>（只能是 syslog 或 poll）`，`server.start_failed` 里 `invalid` 每条带 `{key, value, allowed}`。**不许静默按 `poll` 跑**：那等于打错一个字就悄悄关掉 syslog 接收器，而 `/api/config` 还会回显那个错值——契约（`openapi.yaml` 的 enum）与实测就会对不上。
 
 **在闸门之外**（不配不算缺配置，只是那项能力空着）：
 
@@ -118,7 +122,7 @@
 | 事件 | 何时写 | 关键字段 |
 | --- | --- | --- |
 | `server.started` | 业务 API 监听成功 | `host` `port` |
-| `server.start_failed` | 启动失败：`what: config`＝必填缺项拒绝启动（P003-T025，带 `missing` 键名数组）；`what: triage`＝自动研判 / syslog 接收器启动失败 | `what` `error` |
+| `server.start_failed` | 启动失败：`what: config`＝闸门拒启动（P003-T025：`missing` 是缺的键名数组，`invalid` 每条 `{key, value, allowed}`）；`what: triage`＝自动研判 / syslog 接收器启动失败 | `what` `error` |
 | `http.request` | 每个请求收尾（`res` 的 `finish` 事件） | `method` `path`（无 query）`status` `duration_ms` |
 | `http.unauthorized` | Basic 认证失败（401） | `method` `path` `status` |
 | `http.failed` | 路由没接住的失败（多为牧云 / 模型调用） | `method` `path` `status` `error` |
@@ -422,7 +426,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `LLM_API_KEY` | 无 | 模型服务密钥 | `model-client.js:4` |
 | `LLM_MODEL` | 无 | 模型名 | `model-client.js:5` |
 | `LLM_TIMEOUT_MS` | `90000` | 单次模型请求超时（毫秒） | `model-client.js:36` |
-| `HIDS_TRIAGE_INPUT_MODE` | `syslog` | 自动研判输入方式：`syslog` 或 `poll` | `server.js:40` |
+| `HIDS_TRIAGE_INPUT_MODE` | `syslog` | 自动研判输入方式：`syslog` 或 `poll`；**其他值拒绝启动**（空串＝缺省，见 §3.5 闸门 (2)） | `server.js:46`、`server.js:994` |
 | `HIDS_SYSLOG_HOST` | `127.0.0.1` | syslog UDP 监听地址 | `server.js:367` |
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
