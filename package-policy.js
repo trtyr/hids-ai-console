@@ -51,7 +51,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
   return 1;
 }
 
-// 照 maintenance-server.js:164 的写法：被 import（测试）时不执行，只有直接跑才走命令行。
+// 照 maintenance-server.js:172 的写法：被 import（测试）时不执行，只有直接跑才走命令行。
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const code = await main();
   if (code) process.exitCode = code;
