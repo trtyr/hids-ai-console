@@ -63,10 +63,10 @@
 | `POST /api/trace/boards` | 请求体取 `target`／`alert_id`／`ip` 与 `focus`；目标不合法 400，已有白板 200（原样返回那条，不重查不覆盖），新建 202 与白板快照；告警起不了板回 422，建板过程出错回 502 | `server.js:338-352` |
 | `GET /api/trace/boards` | 分页列白板：接 `count`／`offset` 与 `status`／`type`／`host`／`from`／`to` 筛选，回 `{ boards, total }`（`total` 是筛选后、切页前总数）；分页或筛选参数不合法返回 400 | `server.js:328-336` |
 | `GET /api/trace/boards/{id}` | 返回单张白板（`hops`／`links`／`gaps`／`discovery` 为详情主数据）；没有这张白板返回 404 | `server.js:353-361` |
-| `GET /api/trace/tools` | 返回牧云 MCP 的工具目录（`provider` 为 `cloudwalker-mcp`，`readOnly` 为 `true`） | `server.js:226-229` |
+| `GET /api/trace/tools` | 返回牧云 MCP 的工具目录（`provider` 为 `cloudwalker-mcp`，`readOnly` 为 `true`） | `server.js:895-897` |
 
-`/api/trace/tools` 依赖牧云 MCP 工具箱（`server.js:226-229`）；另外三条依赖 `boardService`，它默认为 `traceBoard` 实例，而 `traceBoard` 只在牧云 MCP 工具箱与模型都在时才创建
-（`server.js:50-51`、`server.js:187`）。没配齐时这些路由返回 503（`server.js:226-229`、`server.js:237-238`、`server.js:245-246`、`server.js:253-254`）。
+`/api/trace/tools` 依赖牧云 MCP 工具箱（`server.js:895-897`）；另外三条依赖 `boardService`，它默认为 `traceBoard` 实例，而 `traceBoard` 只在牧云 MCP 工具箱与模型都在时才创建
+（`server.js:129-131`、`server.js:816`）。没配齐时这些路由返回 503（`server.js:895-897`、`server.js:907`、`server.js:917`、`server.js:929`）。
 
 **`GET /api/trace/boards` 的分页口径**（`server.js:237-242`）：`count` 缺省 20、合法范围 1 到 50；`offset` 缺省 0、合法范围大于等于 0；两者不是安全整数就回 400「分页参数无效」。判定顺序是先判白板服务在不在（503），再判分页，所以没配服务时 `?count=0` 也是 503。切页由 `TraceBoardService.page` 做，回的是切页前的 `total`；`count` 超出剩余条数就回空 `boards`，不报错。
 
@@ -94,7 +94,7 @@
 | 方向 | 依赖什么 | 证据 |
 | --- | --- | --- |
 | 本模块用到 | Node 内置模块（文件、路径、UUID）、事件类型表与告警归一化、提示词装载 | `trace-board.js:1-5` |
-| 上游 | 业务 API 引入本模块，把 HTTP 请求转成本模块的方法调用 | `server.js:20`、`server.js:187` |
+| 上游 | 业务 API 引入本模块，把 HTTP 请求转成本模块的方法调用 | `server.js:22`、`server.js:816` |
 | 下游 | 事件类型表决定 `get_<类型>_event` 与 `list_<类型>_events` 的类型名；告警归一化把牧云事件行转成告警 | `cloudwalker.js:2-6`、`cloudwalker.js:31-34` |
 | 下游 | 取证会话：开一个会话、记录每次调用与证据编号；引用校验给关系边把关 | `agent-tools.js:50`、`agent-tools.js:55`、`agent-tools.js:57-67`、`agent-tools.js:71-93` |
 | 下游 | 提示词装载：`prompts.trace` 段对应仓内 `prompts/trace-board.md` | `prompt-store.js:18-19` |
@@ -336,7 +336,7 @@
 - **`conclude`**：至少调查过一个节点才能结束；`summary` 截断到 2500 字符，`gaps` 最多 8 条、每条 240 字符（`trace-board.js:568-576`）。
 - **动作没过校验**：把错误回灌给模型并记一条 `tool_error`；连续 5 次失败就抛错（`trace-board.js:577-583`）。
 - **消息体裁剪**：超过 70000 字符时，从第 3 条起裁到只剩最近 8 条（`trace-board.js:584-589`）。
-- **32 轮用尽**：状态置 `done`，摘要写明已达轮次上限，`gaps` 添一条「未完成的路径需继续人工核查」（`trace-board.js:591-592`）。
+- **32 轮用尽**：状态置 `done`，摘要写明已达轮次上限，`gaps` 添一条「未完成的路径需继续人工核查」（`trace-board.js:627-628`）。
 - **抛错的后果**：整张白板状态置 `failed`，错误进 `gaps`，并记一条 `error` 活动（`trace-board.js:362-367`）。
 
 ### 5.4 白板持久化
@@ -347,7 +347,7 @@
 - **落盘很频繁**：每次工具调用后（成功或失败）都存一次（`trace-board.js:377-392`）。调查收尾也存一次（`trace-board.js:481-484`），后面这几处动作执行完同样存：
   `trace-board.js:536-541`、`trace-board.js:546-566`、`trace-board.js:568-576`、`trace-board.js:577-583`。
 - **读**：`get()` 读不到文件返回 `null`；读到状态是 `running` 而进程内没有对应在跑任务时（一般是进程重启过），改写成 `interrupted`、
-  追加一条「调查已中断」活动并回写（`trace-board.js:297-307`）。
+  追加一条「调查已中断」活动并回写（`trace-board.js:339-349`）。
 - **列**：`list()` 扫目录里的 `.json`，逐个读出 `id`／`title`／`status`／`created_at`／`updated_at`，读坏的文件跳过，按 `updated_at` 倒序，
   条数夹在 1–50（`trace-board.js:294-295`）。目录不存在时返回空数组（`trace-board.js:294-295`）。
 - **并发读**：写入是「临时文件 + rename」，并发读不会读到写了一半的文件——仓内测试盯的就是这一条（`trace-board.test.js:8-34`）。

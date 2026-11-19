@@ -42,7 +42,7 @@ depth: complete
 | 原子写入 | `investigation-store.js:18-21` | 先写带 UUID 的 `.tmp`，再 `rename` 覆盖到最终文件名 |
 
 构件全集以拆分清单为准：[docs/modules/_breakdown.json](_breakdown.json) 的 `record-store.components` 列的是上面三项；
-[架构篇第 12 节](../architecture.md) 的同一个模块行只写了「研判记录存取」一项（`docs/architecture.md:492`）。
+[架构篇第 12 节](../architecture.md) 的同一个模块行只写了「研判记录存取」一项（`docs/architecture.md:645`）。
 两处写法不同——代码里能逐个对应上的，是拆分清单那三项。
 
 ## 3 关键路径
@@ -85,7 +85,7 @@ latest(alertId, mode = 'deep')
 | 调用方 | 出处 | 调的是什么 |
 | --- | --- | --- |
 | 业务 API（流式分支） | `server.js:315` | `history.save(result)` |
-| 业务 API（普通分支） | `server.js:322` | `history.save(result)` |
+| 业务 API（普通分支） | `server.js:1223` | `history.save(result)` |
 | 业务 API（查最近一次） | `server.js:332` | `history.latest(alertId, mode)` |
 | 自动研判流水线 | `triage-monitor.js:388` | `history.save(result)` |
 | 自动研判流水线（补证据） | `triage-monitor.js:62` | `history.latest(alert_id, 'triage')` |
@@ -170,8 +170,8 @@ latest(alertId, mode = 'deep')
 | --- | --- | --- |
 | 单条记录大小 | 结论 JSON 的字节数加上 `saved_at`（约 30 字节）；代码里没有大小上限 | 推断，依据 `investigation-store.js:16`、`investigation-store.js:20` |
 | 目录里的文件数 | 每个「告警 × 模式」一份文件；没有硬上限 | 推断，依据 `investigation-store.js:9-12` |
-| 单次 `save()` 的文件系统动作 | 1 次 `mkdir`（幂等）+ 1 次 `writeFile` + 1 次 `rename` | `investigation-store.js:19-21` |
-| 单次 `latest()` 的文件系统动作 | 1 次 `readFile` | `investigation-store.js:27` |
+| 单次 `save()` 的文件系统动作 | 1 次 `mkdir`（幂等）+ 1 次 `writeFile` + 1 次 `rename` | `investigation-store.js:14-16` |
+| 单次 `latest()` 的文件系统动作 | 1 次 `readFile` | `investigation-store.js:25` |
 | 单次调用延迟 | 未测量 | — |
 | 权限 | 目录 0700（仅在目录被创建时）、文件 0600 | `investigation-store.js:19-20`，实测见清单 C1 |
 

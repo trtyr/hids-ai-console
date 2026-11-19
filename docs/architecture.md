@@ -27,7 +27,7 @@
 - **MCP**：牧云暴露的 Model Context Protocol 服务，地址 `/api/mcp`，本后端用它做只读取证。
 - **RPC**：牧云的 `/rpc` JSON-RPC 接口，本后端用它读事件列表与事件详情。
 - **常规研判（triage）** 与 **深度研判（deep）**：同一套研判智能体的两种模式，取证工具池和结论口径不同，见第 5 节。
-- **三态**：结论只有「真实威胁 / 存疑 / 误报」三种，取值与中文标签的映射写在 `investigation-agent.js:9-14` 与 `triage-output.js:2`。
+- **三态**：结论只有「真实威胁 / 存疑 / 误报」三种，取值与中文标签的映射写在 `investigation-agent.js:125-130` 与 `triage-output.js:2`。
 
 ## 2. 一条告警的完整旅程
 
@@ -54,7 +54,7 @@
 
 ### 3.1 业务 API（`server.js`）
 
-`node server.js` 启动，默认监听 `127.0.0.1:8080`（`server.js:25-26`、`server.js:364`）。`npm start` 与之等价；`npm run start:local` 会带上 `--env-file=.env.local`（`package.json:6-7`）。启动时若 `HIDS_TRIAGE_INPUT_MODE` 为 `syslog`，会在监听 HTTP 之后另起一个 UDP 接收器（`server.js:365-370`）。
+`node server.js` 启动，默认监听 `127.0.0.1:8080`（`server.js:33-34`、`server.js:1086-1093`）。`npm start` 与之等价；`npm run start:local` 会带上 `--env-file=.env.local`（`package.json:6-7`）。启动时若 `HIDS_TRIAGE_INPUT_MODE` 为 `syslog`，会在监听 HTTP 之后另起一个 UDP 接收器（`server.js:1086-1093`）。
 
 ### 3.2 维护 API（`maintenance-server.js`）
 
@@ -75,11 +75,11 @@
 
 ### 3.5 缺配置时会怎样
 
-**启动看闸门，起来看实效**（P003-T025）。三处共用一份判定：导出的 `configSummary(env)`（`server.js:1009`）、`triageInputModeOf(env)`（`server.js:994`）与 `invalidConfigValues(env)`（`server.js:1000`）。
+**启动看闸门，起来看实效**（P003-T025）。三处共用一份判定：导出的 `configSummary(env)`（`server.js:1057`）、`triageInputModeOf(env)`（`server.js:1042`）与 `invalidConfigValues(env)`（`server.js:1048`）。
 
 **闸门两类问题，一个出口**：缺必填、取值非法，都是「不监听」。
 
-**(1) 缺必填**：下面五项缺任一项（**空串算缺**），`node server.js` 就不监听——把缺的键名逐个写到 stderr（`缺少必填配置：…`）、退出码非 0，并打一条 `server.start_failed` 日志（`server.js:1026-1035`）：
+**(1) 缺必填**：下面五项缺任一项（**空串算缺**），`node server.js` 就不监听——把缺的键名逐个写到 stderr（`缺少必填配置：…`）、退出码非 0，并打一条 `server.start_failed` 日志（`server.js:1076-1083`）：
 
 | 必填项 | 作用 |
 | --- | --- |
@@ -177,13 +177,13 @@
 
 **依赖方向的两个具体证据**：
 
-- `server.js:7-22` 是唯一一处「什么都 import」的地方，它组装 `RpcClient → CloudwalkerGateway → ApiEvidenceToolbox`（`server.js:29-30`）、`CloudwalkerMcpClient → AgentToolbox`（`agent-tools.js:119-122`）、`ChatModelClient → InvestigationAgent`（`server.js:33-37`）。
+- `server.js:1-26` 是唯一一处「什么都 import」的地方，它组装 `RpcClient → CloudwalkerGateway → ApiEvidenceToolbox`（`server.js:36-37`）、`CloudwalkerMcpClient → AgentToolbox`（`agent-tools.js:119-122`）、`ChatModelClient → InvestigationAgent`（`server.js:40-51`）。
 - 编排层向下依赖，存储层不依赖编排层：`prompt-store.js`、`investigation-store.js`、`knowledge-store.js` 三个文件没有任何本地 import。
 
 **两处容易看错的地方**：
 
 - `EvidenceSession` 定义在 `agent-tools.js:54`，但牧云 API 侧的取证工具箱 `api-tools.js` 也复用它（`api-tools.js:2`、`api-tools.js:92`）。也就是说「一次取证会话」的通用部分住在 MCP 那侧的模块里，两侧工具箱共享。
-- `InvestigationAgent` 的第 4 个构造参数名叫 `knowledgeStore`（`investigation-agent.js:207`），但 `server.js` 传进去的其实是 `WikiStore`（`server.js:36-37`）。智能体用它调的 `agentIndex` / `agentPage` / `agentSearch` / `publishedFor` 都是 `wiki-store.js` 上的方法（`wiki-store.js:134`、`wiki-store.js:144`、`wiki-store.js:160`、`wiki-store.js:367`）。
+- `InvestigationAgent` 的第 4 个构造参数名叫 `knowledgeStore`（`investigation-agent.js:207`），但 `server.js` 传进去的其实是 `WikiStore`（`server.js:43-51`）。智能体用它调的 `agentIndex` / `agentPage` / `agentSearch` / `publishedFor` 都是 `wiki-store.js` 上的方法（`wiki-store.js:151`、`wiki-store.js:161`、`wiki-store.js:177`、`wiki-store.js:387`）。
 
 **另一个同名但不相干的东西**：`knowledge-store.js` 与 `knowledge-workbench.js` 是一套「候选经验整理台」，与 `wiki-store.js` / `wiki-workbench.js` 没有代码关系。全仓 grep 显示这两个文件只被测试文件引用（`investigation-agent.test.js:5-6`、`knowledge-workbench.test.js:6-7`），没有出现在 `server.js` 的 import 列表里，因此当前业务进程不会加载它们。详见 [docs/_meta/gaps.md](_meta/gaps.md)。
 
@@ -219,9 +219,9 @@
 
 ### 5.3 模式怎么选
 
-请求体 `mode` 决定，默认 `deep`（`server.js:313`、`server.js:321`）。取值只允许 `deep` 与 `triage`，其他值在 `investigation-agent.js:216` 抛错。
+请求体 `mode` 决定，默认 `deep`（`server.js:1205`、`server.js:1231`）。取值只允许 `deep` 与 `triage`，其他值在 `investigation-agent.js:216` 抛错。
 
-有一个容易看漏的细节：`server.js:304` 写的是 `body.mode === 'deep' && investigator === agent ? deepInvestigator : investigator`。也就是说「切到 deep 研判器」这个动作只在请求方拿到的正是常规研判器时才发生；若调用方注入的已经是另一个实例，请求会继续用注入的那个。
+有一个容易看漏的细节：`server.js:1200` 写的是 `body.mode === 'deep' && investigator === agent ? deepInvestigator : investigator`。也就是说「切到 deep 研判器」这个动作只在请求方拿到的正是常规研判器时才发生；若调用方注入的已经是另一个实例，请求会继续用注入的那个。
 
 ### 5.4 未匹配的 syslog 走另一条路
 
@@ -251,7 +251,7 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 1. 首次不通过，退回模型重写，最多两次（`investigation-agent.js:509-524`）。
 2. 仍不通过，就删掉没通过校验的事实，并把 `validation.removed_unverified_facts` 置为 true（`investigation-agent.js:525-531`）。
-3. 再不行，结论降为存疑、置信度降为低、缺口里加一条「模型引用校验未通过」（`investigation-agent.js:532-536`）。
+3. 再不行，结论降为存疑、置信度降为低、缺口里加一条「模型引用校验未通过」（`investigation-agent.js:956-960`）。
 
 ### 6.4 误报结论的额外门槛
 
@@ -322,7 +322,7 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 
 `customer-experience/EX-*.md` 是另一类页面，正文里嵌一段 JSON 记录这条经验的适用条件与人工复核结论。`publishedFor()`（`wiki-store.js:367-378`）只返回 `status: active`、场景匹配、且复核期限未过的经验。
 
-常规研判在取证后会尝试复用这些经验：让模型在候选中挑一条，并逐项核对适用条件；核对不通过或证据不足就继续完整研判（`investigation-agent.js:266-345`）。命中时结论直接复用该经验的历史判定，并附一条「若出现经验的失效条件，撤回经验并重新研判」的建议（`investigation-agent.js:323-337`）。
+常规研判在取证后会尝试复用这些经验：让模型在候选中挑一条，并逐项核对适用条件；核对不通过或证据不足就继续完整研判（`investigation-agent.js:266-345`）。命中时结论直接复用该经验的历史判定，并附一条「若出现经验的失效条件，撤回经验并重新研判」的建议（`investigation-agent.js:591-605`）。
 
 ### 7.4 维护工作台的四步
 
@@ -361,9 +361,9 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
   读—比对—写不可分割，并发两个 `PUT` 只有一个落盘，另一个拿 409，不会拿旧版本悄悄盖掉前一份。
 - **回滚**：`rollback(id, rev)`（`rule-store.js:348`）把历史里那一版当新版写一次（同一段写队列）——所以当前版也进历史，
   回滚可再回滚；历史里没有的 `rev` 直接 404，不动现网那份。
-- **维护者**：`RegoRuleMaintainer`（`server.js:226`）拿已完成的误报案件让模型改/增一条，写盘走 `save()`，每次维护落一份会话。
+- **维护者**：`RegoRuleMaintainer`（`server.js:227`）拿已完成的误报案件让模型改/增一条，写盘走 `save()`，每次维护落一份会话。
   改已有规则时多一道校验：原条件不许更宽（放宽就拒绝落盘，维护记 `failed`）。
-- **研判侧读同一本库**：`server.js:45` 装配的 `regoRuleStore` 同时交给两个 `InvestigationAgent`（构造第 5 个参数），
+- **研判侧读同一本库**：`server.js:46` 装配的 `regoRuleStore` 同时交给两个 `InvestigationAgent`（构造第 5 个参数），
   维护者改完规则，下一次研判读到的就是改过的那份（`investigation-agent.js:22` 里的仓内缺省只对没传第 5 个参数的调用方生效）。
 
 维护接口（`server.js:752-827`）见 §9.2 与 `openapi.yaml`；四条新增的是 `PUT /api/rules/{id}`、
@@ -387,7 +387,7 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 - 没设就落 `~/.local/share/hids-ai-console/`——本机是 `/home/trtyr/.local/share/hids-ai-console/`。
 - **不读** `XDG_DATA_HOME`：卡面只点名 `HIDS_DATA_DIR` 与 `~/.local/share/hids-ai-console`，多一个开关就是多一条没人维护的路径。
 
-`server.js` 里定义的运行态路径一律取自 `runtime.*`（`server.js:30`、`server.js:42-62`、`server.js:128`），
+`server.js` 里定义的运行态路径一律取自 `runtime.*`（`server.js:31`、`server.js:52-63`、`server.js:129-130`），
 **仓库里一个字都不写**：部署时仓库目录往往只读，运行态落进去没人知道该去哪找。九条具名路径的子结构与 P003-T019 时仓内
 `.data/` 逐字一致（见 8.2），换的只是「根在哪」。
 
@@ -408,7 +408,7 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 ### 8.2 目录与文件清单
 
 下表路径均相对于**数据根**（第 8.1 节：`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console/`）。
-前九条的默认值由 `runtimePaths()`（`server.js:1073-1085`）给出，`server.js:30`、`server.js:42-62`、`server.js:128` 把它们交给各构件。
+前九条的默认值由 `runtimePaths()`（`server.js:1293-1306`）给出，`server.js:31`、`server.js:52-63`、`server.js:129-130` 把它们交给各构件。
 
 | 路径 | 存什么 | 谁写 | 证据 |
 | --- | --- | --- | --- |
@@ -416,16 +416,16 @@ return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就�
 | `<数据根>/triage-rules.json` | 误报规则集 | `TriageRuleEngine` | `server.js:52` |
 | `<数据根>/triage-monitor.json` | 自动研判的游标、队列、去重表、会话窗口 | `TriageMonitor.persist()` | `server.js:54`、`triage-monitor.js:240` |
 | `<数据根>/cases/` | syslog 案件目录（`HIDS_CASES_DIR` 可换掉） | `writeSyslogCase()` | `server.js:59`、`syslog-case.js:92` |
-| `<数据根>/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:60`、`triage-monitor.js:849` |
+| `<数据根>/baseline.json` | 基线（白名单命令、授权运维、已知来源国家等） | 人工维护，研判时读取 | `server.js:61`、`triage-monitor.js:913` |
 | `<数据根>/intel.json` | 按 IP 的情报缓存 | 人工维护，研判时读取 | `server.js:61`、`triage-monitor.js:851` |
 | `<数据根>/wiki-sessions/` | 知识库维护会话 | `WikiWorkbench` | `server.js:62` |
 | `<数据根>/trace-boards/` | 深度溯源白板 | `TraceBoardService` | `server.js:128` |
-| `<数据根>/config-overrides.json` | 可写配置的覆盖层（只存改过的五项） | `createConfigStore` | `server.js:30`、`config-store.js:37` |
+| `<数据根>/config-overrides.json` | 可写配置的覆盖层（只存改过的五项） | `createConfigStore` | `server.js:31`、`config-store.js:37` |
 | `<数据根>/prompt-overrides.json` | 提示词与 SOP 的本地覆盖（`HIDS_PROMPT_STORE_FILE` 可换掉） | `PromptStore` | `prompt-store.js:17` |
 | `<数据根>/update-packages/` | 已上传的升级包（`HIDS_UPDATE_STORE_DIR` 可换掉；默认跟着覆盖文件所在目录走） | `UpdateStore` | `update-store.js:62` |
 | `<数据根>/wiki/` | 判据库活数据（Markdown 页面） | `WikiStore`、`PromptStore`（SOP） | `wiki-store.js:417`、`wiki-store.js:6`、`prompt-store.js:12` |
 | `<数据根>/wiki-history/` | 判据页历史版本（`HIDS_WIKI_DIR` / 构造参数把判据库目录换到别处时改落 `<判据库目录的上一级>/.data/wiki-history/`） | `WikiStore` | `wiki-store.js:421-425`、`wiki-store.js:30`、`wiki-store.js:225` |
-| `<数据根>/rules/` | Rego 规则库活数据（`<id>.rego`） | `RuleStore` | `rule-store.js:390`、`rule-store.js:260`、`server.js:45` |
+| `<数据根>/rules/` | Rego 规则库活数据（`<id>.rego`） | `RuleStore` | `rule-store.js:390`、`rule-store.js:260`、`server.js:46` |
 | `<数据根>/rules-history/` | 规则历史版本（`<id>-<rev>.rego`）与备注（`<id>-<rev>.json`）；构造参数把库目录换到别处时改落 `<库目录的上一级>/.data/rules-history/` | `RuleStore.save()` | `rule-store.js:399`、`rule-store.js:260`、`rule-store.js:316`、`rule-store.js:292` |
 | `<数据根>/rule-sessions/` | 规则维护会话（输入案卷引用 / 模型草案 / 校验结果 / 终态） | `RuleSessionStore` | `rule-store.js:406`、`rule-store.js:442`、`server.js:46` |
 
@@ -458,9 +458,9 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 ### 9.1 业务 API 的 Basic 认证
 
-`server.js:58-65` 的 `hasAccess()` 逻辑是：**只有当 `HIDS_BASIC_AUTH_PASSWORD` 配了时才校验**；没配密码就放行（`server.js:59` 直接 `return true`）。校验时把请求头里的 Base64 解出来，与 `user:password` 做 `timingSafeEqual`（长度不等直接判否）。失败时返回纯文本 401「需要登录后访问」，并带 `WWW-Authenticate` 头（`server.js:66-70`）。
+`server.js:413-419` 的 `hasAccess()` 逻辑是：**只有当 `HIDS_BASIC_AUTH_PASSWORD` 配了时才校验**；没配密码就放行（`server.js:414` 直接 `return true`）。校验时把请求头里的 Base64 解出来，与 `user:password` 做 `timingSafeEqual`（长度不等直接判否）。失败时返回纯文本 401「需要登录后访问」，并带 `WWW-Authenticate` 头（`server.js:421-427`）。
 
-默认监听 `127.0.0.1`（`server.js:25`），所以在默认配置下接口只在回环地址可达；开认证是给「前端反向代理到后端」这种部署形态用的。
+默认监听 `127.0.0.1`（`server.js:33`），所以在默认配置下接口只在回环地址可达；开认证是给「前端反向代理到后端」这种部署形态用的。
 
 ### 9.2 管理员令牌
 
@@ -470,7 +470,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 - 规则集（误报规则集 `triage-rules.json`）：`GET /api/triage/rules` 开放，并在响应里带 `writable` 字段说明当前能不能写；`PUT /api/triage/rules` 要求规则管理员令牌，并要求请求带上 `expected_revision` 做乐观并发控制。
 - 规则库（Rego，`server.js:752-827`）：列表 `/api/rules`、读 `/api/rules/{id}`、求值 `/api/rules/evaluate`、历史 `/api/rules/{id}/history`、维护会话 `/api/rules/sessions` 都是读接口，开放；`PUT /api/rules/{id}` 与 `POST /api/rules/{id}/rollback` 要求同一个规则管理员令牌（`x-rule-admin-token`），没配令牌时回 503、令牌不对回 403。`PUT` 必须带 `expected_revision`（新增规则给 `null`），与当前正文指纹不一致回 409；正文不在规则子集内回 400 并带 `<id>.rego:<行>`。
 
-提示词上传在业务端被明确关闭：`POST /api/agent/prompts/upload` 返回 410「提示词更新已迁移到独立维护端，业务端不允许上传」（`server.js:233`）。
+提示词上传在业务端被明确关闭：`POST /api/agent/prompts/upload` 返回 410「提示词更新已迁移到独立维护端，业务端不允许上传」（`server.js:1120`）。
 
 ### 9.3 牧云侧的只读约束
 
@@ -500,7 +500,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 ### 9.6 本系统不下指令
 
-整条链路上没有「隔离」「封禁」「加白」的执行动作。研判记录里的 `auto_action: false`（`investigation-agent.js:560`）就是这个意思；规则命中也只是「交由 AI 复核」的候选（`server.js:122`、`triage-monitor.js:357`）。
+整条链路上没有「隔离」「封禁」「加白」的执行动作。研判记录里的 `auto_action: false`（`investigation-agent.js:560`）就是这个意思；规则命中也只是「交由 AI 复核」的候选（`server.js:830`、`triage-monitor.js:1021`）。
 
 ## 10. 配置项速查
 
@@ -510,9 +510,9 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 
 | 变量 | 缺省 | 作用 | 读取位置 |
 | --- | --- | --- | --- |
-| `HIDS_HOST` | `127.0.0.1` | 业务 API 监听地址 | `server.js:25` |
+| `HIDS_HOST` | `127.0.0.1` | 业务 API 监听地址 | `server.js:33` |
 | `HIDS_PORT` | `8080` | 业务 API 监听端口 | `server.js:26` |
-| `CLOUDWALKER_URL` | 无 | 牧云地址，同时用于 RPC 与 MCP | `server.js:27`、`server.js:29`、`agent-tools.js:120` |
+| `CLOUDWALKER_URL` | 无 | 牧云地址，同时用于 RPC 与 MCP | `server.js:34`、`server.js:36`、`agent-tools.js:120` |
 | `CLOUDWALKER_API_TOKEN` | 无 | 牧云 Token；少于 6 位会被拒 | `server.js:28`、`rpc-client.js:5`、`mcp-client.js:6` |
 | `LLM_BASE_URL` | 无 | 主判模型服务地址 | `model-client.js:15`、`model-client.js:90-91` |
 | `LLM_API_KEY` | 无 | 主判模型密钥 | `model-client.js:16`、`model-client.js:90-91` |
@@ -626,7 +626,7 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 即：**读本地状态与本地文件的接口**（会话、状态、提示词、升级包概览、规则集、判据目录）不依赖牧云与模型，返回 200；
 **需要牧云或模型才能工作的接口**（告警列表、自动研判状态）返回 503，并写明缺什么。
 
-`/api/status` 不返回 503，而是用 `configured` 与 `connected` 两个字段区分「没配」和「连不上」（`server.js:136-139`）。`/api/agent/status` 同理，会列出缺哪个环境变量（`server.js:141-144`）。
+`/api/status` 不返回 503，而是用 `configured` 与 `connected` 两个字段区分「没配」和「连不上」（`server.js:884-887`）。`/api/agent/status` 同理，会列出缺哪个环境变量（`server.js:900-904`）。
 
 启动日志是一行 JSON：`{"time":…,"event":"server.started","host":…,"port":…}`（见 3.6）。`HIDS_TRIAGE_INPUT_MODE` 为 `syslog` 时还会多一行 `syslog.listening`（`bind` 形如 `udp://…`）或 `syslog.bind_failed`（`error` 写明端口被占 / 权限不足）；未配牧云时这两行都不出现，因为自动研判器整个不启用。
 
@@ -663,7 +663,7 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 
 1. **`evidence/test/**` 的验证件不属于单测基线**（P003-T028）：`npm test` 只扫仓根 `*.test.js`，不再递归吞 `evidence/test/**`——那批件里有 6 个要 spawn `server.js` 并等 20s 超时，缺 `LLM_*` 配置时必失败。复跑旧卡要按该卡 test-report 的原始命令单独跑；口径见 [docs/_meta/gaps.md](_meta/gaps.md) 第八节。
 2. **候选经验整理台未接线**。`knowledge-store.js` 与 `knowledge-workbench.js` 只被测试文件引用（第 4 节末）。
-3. **`createServer` 有两个没被路由使用的参数**：`maintenanceEntry`（`server.js:115`）与 `knowledge`（`server.js:112`）。
+3. **`createServer` 有两个没被路由使用的参数**：`maintenanceEntry`（`server.js:818`）与 `knowledge`（`server.js:815`）。
 4. **接口契约有两套真源**：`openapi.yaml` 与 `server.js` 的路由各自独立（第 11.3 节）。
 
 本页只描述现状。哪一处该改、改成什么样，是评审的活，不在本页范围内。

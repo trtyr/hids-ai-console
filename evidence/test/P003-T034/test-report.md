@@ -85,3 +85,42 @@ $ python3 锚点扫描（README/docs/openapi 19 份）→ anchors 3595 | missing
    没有端到端「写出一条研判记录落数据根」的证据（成本与伪造上游的噪声不值得）。
 4. 跑全量时我这份套件会被 `evidence/test/*/*.test.js` glob 带进主门禁（+14 条、约 7s）；它自己 spawn 真进程、自己 `mkdtemp`，
    ambient 环境变量（`HIDS_*`/`HOME`）全部被覆盖，跑完 /tmp 零残留。
+
+---
+
+## 六、复审第 4 轮复验（测试席 · 何东阳，HEAD `baa28fc`）
+
+被验提交 `baa28fc`：7 文件全为 docs/evidence/报告（`git show --stat baa28fc`），零实现零 `*.test.js` 改动。
+以下每个数字都是我自己终端里跑出来的（命令 + 退出码原文）。
+
+| 验收 | 我的命令 | 实测 |
+| --- | --- | --- |
+| A1 行为面不变 | `git diff --name-only baa28fc^ baa28fc` | 7 文件：`coding-reports/P003-T034.md`、`docs/modules/knowledge-base.md`、`evidence/recon/P003-T034.md`、`evidence/test/P003-T034/{anchor-audit.txt,anchor-retake.mjs,anchor-retake.txt,merge-verify.txt}`；无任何实现/测试套件改动 |
+| A2 探针注入 tmp、全局根不新增 | `timeout 180 bash evidence/test/P003-T029/probe-config-write.sh` → 19 PASS / 0 FAIL，EXIT=0；`timeout 180 bash evidence/test/P003-T029/probe-corrupt-and-auth.sh` → 12 PASS / 0 FAIL，EXIT=0；跑前跑后 `stat -c '%y' ~/.local/share/hids-ai-console` | 两探针均 `DATA=$(mktemp -d)` + `env -i … HIDS_DATA_DIR="$DATA"`；全局根 mtime 恒为 `2026-11-20 01:13:16.174617415`（早于 01:54 提交，探针/全量后一字未动），内容仍只有 `wiki/`、`rules-history/` |
+| A3 跑完仓内无 `.data` | `find . -maxdepth 2 -name .data -not -path './node_modules/*'` + `test ! -e .data`（探针、全量、我的套件各跑一遍后都测） | 三次全空；`git status --short` 只有 ` D .pi-child-claim.json`（编排面文件，属起活前状态，不在本卡 diff） |
+| A4 旧账申报与 MOVED 32 一致 | `timeout 180 node evidence/test/P003-T034/anchor-audit.mjs` | `锚点 3889 处：PASS=3857 MOVED=32 UNVERIFIED=0 其他=0`，EXIT=1（仅因 MOVED 旧账）；逐文档：architecture 1、event-gateway 2、evidence-view 7、experience-draft 1、investigation-agent 13、model-client 1、prompt-store 3、triage-pipeline 4 = 32，与报告 §三 未决 2 对得上；`architecture.md:222` 那条 MOVED 就是申报保留那条 |
+| A5 锚点修正与重取账 | `timeout 60 node evidence/test/P003-T034/anchor-retake.mjs --base 4e65742`；`--verbose` 版与仓内 `anchor-retake.txt` `diff` | `104 处（内容映射 86、人工判 18、无依据 0）`，EXIT=0；`--verbose` 输出与 committed `anchor-retake.txt` **逐字节相同**；`anchor-audit.mjs` 里 `knowledge-base.md 413/413/0 0`。判词点名 4 处我按符号名亲验：`wiki-workbench.js:77 export class WikiWorkbench`、`:136 customer-experience/EX-*` 文件名、`:292-306` 新经验分支（`:306 createExperience`）、`:297-300` 366 天期限（`:298 expires > Date.now() + 366*86400000`）；另抽 `:90-96` save、`:153`/`:274` 会话 404、`:168` relatedEvidence、`:222` 六页上限、`:255-258` catch、`:43-48` HTTPS 校验、`:235`/`:241` sourceEvidence、`:114` 快照文件名、`:15-16` 九字段——语义全吻合。wiki-store / wiki-replay 侧另抽 18 处（`:49` browse、`:92` list、`:111` get、`:121` getById、`:127` search、`:172` health、`:195` update、`:224` checkBundle、`:269` publishBundle、`:345` createExperience、`:367` publishedFor、`:404/:449/:457` 三函数、`wiki-replay.js:15/:79/:90/:114` 四行）全对 |
+| A6 全量绿 | `timeout 300 npm test`；`timeout 400 node --test --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js`；单跑我的套件 | `tests 228 / pass 228 / fail 0`，EXIT=0；`tests 214 / pass 213 / fail 0 / todo 1`，EXIT=0（todo 是 `evidence/test/P003-T013/acceptance.test.js:648` 旧账）；我的 `acceptance.tester.test.js` 单跑 `tests 14 / pass 14 / fail 0`，EXIT=0 |
+
+### 6.1 变异（守卫不是永真，亲手复现）
+
+```
+M1（锚点改动无依据必须恰红）
+  sed -i '25s/wiki-workbench\.js:77/wiki-workbench.js:78/' docs/modules/knowledge-base.md
+  → node evidence/test/P003-T034/anchor-retake.mjs --base 4e65742   EXIT=1
+    「无依据 1：doc:25 (新增) → 78」
+  → git checkout -- docs/modules/knowledge-base.md → 重跑 EXIT=0「104 处（…无依据 0）」复绿
+
+M2（anchor-audit 的弱证据面仍在：改错行仍报全 PASS）
+  把 §1.1 的「单页修订（wiki-store.js:195）」改成 wiki-store.js:49（browse 的定义行）
+  → node evidence/test/P003-T034/anchor-audit.mjs --file docs/modules/knowledge-base.md
+    「锚点 413 处：PASS=413 MOVED=0 …」EXIT=0
+  → git checkout -- docs/modules/knowledge-base.md 还原
+```
+
+M1 证明 A5 的主判据（anchor-retake 内容映射 + HAND 表）会红；M2 证明 A5 的第二半（anchor-audit 413/413/0）**只说明没有可证伪的漂移**——非 `wiki-workbench.js` 的锚点落错行它也放行（脚本自己的注释写明「目标区间里有代码（中文描述脚本判不了）」），这一点与审查席 minor issue 1 同一事实，不是新错。
+
+### 6.2 本轮未决 / 残余风险
+
+1. **doc-side（nit）**：`coding-reports/P003-T034.md:219` 与 `evidence/recon/P003-T034.md:264` 写「非本卡 scope 的 **8 份**模块页共 31 处」，实际枚举 7 份（2+7+1+13+1+3+4=31），总数与 MOVED 32 对得上，是「8 份」这个措辞写错（前几轮遗留）。不影响验收。
+2. **残余**：A5 的 audit 那一半对非 `wiki-workbench.js` 锚点是弱证据（见 M2 与 §6.1），本轮 `knowledge-base.md` 里 wiki-store/wiki-replay/其他文件的锚点没有逐条语义复核，我只抽了 18 处 wiki-store/wiki-replay 侧锚点全部吻合。缝与审查席 issue 1 同源，不阻塞。
