@@ -32,6 +32,7 @@ security:
 tags:
   - name: 状态
   - name: 数据管理
+  - name: 日志
   - name: 告警
   - name: 自动研判
   - name: 深度研判
@@ -258,7 +259,7 @@ paths:
         | `boards` | 溯源白板 | 一个 `*.json` 文件 | `.data/trace-boards` |
         | `wiki_sessions` | 知识库会话 | 一个 `*.json` 文件 | `.data/wiki-sessions` |
         | `queue` | 研判队列 | 一条队列记录（有研判队列时按进程内记录数，否则读队列文件 `records`）；字节＝队列文件 + 同名 `.archive.jsonl` | `.data/triage-monitor.json` |
-        | `logs` | 日志 | `.data/` **顶层**的一个 `*.log` 文件 | 后端自身不落日志文件（只上 stdout），正常部署下这里是 0 |
+        | `logs` | 日志 | `HIDS_LOG_FILE` 的目录里一个 `*.log` 文件（当前活动文件 + 轮转出来的历史文件；缺省目录是数据根） | 配了 `HIDS_LOG_FILE` 才有（见 `getLogs`）；不配＝只上 stdout，这里是 0 |
         | `config_overrides` | 配置覆盖层 | 那一个覆盖层文件（`config-overrides.json`） | `.data/config-overrides.json` |
 
         `oldest_at` / `newest_at` 是这一类的条目时刻：文件取 mtime，案卷取目录内**文件**的最新 mtime（空目录退回目录 mtime），
@@ -346,6 +347,124 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
         '503':
           description: '`code=not_configured`：没装配研判队列（没配牧云或模型）时清 `queue` 会被拒（不拿队列文件硬删）。'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/logs:
+    get:
+      tags: [日志]
+      summary: 查落盘的日志（按 event / level / 时间范围过滤，分页）
+      operationId: getLogs
+      description: |
+        **读的是盘上的文件**，不是进程内存：当前活动文件（`HIDS_LOG_FILE`）加上轮转出来的历史文件
+        （`<名>.<2026-11-20T02-44-01-123Z>.log`），现读现解析，每个请求都反映盘的当下状态。
+
+        没配 `HIDS_LOG_FILE` 时进程不落文件、这里也没有东西可读——回 **503** `not_configured`，不拿空列表冒充「没有日志」。
+
+        过滤（都给就是 AND）：
+        - `event`：事件名精确匹配，逗号分隔可多选（与 `/api/alerts` 的 `level` 同一套写法）；
+        - `level`：`info` / `warn` / `error`，逗号分隔可多选；表外值回 400；
+        - `from` / `to`：时间范围，**闭区间**（含端点），ISO 8601 或秒/毫秒 Unix 时间（与 `/api/alerts` 同一套解析）；解析不出回 400，`from > to` 回 400。
+
+        分页：`count` 缺省 20、1 到 50；`offset` 缺省 0、不小于 0——与其它分页路由同一套 400「分页参数无效」。
+        `total` 是**筛选后、切页前**的条数，`echo` 回显本次分页参数。
+
+        结果按 `time` 倒序（新的在前）。承载不住的情况只有一种：命中超过 20000 条时只收前 20000 条并回 `truncated: true`
+        （先收满就停，不再往下扫文件）——调窄时间范围再查。
+
+        响应里的每条就是落盘那行 JSON（`time` / `level` / `event` + 字段）。落盘时已经过脱敏两道闸，读的时候按同一套规则
+        **再擦一遍**：`Authorization` / `Cookie` / `Token` 之类既不进文件，也不会出现在这里。
+      parameters:
+        - { $ref: '#/components/parameters/Count' }
+        - { $ref: '#/components/parameters/Offset' }
+        - name: event
+          in: query
+          description: 事件名，逗号分隔可多选（如 `http.request,triage.done`）
+          schema: { type: string }
+        - name: level
+          in: query
+          description: 日志级别，逗号分隔可多选（info/warn/error 之外的值回 400，实现不校验 enum 而按描述语义处理）
+          schema: { type: string }
+        - name: from
+          in: query
+          description: 起始时间（含），ISO 8601 或 Unix 秒/毫秒
+          schema: { type: string }
+        - name: to
+          in: query
+          description: 结束时间（含），ISO 8601 或 Unix 秒/毫秒
+          schema: { type: string }
+      responses:
+        '200':
+          description: 筛选后的日志页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogQueryResult'
+        '400':
+          description: |
+            调用方传错（`code=caller_error`）：`count` 不在 1..50、`offset` 为负或非整数（`分页参数无效`）、
+            `level` 不在 `info/warn/error` 里、`from`/`to` 解析不出时间、`from` 晚于 `to`。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '503':
+          description: '`code=not_configured`：没配 `HIDS_LOG_FILE`（日志只上 stdout，没有文件可读）。'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/logs/cleanup:
+    post:
+      tags: [日志]
+      summary: 按时间 / 总大小清理轮转出来的旧日志文件（默认 dry-run 只报清单）
+      operationId: cleanLogs
+      description: |
+        清的是**轮转出来的历史文件**；当前活动文件（`HIDS_LOG_FILE` 本身，正在追加的那一份）**永不在候选里**——
+        删了它，正在写的那一行就断在半行上。
+
+        阈值（两条都要给至少一条，一个都不给回 400——不许无阈值一把抹掉），同时给时取**并集**：
+        - `older_than`：ISO 8601 时间，历史文件 **mtime 早于**它的进候选；
+        - `max_bytes`：历史文件总字节上限；超了就从**最老的**删起，删到不超为止。
+
+        **默认 dry-run**：`execute` 不给或为 `false` 时只回候选清单，盘上一个字节都不动；带 `"execute": true` 才真删。
+
+        **留痕**：`execute: true` 时落一条 `log.cleaned` 日志，字段只有 `by`（`age` / `size` / `age+size`）、`count`、`bytes`——
+        与 `data.cleaned` 同口径：不记文件名、不记日志内容。dry-run 不留痕。
+
+        没配 `HIDS_LOG_FILE` 回 **503** `not_configured`（没有文件可清）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogCleanupRequest'
+            examples:
+              dryRunBySize:
+                summary: 只看历史文件总字节压到 10 MiB 以内会删哪几个（不动盘）
+                value: { max_bytes: 10485760 }
+              deleteOlderThanAWeek:
+                summary: 真删一周前的历史文件
+                value: { older_than: '2026-11-13T00:00:00.000Z', execute: true }
+      responses:
+        '200':
+          description: |
+            `candidates` 是将清清单（`truncated: true` 表示超过 100 个文件只列了前 100）；
+            `applied` 是这次真删掉的个数与字节（dry-run 恒为 0）；`remaining` 是执行后重新扫出来的历史文件余量。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogCleanupResult'
+        '400':
+          description: |
+            调用方传错（`code=caller_error`）：正文不是 JSON 对象、`execute` 不是布尔、
+            `older_than` 解析不出时间、`max_bytes` 不是非负整数、`older_than` 与 `max_bytes` 一个都没给、带未知参数。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503':
+          description: '`code=not_configured`：没配 `HIDS_LOG_FILE`（日志只上 stdout，没有文件可清）。'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1677,6 +1796,83 @@ components:
           type: integer
           minimum: 0
           description: 保留最新 N 条；排在 N 条之后的进候选
+    LogEntry:
+      type: object
+      description: |
+        落盘那一行 JSON。`time` / `level` / `event` 三键恒在；其余字段是写日志时给的（已过脱敏，读的时候又擦一遍）。
+        `additionalProperties: true` 是有意的：事件字段各不相同，按事件名表（docs/architecture.md §3.6）取用。
+      required: [time, level, event]
+      additionalProperties: true
+      properties:
+        time: { type: string, format: date-time, description: 写这一行的时刻（ISO 8601 UTC） }
+        level: { type: string, enum: [info, warn, error] }
+        event: { type: string, description: 事件名，取值见 docs/architecture.md §3.6 的事件名表 }
+    LogQueryResult:
+      type: object
+      required: [logs, total, files, truncated, echo]
+      properties:
+        logs:
+          type: array
+          description: 本页日志，按 `time` 倒序；每页最多 50 条
+          items: { $ref: '#/components/schemas/LogEntry' }
+        total: { type: integer, minimum: 0, description: 筛选后、切页前的条数 }
+        files: { type: integer, minimum: 0, description: 这次读了几个文件（当前活动文件 + 轮转出的历史文件） }
+        truncated: { type: boolean, description: 命中超过 20000 条时为 true，只收了前 20000 条 }
+        echo:
+          type: object
+          required: [count, offset]
+          properties:
+            count: { type: integer, minimum: 1, maximum: 50 }
+            offset: { type: integer, minimum: 0 }
+    LogCleanupRequest:
+      type: object
+      description: 阈值至少给一条；`execute` 缺省 false（dry-run）。
+      additionalProperties: false
+      properties:
+        older_than: { type: string, format: date-time, description: 历史文件 mtime 早于它的进候选 }
+        max_bytes: { type: integer, minimum: 0, description: 历史文件总字节上限；超了从最老的删起 }
+        execute: { type: boolean, default: false, description: 不给或 false 时只报清单，盘上不动 }
+    LogCleanupResult:
+      type: object
+      required: [dry_run, threshold, candidates, applied, remaining]
+      properties:
+        dry_run: { type: boolean, description: 没有真动盘时为 true }
+        threshold:
+          type: object
+          required: [older_than, max_bytes]
+          properties:
+            older_than: { type: [string, 'null'], format: date-time, description: 回显请求里的 older_than；没给为 null }
+            max_bytes: { type: [integer, 'null'], minimum: 0, description: 回显请求里的 max_bytes；没给为 null }
+        candidates:
+          type: object
+          required: [count, bytes, items, truncated]
+          properties:
+            count: { type: integer, minimum: 0, description: 候选历史文件个数（当前活动文件永不在其中） }
+            bytes: { type: integer, minimum: 0 }
+            items:
+              type: array
+              description: 最多 100 个（按 mtime 从老到新）；多出来的只体现在 count/bytes 与 truncated
+              items:
+                type: object
+                required: [name, bytes, at]
+                properties:
+                  name: { type: string, description: 文件名（不含目录） }
+                  bytes: { type: integer, minimum: 0 }
+                  at: { type: string, format: date-time, description: 文件的 mtime }
+            truncated: { type: boolean }
+        applied:
+          type: object
+          required: [count, bytes]
+          properties:
+            count: { type: integer, minimum: 0, description: dry-run 恒为 0 }
+            bytes: { type: integer, minimum: 0, description: dry-run 恒为 0 }
+        remaining:
+          type: object
+          required: [count, bytes]
+          description: 执行后重新扫出来的历史文件余量
+          properties:
+            count: { type: integer, minimum: 0 }
+            bytes: { type: integer, minimum: 0 }
     DataCleanupResult:
       type: object
       required: [dry_run, kind, action, threshold, candidates, applied, inventory]

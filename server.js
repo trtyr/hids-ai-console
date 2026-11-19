@@ -14,7 +14,7 @@ import { InvestigationAgent } from './investigation-agent.js';
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
 import { TriageMonitor } from './triage-monitor.js';
-import { log } from './log.js';
+import { log, logFileOptions, pruneLogFiles, readLogEntries, queryLevels, useLogFile } from './log.js';
 import { SyslogReceiver, parseSyslog } from './syslog-input.js';
 import { eventTypeFor } from './syslog-input.js';
 import { WikiStore } from './wiki-store.js';
@@ -26,6 +26,10 @@ import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
 import { createConfigStore, dataRoot } from './config-store.js';
 
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
+// 日志落盘（P003-T045）：配了 HIDS_LOG_FILE 才在 stdout 之外再同份写文件，不配维持 stdout-only。
+// **必须在 createConfigStore 之前装**：覆盖层读不出来时它会落 config.load_failed。
+const logOptions = logFileOptions();
+if (logOptions) useLogFile(logOptions);
 // 可写配置的覆盖层（P003-T029）：**必须在下面这批模块级装配之前建**——它把改过的键盖进 process.env，
 // 装配才看得到；「重启进程后改过的值仍生效」全靠这一行。没改过的键继续读环境变量。
 const configStore = createConfigStore({ file: path.join(runtime.data, 'config-overrides.json') });
@@ -578,6 +582,22 @@ function traceQuery(params) {
     ...(toTime ? { to: Date.parse(toTime) } : {}) } };
 }
 
+// 解析 /api/logs 的查询参数（P003-T045）：event / level 都支持逗号多选（与 /api/alerts 同一套 paramList 口径），
+// from/to 用同一个 parseInstant；非法值一律 400，不在读盘时静默当成「不过滤」。
+function logQuery(params) {
+  const events = paramList(params, 'event');
+  const levels = paramList(params, 'level').map(value => value.toLowerCase());
+  for (const value of levels) if (!queryLevels.includes(value)) return { error: `筛选等级无效：${value}` };
+  const from = params.get('from')?.trim();
+  const to = params.get('to')?.trim();
+  const fromTime = from ? parseInstant(from) : null;
+  const toTime = to ? parseInstant(to) : null;
+  if (from && !fromTime) return { error: `筛选起始时间无效：${from}` };
+  if (to && !toTime) return { error: `筛选结束时间无效：${to}` };
+  if (fromTime && toTime && fromTime > toTime) return { error: '筛选起始时间晚于结束时间' };
+  return { filters: { events, levels, from: fromTime, to: toTime } };
+}
+
 // 研判侧筛选：逐页拉取、挂 triage 后过滤，翻到流末或扫描上限后再切页。
 // 没有研判记录的告警按 not_queued / review 参与筛选（与 TriageCase.status 口径一致）。
 async function triageFilteredAlerts(service, monitor, query, { statuses, verdicts, count, offset }) {
@@ -817,12 +837,35 @@ export async function dataCleanup(deps = {}, body = null, { now = Date.now() } =
     inventory: await dataInventory(deps) };
 }
 
+// 日志清理（P003-T045）：按时间 / 总大小清轮转出来的历史文件，当前活动文件永不在候选里。
+// 与 /api/data/cleanup 同口径：默认 dry-run，只收已知参数，阈值一个都不给回 400（不许无阈值一把抹）。
+// 真执行才落一条 log.cleaned（只带口径、条数、字节，不带文件名——与 data.cleaned 同一口径）。
+function logCleanup(file, body = null) {
+  const bad = message => Object.assign(new Error(message), { status: 400 });
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw bad('请求正文必须是 JSON 对象');
+  const unknown = Object.keys(body).filter(key => !['older_than', 'max_bytes', 'execute'].includes(key));
+  if (unknown.length) throw bad(`不认识的参数：${unknown.join('、')}`);
+  if (body.execute != null && typeof body.execute !== 'boolean') throw bad('execute 必须是布尔值');
+  const olderThan = body.older_than == null ? null : Date.parse(body.older_than);
+  if (body.older_than != null && !Number.isFinite(olderThan)) throw bad('older_than 必须是可解析的时间（ISO 8601）');
+  const maxBytes = body.max_bytes ?? null;
+  if (maxBytes != null && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) throw bad('max_bytes 必须是不小于 0 的整数');
+  if (olderThan == null && maxBytes == null)
+    throw bad('至少要给一个阈值：older_than（早于某时间）或 max_bytes（历史文件总字节上限）');
+  const execute = body.execute === true;
+  const outcome = pruneLogFiles({ file, olderThan, maxBytes, execute });
+  if (execute) log('log.cleaned', { by: olderThan != null && maxBytes != null ? 'age+size' : olderThan != null ? 'age' : 'size',
+    count: outcome.applied.count, bytes: outcome.applied.bytes });
+  return outcome;
+}
+
 export function createServer(service = gateway, toolbox = apiToolbox, investigator = agent, history = investigationStore, prompts = promptStore, monitor = service === gateway ? triageMonitor : null, knowledge = null,
   access = { user: process.env.HIDS_BASIC_AUTH_USER, password: process.env.HIDS_BASIC_AUTH_PASSWORD }, boardService = service === gateway ? traceBoard : null,
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
   maintenanceEntry = process.env.HIDS_MAINTENANCE_ENTRY_URL,
   ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore,
-  ruleMaintainer = regoMaintainer, config = configStore, ruleSessions = defaultRuleSessions) {
+  ruleMaintainer = regoMaintainer, config = configStore, ruleSessions = defaultRuleSessions,
+  logFile = logOptions ? logOptions.file : null) {
   // 注入的 TraceBoardService 没有取数器时，用本次的 monitor / history 现接一条：
   // 测试与部署走同一套接线，不再靠测试里手塞假 analysis。
   if (boardService instanceof TraceBoardService && !boardService.analysis)
@@ -883,6 +926,25 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         return json(res, 200, await dataInventory(dataDeps));
       if (url.pathname === '/api/data/cleanup' && req.method === 'POST') {
         try { return json(res, 200, await dataCleanup(dataDeps, await readJSON(req))); }
+        catch (cause) { return causeError(res, cause, 'internal'); }
+      }
+      // 日志（P003-T045）：查询读的是盘上的文件（当前活动文件 + 轮转出的历史文件），不是进程内存；
+      // 没配 HIDS_LOG_FILE 就没文件可读可清——503 点明缺哪个键，不拿「空列表」冒充。
+      // 两个路由和 /api/config 一样只碰本地文件：不探上游、不碰模型；Basic 认证闸门照旧过。
+      if (url.pathname === '/api/logs' && req.method === 'GET') {
+        if (!logFile) return configError(res, '日志未落盘：未配置 HIDS_LOG_FILE');
+        const count = Number(url.searchParams.get('count') || 20);
+        const offset = Number(url.searchParams.get('offset') || 0);
+        if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
+          return callerError(res, '分页参数无效');
+        const filters = logQuery(url.searchParams);
+        if (filters.error) return callerError(res, filters.error);
+        return json(res, 200, { ...readLogEntries({ file: logFile, count, offset, ...filters.filters }),
+          echo: { count, offset } });
+      }
+      if (url.pathname === '/api/logs/cleanup' && req.method === 'POST') {
+        if (!logFile) return configError(res, '日志未落盘：未配置 HIDS_LOG_FILE');
+        try { return json(res, 200, logCleanup(logFile, await readJSON(req))); }
         catch (cause) { return causeError(res, cause, 'internal'); }
       }
       if (url.pathname === '/api/status' && req.method === 'GET') {
