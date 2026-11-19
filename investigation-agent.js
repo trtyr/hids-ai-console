@@ -90,6 +90,13 @@ function markLastTurn(transcript, fields) {
   if (last) Object.assign(last, fields);
 }
 
+// 失败附注只写「怎么死的」，不写原文：回包解不出 JSON 时错误文案会原样带出正文前几个字
+//（`Unexpected token 'S', "SECRET_BOD"...`），快照与日志都不许留这个（P003-T046 复审实锤）。
+function failureNote(error, summary, limit = 80) {
+  const detail = error?.model_decode ? '回包不是合法 JSON' : String(error?.message || error);
+  return `${summary}：${detail.slice(0, limit)}`;
+}
+
 // 一行快照 = 一次模型调用的计量。`call` 为 undefined 时（调用本身挂了，没有回包）计量未知，记 null 而不是假零。
 function turnRecord(meta, call, extra = {}) {
   return { turn: meta.turn, phase: meta.phase, role: meta.role, attempt: meta.attempt ?? 1,
@@ -804,6 +811,8 @@ export class InvestigationAgent {
       catch (error) {
         if (error.model_decode) { parseFailure(error, 1); turns = turn + 1; continue; }
         if (!/timeout|超时/i.test(String(error.message || error))) throw modelCallError(error, { turn, calls });
+        // 超时那次也进逐轮快照：否则 turns 的四类结局里永远见不到 timeout（P003-T046 复审 minor）。
+        transcript.push(turnRecord({ ...meta, attempt: 1 }, error.model_call, { note: failureNote(error, '超时重试') }));
         onProgress('模型超时重试', '保留本轮全部已查询证据，重试相同的模型请求');
         try { call = await traceModelCall({ ...meta, attempt: 2 }, () => this.model.complete(requestMessages, requestTools, choice), { decode }); }
         catch (retried) {
@@ -915,7 +924,7 @@ export class InvestigationAgent {
       } catch (error) {
         review = { assessment: 'unavailable', concerns: [`独立复核未完成：${String(error.message).slice(0, 120)}`], missing_evidence: [] };
         trace.push({ kind: 'review_unavailable', error: String(error.message).slice(0, 200) });
-        transcript.push(turnRecord(reviewMeta, error.model_call, { note: `独立复核未完成：${String(error.message).slice(0, 80)}` }));
+        transcript.push(turnRecord(reviewMeta, error.model_call, { note: failureNote(error, '独立复核未完成') }));
       }
     }
     let verdict = draft;
@@ -937,7 +946,7 @@ export class InvestigationAgent {
         // A2：修订请求失败不静默沿用草稿——记 trace，并写进缺口（真实威胁还会被降成存疑）。
         revisionFailed = String(error.message || error).slice(0, 200);
         trace.push({ kind: 'revision_failed', error: revisionFailed });
-        transcript.push(turnRecord(revisionMeta, error.model_call, { note: `修订失败：${revisionFailed.slice(0, 80)}` }));
+        transcript.push(turnRecord(revisionMeta, error.model_call, { note: failureNote(error, '修订失败') }));
       }
     }
     verdict = normalizeVerdict(verdict);
@@ -1011,7 +1020,7 @@ export class InvestigationAgent {
           transcript.push(turnRecord(fixMeta, revised.call, { conclusion: conclusionOf(verdict) }));
         } catch (cause) {
           trace.push({ kind: 'validation_error', note: String(cause.message || cause).slice(0, 200) });
-          transcript.push(turnRecord(fixMeta, cause.model_call, { note: `证据校验退回失败：${String(cause.message || cause).slice(0, 80)}` }));
+          transcript.push(turnRecord(fixMeta, cause.model_call, { note: failureNote(cause, '证据校验退回失败') }));
           break;
         }
       }
@@ -1098,7 +1107,7 @@ export class InvestigationAgent {
       turns.push(turnRecord(narrativeMeta, described.call));
     } catch (error) {
       narrative = { analysis: `牧云事件回查与模型说明未完成：${String(error.message).slice(0, 120)}` };
-      turns.push(turnRecord(narrativeMeta, error.model_call, { note: `说明调用未完成：${String(error.message).slice(0, 80)}` }));
+      turns.push(turnRecord(narrativeMeta, error.model_call, { note: failureNote(error, '说明调用未完成') }));
     }
     const facts = Object.entries(input.parsed.payload).filter(([, value]) => value !== null && value !== '' && value !== undefined)
       .slice(0, 5).map(([key, value]) => ({ text: `syslog ${key}=${String(value).slice(0, 100)}`,

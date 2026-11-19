@@ -1,5 +1,5 @@
 // P003-T046 A3：研判会话回放接口（写者自测）。
-// 口径只认文档：docs/modules/http-api.md §3.9（路由、参数、响应、失败）、openapi.yaml 的
+// 口径只认文档：docs/modules/http-api.md §3.10（路由、参数、响应、失败）、openapi.yaml 的
 // `/api/agent/investigations/{alertId}/replay` 与 `InvestigationReplay`、docs/modules/investigation-agent.md（结果体 turns）。
 // 做法：进程内 server + 真研判（替身牧云 / 替身模型）+ tmp 数据根；不碰真网络、不碰真时钟。
 import test from 'node:test';

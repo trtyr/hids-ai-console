@@ -121,7 +121,11 @@ export async function traceModelCall(meta = {}, run, { decode = null } = {}) {
   let reply;
   try { reply = await run(); }
   catch (error) {
-    settle({ outcome: outcomeOf(error), output_chars: 0, error: errorText(error) });
+    const call = { input_chars: inputChars, output_chars: 0,
+      duration_ms: Date.now() - startedAt, outcome: outcomeOf(error), tool_calls: 0 };
+    settle({ ...call, error: errorText(error) });
+    // 计量挂在错误上：调用方的逐轮快照（turns）靠它把「这一轮超时了」和「调用报错了」分开记。
+    Object.assign(error, { model_call: call });
     throw error;
   }
   let decoded = null;
@@ -131,7 +135,9 @@ export async function traceModelCall(meta = {}, run, { decode = null } = {}) {
       // 回包到手了但解不出来：这是「模型没按约定输出」，与调用失败分开记，调用方的退回逻辑照旧。
       const call = { input_chars: inputChars, output_chars: replyChars(reply),
         duration_ms: Date.now() - startedAt, outcome: 'invalid_json', tool_calls: toolCallCount(reply) };
-      settle({ ...call, error: errorText(error) });
+      // `error` 字段只写固定文案 + 错误类名：V8 的 JSON.parse 报错原文会带出回包正文前 ~10 个字
+      //（`Unexpected token 'S', "SECRET_BOD"...`），两道脱敏闸擦的是凭据，正文只能靠这里不写。
+      settle({ ...call, error: `模型回包无法解析为 JSON（${error?.name || 'Error'}）` });
       Object.assign(error, { model_decode: true, model_reply: reply, model_call: call });
       throw error;
     }

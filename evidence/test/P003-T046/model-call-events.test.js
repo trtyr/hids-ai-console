@@ -1,6 +1,6 @@
 // P003-T046 三域模型调用事件（写者自测，交付给 tester 当契约样例）。
 // 口径只认文档：docs/architecture.md §3.6 的 `ai.model_call` 两行（字段表与四类结局）、
-// docs/modules/http-api.md §3.9（回放接口）、docs/modules/investigation-agent.md（结果体 turns）。
+// docs/modules/http-api.md §3.10（回放接口）、docs/modules/investigation-agent.md §3.11（结果体 turns）。
 // 做法：`useJournal(createJournal({ write }))` 收行（不碰真 stdout）、替身模型/替身牧云（不碰真网络与真时钟）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -71,13 +71,19 @@ test('A1 结局四值：超时记 timeout、回包解不出 JSON 记 invalid_jso
   const meta = { domain: 'rule', role: 'rule_maintainer', turn: 1, phase: 'maintain' };
   await assert.rejects(() => traceModelCall(meta,
     async () => { throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }); }), /timeout/i);
+  // 回包里放一段可检索的正文片段：invalid_json 的原始日志行里不许出现它（V8 的 JSON.parse 报错会带出前 ~10 字）
   await assert.rejects(() => traceModelCall(meta,
-    async () => ({ content: '这不是 JSON' }), { decode: reply => JSON.parse(reply.content) }), /JSON/);
+    async () => ({ content: 'SECRET_BODY_MARKER 是一段不该进日志的回包正文' }),
+    { decode: reply => JSON.parse(reply.content) }), /JSON/);
   await assert.rejects(() => traceModelCall({ ...meta, domain: 'wiki', role: 'wiki_maintainer' },
     async () => { throw new Error('模型接口 HTTP 500: 上游炸了'); }), /HTTP 500/);
 
   const responses = sink.events().filter(entry => entry.direction === 'response');
   assert.deepEqual(responses.map(entry => entry.outcome), ['timeout', 'invalid_json', 'error']);
+  // A1 复审实锤：invalid_json 的 error 字段只写固定文案，原始日志行里搜不到回包正文片段
+  const invalid = responses.find(entry => entry.outcome === 'invalid_json');
+  assert.equal(invalid.error, '模型回包无法解析为 JSON（SyntaxError）');
+  assert.doesNotMatch(sink.raw.join('\n'), /SECRET_BODY_MARKER|SECRET_BOD/);
   // 解码失败的错误上带三个标记，调用方的退回逻辑靠它区分「调用失败」与「回包不是 JSON」
   const failure = await traceModelCall(meta, async () => ({ content: 'nope' }),
     { decode: reply => JSON.parse(reply.content) }).catch(error => error);
@@ -132,6 +138,28 @@ test('A5 研判域：调查轮 + 独立复核 + 复核要求后的修订都落�
   assert.equal(result.turns.length, 3);
   assert.deepEqual(result.turns.map(item => item.phase), ['investigate', 'review', 'revision']);
   assert.doesNotMatch(JSON.stringify(result.turns), /缺反证|证据不足|curl/);
+});
+
+test('A5 超时重试在快照里留痕：turns 里 timeout 与 error 分得开，不再恒记 error', async t => {
+  const sink = rig(t);
+  const verdict = JSON.stringify({ verdict: '存疑', confidence: '低', summary: '证据不足',
+    claims: [{ text: '执行可疑命令', citations: [{ evidence_id: 'cw:1', pointer: '/event/cmdline', value: 'curl /etc/passwd' }] }],
+    missing_data: [] });
+  let calls = 0;
+  const model = { model: 'fake', complete: async (_messages, tools) => {
+    calls += 1;
+    if (calls === 1) throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    return { content: tools.length ? verdict : JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
+  } };
+  const result = await new InvestigationAgent(fakeToolbox(), model).run('honeypot:7', { mode: 'triage' });
+
+  const investigate = result.turns.filter(item => item.phase === 'investigate');
+  assert.equal(investigate.length, 2);
+  assert.deepEqual(investigate.map(item => [item.attempt, item.outcome]), [[1, 'timeout'], [2, 'ok']]);
+  assert.match(investigate[0].note, /超时重试/);
+  // 事件侧同一批计量：第一次 timeout、第二次 ok
+  const responses = sink.events().filter(entry => entry.direction === 'response' && entry.phase === 'investigate');
+  assert.deepEqual(responses.map(entry => [entry.attempt, entry.outcome]), [[1, 'timeout'], [2, 'ok']]);
 });
 
 test('A4 规则维护单发调用落事件，带 T041 规则维护会话 id（互引）', async t => {
