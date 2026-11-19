@@ -446,7 +446,7 @@ syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间
 | `HIDS_SYSLOG_PORT` | `15514` | syslog UDP 监听端口 | `server.js:368` |
 | `HIDS_SYSLOG_TIME_OFFSET_MINUTES` | `0` | 牧云事件时间（无时区）相对 UTC 的偏移分钟数 | `syslog-input.js:61` |
 | `HIDS_CASES_DIR` | 仓内 `.data/cases`（`runtimePaths().cases`） | 案件目录根 | `server.js:51` |
-| `HIDS_TRIAGE_CONCURRENCY` | `2` | 自动研判同时跑几条；非法值回落 2。P003-T037，改完要重启进程 | `triage-monitor.js:30`、`triage-monitor.js:76-77` |
+| `HIDS_TRIAGE_CONCURRENCY` | `2` | 自动研判同时跑几条；非法值回落 2。**装配处不覆盖**：`poll` 与 `syslog` 两种输入模式都按它生效，`summary().concurrency` 报规范化后的生效值。P003-T037，改完要重启进程 | `triage-monitor.js:30`、`triage-monitor.js:76-77`、`server.js:51-53` |
 | `HIDS_TRIAGE_QUEUE_MAX` | `1000` | 自动研判队列上限（排队 + 在跑）；满了拒收并计入 `summary().dropped`。P003-T037，改完要重启进程 | `triage-monitor.js:31`、`triage-monitor.js:78` |
 | `HIDS_STATUS_TTL_MS` | `45000` | `/api/status` 探活缓存窗口，落 30~60 秒；`0` 关闭缓存。P003-T037 | `cloudwalker.js:110` |
 | `HIDS_PROBE_TTL_MS` | `5000` | 详情失败后同类列表探活的复用窗口。P003-T037 | `cloudwalker.js:111` |

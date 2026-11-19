@@ -143,8 +143,9 @@ latest(alertId, mode = 'deep')
 **幂等**：`latest()` 幂等。`save()` 不是严格幂等——同一个 `result` 保存两次，第二次会覆盖第一次，
 且 `saved_at` 会更新（`investigation-store.js:16`）。
 
-**排队与背压**：本模块没有队列，没有容量上限，也没有限流。并发压力由调用方自己控制
-（自动研判监控器的并发度是 `server.js:43` 的 `concurrency`，本模块不参与决定）。
+**排队与背压**：本模块没有队列，没有容量上限，也没有限流。并发压力由调用方自己控制——
+自动研判监控器的并发度由 `HIDS_TRIAGE_CONCURRENCY` 决定（`triage-monitor.js:30`、`triage-monitor.js:76`），
+装配处不覆盖（`server.js:51-53`），本模块不参与决定。
 
 ## 7 失败面
 

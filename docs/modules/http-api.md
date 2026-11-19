@@ -100,7 +100,7 @@
 | GET | `/api/agent/triage/cases` | 200 | 无研判队列回 503 | `server.js:292-299` |
 | PUT | `/api/agent/triage/control` | 200 | 无研判队列回 503 | `server.js:300-306` |
 | GET | `/api/agent/triage/{alertId}` | 200 | 无研判队列回 503 | `server.js:307-315` |
-| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503 | `server.js:633-641` |
+| POST | `/api/agent/triage/{alertId}` | 202 | 无研判队列回 503；队列（排队 + 在跑）已达 `HIDS_TRIAGE_QUEUE_MAX` 回 429「研判队列已满（上限 N），稍后再试」并计入 `summary().dropped` | `server.js:633-641` |
 | POST | `/api/agent/triage/{alertId}/false-positive` | 202（结论已落盘为误报，两个维护者开始） | 无研判队列回 503；理由不符格式回 400；无此案件回 404；研判未完成回 409 | `server.js:597-632` |
 | GET | `/api/agent/prompts` | 200 | — | `server.js:316-318` |
 | GET | `/api/wiki/pages` | 200 `{pages, total}`，接 `count`／`offset` | 分页参数不合法回 400 | `server.js:322-334` |

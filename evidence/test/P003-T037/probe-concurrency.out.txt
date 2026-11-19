@@ -1,0 +1,7 @@
+✔ poll   HIDS_TRIAGE_CONCURRENCY=1   -> summary().concurrency=1 queue_limit=7（期望 concurrency=1、queue_limit=7）
+✔ poll   HIDS_TRIAGE_CONCURRENCY=3   -> summary().concurrency=3 queue_limit=7（期望 concurrency=3、queue_limit=7）
+✔ poll   HIDS_TRIAGE_CONCURRENCY=5   -> summary().concurrency=5 queue_limit=7（期望 concurrency=5、queue_limit=7）
+✔ poll   HIDS_TRIAGE_CONCURRENCY=0   -> summary().concurrency=2 queue_limit=7（期望 concurrency=2、queue_limit=7）
+✔ poll   HIDS_TRIAGE_CONCURRENCY=abc -> summary().concurrency=2 queue_limit=7（期望 concurrency=2、queue_limit=7）
+✔ syslog HIDS_TRIAGE_CONCURRENCY=3   -> summary().concurrency=3 queue_limit=7（期望 concurrency=3、queue_limit=7）
+✔ 汇总：6/6 条成立

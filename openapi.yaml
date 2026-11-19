@@ -513,6 +513,7 @@ paths:
               schema: { $ref: '#/components/schemas/TriageCase' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /api/agent/triage/{alertId}/false-positive:
     parameters:
       - $ref: '#/components/parameters/TriageId'
@@ -1659,7 +1660,9 @@ components:
           description: 连续空轮数（含失败轮）；见到新告警清零。P003-T037
         concurrency:
           type: integer
-          description: 同时研判的条数（HIDS_TRIAGE_CONCURRENCY，缺省 2）。P003-T037
+          description: |
+            实际生效的同时研判条数：`HIDS_TRIAGE_CONCURRENCY` 规范化后的值（缺省 2，`0` / 负数 / 小数 / 非数回落 2）。
+            `poll` 与 `syslog` 两种输入模式同一口径，装配处不覆盖。P003-T037
         queue_limit:
           type: integer
           description: 队列上限（排队 + 在跑，HIDS_TRIAGE_QUEUE_MAX，缺省 1000）。P003-T037
@@ -2193,7 +2196,9 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     TooManyRequests:
-      description: 登录失败次数过多（调用方传错，`code=caller_error`）
+      description: |
+        请求被拒（调用方传错，`code=caller_error`）。两个来源：登录失败次数过多；
+        自动研判队列（排队 + 在跑）已达 `HIDS_TRIAGE_QUEUE_MAX`，正文 `研判队列已满（上限 N），稍后再试`。
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

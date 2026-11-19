@@ -50,7 +50,7 @@ const regoRuleStore = new RuleStore(path.join(moduleDirectory, 'rules'));
 const triageInputMode = triageInputModeOf();
 const triageMonitor = gateway && agent ? new TriageMonitor({ service: gateway, investigator: agent,
   history: investigationStore, file: runtime.triageMonitor,
-  inputMode: triageInputMode, concurrency: triageInputMode === 'syslog' ? 1 : 2,
+  inputMode: triageInputMode,
   eventToolbox: apiToolbox, wiki: wikiStore,
   ruleEngine: triageRuleEngine,
   casesDirectory: process.env.HIDS_CASES_DIR || runtime.cases,

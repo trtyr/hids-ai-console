@@ -381,7 +381,7 @@ EOF
 
 新告警入队时按 `found.reverse()` 的顺序写进 `records`（`triage-monitor.js:377`），即**倒序入队**；实际执行顺序由 §5.3 的优先级决定，不再等于插入序。
 
-**退避**：`poll()` 返回 `{ found, empty, failed }`（`triage-monitor.js:404`）。空轮（含失败轮）把 `emptyPolls` 加一，下一轮延迟 `min(intervalMs × 2^emptyPolls, maxBackoffMs)`；见到新告警立刻回到 `intervalMs` 并清零（`triage-monitor.js:403-404`）。`maxBackoffMs` 缺省是 `intervalMs × 16`（`triage-monitor.js:86`）。定时器是 `setTimeout` 链而不是 `setInterval`：每轮跑完才排下一轮（`triage-monitor.js:170-178`）。
+**退避**：`poll()` 返回 `{ found, empty, failed }`（`triage-monitor.js:404`）。空轮（含失败轮）把 `emptyPolls` 加一，下一轮延迟 `min(intervalMs × 2^emptyPolls, maxBackoffMs)`；见到新告警立刻回到 `intervalMs` 并清零（`triage-monitor.js:403-404`）。**冷启动那一轮也计入空轮**：这一轮只钉游标、不入队（`found.length === 0`，见上表「首次轮询」行），这就是 `emptyPolls = 1`，所以**进程重启后第一轮真实轮询的间隔是 `2 × intervalMs`**，不是 `intervalMs`；之后按空轮继续翻倍直到 `maxBackoffMs`。`maxBackoffMs` 缺省是 `intervalMs × 16`（`triage-monitor.js:86`）。定时器是 `setTimeout` 链而不是 `setInterval`：每轮跑完才排下一轮（`triage-monitor.js:170-178`）。
 
 **实测**：
 
@@ -542,7 +542,7 @@ EOF
 | `HIDS_TRIAGE_CONCURRENCY` | 2 | 同时研判条数 | `triage-monitor.js:30`、`triage-monitor.js:76` |
 | `HIDS_TRIAGE_QUEUE_MAX` | 1000 | 「排队 + 在跑」的记录上限 | `triage-monitor.js:31`、`triage-monitor.js:78` |
 
-非法值（0、负数、小数、非数）回落到默认（`triage-monitor.js:26-29`）。队列满时：手动 `enqueue` 抛 429（`triage-monitor.js:303-307`）；轮询批量入队与 syslog 收包只丢弃并计数，不抛（`triage-monitor.js:377-381`、`triage-monitor.js:477-480`）。丢弃总数在 `summary().dropped`，每次丢弃记 `triage.dropped` 日志（`triage-monitor.js:289-292`）。
+非法值（0、负数、小数、非数）回落到默认（`triage-monitor.js:26-29`）。**装配处不覆盖这两个值**（`server.js:51-53`）：`poll` 与 `syslog` 两种输入模式都按 `HIDS_TRIAGE_CONCURRENCY` 生效（`syslog` 模式不再固定 1），`summary().concurrency` 报的是**规范化后的生效值**——非法 env 回落成 2，接口就回 2，不回原始串。队列满时：手动 `enqueue` 抛 429（`triage-monitor.js:303-307`）；轮询批量入队与 syslog 收包只丢弃并计数，不抛（`triage-monitor.js:377-381`、`triage-monitor.js:477-480`）。丢弃总数在 `summary().dropped`，每次丢弃记 `triage.dropped` 日志（`triage-monitor.js:289-292`）。
 
 ## 6 关键路径四：案件目录
 
