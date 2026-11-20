@@ -1,0 +1,25 @@
+# 预存抖动：syslog-pipeline.test.js:96（与 P003-T052 无关，基线树上同样复现）
+
+## 现象
+```
+$ npm test        # 偶发 1 红，约 5–10%（并发会话多、机器负载高时更常见）
+✖ syslog 逐条研判保留材料、三态结果，并区分重复投递与跨秒行为
+  at TestContext.<anonymous> (syslog-pipeline.test.js:96:10)
+  actual: 1, expected: 2     # assert.equal(resumed.cases().total, 2)
+```
+
+## 基线树复现（bea34bd 的干净导出，不含本卡任何改动）
+```
+$ rm -rf /tmp/t052-flake-base && mkdir -p /tmp/t052-flake-base
+$ git archive bea34bd | tar -x -C /tmp/t052-flake-base
+$ cd /tmp/t052-flake-base && for i in $(seq 1 40); do npm test …done   # 第 28 次红
+FAILED at run 28 (ok=27)
+✖ syslog 逐条研判保留材料、三态结果，并区分重复投递与跨秒行为
+  at TestContext.<anonymous> (file:///tmp/t052-flake-base/syslog-pipeline.test.js:96:10)
+  actual: 1, expected: 2
+```
+
+## 归因（只定性，不改）
+- 断言是 `resumed.cases().total === 2`：`resumed` 是同一 state 文件上新建的第二个 monitor，`load()` 读到的是合并写窗口（≤1 次/秒）落盘后的状态；第一个 monitor 的写还没落地时就少一条。
+- 与记录侧脱敏闸无关：把本卡改过的 7 个产品文件回退成 bea34bd 版本再跑 20 轮，同样偶发（1/20）。
+- 修法属 `syslog-pipeline.test.js` 或 `triage-monitor` 的 flush 时序（scope 外），本卡不动，上报。
