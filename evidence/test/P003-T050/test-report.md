@@ -27,7 +27,7 @@ node --test --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js
 
 - todo 唯一条 = `evidence/test/P003-T013/acceptance.test.js:654`「who 101 字」待群主定口径（A1 明写豁免，卡面口径）。
 - `syslog-pipeline.test.js:96` 既有 flake（12:27 复审观测 1 次）我这边 6 次全量 + 1 次 npm test 均未复现；单文件不属本卡改动面。
-- 12:37 两次复跑出现输出截断（`exit=7` 无 summary、`exit=1` 空输出），与同时段别树会话（P003-T052 tree，pid 1930598，12:38:11 起）跑全量套件造成的内存/IO 争用同窗；原命令 12:38、12:39 复跑均绿（上表）。判为环境抖动（C 类），不记 B 类发现。
+- 12:37 两次复跑出现输出截断（`exit=7` 无 summary、`exit=1` 空输出），原始输出没留。**归因到 12:37 的因果证不出来**：引用的 pid（P003-T052 树）起于 12:38:11，晚于事件；可证的是 12:38:12 群消息「上一棒 runner 崩了，重起」——同窗确有 runner 崩溃与别会话跑全量。故只记「复跑即绿、判环境争用」，不写成已归因（C 类，不记 B 类发现）。
 
 ## 2 A2/A4 守卫（影子根零条目 + A3 种子）
 
@@ -73,9 +73,12 @@ env -i PATH HOME=$(mktemp -d) node --test evidence/p003-t047-verify/acceptance.t
 | 12:29:30 → 12:30:10 | 全量 evidence 套件并发 ×3 | **0** |
 | 12:30:10 → 12:30:44 | 全量 evidence 套件串行 | **0** |
 | 12:30:44 → 12:30:47 | npm test | **0** |
-| 12:31:39 → 12:35:56 | A5 变异脚本 23 点（每点临时 HOME） | 20（另树，§6） |
-| 12:38:11 → 12:39:0x | 全量并发复跑 + 手抽变异 | **0** |
+| 12:31:39 → 12:35:56 | A5 变异脚本 23 点（每点临时 HOME） | 20（另树形态，§6.2） |
+| 12:38:11 → 12:39:08 | 全量并发复跑 + 手抽变异 | 0 |
+| 12:39:08 → 12:39:20 | （别树会话同窗写入） | 12（另树形态，§6.2） |
 | 12:39:20 → 12:39:47 | 串行 + npm test | **0** |
+
+合计：本树自身写入 0；两处非零（12 行 / 20 行）全是别树形态，见 §6.2 归因。
 
 另跑本树根单测 `node --test --test-timeout=60000 --test-force-exit agent-api.test.js`（23/23）前后 diff = **0**。
 
@@ -105,7 +108,7 @@ bash evidence/test/P003-T034/mutation-isolation.sh
 2. **真全局根的别树痕迹**：12:31:14/12:31:28/12:33:20/12:35:43/12:39:11 共 5 批、每批 4 份 `fp-sessions/*.json`，
    全部 `who=值班分析员` + `case_dir=/tmp/trace-analysis-*/case`。归因依据（三条独立）：
    - 该形态只见于**根单测 `agent-api.test.js`**（本树 `grep -rln trace-analysis` 仅命中 `./agent-api.test.js`），而它不在 `evidence/test/*/*.test.js` 套件里；
-   - 唯一会跑 root 单测的路径是守卫子套件（守卫把 HOME 换临时家目录）——我把注入语句注释掉、临时 HOME 跑 `agent-api.test.js`（=变异脚本第二轮的最坏条件）实测真根 diff=**0**，写的是临时家目录的 `fp-sessions/`（4 份）；
+   - 跑 root 单测的路径有两条，都已实测：① `npm test` 跑根 `*.test.js`（含 `agent-api.test.js`），由各文件的 import 注入保护，实测真根 diff=**0**；② 守卫子套件跑同一批，且把 HOME 换成临时家目录。把注入语句注释掉、临时 HOME 跑 `agent-api.test.js`（=变异脚本第二轮的最坏条件）实测真根 diff=**0**，写的是临时家目录的 `fp-sessions/`（4 份）；
    - 同窗活着一个 cwd 在 **P003-T052** 树的子会话（pid 1930598，12:38:11 起），该树 `agent-api.test.js` 的隔离注入数 = **0**；它在跑自己那套门禁（`npm test` 每跑一次即写 4 份）。
    - 反向对照：本树 `agent-api.test.js` 单跑 23/23 绿、真根 diff 0。
    日志：`logs/other-tree-attribution.txt`、`logs/final-suite-a4.txt`。
