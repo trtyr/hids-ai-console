@@ -1,0 +1,133 @@
+## M1 triage-monitor run() detail
+变异：triage-monitor.js 换回原文
+对应用例：--test-name-pattern='O1 '
+退出码：1
+红掉的用例：
+  ✖ O1 run() 抛错：detail / failure.reason 过闸，原文不进队列状态文件 (9.891811ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 88.257138
+
+
+
+## M2 triage-monitor 规则评估 reason
+变异：triage-monitor.js 换回原文
+对应用例：--test-name-pattern='O2 '
+退出码：1
+红掉的用例：
+  ✖ O2 规则评估抛错：record.steps[].detail 过闸 (14.74165ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 86.328475
+
+
+
+## M3 triage-monitor lastError(syslog 解析)
+变异：triage-monitor.js 换回原文
+对应用例：--test-name-pattern='O3 '
+退出码：1
+红掉的用例：
+  ✖ O3 lastError 过闸：syslog 解析报错原文不落盘，自造判定语照留 (5.926789ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 85.602128
+
+
+
+## M4 knowledge-workbench last_error
+变异：knowledge-workbench.js 换回原文
+对应用例：--test-name-pattern='O4 '
+退出码：1
+红掉的用例：
+  ✖ O4 last_error 过闸：模型报错原文不落盘，三条自造文案照留 (6.81908ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 81.046878
+
+
+
+## M5 required-evidence query_failed reason
+变异：required-evidence.js 换回原文
+对应用例：--test-name-pattern='O5 '
+退出码：1
+红掉的用例：
+  ✖ O5 必查项查询失败：trace[evidence_check].reason 与 missing_evidence[0] 都过闸 (2.161513ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 82.023886
+
+
+
+## M6 syslog-case 未匹配 reason
+变异：syslog-case.js 换回原文
+对应用例：--test-name-pattern='O6 '
+退出码：1
+红掉的用例：
+  ✖ O6 未匹配 reason：返回体与案件文件过闸、日志行仍留原文 (3.049963ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 76.068462
+
+
+
+## M7 trace-board error 活动 detail
+变异：trace-board.js 换回原文
+对应用例：--test-name-pattern='O7 调查中断'
+退出码：1
+红掉的用例：
+  ✖ O7 调查中断：白板 gaps 与 error 活动过闸，原文不落盘 (9.248295ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 81.322611
+
+
+
+## M8 wiki-replay replay.error
+变异：wiki-replay.js 换回原文
+对应用例：--test-name-pattern='O8 '
+退出码：1
+红掉的用例：
+  ✖ O8 回放报告：模型报错原文不落盘，自造判定语照留 (5.421838ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 79.872849

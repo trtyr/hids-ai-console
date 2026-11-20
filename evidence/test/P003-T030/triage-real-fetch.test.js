@@ -281,7 +281,9 @@ test('R3 目录校验：MCP 目录缺 get_webshell_event → 抛文档原话，�
   }, { label: '研判失败落记录' });
   assert.equal(failed.attempts, 1);
   assert.ok(failed.failure && typeof failed.failure.reason === 'string', '失败原因要落在 failure.reason');
-  assert.match(failed.failure.reason, /牧云 MCP 缺少 get_webshell_event/);
+  // P003-T052：队列记录里的这个字段只写闸后文案（固定文案 + 原文字符量），「牧云 MCP 缺少 …」这句
+  // 原文只在上抛给调用方的那份（上面 `direct.message` 已断言），不落盘。字符量也锁精确值（同 T023/T036 口径）。
+  assert.equal(failed.failure.reason, `上游调用失败，原文 ${direct.message.length} 字未落盘`);
   assert.ok(!Number.isNaN(Date.parse(failed.failure.at)), 'failure.at 应该是时间');
   // 目录校验在取数之前就失败了：/rpc 上一条详情请求都没发
   assert.equal(stub.state.rpcCalls.filter(call => call.method.endsWith('.GetEvent')).length, 0);

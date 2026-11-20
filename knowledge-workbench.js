@@ -1,4 +1,5 @@
 import { eventTypes } from './cloudwalker.js';
+import { recordFailure } from './record-redaction.js';
 
 export const knowledgeFields = Object.freeze([
   ['record_ref', '原始告警或处置记录', '请提供告警 ID、发生时间或可回查的处置记录编号。'],
@@ -133,7 +134,11 @@ export class KnowledgeWorkbench {
         });
       } catch (error) {
         record = await this.store.update(id, current => {
-          current.last_error = String(error.message || error).slice(0, 240);
+          // 记录侧不写错误原文（P003-T052）：`last_error` 存进工作台会话。三条自造文案是给人看着
+          // 去动手的（模型没配 / 回包里没文本 / 不是对象），照原样留；其余一律只留固定文案 + 字符量。
+          current.last_error = recordFailure(error, {
+            kind: error instanceof SyntaxError ? '模型回包不是合法 JSON' : '知识整理失败',
+            keep: ['知识整理模型尚未配置', '知识整理模型未返回文本', '知识整理模型未返回 JSON 对象'] });
           current.messages.push({ role: 'assistant', content: '这轮内容已保存，但自动整理暂时失败。你可以稍后继续补充，已有输入不会丢失。', at: new Date().toISOString() });
           return current;
         });

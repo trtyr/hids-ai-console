@@ -107,7 +107,8 @@ test('A1 连续失败到上限进死信：保留原因、不再自动跑、summa
   assert.equal(calls, 3);
   assert.equal(dead.status, 'failed');
   assert.equal(dead.attempts, 3);
-  assert.equal(dead.failure.reason, '模型不可达');
+  // P003-T052：`failure.reason` 只写闸后文案；具体错误码仍在 `failure.code`。
+  assert.equal(dead.failure.reason, `上游调用失败，原文 ${'模型不可达'.length} 字未落盘`);
   assert.equal(dead.failure.code, 'ETIMEDOUT');
   assert.match(dead.failure.at, /^\d{4}-\d\d-\d\dT/);
   // 死信不再自动跑：等过两个退避窗口，调用次数不动
@@ -117,7 +118,7 @@ test('A1 连续失败到上限进死信：保留原因、不再自动跑、summa
   assert.equal(summary.retry.max_attempts, 3);
   assert.equal(summary.retry.dead_letters, 1);
   assert.equal(summary.queue.retry_waiting, 0);
-  assert.equal(summary.failure_reasons['模型不可达'], 1);
+  assert.equal(summary.failure_reasons[`上游调用失败，原文 ${'模型不可达'.length} 字未落盘`], 1);
 });
 
 test('A1 失败记录跨重启仍会重排：load + start 后逾期的那条自动回队', async t => {
