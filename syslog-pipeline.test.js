@@ -91,6 +91,11 @@ test('syslog 逐条研判保留材料、三态结果，并区分重复投递与�
   assert.equal(contexts[1].window.length, 1);
   assert.equal(contexts[1].occurrence_count, 1);
   assert.equal((await readdir(path.join(directory, 'cases', 'cloudwalker-honeypot'))).length, 2);
+  // 下面读的是磁盘快照，不是内存态：`done` 在 run() 里先改内存（triage-monitor.js:1045），
+  // 快照由收尾的合并写异步落盘（triage-monitor.js:1075-1079）。不等这一代落盘就 load()，
+  // 并发跑主门时会读到「第三条记录入队之前」的旧快照（total 假红成 1）。writeChain 是文档写明的等落盘同步点
+  // （docs/modules/triage-pipeline.md:360，等价 persist()：triage-monitor.js:246）。
+  await monitor.writeChain;
   const resumed = new TriageMonitor(options);
   await resumed.load();
   assert.equal(resumed.cases().total, 2);
