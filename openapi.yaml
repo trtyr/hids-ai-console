@@ -2045,7 +2045,7 @@ components:
       required: [stage, detail, at]
       properties:
         stage: { type: string, description: 阶段名，如 关联事件、规则评估、AI 分析、完成研判 }
-        detail: { type: string, description: 这一阶段的说明；规则评估阶段写命中或跳过的原因 }
+        detail: { type: string, description: 这一阶段的说明；规则评估阶段写命中或跳过的原因（规则评估抛错时是固定文案 + 原文字符量，P003-T052） }
         at: { type: string, format: date-time, description: 写入时间（UTC ISO 串） }
       additionalProperties: false
     TriageEvidence:
@@ -2430,7 +2430,8 @@ components:
         failure_reasons:
           type: object
           description: |
-            失败原因分布：键是失败记录上的原因原文（截 120 字，优先 `failure.reason`，其次 `detail`），值是条数。
+            失败原因分布：键是失败记录上的失败原因（P003-T052 起只写固定文案 + 原文字符量，如 `上游调用失败，原文 26 字未落盘`；
+            不再含错误原文、也不再截断；取 `failure.reason`，没有时取 `detail`），值是条数。
             死信也算在里面（它与“还能重试”只差 `retry.dead_letters` 那个计数）。空对象表示没有失败记录。
             不跟 since 走。
           additionalProperties: { type: integer }
@@ -2506,7 +2507,7 @@ components:
           type: [object, 'null']
           description: 最近一次失败的原因；status 不是 failed 时为 null / 不带
           properties:
-            reason: { type: string, description: 失败原因原文（截 250 字，与 detail 同源） }
+            reason: { type: string, description: 失败原因（P003-T052 起是固定文案 + 原文字符量，不再含错误原文、不再截断；与 detail 同源） }
             code: { type: string, description: 错误自带的 code 或 name（如 ETIMEDOUT） }
             at: { type: string, format: date-time }
           additionalProperties: false
@@ -2733,7 +2734,7 @@ components:
           description: 研判记录存盘时的 ID（`history.save()` 的返回）；未落盘为 null
         status: { type: string, enum: [not_queued, queued, running, done, failed] }
         stage: { type: string, description: 当前阶段中文名，如 等待研判、关联事件、研判完成、研判失败 }
-        detail: { type: string, description: 阶段说明；完成后是结论摘要，失败时是错误原因（截 250 字） }
+        detail: { type: string, description: 阶段说明；完成后是结论摘要，失败时是失败原因（P003-T052 起是固定文案 + 原文字符量，不再含错误原文、不再截断） }
         created_at: { type: string, format: date-time, description: 记录创建时间（收到 syslog 的时刻） }
         updated_at: { type: string, format: date-time }
         saved_at: { type: [string, 'null'], format: date-time }

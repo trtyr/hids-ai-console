@@ -341,7 +341,8 @@
 - **白板里不写错误原文（P003-T052）**：`activity[].detail` 与 `gaps[].reason` 过同一道闸
   （`record-redaction.js` 的 `recordFailure()`），只留固定文案 + 原文字符量：
   - 工具报错 → `上游调用失败，原文 N 字未落盘`（查询失败的 `tool_error`、整板失败/调查中断的 `gaps` 与 `error` 活动：`trace-board.js:398-399`、`trace-board.js:424`）
-  - 模型回包解析失败 → `模型返回的白板操作 JSON 不完整或格式错误（SyntaxError），原文 N 字未落盘`（`trace-board.js:560-562`）
+  - 模型回包解不出动作（`parseAction` 抛 `SyntaxError`）→ `模型返回的白板操作 JSON 不完整或格式错误；响应长度 N`——不带错误原文，只报回包长度（`trace-board.js:560`、`:563`）
+  - `parseAction` 抛其它错误（`SyntaxError` 以外）→ `白板操作失败，原文 N 字未落盘；响应长度 N`（`trace-board.js:561`、`:563`）
   - 动作未过校验 → `操作未通过校验，原文 N 字未落盘`（`trace-board.js:619-620`）
 
   **唯一例外是回灌给模型的那份**：`tool_result.error` 仍是原文（模型靠它改参数；同 P003-T051 S2 口径，`trace-board.js:617`）。

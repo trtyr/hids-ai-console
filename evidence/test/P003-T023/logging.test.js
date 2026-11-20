@@ -3,7 +3,7 @@
 // 全部用内存 journal（注入 write / now），不碰真实 stdout、不碰真实时钟、不起外部服务。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createJournal, log, useJournal } from '../../../log.js';
@@ -220,8 +220,15 @@ test('A2 研判入队 → 完成 / 失败都留痕，带告警 ID 与结论', as
   for (let n = 0; n < 100 && failing.status('honeypot:8')?.status !== 'failed'; n++) await new Promise(resolve => setTimeout(resolve, 5));
   const failed = lines.find(item => item.event === 'triage.failed');
   assert.equal(failed.alert_id, 'honeypot:8');
-  // P003-T052：`record.detail` / `failure.reason` / `triage.failed.error` 只写闸后文案（固定文案 + 原文字符量），
-  // 错误原文（这里 13 字）不再进队列状态文件与日志行。
+  // P003-T052：两条路分开锁，别拿一条断言杆两侧：
+  // ① 记录侧——队列状态文件里只剩闸后文案（固定文案 + 原文字符量），错误原文不落盘。
+  await failing.writeChain;
+  const queueFile = await readFile(path.join(directory, 'queue2.json'), 'utf8');
+  assert.doesNotMatch(queueFile, /模型调用失败（第 2 轮）/);
+  assert.ok(queueFile.includes(`上游调用失败，原文 ${'模型调用失败（第 2 轮）'.length} 字未落盘`));
+  // ② 日志侧——`triage.failed` 的 error 取的就是 `record.detail`（`triage-monitor.js:1083`），所以跟着是闸后文案；
+  //    “日志行留原文”的是其它事件（`triage.poll_failed` / `syslog.match_failed` 等，归 P003-T046 的日志侧闸），
+  //    守卫见 `evidence/test/P003-T052/tester-redaction-boundary.test.js`。
   assert.equal(failed.error, `上游调用失败，原文 ${'模型调用失败（第 2 轮）'.length} 字未落盘`);
 });
 

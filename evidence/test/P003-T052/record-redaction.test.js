@@ -94,7 +94,7 @@ test('O6 未匹配 reason：返回体与案件文件过闸、日志行仍留原�
 });
 
 // ── O8：wiki 回放报告（`proposal.replay.error` 落工作台会话）──────────────────
-test('O8 回放报告：模型报错原文不落盘，自造判定语照留', async () => {
+test('O8 回放报告：模型报错原文不落盘，自造判定语照留', async t => {
   const wiki = {
     get: async file => ({ path: file, id: 'HP-01', revision: 3,
       content: '---\nid: HP-01\nstatus: active\n---\n判据原文：需核对授权。' }),
@@ -104,7 +104,8 @@ test('O8 回放报告：模型报错原文不落盘，自造判定语照留', as
     feedback: { case_id: 'syslog:case-1', event_type: 'honeypot', expected_verdict: 'false_positive',
       case_snapshot: { '01-原始告警.txt': 'raw alert text', '03-研判事实.md': '仅一次探测' } } };
   const prompts = { load: async () => ({ revision: 1, prompts: {} }) };
-  const directory = path.join(tmpdir(), 'hids-t052-no-cases');
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-no-cases-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
   const failed = await runWikiReplay({ record, directory, prompts,
     model: { model: 'fake', complete: async () => { throw upstreamError(); } }, wiki });
   assert.equal(failed.cases[0].before.error, failed.cases[0].after.error);
@@ -120,8 +121,28 @@ test('O8 回放报告：模型报错原文不落盘，自造判定语照留', as
 });
 
 // ── O4：知识整理工作台的 `last_error`（存进工作台会话）───────────────────────
-async function knowledgeTurn(model, content = '补充一句') {
+// ── O7 第三支：模型回包解不出动作（`parseAction` 抛 SyntaxError）───────────────
+// 文档（trace-board.md §5.3）说这一支只留固定文案 + 响应长度、不带错误原文；原用例只盖了另一支。
+test('O7 回包解不出动作：SyntaxError 支只留固定文案 + 响应长度，原文不落白板', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-board-syntax-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const replies = [`{"action": "investigate", "node": ${SECRET_BODY}`,
+    '{"action":"investigate","node":"asset:172.20.208.23","why":"核查资产"}',
+    '{"action":"conclude","summary":"未证实横向","gaps":[]}'];
+  const service = traceService(directory, { tools: ['list_host_assets'],
+    complete: async () => ({ content: replies.shift() || '{}' }) });
+  await service.start('honeypot:7');
+  await service.running.get('honeypot:7');
+  const board = await new TraceBoardService({ directory }).get('honeypot:7');
+  const parseError = board.activity.find(item => item.kind === 'model_error');
+  assert.match(parseError.detail, /^模型返回的白板操作 JSON 不完整或格式错误；响应长度 \d+$/);
+  assert.doesNotMatch(parseError.detail, /SECRET_BODY/);
+  assert.doesNotMatch(await persistedBoards(directory), /SECRET_BODY/);
+});
+
+async function knowledgeTurn(t, model, content = '补充一句') {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-knowledge-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
   const store = new KnowledgeStore(directory);
   const workbench = new KnowledgeWorkbench(store, model, { load: async () => ({ prompts: { knowledge: '整理' } }) });
   const created = await workbench.create();
@@ -129,14 +150,14 @@ async function knowledgeTurn(model, content = '补充一句') {
   return { record, reopened: await new KnowledgeStore(directory).get(created.id) };
 }
 
-test('O4 last_error 过闸：模型报错原文不落盘，三条自造文案照留', async () => {
-  const failed = await knowledgeTurn({ complete: async () => { throw upstreamError(); } }, '这条告警需要以后补充。');
+test('O4 last_error 过闸：模型报错原文不落盘，三条自造文案照留', async t => {
+  const failed = await knowledgeTurn(t, { complete: async () => { throw upstreamError(); } }, '这条告警需要以后补充。');
   assert.match(failed.record.last_error, /^知识整理失败，原文 \d+ 字未落盘$/);
   assert.doesNotMatch(JSON.stringify(failed.reopened), /SECRET_BODY/);
   // 模型没配：给人看的操作提示不许被抹掉。
-  assert.equal((await knowledgeTurn(null)).record.last_error, '知识整理模型尚未配置');
+  assert.equal((await knowledgeTurn(t, null)).record.last_error, '知识整理模型尚未配置');
   // 回包不是 JSON：V8 原文不落盘，只留固定文案 + 字符量。
-  const badJson = await knowledgeTurn({ complete: async () => ({ content: `{"fields": ${SECRET_BODY} }` }) });
+  const badJson = await knowledgeTurn(t, { complete: async () => ({ content: `{"fields": ${SECRET_BODY} }` }) });
   assert.match(badJson.record.last_error, /^模型回包不是合法 JSON（SyntaxError），原文 \d+ 字未落盘$/);
   assert.doesNotMatch(badJson.record.last_error, /SECRET_BODY/);
 });

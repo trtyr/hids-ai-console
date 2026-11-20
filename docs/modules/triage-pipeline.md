@@ -497,9 +497,17 @@ EOF
 收尾状态由合并写带走：有排队/等重试的记录就留给写窗口，真闲下来才立刻 `flush()`（`triage-monitor.js:1086-1093`）。
 
 **队列状态文件里不写错误原文（P003-T052）**：`detail` / `failure.reason` / `steps[].detail` / `lastError` 四个落点
-过同一道闸（`record-redaction.js` 的 `recordFailure()`）——只留固定文案 + 原文字符量，错误对象本身与
-`log()` 日志行照旧（日志侧归 P003-T046）。`summary().failure_reasons` 按 `failure.reason` 分桶，
-所以它的键现在是固定文案（同一类失败合并成一个桶，不再是每条告警一行原文）；具体错误码仍在 `failure.code`。
+过同一道闸（`record-redaction.js` 的 `recordFailure()`）——只留固定文案 + 原文字符量，错误对象本身不动。
+`summary().failure_reasons` 按 `failure.reason` 分桶，所以它的键现在是固定文案（同一类失败合并成一个桶，
+不再是每条告警一行原文）；具体错误码仍在 `failure.code`（`openapi.yaml` 的 `TriageSummary.failure_reasons` /
+`TriageFailure.reason` / 队列记录 `detail` 三处描述同此口径）。
+
+日志行分两类（P003-T052 之后）：
+
+| 日志事件 | 现在的取值 | 依据 |
+| --- | --- | --- |
+| `triage.failed`、`triage.dead_letter` | **闸后文案**——这两个事件直接取记录字段（`record.detail` / `record.failure.reason`），记录字段过闸它就跟着过闸，运维在这一行上看不到错误原文 | `triage-monitor.js:1083`、`triage-monitor.js:367-368`；断言锁在 `evidence/test/P003-T023/logging.test.js:232` |
+| `triage.poll_failed`、`triage.persist_failed`、`syslog.parse_failed`、`syslog.match_failed`、`cloudwalker.call_failed` | **原文**——诊断要「连接被拒 / 超时 / 证书」这类字眼，日志侧归 P003-T046 的闸（`log.js` 擦凭据，不擦错误正文） | `triage-monitor.js:774`、`:953`、`:822`、`syslog-case.js:12-15`；断言锁在 `evidence/test/P003-T052/tester-redaction-boundary.test.js` |
 
 **「模型没交卷」不是失败**（P003-T035）：`investigation-agent` 在调查轮数用尽时改出「存疑 + 缺口清单」的降级结论并正常返回
 （`investigation-agent.js:827-843`），所以这一档走的是成功通路——`writeSyslogResult` 照常写 `05-研判结果.md`、记录转 `done`。
