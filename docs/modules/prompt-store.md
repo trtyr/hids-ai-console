@@ -26,7 +26,7 @@ updated: 2026-11-20
 | 提示词装载 | 第 3 节 | 把核心提示词、场景卡、SOP 三类来源的正文拼成一份 | `load()`（`prompt-store.js:37`） |
 | 本地覆盖 | 第 4 节 | 允许用本机的一份覆盖文件改写其中若干章节 | `update()`（`prompt-store.js:106`） |
 | 版本指纹 | 第 5 节 | 给生效正文算一个可比较的短指纹 | `load()` 与 `snapshot()` 的返回值（`prompt-store.js:51`、`prompt-store.js:62-63`） |
-| 整包安装 | 第 6 节 | 用一个升级包整体替换 21 个章节 | `install()`（`prompt-store.js:67`） |
+| 整包安装 | 第 6 节 | 用一个升级包整体替换 22 个章节 | `install()`（`prompt-store.js:67`） |
 
 ### 1.2 不做什么
 
@@ -77,7 +77,7 @@ updated: 2026-11-20
 
 | 来源 | 内容 | 位置 | 出处 |
 | --- | --- | --- | --- |
-| 核心提示词 | 6 个 Markdown 文件，键为 `triage` / `deep` / `trace` / `knowledge` / `knowledge_reuse` / `cross` | `<模块目录>/prompts/<文件名>` | 键与文件名见 `prompt-store.js:22`，读取见 `prompt-store.js:41` |
+| 核心提示词 | 7 个 Markdown 文件，键为 `triage` / `deep` / `trace` / `knowledge` / `knowledge_reuse` / `cross` / `rule` | `<模块目录>/prompts/<文件名>` | 键与文件名见 `prompt-store.js:22`，读取见 `prompt-store.js:41` |
 | 场景卡 | 一个 `scenarios.json`，含 `version` 与 `cards` 数组 | `<模块目录>/prompts/scenarios.json` | `prompt-store.js:42` |
 | 判据目录里的 SOP | 12 个场景各一份 SOP 文件 | `<判据目录>/<映射表给出的路径>` | 映射表 `prompt-store.js:14-20`，读取 `prompt-store.js:49` |
 | 仓内 SOP | 2 份：`common` 与 `command_whitelist` | `<模块目录>/prompts/sop/<id>.md` | `prompt-store.js:48` |
@@ -89,9 +89,9 @@ SOP 正文来自 `prompts/sop/command_whitelist.md`。
 
 当前数据下（命令见下）：
 
-- 核心提示词 6 个，键与 `prompt-store.js:22` 的 `coreFiles` 一一对应。
+- 核心提示词 7 个，键与 `prompt-store.js:22` 的 `coreFiles` 一一对应（第 7 个是 `rule` → `rule-maintenance.md`，P003-T013 引入，commit `5256d0e`）。出处可复跑核对：`git log --oneline -S "rule: 'rule-maintenance.md'" -- prompt-store.js` —— 必须带完整的 `rule: '<文件名>'` 形态才只命中引入那一次；只搜文件名会命中后续所有提到它的提交。
 - 场景卡 13 张，SOP 14 条（`common` + 13 张卡各一条）。
-- 生效版本 `merged-three-state-2026-11-06`，指纹 `deabe4abb842db81`。
+- 生效版本 `merged-three-state-2026-11-06`，指纹 `065221c4b66f7660`。
 
 ```bash
 node -e "
@@ -108,7 +108,7 @@ import('./prompt-store.js').then(async m => {
 
 ### 3.2 装配顺序
 
-1. **并行读**：核心 6 个文件、`scenarios.json`、覆盖文件三路同时读（`prompt-store.js:40-43`）。
+1. **并行读**：核心 7 个文件、`scenarios.json`、覆盖文件三路同时读（`prompt-store.js:40-43`）。
 2. **叠加覆盖**：核心章节用覆盖文件的同名键覆盖（`prompt-store.js:44`），场景卡用 `scenario:<card.id>` 键覆盖
    （`prompt-store.js:46`），`sop:common` 与 `sop:command_whitelist` 用 `sop:<id>` 键覆盖（`prompt-store.js:50`）。
    键名表见第 4.2 节。
@@ -155,7 +155,7 @@ import('./prompt-store.js').then(async m => {
 
 | 键名形式 | 覆盖对象 | 生效处 | 出处 |
 | --- | --- | --- | --- |
-| `triage`、`deep`、`trace`、`knowledge`、`knowledge_reuse`、`cross` | 6 个核心提示词 | 覆盖值不是 null/undefined 时用覆盖值，否则用文件正文 | `prompt-store.js:44` |
+| `triage`、`deep`、`trace`、`knowledge`、`knowledge_reuse`、`cross`、`rule` | 7 个核心提示词 | 覆盖值不是 null/undefined 时用覆盖值，否则用文件正文 | `prompt-store.js:44` |
 | `scenario:<card.id>` | 对应场景卡的提示词正文 | 同上 | `prompt-store.js:46` |
 | `sop:common`、`sop:command_whitelist` | 仓内那两份 SOP | 同上 | `prompt-store.js:50` |
 | `_release` | 升级包元信息（`version` / `sequence` 等） | `version` 取自此处 | `prompt-store.js:51-52` |
@@ -175,7 +175,7 @@ import('./prompt-store.js').then(async m => {
 | 正文是字符串、去空白后非空、长度 ≤ 20000、不含 NUL | `提示词正文必须为 1 到 20000 字` | 否 |
 | `expectedRevision` 等于当前 `revision` | `提示词已由其他操作更新，请刷新后再保存` | 是，`409` |
 
-白名单是「6 个核心键 + 13 个 `scenario:<id>` 键」（`prompt-store.js:109`），由当前场景卡列表现算。
+白名单是「7 个核心键 + 13 个 `scenario:<id>` 键」（共 20 个，`prompt-store.js:109` 由 `coreFiles` 键与当前场景卡列表现算）。
 **SOP 键不在白名单里**：拿 `sop:common` 调 `update()` 会得到 `不支持的提示词章节`；
 SOP 只能随整包安装（第 6 节）或手改覆盖文件来变。
 
@@ -218,7 +218,7 @@ createHash('sha256').update(JSON.stringify(prompts)).digest('hex').slice(0, 16)
 | | `revision` | `knowledge_revision` |
 | --- | --- | --- |
 | 算什么 | `{prompts, scenarios, sop, release}` 整体（`prompt-store.js:51`） | 去掉 `common` 与 `command_whitelist` 之后的 SOP 字典（`prompt-store.js:62-63`） |
-| 覆盖范围 | 6 个核心提示词 + 13 张场景卡 + 14 条 SOP + 发布版本号 | 判据目录里那 12 条场景 SOP |
+| 覆盖范围 | 7 个核心提示词 + 13 张场景卡 + 14 条 SOP + 发布版本号 | 判据目录里那 12 条场景 SOP |
 | 从哪取 | `load()`、`metadata()` 都返回（`prompt-store.js:52`、`prompt-store.js:96`） | 只在 `snapshot()` 里返回（`prompt-store.js:62-63`） |
 | 用途 | 乐观并发的校验值；写章节与整包安装都要比 | 整包安装的第二道校验（第 6 节） |
 
@@ -229,7 +229,7 @@ createHash('sha256').update(JSON.stringify(prompts)).digest('hex').slice(0, 16)
 
 | 变动 | `revision` | `knowledge_revision` |
 | --- | --- | --- |
-| 改 6 个核心提示词之一 | 变 | 不变 |
+| 改 7 个核心提示词之一 | 变 | 不变 |
 | 改 13 张场景卡之一 | 变 | 不变 |
 | 改判据目录里那 12 条 SOP 之一 | 变 | 变 |
 | 改 `prompts/sop/` 里的 `common` 或 `command_whitelist` | 变 | 不变 |
@@ -237,7 +237,7 @@ createHash('sha256').update(JSON.stringify(prompts)).digest('hex').slice(0, 16)
 | 改 `scenarios.json` 里的**字段顺序**（内容不变） | 变 | 不变 |
 
 最后一行值得单独说一句：指纹算的是 JSON **文本**，所以键序也参与计算。实测把 `scenarios` 的键顺序
-颠倒后，内容没变，指纹从 `deabe4abb842db81` 变成 `9bf6e567ce73b60d`。
+颠倒后，内容没变，指纹从 `065221c4b66f7660` 变成 `9da15df422ed3b7d`。
 
 ```bash
 node -e "
@@ -250,7 +250,7 @@ import('node:crypto').then(async ({createHash}) => {
   console.log('原序:', sha16(base), '| 倒序:', sha16(swapped), '| 相同:', sha16(base) === sha16(swapped));
 });
 "
-# 原序: deabe4abb842db81 | 倒序: 9bf6e567ce73b60d | 相同: false
+# 原序: 065221c4b66f7660 | 倒序: 9da15df422ed3b7d | 相同: false
 ```
 
 ### 5.4 复算命令
@@ -267,18 +267,18 @@ import('node:crypto').then(async ({createHash}) => {
   console.log('复算:', recomputed, '| 上报:', a.revision, '| 一致:', recomputed === a.revision);
 });
 "
-# 复算: deabe4abb842db81 | 上报: deabe4abb842db81 | 一致: true
+# 复算: 065221c4b66f7660 | 上报: 065221c4b66f7660 | 一致: true
 ```
 
 ## 6. 构件四：整包安装
 
 ### 6.1 入口与入参
 
-`install(sections, release, expectedRevision, knowledgeRevision)`（`prompt-store.js:67`）把 21 个章节整体换成一份升级包。
+`install(sections, release, expectedRevision, knowledgeRevision)`（`prompt-store.js:67`）把 22 个章节整体换成一份升级包。
 
 | 入参 | 是什么 | 从哪来 |
 | --- | --- | --- |
-| `sections` | 章节字典，键是 21 个章节名（6 核心 + 13 场景 + 2 SOP），值是正文 | `snapshot()` 的 `sections`（`prompt-store.js:58-61`） |
+| `sections` | 章节字典，键是 22 个章节名（7 核心 + 13 场景 + 2 SOP），值是正文 | `snapshot()` 的 `sections`（`prompt-store.js:58-61`） |
 | `release` | 升级包元信息；`version` 决定安装后的生效版本号，`sequence` 参与序号检查 | 升级包自己带的 |
 | `expectedRevision` | 调用方看到的当前指纹 | `load()` 或 `metadata()` 的 `revision` |
 | `knowledgeRevision` | 调用方看到的当前知识库指纹 | `snapshot()` 的 `knowledge_revision`（`prompt-store.js:62-63`） |
@@ -289,15 +289,15 @@ import('node:crypto').then(async ({createHash}) => {
 | --- | --- | --- | --- | --- |
 | 1 | 当前 `revision` 等于 `expectedRevision` | `当前版本已变化，请刷新后重新确认替换` | `409` | `prompt-store.js:71` |
 | 2 | 当前 `knowledge_revision` 等于 `knowledgeRevision` | `升级包与当前知识库版本不兼容` | `409` | `prompt-store.js:72` |
-| 3 | `sections` 的键数等于 21；21 个值逐一检查：必须是字符串、去空白后非空、长度 ≤ 20000、不含 NUL | `升级包缺少必需章节或正文格式不正确` | `400` | `prompt-store.js:73-76` |
+| 3 | `sections` 的键数等于 22；22 个值逐一检查：必须是字符串、去空白后非空、长度 ≤ 20000、不含 NUL | `升级包缺少必需章节或正文格式不正确` | `400` | `prompt-store.js:73-76` |
 | 4 | `release.sequence` 大于已记录的 `sequence`（无记录时按 0 算） | `不允许重复应用或降级到旧版本` | `409` | `prompt-store.js:78-79` |
 
-第 3 条的实际效果是「键集合必须与当前快照一致」，实现方式是两步（`prompt-store.js:73-76`）：先比键数是否等于 21，
-再拿**快照里那 21 个键**逐个查传入字典的值是不是合法字符串。传入的键名不同就会查不到某个键，
-那个键的值是 `undefined`，按「非字符串」处理，整包被拒。实测把 21 个键换成另一套 21 个名字，键数不变，照样被拒：
+第 3 条的实际效果是「键集合必须与当前快照一致」，实现方式是两步（`prompt-store.js:73-76`）：先比键数是否等于 22，
+再拿**快照里那 22 个键**逐个查传入字典的值是不是合法字符串。传入的键名不同就会查不到某个键，
+那个键的值是 `undefined`，按「非字符串」处理，整包被拒。实测把 22 个键换成另一套 22 个名字，键数不变，照样被拒：
 
 ```
-21 个键换成另一套名字（键数仍为 21）=> Error | status: 400 | 升级包缺少必需章节或正文格式不正确
+22 个键换成另一套名字（键数仍为 22）=> Error | status: 400 | 升级包缺少必需章节或正文格式不正确
 ```
 
 `release` 缺字段时，第 4 条会在读 `release.sequence` 时抛 `TypeError`
@@ -318,7 +318,7 @@ release undefined => TypeError | status: undefined | Cannot read properties of u
 
 | 键 | 内容 |
 | --- | --- |
-| 21 个章节键 | 升级包给的新正文 |
+| 22 个章节键 | 升级包给的新正文 |
 | `_release` | 升级包元信息，原样写入 |
 | `_history` | 安装历史：已有历史则追加一条 `release`；没有则先放一条「初始研判策略」再追加 |
 
@@ -348,10 +348,10 @@ import('node:fs/promises').then(async fs => {
 });
 "
 # 安装后 version: demo-2026-11-20 | revision 变了: true
-# 文件顶层键数: 23 | _history 长度: 2
+# 文件顶层键数: 24 | _history 长度: 2
 ```
 
-顶层 23 个键 = 21 个章节 + `_release` + `_history`。
+顶层 24 个键 = 22 个章节 + `_release` + `_history`。
 
 ## 7. 关键路径
 
@@ -359,7 +359,7 @@ import('node:fs/promises').then(async fs => {
 
 ```
 load()
-  → 并行读 6 个核心文件 + scenarios.json + 覆盖文件      prompt-store.js:40-43
+  → 并行读 7 个核心文件 + scenarios.json + 覆盖文件      prompt-store.js:40-43
   → 叠加覆盖（核心 / 场景卡 / 两份仓内 SOP）                prompt-store.js:44-50
   → 算 revision                                           prompt-store.js:51
   → 返回 {version, revision, source, prompts, scenarios, sop}
@@ -384,16 +384,16 @@ load() 或 metadata()            → 拿到当前 revision
 ### 路径 C：整包替换
 
 ```
-snapshot()                      → 拿到 sections（21 个章节）与 knowledge_revision
+snapshot()                      → 拿到 sections（22 个章节）与 knowledge_revision
 load() 或 metadata()            → 拿到当前 revision
   → install(sections, release, expectedRevision, knowledgeRevision)   prompt-store.js:67
       → revision 检查 → knowledge_revision 检查 → 章节形状检查 → 序号检查   prompt-store.js:71-79
-      → 写 21 个章节 + _release + _history                 prompt-store.js:82-83
+      → 写 22 个章节 + _release + _history                 prompt-store.js:82-83
       → 临时文件 + rename 落盘                              prompt-store.js:84-87
       → 返回重新 load() 的结果                              prompt-store.js:88
 ```
 
-用途：把一整套新提示词换上去。特点：**整体替换**，21 个章节一次性换掉；
+用途：把一整套新提示词换上去。特点：**整体替换**，22 个章节一次性换掉；
 版本号从升级包带过来（此后 `load()` 的 `version` 取 `_release.version`，`prompt-store.js:52`）。
 
 ### 三条路径的共同点
@@ -410,7 +410,7 @@ load() 或 metadata()            → 拿到当前 revision
 | `R-PROMPT-02` | `revision` 的输入包含生效中的核心提示词、场景卡、SOP 与发布版本 | 改了场景卡正文而 `revision` 不变 | `prompt-store.js:51` | 乐观并发失效，旧指纹仍能写入 |
 | `R-PROMPT-03` | `update()` 不接受 SOP 章节 | 拿 `sop:common` 调 `update()` 并成功 | `prompt-store.js:109-110` | SOP 被局部改写，与整包安装口径不一致 |
 | `R-PROMPT-04` | 整包安装要求 `sequence` 严格大于当前值，等于或更小都拒绝 | `sequence` 等于当前值也能装上 | `prompt-store.js:78-79` | 旧包覆盖新包 |
-| `R-PROMPT-05` | 整包安装的章节集合必须与当前快照一致（21 个） | 少一个章节也能装上 | `prompt-store.js:73-76` | 装出一套残缺的提示词 |
+| `R-PROMPT-05` | 整包安装的章节集合必须与当前快照一致（22 个） | 少一个章节也能装上 | `prompt-store.js:73-76` | 装出一套残缺的提示词 |
 | `R-PROMPT-06` | 单章节改写不丢覆盖文件里的其他键 | 改完 `triage`，`_release` 与 `_history` 没了 | `prompt-store.js:113-114` | 版本号与安装历史被清掉 |
 | `R-PROMPT-07` | 同一实例上两个写操作不交叉 | 两个 `update()` 同时读到同一份旧覆盖文件并各自落盘 | `prompt-store.js:68`、`prompt-store.js:90`、`prompt-store.js:107`、`prompt-store.js:121` | 后写覆盖前写 |
 | `R-PROMPT-08` | 覆盖文件权限 `0600`、所在目录 `0700` | 覆盖文件是 `0644` | `prompt-store.js:84-86`、`prompt-store.js:115-117` | 提示词正文对本机其他用户可读 |
@@ -422,7 +422,7 @@ load() 或 metadata()            → 拿到当前 revision
 | --- | --- | --- | --- | --- | --- |
 | 覆盖文件不存在 | 当作无覆盖 | 无 | 不变 | — | 继续用仓内正文 |
 | 覆盖文件不是合法 JSON | `load()` 抛错 | `SyntaxError` | 不变 | 修好文件后可以 | 无 |
-| 提示词文件缺失（6 个核心之一或 `scenarios.json`） | `load()` 抛错 | `Error` / `ENOENT` | 不变 | 补回文件后可以 | 无 |
+| 提示词文件缺失（7 个核心之一或 `scenarios.json`） | `load()` 抛错 | `Error` / `ENOENT` | 不变 | 补回文件后可以 | 无 |
 | 判据页缺失（`HIDS_WIKI_DIR` 指错、或判据页被删） | `load()` 抛错，报缺哪个文件 | `Error` / `ENOENT` | 不变 | 补回页面后可以 | 无 |
 | 场景卡 id 不在 `wikiSop` 映射表里 | `path.join` 收到 `undefined`（推断，本仓没有实测触发） | `TypeError` | 不变 | 补上映射表后可以 | 无 |
 | 章节名不在白名单 | `update()` 抛错 | `Error` / 无 `status` | 不变 | 换个章节名 | 无 |
@@ -445,18 +445,18 @@ load() 或 metadata()            → 拿到当前 revision
 
 | 项 | 数值 / 现状 | 依据 |
 | --- | --- | --- |
-| 一次 `load()` 的读盘次数 | 22 次 `readFile`：6 个核心文件 + `scenarios.json` + 14 份 SOP + 1 份覆盖文件 | `prompt-store.js:33`、`prompt-store.js:41`、`prompt-store.js:42`、`prompt-store.js:47-49` |
-| 读盘并发度 | 6 个核心文件、场景卡、覆盖文件三路并发；14 份 SOP 也并发 | `prompt-store.js:40-43`、`prompt-store.js:47` |
-| 章节数 | 21（6 核心 + 13 场景 + 2 SOP） | `prompt-store.js:22`、`prompt-store.js:58-61` |
+| 一次 `load()` 的读盘次数 | 23 次 `readFile`：7 个核心文件 + `scenarios.json` + 14 份 SOP + 1 份覆盖文件 | `prompt-store.js:33`、`prompt-store.js:41`、`prompt-store.js:42`、`prompt-store.js:47-49` |
+| 读盘并发度 | 7 个核心文件、场景卡、覆盖文件三路并发；14 份 SOP 也并发 | `prompt-store.js:40-43`、`prompt-store.js:47` |
+| 章节数 | 22（7 核心 + 13 场景 + 2 SOP） | `prompt-store.js:22`、`prompt-store.js:58-61` |
 | 单章节正文上限 | 20000 字（写与装都是这个数） | `prompt-store.js:75`、`prompt-store.js:111` |
-| 覆盖文件大小上限 | 无显式上限；受 21 个章节各自的 20000 字约束 | `prompt-store.js:75`、`prompt-store.js:111` |
+| 覆盖文件大小上限 | 无显式上限；受 22 个章节各自的 20000 字约束 | `prompt-store.js:75`、`prompt-store.js:111` |
 | 指纹长度 | 十六进制 16 位，即 64 位摘要 | `prompt-store.js:26` |
 | 指纹计算量 | 一次 `JSON.stringify` 加一次 SHA-256，体积与生效正文总量成正比 | `prompt-store.js:26`、`prompt-store.js:51` |
 | 缓存 | 无。`load()` / `snapshot()` / `metadata()` 每次调用都重新读盘 | `prompt-store.js:37`、`prompt-store.js:57`、`prompt-store.js:95` |
 
-数据量本身由仓里的文件决定：当前 6 个核心文件、13 张场景卡、14 份 SOP 的正文合计 37680 字
+数据量本身由仓里的文件决定：当前 7 个核心文件、13 张场景卡、14 份 SOP 的正文合计 39802 字
 （`metadata()` 报告的各章节 `characters` 之和，`prompt-store.js:98-102` 实测值：
-核心 11182 + 场景 14415 + SOP 12083）。
+核心 13177 + 场景 14415 + SOP 12210）。
 
 ## 11. 约束与理由
 

@@ -315,7 +315,7 @@ syslog 推来的告警如果回查不到对应牧云事件，不进入上面的 
 
 ### 7.1 提示词
 
-`prompts/` 下有 6 个核心提示词文件（清单见 `prompt-store.js:18`）：`triage.md`、`deep-investigation.md`、`trace-board.md`、`knowledge-maintenance.md`、`knowledge-reuse.md`、`cross-scenario.md`。另有 `scenarios.json`，当前 13 张场景卡（`prompts/scenarios.json`），版本号 `merged-three-state-2026-11-06`。
+`prompts/` 下有 7 个核心提示词文件（清单见 `prompt-store.js:22` 的 `coreFiles`）：`triage.md`、`deep-investigation.md`、`trace-board.md`、`knowledge-maintenance.md`、`knowledge-reuse.md`、`cross-scenario.md`、`rule-maintenance.md`（最后一个 P003-T013 起加，commit `5256d0e`）。另有 `scenarios.json`，当前 13 张场景卡（`prompts/scenarios.json`），版本号 `merged-three-state-2026-11-06`。
 
 SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` 是仓库内文件；其余 12 个场景的 SOP 实际来自**数据根判据库**下的判据页（`prompt-store.js:12` 的 `wikiDir`），映射表在 `prompt-store.js:13-19`（例如 `webshell` → `webshell/WS-13.md`）。`HIDS_WIKI_DIR` 仍可把整本库换到别处（换了就不种子、不碰仓库）。
 

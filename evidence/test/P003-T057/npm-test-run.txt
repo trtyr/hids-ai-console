@@ -1,0 +1,12 @@
+=== 单测烟测（不放进验收脚本：自毁防线，套件内不跑整套测试）===
+命令：timeout 900 npm test（node --test --test-timeout=60000 --test-force-exit *.test.js）
+
+ℹ tests 235
+ℹ suites 0
+ℹ pass 235
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 835.873993
+NPM TEST EXIT=0

@@ -1,0 +1,5 @@
+=== 页面 §3.3 原文块，连跑 30 次，统计报缺的那一页（B11 断言的稳定性依据）===
+命令：awk 从 docs/modules/prompt-store.md 抽出 §3.3 的 bash 块 → for i in 1..30; do rm -rf /tmp/empty-wiki; bash /tmp/t057-p33.sh | head -1; done | sort | uniq -c
+
+     24 ENOENT /tmp/empty-wiki/webshell/WS-13.md
+      6 ENOENT /tmp/empty-wiki/memwebshell/MW-08.md

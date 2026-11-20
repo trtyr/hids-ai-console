@@ -1,0 +1,98 @@
+# P003-T057 变异自证（测试件有没有牙）
+
+目的：证明 `tester-acceptance.sh` 在**真回归**下会红、在干净树上会绿；证明 A1 的残留词表既非永真也非漏覆盖。
+全部在本机亲手跑，命令原文照抄即可重放。
+
+## 0. 环境
+
+```bash
+cd /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057
+rm -rf /tmp/t057-mut
+git clone --shared --no-checkout -q . /tmp/t057-mut
+cd /tmp/t057-mut && git checkout -q 697f83a
+```
+
+## 1. M0 基线（未变异，必须绿）
+
+```bash
+$ bash evidence/test/P003-T057/tester-acceptance.sh; echo EXIT=$?
+=== 汇总：PASS=145 FAIL=0 ===
+=== 结论：PASS（退出码 0）===
+EXIT=0
+```
+
+## 2. M1 把 page:92 改回旧口径 → 必须红（审计点名的那条）
+
+```bash
+$ sed -i 's/核心提示词 7 个，/核心提示词 6 个，/' docs/modules/prompt-store.md
+$ git diff --stat
+ docs/modules/prompt-store.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+$ bash evidence/test/P003-T057/tester-acceptance.sh; echo EXIT=$?
+  FAIL  残留 [核心提示词 6 个] | 期望: [0] | 实际: [1]
+=== 汇总：PASS=144 FAIL=1 ===
+=== 结论：FAIL（退出码 1）===
+EXIT=1
+```
+
+还原复绿：
+
+```bash
+$ git checkout -- docs/modules/prompt-store.md
+$ bash evidence/test/P003-T057/tester-acceptance.sh; echo EXIT=$?
+=== 汇总：PASS=145 FAIL=0 ===
+=== 结论：PASS（退出码 0）===
+EXIT=0
+```
+
+## 3. M2 把 page:450「章节数 22」改回 21 → 必须红（审计说旧正则漏掉的那一类）
+
+```bash
+$ sed -i 's/| 章节数 | 22（7 核心/| 章节数 | 21（6 核心/' docs/modules/prompt-store.md
+$ bash evidence/test/P003-T057/tester-acceptance.sh; echo EXIT=$?
+  FAIL  残留 [21（6 核心] | 期望: [0] | 实际: [1]
+  FAIL  A2 页面 §10 章节数 缺 [| 章节数 | 22（7 核心 + 13 场景 + 2 SOP） |]（docs/modules/prompt-store.md）
+=== 汇总：PASS=143 FAIL=2 ===
+=== 结论：FAIL（退出码 2）===
+EXIT=2
+```
+
+## 4. M3 从旧口径词表里抽掉两行 → 清单完整性自检必须红
+
+这条验的是「词表没漏」的自检本身有牙：只要有一条被删旧行没有任何词覆盖，脚本就红。
+
+```bash
+$ sed -i '/^11182$/d;/^12083$/d' evidence/test/P003-T057/old-values.txt
+$ bash evidence/test/P003-T057/tester-acceptance.sh; echo EXIT=$?
+  漏覆盖的被删行: -核心 11182 + 场景 14415 + SOP 12083）。
+  FAIL  A1 清单漏覆盖的被删行数 | 期望: [0] | 实际: [1]
+=== 汇总：PASS=140 FAIL=1 ===
+=== 结论：FAIL（退出码 1）===
+EXIT=1
+```
+
+## 5. A3 的反面对照：空数据根（不先种子）数出来的不是 23
+
+旧跑法（空数据根直接 trace）在本机数出 **213 次** openat / 201 个唯一路径，断言 23 必红——
+这正是把 A3 改成「固定数据根 → 先不 trace 跑一次种子 → 覆盖文件写 `{}` → 再 trace」的原因。
+
+```bash
+$ rm -rf /tmp/t057-a3-old && mkdir -p /tmp/t057-a3-old/data
+$ HIDS_DATA_DIR=/tmp/t057-a3-old/data HIDS_PROMPT_STORE_FILE=/tmp/t057-a3-old/prompt-overrides.json \
+    strace -f -e trace=openat -o /tmp/t057-a3-old/trace.txt \
+    node -e "import('./prompt-store.js').then(async m=>{const a=await new m.PromptStore().load();console.log('rev:',a.revision)})"
+rev: 065221c4b66f7660
+$ grep -oE '"[^"]*(/prompts/[^"]*\.(md|json)|/data/wiki/[^"]*\.md|prompt-overrides\.json)"' /tmp/t057-a3-old/trace.txt | wc -l
+213
+$ grep -oE '"[^"]*(/prompts/[^"]*\.(md|json)|/data/wiki/[^"]*\.md|prompt-overrides\.json)"' /tmp/t057-a3-old/trace.txt | sort -u | wc -l
+201
+```
+
+种子后的固定数据根（脚本里的做法）数出 23 总 openat / 23 唯一 / 0 ENOENT / 23 条全是 `O_RDONLY`，与页面 §10 的 7+1+14+1 逐项对上。
+
+## 6. 终态
+
+```bash
+$ git status --short
+（无输出）
+```
