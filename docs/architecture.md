@@ -204,7 +204,7 @@ updated: 2026-11-20
 **依赖方向的两个具体证据**：
 
 - `server.js:1-26` 是唯一一处「什么都 import」的地方，它组装 `RpcClient → CloudwalkerGateway → ApiEvidenceToolbox`（`server.js:36-37`）、`CloudwalkerMcpClient → AgentToolbox`（`agent-tools.js:119-122`）、`ChatModelClient → InvestigationAgent`（`server.js:40-51`）。
-- 编排层向下依赖，存储层不依赖编排层：`prompt-store.js`、`investigation-store.js`、`knowledge-store.js` 三个文件没有任何本地 import。
+- 编排层向下依赖，存储层不依赖编排层：`investigation-store.js`、`knowledge-store.js` 没有任何本地 import；两个例外都只向下取路径——`prompt-store.js` 向配置存储取数据根、向判据库存储取库目录（判据库还没种子时由它触发一次整库种子），`rule-store.js` 向配置存储取数据根。
 
 **两处容易看错的地方**：
 

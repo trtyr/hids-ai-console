@@ -9,7 +9,7 @@ updated: 2026-11-20
 
 > **模块名**：`prompt-store`
 > **落点**：本页（`docs/modules/prompt-store.md`），模块清单见 [\_breakdown.json](_breakdown.json)
-> **真源**：`prompt-store.js`（118 行，单文件模块，无本地 import）
+> **真源**：`prompt-store.js`（133 行，单文件模块；本地 import 只有两处，都向下取路径——`config-store.js` 的 `dataRoot` 与 `wiki-store.js` 的判据库目录/种子，见文末 `:132-133`）
 > **覆盖构件**：提示词装载、本地覆盖、版本指纹、整包安装（四个构件各占一节，见第 3 至第 6 节）
 > **行号基准**：对应提交 `35530d85`；该文件自 `a16e0d5` 起未改动。代码变了要重新核行号。
 
