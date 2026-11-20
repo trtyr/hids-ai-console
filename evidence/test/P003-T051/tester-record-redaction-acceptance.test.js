@@ -277,8 +277,8 @@ test('A1 边界：超时错误落「调用超时」固定文案与字符量', as
   assert.doesNotMatch((await diskText(path.join(directory, 'investigations'))).raw, CLEAN);
 });
 
-// 同族落点：未匹配 syslog 的旁路（docs §3.2「结论正文」的 narrative 面 + 上游 reason 的徽标保留）。
-test('A1 未匹配 syslog：模型说明失败与上游查询失败只留徽标 + 字符量，落盘面干净', async t => {
+// 同族落点：未匹配 syslog 的旁路（docs §3.2「结论正文」的 narrative 面 + 上游 reason 一律归一）。
+test('A1 未匹配 syslog：模型说明失败与上游查询失败只留固定文案 + 字符量，落盘面干净', async t => {
   const directory = await workspace(t);
   const investigations = path.join(directory, 'investigations');
   await mkdir(investigations, { recursive: true });
@@ -298,7 +298,9 @@ test('A1 未匹配 syslog：模型说明失败与上游查询失败只留徽标 
   { case_dir: caseDir, files: ['03-研判事实.md'] });
 
   const modelFailure = `上游调用失败，原文 ${modelError.length} 字未落盘`;
-  const upstreamFailure = `牧云事件查询失败：上游调用失败，原文 ${upstream.length} 字未落盘`;
+  // P003-T054：`reasonForRecord()` 删了徽标白名单（与 record-redaction.js 同口径），
+  // 上游 reason 整串进闸——字符量算的是含「牧云事件查询失败：」前缀的全长。
+  const upstreamFailure = `上游调用失败，原文 ${`牧云事件查询失败：${upstream}`.length} 字未落盘`;
   assert.equal(result.verdict.analysis, `牧云事件回查与模型说明未完成：${modelFailure}`);
   assert.equal(result.turns[0].note, `说明调用未完成：${modelFailure}`);
   assert.equal(result.verdict.missing_evidence[0], upstreamFailure);

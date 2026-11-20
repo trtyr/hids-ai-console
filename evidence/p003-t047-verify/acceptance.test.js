@@ -5,16 +5,33 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile, readFile, readdir, chmod, rm } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFileSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import net from 'node:net';
+import path from 'node:path';
 import http from 'node:http';
 import { checkModelCallEvents } from './model-call-events-check.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname.replace(/\/$/, '');
-const TMP = '/tmp/p003-t047-acceptance';
+// 临时根与端口都现取（P003-T054 A4）：固定 /tmp 路径与写死端口会让两份本文件互相 rm、抢端口——
+// 现改成 mkdtemp 独立根 + listen(0) 探空闲端口，本文件可并发跑多份。
+const TMP = await mkdtemp(path.join(tmpdir(), 'p003-t047-acceptance-'));
+process.once('exit', () => rmSync(TMP, { recursive: true, force: true }));
 const DATA = `${TMP}/data`;
-const PORT = 18147;
+
+async function freePort() {
+  const probe = net.createServer();
+  await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', resolve); });
+  const { port } = probe.address();
+  await new Promise(resolve => probe.close(resolve));
+  return port;
+}
+
+const PORT = await freePort();
+// syslog 接收器原本写死 28500 + port % 100：并发时两份可能落到同一端口。另探一个。
+const SYSLOG_PORT = await freePort();
 const LLM_PORT_FREE = 0;
 const RULE_ID = 'honeypot_probe';
 const WIKI_PAGE = 'honeypot/HP-10.md';
@@ -173,7 +190,7 @@ async function startServer({ env = {}, port = PORT } = {}) {
       HIDS_PORT: String(port),
       HIDS_HOST: '127.0.0.1',
       HIDS_TRIAGE_INPUT_MODE: 'syslog',
-      HIDS_SYSLOG_PORT: String(28500 + (port % 100)),
+      HIDS_SYSLOG_PORT: String(SYSLOG_PORT),
       HIDS_STATUS_TTL_MS: '0',
       HIDS_LOG_FILE: `${TMP}/server.log`,
       ...env,
@@ -623,7 +640,7 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
 });
 
 test('错误码 503：无研判队列的进程里登记误报回 503 not_configured（createServer() 缺件路径，文档 §2）', async () => {
-  const port = 18149;
+  const port = await freePort();
   const dir = `${TMP}/nodeps-data`;
   await mkdir(dir, { recursive: true });
   const child = spawn(process.execPath, ['--input-type=module', '-e', `import('${ROOT}/server.js').then((m) => { m.createServer().listen(${port}, '127.0.0.1'); });`], {

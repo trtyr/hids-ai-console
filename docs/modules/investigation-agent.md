@@ -917,7 +917,7 @@ node --test evidence/test/P003-T046/record-redaction.test.js
 
 覆盖 `review.concerns`（复核回包解不出 JSON）、`missing_evidence`（修订失败）、`trace[validation_error]`、
 `trace[parse_error]` + 降级结论的 `analysis`、`trace[tool_error]`、未匹配 syslog 的 `analysis` / `missing_evidence`
-（含上游 `牧云事件…失败：<raw>` 那两条），以及 A2「抛错原文与三标记照旧到调用方」。
+（含上游 `牧云事件…失败：<raw>` 那两条——P003-T054 起 `reasonForRecord()` 无白名单，这两条也只留固定文案 + 字符量，徽标不再保留），以及 A2「抛错原文与三标记照旧到调用方」。
 **改写 5 条**（原文断言「抛错」的那几条）：六轮都没给 JSON、结论连续被退回、同一实例连出两次降级结论、
 真异常不覆盖已写成结论、常规研判把必查空页与 deep 采同一套。
 

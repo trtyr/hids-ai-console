@@ -354,7 +354,22 @@ test('结果形状：run() 必备字段与枚举值符合文档', async () => {
   assert.ok(['supported', 'needs_revision', 'unavailable', 'knowledge_reuse'].includes(result.review.assessment));
   assert.equal(typeof result.validation.ok, 'boolean');
   assert.ok(Array.isArray(result.validation.errors));
-  assert.deepEqual(result.required_evidence, []);
+  // deep 与 triage 同一套生成必查项（P003-T035，docs/modules/investigation-agent.md:411-413：「改前 deep 恒为空数组」）。
+  // 本用例的替身工具箱只给 `get_suspicious_operation_event`，三项清单工具都没有 → 全部 source_unavailable。
+  assert.deepEqual(result.required_evidence.map(item => item.id),
+    ['related_events', 'command_history', 'authorization']);
+  const five = ['records_returned', 'empty_page', 'source_unavailable', 'missing_identifier', 'query_failed'];
+  for (const item of result.required_evidence) {
+    assert.equal(typeof item.label, 'string', `缺 label：${item.id}`);
+    assert.equal(typeof item.tool, 'string', `缺 tool：${item.id}`);
+    assert.equal(typeof item.scope, 'string', `缺 scope：${item.id}`);
+    assert.ok(five.includes(item.status), `status 不在五态里：${item.id}=${item.status}`);
+  }
+  assert.equal(result.required_evidence.find(item => item.id === 'authorization').catalog_absent, true,
+    '本次 MCP 目录没有 authorization_record → 标 catalog_absent');
+  // 缺口只进 verdict.missing_evidence，且 catalog_absent 那项不算缺口（docs:456）；deep 不写客户报告。
+  assert.equal(result.verdict.missing_evidence.length, 2);
+  assert.equal(result.verdict.missing_evidence.join('\n').includes('操作授权'), false);
   assert.ok(Array.isArray(result.evidence) && result.evidence.length >= 1);
   assert.equal(typeof result.evidence[0].evidence_id, 'string');
   assert.equal(typeof result.evidence[0].sha256, 'string');
@@ -396,10 +411,14 @@ test('A4 同主机同事件秒同告警只研判一次，重复投递只累加 r
   assert.match(await readFile(path.join(monitor.status(first.alert_id).case_dir, '05-研判结果.md'), 'utf8'),
     /重复投递：2 次/);
 
+  // 跨事件秒、同指纹、上一条已完结 → 复用结论（docs/modules/triage-pipeline.md:285-291、
+  // triage-monitor.js:875-893）：不新建记录、不再研判一次，只累加 repeat_count。
+  // 卡面说的「跨秒另建记录」是上一条未完结时的分支，真要走那条得另造一个没收尾的记录。
   const crossSecond = raw.replace('08:00:00" source_ip', '08:00:01" source_ip');
   const other = await monitor.acceptSyslog(crossSecond);
-  assert.notEqual(other.alert_id, first.alert_id);
-  for (let n = 0; n < 200 && monitor.status(other.alert_id)?.status !== 'done'; n++)
-    await new Promise(resolve => setTimeout(resolve, 5));
-  assert.equal(runs.length, 2, '跨事件秒另建记录、另做一次研判（triage-pipeline.md:293）');
+  assert.equal(other.reused, true, '同指纹 + 已完结 → 复用结论');
+  assert.equal(other.alert_id, first.alert_id, '复用不新建记录');
+  assert.equal(other.repeat_count, 3, '第三次投递累计到 3');
+  assert.equal(runs.length, 1, '复用结论不得再跑一次研判');
+  assert.equal((await history.latest('honeypot:7', 'triage')).repeat_count, 3, '研判记录里的次数跟着回写');
 });

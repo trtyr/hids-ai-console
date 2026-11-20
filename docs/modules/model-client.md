@@ -2,7 +2,7 @@
 type: module
 id: MOD-MODEL-CLIENT
 covers: [model-client.js]
-updated: 2026-11-17
+updated: 2026-11-20
 ---
 
 # 模型客户端（model-client）

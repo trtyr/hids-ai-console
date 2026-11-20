@@ -1,0 +1,31 @@
+P003-T054 A10 变异自证（每处换回原文 → 对应用例恰红；还原后 git status 干净）
+工作树：/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T054
+运行日期：2026-11-20
+
+M1（A1）server.js：`result.rule_evaluation = { ...decision, reason: reasonForRecord(...) }` → `= decision`
+  node --test evidence/test/P003-T054/leak-closure.test.js
+  → ℹ pass 4 / fail 2，恰红两条 A1：
+    ✖ A1 规则评估抛错：catch 拼的原文进不了研判记录，回灌模型的那份仍是原文
+    ✖ A1 ruleEngine 回 status=error：decision.reason 同样过闸，模型那份不改
+
+M2（A2）investigation-agent.js：reasonForRecord() 换回 `upstreamFailure` 白名单
+  node --test evidence/test/P003-T054/leak-closure.test.js → fail 1（✖ A2 未匹配 syslog：徽标不再保留）
+  node --test evidence/test/P003-T046/record-redaction.test.js → fail 1（✖ A1 未匹配 syslog…不再保留徽标）
+  node --test evidence/test/P003-T051/tester-record-redaction-acceptance.test.js → fail 1（同上）
+
+M3a（A3）update-store.js：`compatibilityReason = cause.status ? cause.message : recordFailure(cause)` → `= cause.message`
+  node --test evidence/test/P003-T054/leak-closure.test.js → fail 1（✖ A3 update-store：上游报错原文不进 compatibility_reason）
+
+M3b（A3）triage-rules.js：`error: reasonForRecord(error.message)` → `error: error.message`
+  node --test evidence/test/P003-T054/leak-closure.test.js → fail 1（✖ A3 triage-rules：解析失败原文不进 readConfig().error）
+
+M4（A6）config-check.test.js：恢复「先注册 rm、后注册 kill」的旧顺序（= 修前内容），8 路并行 × 20 轮 = 160 跑
+  → 7/160 跑红，全部 ENOTEMPTY（rm 撞真进程写入）；修后同负载 160 跑 → 0 次 ENOTEMPTY、160/160 ℹ fail 0
+  （旧顺序日志：/tmp/cfgm-*.log 命中 7 个；修后：/tmp/cfgf-*.log 命中 0 个）
+
+M5（A7）triage-monitor.js：`recordFailure(error, { kind: '本地写入失败' })` → `error.message`
+  node --test evidence/test/P003-T054/triage-drain-catch.test.js → fail 1（✖ A7 研判收尾抛错：lastError 过闸…）
+
+M6（A4）p003-t047-verify/acceptance.test.js：恢复固定 `TMP='/tmp/p003-t047-acceptance'` + `PORT=18147`，两份并发
+  → 一份 17/17 绿，另一份 fail 1：`服务没起来（exit={"code":1}）… listen EADDRINUSE 127.0.0.1:18147`
+  修后（mkdtemp + listen(0)）两份并发：各自 ℹ pass 17 / fail 0

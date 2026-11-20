@@ -3,7 +3,7 @@ type: module
 id: MOD-EVENT-GATEWAY
 covers: [cloudwalker.js, rpc-client.js]
 unit: event-gateway
-updated: 2026-11-17
+updated: 2026-11-20
 ---
 
 # 事件网关（event-gateway）

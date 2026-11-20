@@ -362,7 +362,7 @@ updated: 2026-11-20
 | --- | --- | --- | --- |
 | `file` | 规则集文件读到了，且内容合法 | 文件内容的哈希前 16 位 | triage-rules.js:231-232 |
 | `example` | 规则集文件不存在（`ENOENT`），回落到示例文件 | `null` | triage-rules.js:226-231 |
-| `invalid` | 规则集文件存在但内容非法，仍回落到示例配置 | **原文件**的哈希前 16 位，另有 `error` 字段带错误消息 | triage-rules.js:233-237 |
+| `invalid` | 规则集文件存在但内容非法，仍回落到示例配置 | **原文件**的哈希前 16 位，另有 `error` 字段只写固定文案 + 原文字符量（P003-T054：这条随 `GET /api/triage/rules` 出接口，不写解析器原文） | triage-rules.js:233-237 |
 
 ## 8 不变量
 
@@ -385,7 +385,7 @@ updated: 2026-11-20
 | --- | --- | --- | --- | --- |
 | 规则集文件不存在 | `status: 'disabled'`，理由「未配置规则集」 | 文件不动，其它研判照常 | 能（等文件出现） | 等同没有规则 |
 | 规则集读失败（权限等非 `ENOENT` 错误） | `status: 'error'`，理由「规则集读取失败：…」 | 文件不动 | 能 | 规则不生效 |
-| 规则集内容非法 | `evaluate` 给 `status: 'error'`，理由前缀「规则集校验失败：」；`readConfig` 给 `origin: 'invalid'` 与 `error` 字段，配置回落成示例 | 文件不动 | 能（改文件） | 规则不生效 |
+| 规则集内容非法 | `evaluate` 给 `status: 'error'`，理由前缀「规则集校验失败：」；`readConfig` 给 `origin: 'invalid'` 与 `error` 字段（闸后文案：固定文案 + 原文字符量），配置回落成示例 | 文件不动 | 能（改文件） | 规则不生效 |
 | 规则集未启用 | `status: 'disabled'`，理由「规则集未启用」 | 文件不动 | 能 | 规则不生效 |
 | 没有候选规则（类型不匹配 / 全过期 / 全停用） | `status: 'no_candidate'` | 文件不动 | — | 无候选可给 |
 | syslog 与牧云事件对不上 | `status: 'identity_unverified'`，理由「syslog 与牧云事件 ID 未精确关联」 | 文件不动 | 能 | 不给结论 |
@@ -401,6 +401,8 @@ updated: 2026-11-20
 > `result.rule_evaluation` 在 `triage-monitor.js:1016-1025` / `:1046-1047` 一律归一成三态固定文案
 > （超时 → `调用超时，原文 N 字未落盘`；模型回包不可解析 → `模型回包不是合法 JSON，原文 N 字未落盘`；
 > 其余 → `上游调用失败，原文 N 字未落盘`。P003-T052；第四轮起无内容白名单、不保留徽标）。写测试时两边要分开断言。
+> HTTP 深度研判路径（`server.js:859-875` 的 `investigate()`）同口径：`result.rule_evaluation` 的 `reason` 过同一道闸，
+> 回灌模型那份（`options.ruleEvaluation`）仍原文（P003-T054）。
 
 ## 10 资源与限额
 
