@@ -238,8 +238,8 @@ test('C2 告警 ID 边界：编码失败/格式失败/未知类型/0 号/小数/
   assert.equal(unknown.body.status, 'not_queued');
 });
 
-// ── C3 现查记录不进案件列表（§3.9）───────────────────────────────────────────
-test('C3 现查记录不进 GET /cases（只列有原始报文的案件），但单条可见', async t => {
+// ── C3 现查记录进案件列表（P003-T060 起：poll/现查记录不再被 input 过滤掉，缺 input 的派生字段回 null）
+test('C3 现查记录进 GET /cases（P003-T060 起），但单条可见、无 syslog/case_dir', async t => {
   const directory = await tempDir(t);
   const monitor = makeMonitor({ directory, investigator: fakeInvestigator(), concurrency: 1 });
   const base = await serve(t, monitor);
@@ -255,8 +255,11 @@ test('C3 现查记录不进 GET /cases（只列有原始报文的案件），但
 
   const cases = await get(base, '/api/agent/triage/cases');
   assert.equal(cases.status, 200);
-  assert.equal(cases.body.total, 0, '现查记录不该出现在案件列表里');
-  assert.deepEqual(cases.body.cases, []);
+  assert.equal(cases.body.total, 1, '现查记录按 P003-T060 出现在案件列表里');
+  assert.equal(cases.body.cases.length, 1);
+  assert.equal(cases.body.cases[0].alert_id, TID);
+  assert.equal(cases.body.cases[0].msgid, null, '缺 input 的派生字段如实回 null');
+  assert.equal(cases.body.cases[0].case_dir, null);
 });
 
 // ── C4 取消：200 形状 / done 409 / 不存在 404（§3.1 + §5.4）──────────────────

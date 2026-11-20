@@ -503,7 +503,7 @@ test('A5 坏值点组内键名：十一个键各按形状下界判，错误原�
   assert400(response, text, /^LLM_BASE_URL 必须是 HTTP\(S\) 地址$/, '回退字段坏了');
 });
 
-test('A5 写配置的错误码面：400 四类正文 + 401 纯文本四条头 + 500 不外泄异常', async t => {
+test('A5 写配置的错误码面：400 四类正文 + 401 JSON 四条头 + 500 不外泄异常（P003-T073 起 401 为 {error, code}）', async t => {
   const { base } = await serve(t, { ...PRIMARY });
   const raws = [
     ['not json at all', /请求正文不是 JSON/],
@@ -516,7 +516,7 @@ test('A5 写配置的错误码面：400 四类正文 + 401 纯文本四条头 + 
     assert400(response, await response.text(), pattern, `正文 ${raw}`);
   }
 
-  // 401：配了口令后，GET 与 POST 都过 Basic 闸门，401 是纯文本四条头。
+  // 401：配了口令后，GET 与 POST 都过 Basic 闸门，401 是 JSON 四条头（P003-T073）。
   const gated = await serve(t, { ...PRIMARY }, { user: 'ops', password: 'gate-pass-abcdef' });
   for (const [label, call] of [
     ['GET', () => getJson(`${gated.base}/api/config`)],
@@ -525,10 +525,10 @@ test('A5 写配置的错误码面：400 四类正文 + 401 纯文本四条头 + 
     const { response, text } = await call();
     assert.equal(response.status, 401, `${label} 未带凭据应 401`);
     assert.equal(response.headers.get('www-authenticate'), 'Basic realm="HIDS AI Console", charset="UTF-8"');
-    assert.match(response.headers.get('content-type') ?? '', /^text\/plain; charset=utf-8$/);
+    assert.match(response.headers.get('content-type') ?? '', /^application\/json; charset=utf-8$/);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
-    assert.equal(text, '需要登录后访问');
+    assert.equal(JSON.parse(text).error, '需要登录后访问');
   }
 
   // 500：落盘失败（数据根不可写）→ internal_error，正文不带异常原文，值与覆盖层都不变。

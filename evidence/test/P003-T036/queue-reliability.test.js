@@ -340,7 +340,9 @@ test('A5 过期 done 记录归档出内存 Map：写进 .archive.jsonl、失效 
   const result = await monitor.archiveDone({ now });
   assert.deepEqual(result, { archived: 1, remaining: 2 });
   assert.equal(monitor.status('syslog:honeypot:old'), null);
-  assert.equal(monitor.cases().total, 0);
+  // P003-T060 起 cases() 不再按 input 过滤：这里断言的是「归档那条不在列表里」，其余照常在列。
+  assert.equal(monitor.cases().total, 2);
+  assert.equal(monitor.cases().cases.some(item => item.alert_id === 'syslog:honeypot:old'), false);
   assert.equal(monitor.status('syslog:honeypot:fresh').status, 'done');
   assert.equal(monitor.status('syslog:honeypot:queued').status, 'queued');
   assert.equal(monitor.dedupe.has('fp-old'), false);

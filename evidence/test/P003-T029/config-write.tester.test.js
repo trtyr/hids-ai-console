@@ -132,10 +132,10 @@ test('A3：401 是纯文本四条头；配了口令后写与读都过闸门，�
   const denied = await post(base, { LLM_MODEL: 'gated-model' });
   assert.equal(denied.status, 401);
   assert.equal(denied.headers.get('www-authenticate'), 'Basic realm="HIDS AI Console", charset="UTF-8"');
-  assert.match(denied.headers.get('content-type') ?? '', /^text\/plain; charset=utf-8$/);
+  assert.match(denied.headers.get('content-type') ?? '', /^application\/json; charset=utf-8$/);
   assert.equal(denied.headers.get('cache-control'), 'no-store');
   assert.equal(denied.headers.get('x-content-type-options'), 'nosniff');
-  assert.equal(await denied.text(), '需要登录后访问');
+  assert.deepEqual(await denied.json(), { error: '需要登录后访问', code: 'unauthorized' });
   assert.deepEqual(store.overrides(), {}, '没凭据的写一个字都不许落盘');
 
   const wrong = await post(base, { LLM_MODEL: 'gated-model' }, { Authorization: basic('wrong-password') });

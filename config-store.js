@@ -25,8 +25,9 @@ export const WRITABLE_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_URL', 'CLOUDWALK
 
 // 运行态数据根的唯一定义（P003-T034）已摘成零依赖叶子 `src/shared/data-root.js`（T075 批 0，
 // D034 §8.4 #1：原来这个纯路径函数让三个 store 的依赖图挂上 RpcClient/ChatModelClient）。
-// 这里 re-export 保持旧 import 路径稳定；批 6 迁 config-store 时删掉这一行。
-export { dataRoot } from './src/shared/data-root.js';
+// 这里 import + re-export 保持旧 import 路径稳定（本文件内部 defaultConfigFile 也用它）；批 6 迁 config-store 时收掉。
+import { dataRoot } from './src/shared/data-root.js';
+export { dataRoot };
 
 export function defaultConfigFile(root = dataRoot()) {
   return path.join(root, 'config-overrides.json');

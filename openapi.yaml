@@ -3254,13 +3254,23 @@ components:
   responses:
     BusinessUnauthorized:
       description: |
-        业务 Basic 认证失败。正文是纯文本（不是 Error 形状）：401 是身份闸，不属于四类业务错误。
+        业务 Basic 认证失败（P003-T073 起为 JSON 体）：`code: unauthorized` 与维护端同一命名风格；
+        Basic 弹窗行为不变——浏览器认的是 WWW-Authenticate 头，不是正文。
       headers:
         WWW-Authenticate:
           schema: { type: string }
       content:
-        text/plain:
-          schema: { type: string }
+        application/json:
+          schema:
+            type: object
+            required: [error, code]
+            properties:
+              error:
+                type: string
+                description: 固定文案「需要登录后访问」
+              code:
+                type: string
+                enum: [unauthorized]
     ToolCatalog:
       description: 当前可用的只读取证工具目录
       content:

@@ -226,9 +226,11 @@ test('R1 真取数：POST 事件 ID 一次 GetEvent 取详情，记录 done 且�
   assert.match(detail.sha256, /^[0-9a-f]{64}$/);
   assert.ok(!Number.isNaN(Date.parse(detail.fetched_at)));
 
-  // 现查记录不进案件列表（§3.9）
+  // 现查记录进案件列表（P003-T060 起），缺 input 的派生字段回 null
   const cases = await getJson(base, '/api/agent/triage/cases');
-  assert.equal(cases.total, 0);
+  assert.equal(cases.total, 1);
+  assert.equal(cases.cases[0].alert_id, TID);
+  assert.equal(cases.cases[0].msgid, null);
 });
 
 // ── R2 人工重试 = 再跑一轮：每轮各取一次详情（缓存粒度是一次 run，§5.6 A2）──────────

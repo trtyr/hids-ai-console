@@ -27,6 +27,8 @@ import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
 import { FalsePositiveMaintainer, FP_LIBRARIES, FpSessionStore, fpSessionDirectory,
   maintenanceSide, maintenanceSides, wikiFeedbackTarget } from './fp-maintainer.js';
 import { createConfigStore, dataRoot } from './config-store.js';
+import { writeJson as json, callerError, configError, upstreamError, causeError, failureClasses,
+  failureKindOf, failureStatusOf, sendUnauthorized, sendCloudwalkerStatusFailure, sseErrorFrame } from './src/shared/errors.js';
 
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
 // 日志落盘（P003-T045）：配了 HIDS_LOG_FILE 才在 stdout 之外再同份写文件，不配维持 stdout-only。
@@ -369,54 +371,9 @@ function falsePositiveView(record) {
     feedback: record.feedback, maintenance: record.maintenance };
 }
 
-function json(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-  res.end(JSON.stringify(body));
-}
-// ── 错误响应：四类失败，一类一个稳定 code（P003-T024）──────────────────────────
-// 类 → 状态码固定，调用点只说「这是哪一类」，不再自己挑 400/502；同一类在哪条路由上都是同一个码。
-// 判据只认错误自己带的标记（failure / status），不看文案——文案会改，改文案不该改分类。
-const failureClasses = Object.freeze({
-  caller: { status: 400, code: 'caller_error' }, // 调用方传错：参数/正文/ID/权限/不存在/状态冲突
-  config: { status: 503, code: 'not_configured' }, // 没配置：牧云、模型、管理员令牌、研判队列
-  upstream: { status: 502, code: 'upstream_error' }, // 上游失败：牧云、模型、MCP、随部署的只读规则数据
-  internal: { status: 500, code: 'internal_error' } // 本程序失败：没预料到的异常、本地运行态读写
-});
-// 本程序失败对外只说这一句：异常原文与堆栈只进 http.failed 日志（A3），不回给调用方。
-const INTERNAL_ERROR_MESSAGE = '服务器内部错误';
-
-// 错误原文里可能带上游回显的凭据（Authorization 头、查询串里的 token/api_key）：正文出口统一擦一遍（A4）。
-// 实现只有一份，在 `fp-maintainer.js` 里导出（维护侧的 error 也要在**写之前**擦，函数放这边会成环）。
-
-function failureBody(kind, message) {
-  const { code } = failureClasses[kind];
-  return { error: kind === 'internal' ? INTERNAL_ERROR_MESSAGE : scrubCredentials(message) || code, code };
-}
-// status 只在「调用方传错」这一类里覆盖（400 参数 / 403 权限 / 404 不存在 / 405 方法 / 409 冲突 / 410 已下线 / 422 无法溯源），
-// 5xx 一律由类决定，免得同一类又冒出两种服务端状态码。
-function fail(res, kind, message, status = failureClasses[kind].status) {
-  return json(res, status, failureBody(kind, message));
-}
-const callerError = (res, message, status = 400) => fail(res, 'caller', message, status);
-const configError = (res, message) => fail(res, 'config', message);
-const upstreamError = (res, message) => fail(res, 'upstream', message);
-
-// 一个异常属于哪一类：显式标记（viaCloudwalker 打的上游标）优先，其次 4xx status（各模块自己判过的调用方错误），
-// 都没有就落到调用点给的缺省类——调用点知道自己调的是上游还是本地代码。
-function failureKindOf(cause, fallback = 'internal') {
-  if (cause?.failure && Object.hasOwn(failureClasses, cause.failure)) return cause.failure;
-  const status = Number(cause?.status);
-  return Number.isInteger(status) && status >= 400 && status < 500 ? 'caller' : fallback;
-}
-function failureStatusOf(kind, cause) {
-  const status = Number(cause?.status);
-  return kind === 'caller' && Number.isInteger(status) ? status : failureClasses[kind].status;
-}
-function causeError(res, cause, fallback = 'internal') {
-  const kind = failureKindOf(cause, fallback);
-  const message = cause?.message || (kind === 'upstream' ? '上游请求失败' : '请求无效');
-  return fail(res, kind, message, failureStatusOf(kind, cause));
-}
+// ── 错误响应：四类失败，一类一个稳定 code（P003-T024 → T073 单一真源）────────────────
+// json / fail 家族全部来自 `src/shared/errors.js`（业务端四类 + 401/502/SSE 特例的唯一出口）；
+// 这里只留 import 别名与身份判定。R-ERROR：任何路由不许自己构造错误响应（check-layers 强制）。
 function hasAccess(req, access) {
   if (!access?.password) return true;
   const header = req.headers.authorization || '';
@@ -424,13 +381,6 @@ function hasAccess(req, access) {
   const supplied = Buffer.from(header.slice(6), 'base64');
   const expected = Buffer.from(`${access.user || 'admin'}:${access.password}`);
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
-}
-function requireAccess(res) {
-  res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="HIDS AI Console", charset="UTF-8"',
-    // 正文是纯文本：openapi.yaml 的 BusinessUnauthorized 只声明 text/plain，不声明 Content-Type 会让调用方当二进制猜。
-    'Content-Type': 'text/plain; charset=utf-8',
-    'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-  res.end('需要登录后访问');
 }
 function hasPromptAdminAccess(req, token) {
   if (!token) return false;
@@ -844,6 +794,34 @@ function logCleanup(file, body = null) {
   return outcome;
 }
 
+// 方法不匹配统一回 405（P003-T073）：已知路径的合法方法集一张表；批 7 路由表化时它就是路由表的 method 列。
+// `POST /api/agent/prompts` 与 `/api/agent/prompts/upload` 在上面有自己的分支（405 / 410 哨兵），不进这张表。
+const routeMethods = Object.freeze({
+  '/api/session': ['GET'], '/api/updates': ['GET'], '/api/config': ['GET', 'POST'],
+  '/api/data/inventory': ['GET'], '/api/data/cleanup': ['POST'],
+  '/api/logs': ['GET'], '/api/logs/cleanup': ['POST'], '/api/status': ['GET'],
+  '/api/agent/tools': ['GET'], '/api/trace/tools': ['GET'], '/api/agent/status': ['GET'],
+  '/api/agent/prompts': ['GET'],
+  '/api/trace/boards': ['GET', 'POST'], '/api/agent/triage/status': ['GET'],
+  '/api/agent/triage/cases': ['GET'], '/api/agent/triage/control': ['PUT'],
+  '/api/triage/rules': ['GET', 'PUT'], '/api/triage/rules/validate': ['POST'],
+  '/api/rules': ['GET'], '/api/rules/sessions': ['GET'], '/api/rules/evaluate': ['POST'],
+  '/api/false-positive/sessions': ['GET'], '/api/wiki/pages': ['GET'],
+  '/api/wiki/health': ['GET'], '/api/wiki/sessions': ['GET', 'POST'],
+  '/api/agent/investigations': ['POST'], '/api/alerts': ['GET']
+});
+// 动态前缀：末尾带 / 的键按前缀匹配（`/api/rules/{id}` 系）。
+const routeMethodPrefixes = Object.freeze([
+  ['/api/rules/', ['GET', 'PUT', 'POST']], ['/api/agent/triage/', ['GET', 'POST', 'DELETE']],
+  ['/api/wiki/', ['GET', 'PUT', 'POST']], ['/api/agent/investigations/', ['GET']],
+  ['/api/alerts/', ['GET']], ['/api/trace/boards/', ['GET']], ['/api/false-positive/sessions/', ['GET']]
+]);
+function allowedMethods(pathname) {
+  if (routeMethods[pathname]) return routeMethods[pathname];
+  const prefix = routeMethodPrefixes.find(([head]) => pathname.startsWith(head));
+  return prefix ? prefix[1] : null;
+}
+
 export function createServer(service = gateway, toolbox = apiToolbox, investigator = agent, history = investigationStore, prompts = promptStore, monitor = service === gateway ? triageMonitor : null, knowledge = null,
   access = { user: process.env.HIDS_BASIC_AUTH_USER, password: process.env.HIDS_BASIC_AUTH_PASSWORD }, boardService = service === gateway ? traceBoard : null,
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
@@ -891,7 +869,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       duration_ms: Date.now() - startedAt }));
     if (!hasAccess(req, access)) {
       log('http.unauthorized', { method: req.method, path: route, status: 401 }, 'warn');
-      return requireAccess(res);
+      return sendUnauthorized(res);
     }
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     try {
@@ -945,9 +923,8 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
         try { return json(res, 200, { configured: true, ...(await viaCloudwalker('status', null, () => service.status())) }); }
-        // 配了但连不上：业务体形状是契约（前端按 connected 判），只补一个稳定 code；reason 是上游那句摘要。
-        catch (e) { return json(res, 502, { configured: true, connected: false,
-          reason: scrubCredentials(e.message) || '上游请求失败', code: failureClasses.upstream.code }); }
+        // 配了但连不上：形状是契约（前端按 connected 判），构造只能走统一出口（error/code 并入统一模型）。
+        catch (e) { return sendCloudwalkerStatusFailure(res, e.message); }
       }
       if (url.pathname === '/api/agent/tools' && req.method === 'GET') {
         if (!toolbox) return configError(res, '牧云 API 未配置');
@@ -1323,7 +1300,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
             const result = await investigate(executor, body.alert_id, mode,
               (stage, detail) => send({ type: 'progress', stage, detail }));
             send({ type: 'result', result: await history.save(result) });
-          } catch (cause) { send({ type: 'error', error: scrubCredentials(cause.message) || '研判失败' }); }
+          } catch (cause) { send(sseErrorFrame(cause)); }
           finally { clearInterval(heartbeat); if (!res.destroyed) res.end(); }
           return;
         }
@@ -1392,7 +1369,12 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         if (monitor) result.alert.triage = monitor.status(result.alert.id);
         return json(res, 200, result);
       }
-      if (url.pathname.startsWith('/api/')) return callerError(res, '接口不存在', 404);
+      // 未知路径统一一个文案（P003-T073）；已知路径但方法不对统一 405 并带 Allow（原来退 404 且两套文案）。
+      const allowed = allowedMethods(url.pathname);
+      if (allowed) {
+        res.setHeader('Allow', allowed.join(', '));
+        return callerError(res, '该方法不支持此接口', 405);
+      }
       return callerError(res, '接口不存在', 404);
     } catch (e) {
       // 走到这里的是没被各路由自己接住的失败：分类交给四类判定——牧云调用经 viaCloudwalker 打了上游标（502），

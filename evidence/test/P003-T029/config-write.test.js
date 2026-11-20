@@ -145,7 +145,7 @@ test('A3 写操作过 Basic 认证闸门；没启用鉴权时放行（文档写�
   const gated = await listen(t, serverWith({ access: { user: 'ops', password: PASS }, store }));
   const denied = await post(gated, { LLM_MODEL: 'gated-model' });
   assert.equal(denied.status, 401);
-  assert.match(await denied.text(), /需要登录后访问/);
+  assert.equal((await denied.json()).error, '需要登录后访问');
   assert.equal(store.values().LLM_MODEL, 'fake-model', '没凭据的写必须一个字都没落盘');
   const allowed = await post(gated, { LLM_MODEL: 'gated-model' }, { Authorization: basic() });
   assert.equal(allowed.status, 200);
@@ -228,8 +228,10 @@ test('写接口的拒绝面：表外的键、空值、非对象正文、空正�
   }
   assert.deepEqual(store.overrides(), {}, '被拒的写不许留下覆盖层');
   assert.equal(env.LLM_MODEL, FAKE_ENV.LLM_MODEL);
-  // 认不出的方法不是写：POST 之外没有第二个写入口。
-  assert.equal((await fetch(`${base}/api/config`, { method: 'PUT' })).status, 404);
+  // 认不出的方法不是写：POST 之外没有第二个写入口（P003-T073 起方法不匹配统一 405 + Allow）。
+  const wrongMethod = await fetch(`${base}/api/config`, { method: 'PUT' });
+  assert.equal(wrongMethod.status, 405);
+  assert.match(wrongMethod.headers.get('allow'), /GET, POST/);
 });
 
 test('可写键表钉死十一项：多一项少一项都算契约被改', () => {

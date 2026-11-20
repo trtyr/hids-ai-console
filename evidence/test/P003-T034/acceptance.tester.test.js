@@ -126,7 +126,8 @@ async function copyBackend(t, prefix = 'hids-t034-tree-') {
       await cp(path.join(repository, entry.name), path.join(dest, entry.name));
     }
   }
-  for (const name of ['wiki', 'prompts', 'rules']) {
+  for (const name of ['wiki', 'prompts', 'rules', 'src']) {
+    // P003-T075 批 0 起 src/ 属于可部署后端（shared 内核）：根文件 import src/shared/**，部署树缺 src/ 子进程起不来。
     await cp(path.join(repository, name), path.join(dest, name), { recursive: true });
   }
   return dest;

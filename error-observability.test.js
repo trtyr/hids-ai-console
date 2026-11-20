@@ -92,28 +92,30 @@ test('/api/status 连不上牧云是 502，正文带 configured/connected/reason
   const response = await fetch(`${base}/api/status`);
   assert.equal(response.status, 502);
   assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8');
+  // P003-T073：502 特例并入统一模型——形状保留（前端按 connected 判），error/code 由错误模型出。
   assert.deepEqual(await response.json(),
-    { configured: true, connected: false, reason: 'connect ECONNREFUSED 10.0.0.1:443', code: 'upstream_error' });
+    { configured: true, connected: false, reason: 'connect ECONNREFUSED 10.0.0.1:443',
+      error: 'connect ECONNREFUSED 10.0.0.1:443', code: 'upstream_error' });
 
   // 没配牧云仍走 200：502 只表示「配了但连不上」。
   const unconfigured = await listen(t, createServer(null, null, null, null, null, null));
   assert.equal((await fetch(`${unconfigured}/api/status`)).status, 200);
 });
 
-// A4（B26）：401 正文是纯文本，Content-Type 要跟 openapi.yaml:1013-1020 的 text/plain 一致。
-test('业务认证失败的 401 是纯文本正文且声明 text/plain', async t => {
+// P003-T073：401 从纯文本改为 {error, code}（Basic 弹窗靠 WWW-Authenticate 头，行为不变）。
+test('业务认证失败的 401 是 {error, code} JSON 且带 WWW-Authenticate', async t => {
   const base = await listen(t, createServer(null, null, null, null, null, null, null,
     { user: 'operator', password: 'test-only-password' }));
   const denied = await fetch(`${base}/api/session`);
   assert.equal(denied.status, 401);
-  assert.equal(denied.headers.get('content-type'), 'text/plain; charset=utf-8');
-  assert.equal(await denied.text(), '需要登录后访问');
+  assert.equal(denied.headers.get('content-type'), 'application/json; charset=utf-8');
+  assert.deepEqual(await denied.json(), { error: '需要登录后访问', code: 'unauthorized' });
   assert.equal(denied.headers.get('www-authenticate'), 'Basic realm="HIDS AI Console", charset="UTF-8"');
 
   // 同一闸门下的业务路由也是同一份 401。
   const api = await fetch(`${base}/api/status`);
   assert.equal(api.status, 401);
-  assert.equal(api.headers.get('content-type'), 'text/plain; charset=utf-8');
+  assert.deepEqual(await api.json(), { error: '需要登录后访问', code: 'unauthorized' });
 });
 
 // A5（B28）：读 config.rules 之前先判正文形状，内部 TypeError 不外泄。

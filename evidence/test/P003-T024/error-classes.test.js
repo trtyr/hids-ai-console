@@ -129,7 +129,7 @@ test('A3 上游失败把上游那句摘要原话带出来（牧云码 / 直连�
   const statusResponse = await json(statusBase, '/api/status');
   assert.equal(statusResponse.status, 502);
   assert.deepEqual(await statusResponse.json(), { configured: true, connected: false,
-    reason: 'connect ECONNREFUSED 10.0.0.1:443', code: 'upstream_error' });
+    reason: 'connect ECONNREFUSED 10.0.0.1:443', error: 'connect ECONNREFUSED 10.0.0.1:443', code: 'upstream_error' });
 });
 
 test('A3 本程序意外只回固定文案：异常原文与堆栈都不进正文', async t => {

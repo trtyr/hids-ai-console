@@ -202,8 +202,9 @@ test('A2 上游一类：alerts / alerts 单条 / status / Rego 规则库三条�
   // /api/status 的 502 是业务体（文档 §9.2）：configured/connected/reason 一个不删，末位多 code。
   const status = await call(base, '/api/status');
   assert.equal(status.status, 502);
+  // P003-T073：502 特例并入统一模型——形状保留，error/code 由错误模型出。
   assert.deepEqual(await status.json(), { configured: true, connected: false,
-    reason: 'connect ECONNREFUSED 10.0.0.1:443', code: 'upstream_error' });
+    reason: 'connect ECONNREFUSED 10.0.0.1:443', error: 'connect ECONNREFUSED 10.0.0.1:443', code: 'upstream_error' });
 });
 
 test('A2 本程序一类：wiki 页读 / 规则配置写 / 研判开关 / 提示词元数据 都是 500 固定文案', async t => {
@@ -324,7 +325,7 @@ test('A3/A4 上游摘要原话保留，同时 Basic / Bearer / token= / api_key=
     assert.ok(!JSON.stringify(statusBody).includes(secret), `status 502 正文里出现了凭据：${secret}`);
   }
 
-  // SSE 错误帧（§6）：状态 200、帧里的原文同样过擦除、帧里没有 code
+  // SSE 错误帧（§6）：状态 200、帧里的原文同样过擦除；P003-T073 起帧带 code（前端可只按 code 判成败）
   const investigator = { run: async () => { throw new Error('模型接口 401: Bearer sk-live-stream-token 无效'); } };
   const streamBase = await serve(t, { investigator, history: { save: async value => value } });
   const stream = await postJSON(streamBase, '/api/agent/investigations?stream=1',
@@ -337,21 +338,21 @@ test('A3/A4 上游摘要原话保留，同时 Basic / Bearer / token= / api_key=
   const frames = raw.split('\n\n').filter(frame => frame.startsWith('data: ')).map(frame => JSON.parse(frame.slice(6)));
   const errorFrame = frames.find(frame => frame.type === 'error');
   assert.ok(errorFrame, 'SSE 必须有一帧 type=error');
-  assert.equal('code' in errorFrame, false, '文档 §9.2：SSE 帧里没有 code');
+  assert.equal(errorFrame.code, 'upstream_error', 'P003-T073：SSE 帧带统一 code');
 });
 
-// ---------------- 例外：401 纯文本 ----------------
-test('401 例外：正文是纯文本「需要登录后访问」，没有 code；其余错误都有 code', async t => {
+// ---------------- 401：P003-T073 起 {error, code} JSON，同码跨路由 ----------------
+test('401 是 {error, code} JSON（code=unauthorized），同一闸门下所有路由同码', async t => {
   const base = await serve(t, { access: { user: 'ops', password: 'test-only-password' } });
   const denied = await call(base, '/api/status');
   assert.equal(denied.status, 401);
-  assert.equal(denied.headers.get('content-type'), 'text/plain; charset=utf-8');
-  assert.equal(await denied.text(), '需要登录后访问');
+  assert.equal(denied.headers.get('content-type'), 'application/json; charset=utf-8');
+  assert.deepEqual(await denied.json(), { error: '需要登录后访问', code: 'unauthorized' });
 
-  // 同一 401 下别的路由也不带 code（身份闸在路由之前）
+  // 同一 401 下别的路由同码（身份闸在路由之前）
   const other = await call(base, '/api/alerts');
   assert.equal(other.status, 401);
-  assert.equal(await other.text(), '需要登录后访问');
+  assert.deepEqual(await other.json(), { error: '需要登录后访问', code: 'unauthorized' });
 });
 
 // ---------------- e2e：真进程起 server.js ----------------

@@ -452,15 +452,17 @@ function fitBody(build, n) {
   return body;
 }
 
-test('边界 方法不匹配落 404（不是 405、不是接口跑到写操作）', { timeout: 15000 }, async () => {
-  assertErrorShape(await request(main.port, '/api/rules', { method: 'POST', body: '{}' }), { status: 404, label: 'POST /api/rules' });
-  assertErrorShape(await request(main.port, '/api/rules', { method: 'DELETE' }), { status: 404, label: 'DELETE /api/rules' });
-  assertErrorShape(await getJSON(main.port, '/api/rules/evaluate'), { status: 404, label: 'GET /api/rules/evaluate' });
-  assertErrorShape(await request(main.port, '/api/rules/ssh_bruteforce', { method: 'DELETE' }), { status: 404, label: 'DELETE 读接口' });
-  // T041 起 PUT /api/rules/{id} 是真路由（规则维护接口）：未配管理员令牌回 503 not_configured，不再是方法不匹配；
-  // 方法不匹配的边界改用 PATCH 探（仍无此方法，落 404）。
+test('边界 方法不匹配统一落 405 + Allow（P003-T073；原 404；且不会跑到写操作）', { timeout: 15000 }, async () => {
+  assertErrorShape(await request(main.port, '/api/rules', { method: 'POST', body: '{}' }), { status: 405, label: 'POST /api/rules' });
+  assertErrorShape(await request(main.port, '/api/rules', { method: 'DELETE' }), { status: 405, label: 'DELETE /api/rules' });
+  // GET /api/rules/evaluate 命中的是「按 id 读规则」分支（路由顺序语义，'evaluate' 是合法 id 形状）→ 404 规则不存在。
+  // 批 7 路由表化时这是第三条顺序回归点（与 sessions、triage/status 同族）。
+  assertErrorShape(await getJSON(main.port, '/api/rules/evaluate'), { status: 404, label: 'GET /api/rules/evaluate（按 id 读，不存在）' });
+  assertErrorShape(await request(main.port, '/api/rules/ssh_bruteforce', { method: 'DELETE' }), { status: 405, label: 'DELETE 读接口' });
+  // T041 起 PUT /api/rules/{id} 是真路由（规则维护接口）：未配管理员令牌回 503 not_configured，不再是方法不匹配。
   assertErrorShape(await request(main.port, '/api/rules/ssh_bruteforce', { method: 'PUT', body: '{}' }), { status: 503, label: 'PUT 维护路由（无令牌 503）' });
-  assertErrorShape(await request(main.port, '/api/rules/ssh_bruteforce', { method: 'PATCH', body: '{}' }), { status: 404, label: 'PATCH 方法不匹配' });
+  // PATCH 仍无此方法：P003-T073 起统一 405（带 Allow）。
+  assertErrorShape(await request(main.port, '/api/rules/ssh_bruteforce', { method: 'PATCH', body: '{}' }), { status: 405, label: 'PATCH 方法不匹配' });
 });
 
 // ---- 502：规则库坏了必须整次失败并带定位，不静默跳过 ----

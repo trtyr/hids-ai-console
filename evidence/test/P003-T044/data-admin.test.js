@@ -478,10 +478,10 @@ test('鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错�
   const expect401 = async (response, label) => {
     assert.equal(response.status, 401, label);
     assert.equal(response.headers.get('www-authenticate'), 'Basic realm="HIDS AI Console", charset="UTF-8"', label);
-    assert.equal(response.headers.get('content-type'), 'text/plain; charset=utf-8', label);
+    assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8', label);
     assert.equal(response.headers.get('cache-control'), 'no-store', label);
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff', label);
-    assert.equal(await response.text(), '需要登录后访问', label);
+    assert.deepEqual(await response.json(), { error: '需要登录后访问', code: 'unauthorized' }, label);
   };
   const post = headers => fetch(`${base}/api/data/cleanup`, { method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
@@ -504,9 +504,10 @@ test('鉴权：两条新路由都在 Basic 闸门后（无凭据/错口令/错�
   assert.deepEqual(await readdir(locations.investigations), []);
 });
 
-test('GET 只认 GET：盘点用 POST 回 404（方法不对不在本路径兜）', async t => {
+test('GET 只认 GET：盘点用 POST 回 405（P003-T073 起方法不匹配统一 405 + Allow，不在本路径兜）', async t => {
   const { deps } = await workspace(t);
   const base = await serve(t, deps);
   const response = await fetch(`${base}/api/data/inventory`, { method: 'POST', body: '{}' });
-  assert.equal(response.status, 404);
+  assert.equal(response.status, 405);
+  assert.match(response.headers.get('allow'), /GET/);
 });

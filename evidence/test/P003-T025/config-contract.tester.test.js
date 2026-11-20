@@ -284,10 +284,10 @@ test('A2/A3 真进程五项齐 + Basic 口令：401 纯文本四条头、正确�
     const response = await call(base, '/api/config', { headers });
     assert.equal(response.status, 401, `${label} 时状态码`);
     assert.equal(response.headers.get('www-authenticate'), 'Basic realm="HIDS AI Console", charset="UTF-8"', `${label} 时 WWW-Authenticate`);
-    assert.equal(response.headers.get('content-type'), 'text/plain; charset=utf-8', `${label} 时 401 是纯文本`);
+    assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8', `${label} 时 401 是 JSON`);
     assert.equal(response.headers.get('cache-control'), 'no-store', `${label} 时 401 带 no-store`);
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff', `${label} 时 401 带 nosniff`);
-    assert.equal(await response.text(), '需要登录后访问', `${label} 时 401 正文`);
+    assert.deepEqual(await response.json(), { error: '需要登录后访问', code: 'unauthorized' }, `${label} 时 401 正文`);
   }
 
   const ok = await call(base, '/api/config', {

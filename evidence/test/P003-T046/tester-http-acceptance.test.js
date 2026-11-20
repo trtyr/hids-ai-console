@@ -219,10 +219,11 @@ test('A3 边界：ID 形状 / mode 枚举 / 解码失败的状态码与完整正
     if (expectedBody) assert.deepEqual(body, expectedBody, `${name}：正文形状`);
     else assert.equal(body.alert_id, 'revshell:7', `${name}：正文`);
   }
-  // 非 GET 不落回放分支，也不许 5xx：走通用「接口不存在」
+  // 非 GET 不落回放分支，也不许 5xx：P003-T073 起方法不匹配统一 405 + Allow（原 404）。
   const posted = await fetch(`${base}/api/agent/investigations/revshell:7/replay`, { method: 'POST' });
-  assert.equal(posted.status, 404);
+  assert.equal(posted.status, 405);
   assert.equal((await posted.json()).code, 'caller_error');
+  assert.match(posted.headers.get('allow'), /GET/);
 });
 
 test('A3 分支顺序：/replay 不被当成告警 ID 后缀，单条阅读分支照旧回整份案卷', async t => {

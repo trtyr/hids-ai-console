@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { PromptStore } from './prompt-store.js';
 import { UpdateStore, PACKAGE_LIMIT } from './update-store.js';
 import { log } from './log.js';
+import { sendMaintenanceFailure, maintenanceCodeFor } from './src/shared/errors.js';
 
 const json = (res,status,data) => { res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data)); };
 const equal = (actual,expected) => actual.length===expected.length && timingSafeEqual(actual,expected);
@@ -53,10 +54,10 @@ export function createMaintenanceServer(store,{access={},preview=false}={}) {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     res.setHeader('Referrer-Policy','no-referrer');
-    if(!loopback(req.socket.remoteAddress))return json(res,403,{error:'维护服务仅允许本机或 SSH 隧道访问'});
-    if(preview&&!loopback(req.socket.localAddress))return json(res,403,{error:'预览仅允许本机监听'});
-    let url;try{url=new URL(req.url,'http://localhost');}catch{return json(res,400,{error:'请求地址无效'});}
-    if(!url.pathname.startsWith('/api/maintenance/'))return json(res,404,{error:'接口不存在'});
+    if(!loopback(req.socket.remoteAddress))return sendMaintenanceFailure(res,403,'loopback_only');
+    if(preview&&!loopback(req.socket.localAddress))return sendMaintenanceFailure(res,403,'preview_loopback_only');
+    let url;try{url=new URL(req.url,'http://localhost');}catch{return sendMaintenanceFailure(res,400,'invalid_url');}
+    if(!url.pathname.startsWith('/api/maintenance/'))return sendMaintenanceFailure(res,404,'not_found');
     const token=(req.headers.cookie||'').split(';').map(item=>item.trim()).find(item=>item.startsWith(cookieName+'='))?.slice(cookieName.length+1);
     const session=token?sessions.get(token):null;
     if(session&&session.expires<=Date.now())sessions.delete(token);
@@ -65,23 +66,23 @@ export function createMaintenanceServer(store,{access={},preview=false}={}) {
     const key=req.socket.remoteAddress;
     const cookie=(value,age)=>cookieName+'='+value+'; HttpOnly; SameSite=Strict; Path=/; Max-Age='+age+(req.socket.encrypted?'; Secure':'');
     const write=req.method!=='GET'&&req.method!=='HEAD';
-    if(write&&!writeAllowed(req))return json(res,403,{error:'维护请求校验失败，拒绝跨站请求'});
+    if(write&&!writeAllowed(req))return sendMaintenanceFailure(res,403,'csrf_rejected');
     try {
       if(url.pathname==='/api/maintenance/session'&&req.method==='GET')
         return json(res,200,{authenticated:loggedIn,preview,login_enabled:loginEnabled,
           user:loggedIn?access.user:null,role:loggedIn?role:null});
       if(url.pathname==='/api/maintenance/login'&&req.method==='POST') {
-        if(!loginEnabled)return json(res,503,{error:preview?'只读预览未配置维护账号，不可登录执行更新':'维护账号尚未配置'});
-        if(failures.get(key)?.until>Date.now())return json(res,429,{error:'登录失败过多，请稍后重试'});
+        if(!loginEnabled)return sendMaintenanceFailure(res,503,preview?'login_disabled_preview':'login_disabled');
+        if(failures.get(key)?.until>Date.now())return sendMaintenanceFailure(res,429,'rate_limited');
         if((req.headers['content-type']||'').split(';')[0]!=='application/json')
-          return json(res,415,{error:'登录请求须为 JSON'});
+          return sendMaintenanceFailure(res,415,'json_required');
         let data;
         try{data=JSON.parse((await readBody(req,8192)).toString('utf8'));}
         catch(cause){return json(res,cause.status||400,{error:cause.status?cause.message:'登录请求格式不正确'});}
         const correct=data&&typeof data.username==='string'&&typeof data.password==='string'&&
           equal(Buffer.from(data.username),Buffer.from(access.user))&&equal(Buffer.from(data.password),Buffer.from(access.password));
-        if(!correct){recordFailure(key);return json(res,401,{error:'账号或密码错误'});}
-        if(!authorized)return json(res,403,{error:'该账号没有后台访问权限'});
+        if(!correct){recordFailure(key);return sendMaintenanceFailure(res,401,'invalid_credentials');}
+        if(!authorized)return sendMaintenanceFailure(res,403,'forbidden_role');
         failures.delete(key);
         for(const [id,value]of sessions)if(value.expires<=Date.now())sessions.delete(id);
         if(token)sessions.delete(token);
@@ -93,11 +94,11 @@ export function createMaintenanceServer(store,{access={},preview=false}={}) {
       }
       if(!previewAccess) {
         if(!loggedIn) {
-          if(failures.get(key)?.until>Date.now())return json(res,429,{error:'登录失败过多，请稍后重试'});
+          if(failures.get(key)?.until>Date.now())return sendMaintenanceFailure(res,429,'rate_limited');
           recordFailure(key);
-          return json(res,401,{error:'请使用独立维护账号登录'});
+          return sendMaintenanceFailure(res,401,'unauthorized');
         }
-        if(!authorized)return json(res,403,{error:'该账号没有后台访问权限'});
+        if(!authorized)return sendMaintenanceFailure(res,403,'forbidden_role');
       }
       if(url.pathname==='/api/maintenance/logout'&&req.method==='POST') {
         if(token)sessions.delete(token);
@@ -105,8 +106,8 @@ export function createMaintenanceServer(store,{access={},preview=false}={}) {
         return json(res,200,{logged_out:true});
       }
       if(write) {
-        if(preview)return json(res,403,{error:'本地只读预览不允许上传或替换'});
-        if(role!=='updater')return json(res,403,{error:'当前账号没有产品更新权限'});
+        if(preview)return sendMaintenanceFailure(res,403,'preview_read_only');
+        if(role!=='updater')return sendMaintenanceFailure(res,403,'not_updater');
       }
       if(url.pathname==='/api/maintenance/overview'&&req.method==='GET') {
         const overview=await store.overview();
@@ -121,9 +122,9 @@ export function createMaintenanceServer(store,{access={},preview=false}={}) {
       }
       if(url.pathname==='/api/maintenance/packages'&&req.method==='POST') {
         if((req.headers['content-type']||'').split(';')[0]!=='application/octet-stream')
-          return json(res,415,{error:'仅接受加密策略包文件'});
+          return sendMaintenanceFailure(res,415,'package_media_type');
         let name;try{name=decodeURIComponent(req.headers['x-package-filename']||'');}
-        catch{return json(res,400,{error:'升级包名称编码无效'});}
+        catch{return sendMaintenanceFailure(res,400,'package_name_invalid');}
         const record=await store.stage(await readBody(req),name);
         return json(res,201,{id:record.id,version:record.version});
       }
@@ -132,13 +133,14 @@ export function createMaintenanceServer(store,{access={},preview=false}={}) {
         if(!match[2]&&req.method==='GET')return json(res,200,await store.detail(match[1]));
         if(match[2]&&req.method==='POST') {
           const revision=req.headers['if-match'];
-          if(typeof revision!=='string')return json(res,428,{error:'请先刷新版本后确认替换'});
+          if(typeof revision!=='string')return sendMaintenanceFailure(res,428,'revision_required');
           return json(res,200,await store.apply(match[1],revision,access.user));
         }
       }
-      return json(res,404,{error:'接口或文件不存在'});
+      return sendMaintenanceFailure(res,404,'not_found');
     } catch(cause) {
-      return json(res,cause.status||500,{error:cause.status?cause.message:'维护服务处理失败，请检查后端记录'});
+      // P003-T073：动态 catch 也走统一出口——带 status 的实现错按类归码（4xx=caller_error），意外归 internal_error。
+      return sendMaintenanceFailure(res,cause.status||500,maintenanceCodeFor(cause),cause.status?cause.message:null);
     }
   });
 }
