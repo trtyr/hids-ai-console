@@ -1,0 +1,34 @@
+{
+  "impl-missing-in-contract|PUT /api/wiki/pages/{pagePath}": {
+    "kind": "impl-missing-in-contract",
+    "item": "PUT /api/wiki/pages/{pagePath}"
+  },
+  "usecase-exit-needed|I08（A02）": {
+    "kind": "usecase-exit-needed",
+    "item": "I08（A02）"
+  },
+  "usecase-exit-needed|I12（A16）": {
+    "kind": "usecase-exit-needed",
+    "item": "I12（A16）"
+  },
+  "usecase-exit-needed|I13（A03/I-13）": {
+    "kind": "usecase-exit-needed",
+    "item": "I13（A03/I-13）"
+  },
+  "usecase-exit-needed|I14（A11）": {
+    "kind": "usecase-exit-needed",
+    "item": "I14（A11）"
+  },
+  "usecase-exit-needed|I15（A13/I-15）": {
+    "kind": "usecase-exit-needed",
+    "item": "I15（A13/I-15）"
+  },
+  "dead-code|knowledge-store.js 的 publish/withdraw/reply/defer — T079 裁决：接入或删除": {
+    "kind": "dead-code",
+    "item": "knowledge-store.js 的 publish/withdraw/reply/defer — T079 裁决：接入或删除"
+  },
+  "dead-code|POST /api/agent/prompts/upload（恒 410） — 保留为哨兵": {
+    "kind": "dead-code",
+    "item": "POST /api/agent/prompts/upload（恒 410） — 保留为哨兵"
+  }
+}
