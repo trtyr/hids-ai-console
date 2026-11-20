@@ -1,3 +1,10 @@
+---
+type: module
+id: MOD-INVESTIGATION-AGENT
+covers: [investigation-agent.js, required-evidence.js, triage-output.js]
+updated: 2026-11-20
+---
+
 # HIDS 智能研判平台 · 研判智能体
 
 这份文档写给第一次进这个仓、要动研判链路的人。它讲一个模块：`investigation-agent`——
@@ -769,21 +776,23 @@ P003-T052 起缺口里拼的 `reason` 是闸后文案（固定文案 + 原文字
 
 ## 4. 公开面
 
-| 导出 | 签名 / 形态 | 作用 | 证据 |
-| --- | --- | --- | --- |
-| `InvestigationAgent` | `new InvestigationAgent(toolbox, model, promptStore?, knowledgeStore?, ruleStore?, reviewModel?)` | 研判智能体。六个构造参数依次是取证工具箱、研判模型客户端、提示词存储、知识库、Rego 规则库（`server.js` 传数据根库；不传时缺省读仓内 `rules/`，仅供单测与探针）、**复核模型客户端**（P003-T042：独立复核那一轮用它；不传就沿用 `model`，即分层前的行为） | `investigation-agent.js:418-423`、`server.js:50-53` |
-| `.run(alertId, options)` | `Promise<研判记录>` | 主路径，见 [2.2](#22-主路径的阶段) | `investigation-agent.js:214` |
-| `.runUnmatchedSyslog(input, matchResult, caseInfo, onProgress?)` | `Promise<研判记录>` | 未匹配 syslog 的旁路，见 [2.4](#24-未匹配-syslog-的旁路) | `investigation-agent.js:728` |
-| `.prompts()` / `.updatePrompt(section, content, revision)` | `Promise<…>` | 读 / 改提示词，转调提示词存储 | `investigation-agent.js:211-212` |
-| `boundedToolArgs(name, rawArgs, catalog)` | `(name, args, catalog) => args` | 工具参数收窄，见 [3.2](#32-工具轮次与调用上限) | `investigation-agent.js:177` |
-| `replayInvestigation(record)` | `(record) => 回放视图 \| null` | 把已落盘的研判记录压成回放视图（逐轮摘要 / 工具序列 / 结论变化），**不调模型**；见 [3.11](#311-逐轮快照与研判会话回放p003-t046) | `investigation-agent.js:1161-1185` |
-| `agentConfigured(env?)` | `(env?) => boolean` | 五个环境变量齐了才算配好：牧云地址、牧云 Token、模型地址、模型密钥、模型名 | `investigation-agent.js:620-622` |
-| `requiredEvidencePlan(type, original, catalog)` | `=> 检查项[]` | 生成必查项清单；`catalog` 决定动态数据源那两项能不能查 | `required-evidence.js:69` |
-| `collectRequiredEvidence(plan, session, onProgress?, trace?)` | `Promise<检查结果[]>` | 并发执行必查项（`Promise.allSettled`） | `required-evidence.js:121` |
-| `requiredEvidenceGaps(checks)` | `=> string[]` | 汇总缺口；跳过 `catalog_absent` | `required-evidence.js:167` |
-| `requiredEvidenceReport(checks)` | `=> string` | 按状态拼一句摘要；跳过 `catalog_absent` | `required-evidence.js:178` |
-| `appendEvidenceReport(report, checks, maxLength?)` | `=> string` | 把摘要追加到客户报告，默认上限 300 | `required-evidence.js:192` |
-| `finalizeTriageOutput(verdict)` | `(verdict) => verdict` | 客户报告与建议动作整形 | `triage-output.js:35` |
+| 导出 | 签名 / 形态 | 作用 | 证据 | 单位 |
+| --- | --- | --- | --- | --- |
+| `InvestigationAgent` | `new InvestigationAgent(toolbox, model, promptStore?, knowledgeStore?, ruleStore?, reviewModel?)` | 研判智能体。六个构造参数依次是取证工具箱、研判模型客户端、提示词存储、知识库、Rego 规则库（`server.js` 传数据根库；不传时缺省读仓内 `rules/`，仅供单测与探针）、**复核模型客户端**（P003-T042：独立复核那一轮用它；不传就沿用 `model`，即分层前的行为） | `investigation-agent.js:418-423`、`server.js:50-53` | — |
+| `.run(alertId, options)` | `Promise<研判记录>` | 主路径，见 [2.2](#22-主路径的阶段) | `investigation-agent.js:214` | — |
+| `.runUnmatchedSyslog(input, matchResult, caseInfo, onProgress?)` | `Promise<研判记录>` | 未匹配 syslog 的旁路，见 [2.4](#24-未匹配-syslog-的旁路) | `investigation-agent.js:728` | — |
+| `.prompts()` / `.updatePrompt(section, content, revision)` | `Promise<…>` | 读 / 改提示词，转调提示词存储 | `investigation-agent.js:211-212` | — |
+| `boundedToolArgs(name, rawArgs, catalog)` | `(name, args, catalog) => args` | 工具参数收窄，见 [3.2](#32-工具轮次与调用上限) | `investigation-agent.js:177` | — |
+| `replayInvestigation(record)` | `(record) => 回放视图 \| null` | 把已落盘的研判记录压成回放视图（逐轮摘要 / 工具序列 / 结论变化），**不调模型**；见 [3.11](#311-逐轮快照与研判会话回放p003-t046) | `investigation-agent.js:1161-1185` | — |
+| `agentConfigured(env?)` | `(env?) => boolean` | 五个环境变量齐了才算配好：牧云地址、牧云 Token、模型地址、模型密钥、模型名 | `investigation-agent.js:620-622` | — |
+| `requiredEvidencePlan(type, original, catalog)` | `=> 检查项[]` | 生成必查项清单；`catalog` 决定动态数据源那两项能不能查 | `required-evidence.js:69` | — |
+| `collectRequiredEvidence(plan, session, onProgress?, trace?)` | `Promise<检查结果[]>` | 并发执行必查项（`Promise.allSettled`） | `required-evidence.js:121` | — |
+| `requiredEvidenceGaps(checks)` | `=> string[]` | 汇总缺口；跳过 `catalog_absent` | `required-evidence.js:167` | — |
+| `requiredEvidenceReport(checks)` | `=> string` | 按状态拼一句摘要；跳过 `catalog_absent` | `required-evidence.js:178` | — |
+| `appendEvidenceReport(report, checks, maxLength?)` | `=> string` | 把摘要追加到客户报告，默认上限 300 | `required-evidence.js:192` | 字符 |
+| `finalizeTriageOutput(verdict)` | `(verdict) => verdict` | 客户报告与建议动作整形 | `triage-output.js:35` | — |
+
+表注：只有 `appendEvidenceReport` 带数值上限（字符），其余是函数与常量，不含量纲，写「—」。
 
 `run()` 的返回体固定带这几个字段：`alert_id`、`mode`、`model`、`prompt_version`、`scenario_ids`、`verdict`、`review`、
 `validation`、`trace`、`turns`（P003-T046）、`required_evidence`、`evidence`、`auto_action`（`investigation-agent.js:1069-1073`）。
@@ -1019,3 +1028,30 @@ bash evidence/test/P003-T040/mutate-check.sh                     # 8/8 变异变
 
 模型服务的协议与超时、牧云 MCP 客户端本身、证据视图的投影规则——这些都不在本页覆盖的三份实现文件里。
 本页只写这三份文件的行为，以及它们之间的调用关系。
+
+> 下面两节放在末位是刻意的：既有小节不重编号，别的文档按住小节锚点指过来的链接不会断。
+
+## 7. 行为承诺
+
+可以拿去写断言的承诺，每条都有反例。详细口径在各节，本表只做索引。
+
+| 承诺 | 反例 | 正文 |
+| --- | --- | --- |
+| 调查轮数与工具调用数受同一组常量约束（`maxTurns` 6、`maxToolCalls` 8、`conclusionRetries` 2） | 第 7 轮还在调工具 | 第 3.2 节 |
+| 轮数用尽仍无结论时不抛错，出「存疑」降级结论并在 trace 留 `degraded_conclusion` | 抛错让队列记录转 `failed` | 第 3.2.1 节 |
+| 没有可核验 `claims` 的结论不会以「真实威胁」交付：要么带引用，要么降级存疑 | `validation.ok=false` 却仍回 `threat` | 第 3.4 节 |
+| 引用校验不通过最多退回 2 次，每次只让模型用手上的原始指针重出 | 无限退回，或退回时不带错误明细 | 第 3.4 节 |
+| 返回体字段集合固定（`alert_id` 到 `auto_action`）；客户经验复用那条捷径回同一结构 | 捷径少字段或换字段名 | 第 4 节 |
+| 必查项缺口进 `missing_evidence`；`catalog_absent` 的项不计作缺口 | 数据源本就不存在也报成缺口 | 第 3.5 节 |
+| 客户报告由 `finalizeTriageOutput` 压到 300 字符内；必查项摘要在其后追加，最长可到 301 | 报告到 400 字符 | 第 3.6 节、第 6.1 节 |
+
+## 8. 失败面
+
+| 失败模式 | 表现 | 落盘 / 状态 | 能否重试 | 降级 |
+| --- | --- | --- | --- | --- |
+| 模型调用报错或超时 | 报错信息含 `timeout` 或「超时」才原样重试一次；再失败或其它错误，包成带轮次、已查证据数、回包摘要的失败消息抛出 | 队列记录转 `failed` | 是（队列层重排） | 无结论 |
+| 六轮调查完仍没有结论 | 不抛错，出存疑降级结论（三态 `uncertain`） | 照常写 `05-研判结果.md`，状态 `done` | — | 结论 + `missing_evidence` 缺口 |
+| 引用校验不通过 | 退回重出，最多 2 次 | 仍不过则 `validation.ok=false` | 由模型重出 | 结论保留但标不可核验 |
+| 单条工具结果超过 20000 字符 | 不把正文给模型，只回一句「结果超出模型上下文……」 | — | 模型换查询 | 该条不进引用 |
+| 必查项的数据源不在工具箱目录 | 该检查项跳过 | — | 否 | 不计作缺口（`catalog_absent`） |
+| 案卷目录写不出来 | 异常上抛 | 队列记录转 `failed`，无 `05-研判结果.md` | 是（重排） | 无 |

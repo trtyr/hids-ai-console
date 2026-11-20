@@ -38,18 +38,20 @@ updated: 2026-11-20
 
 ## 2 公开面
 
-| 能力 | 入口 | 说明 |
-| --- | --- | --- |
-| 事件类型表 | `eventTypes`（`cloudwalker.js:2`） | 11 个类型键 → 中文名，冻结不可改 |
-| RPC 服务名表 | `rpcMethods`（`cloudwalker.js:8`） | 11 个类型键 → 牧云服务名，冻结不可改 |
-| 原始行 → 告警 | `normalizeAlert(type, row)`（`cloudwalker.js:31`） | 纯函数，无 IO |
-| 详情 → 证据条目 | `detailEvidence(detail)`（`cloudwalker.js:60`） | 纯函数，无 IO |
-| 连通性探测 | `CloudwalkerGateway.status()`（`cloudwalker.js:120`） | 探一种类型；P003-T037 起 45 秒缓存 |
-| 合并列表 | `CloudwalkerGateway.alerts({ count, offset, type, level, q, from, to, sort })`（`cloudwalker.js:164`） | 11 类合并分页；P003-T037 起首批走 15 秒快照 |
-| 单条详情 | `CloudwalkerGateway.alert(type, id)`（`cloudwalker.js:260`） | 带事件身份校验；失败路径的探活 5 秒复用 |
-| 缓存缺省 | `defaultTtls`（`cloudwalker.js:95`） | `{status: 45000, probe: 5000, snapshot: 15000}`，构造参数或环境变量覆盖 |
-| RPC 传输 | `new RpcClient(baseUrl, token, fetcher?)`（`rpc-client.js:3`） | `fetcher` 默认 `fetch` |
-| 一次调用 | `RpcClient.call(method, params)`（`rpc-client.js:12`） | 白名单拦截 + JSON-RPC |
+| 能力 | 入口 | 说明 | 单位 |
+| --- | --- | --- | --- |
+| 事件类型表 | `eventTypes`（`cloudwalker.js:2`） | 11 个类型键 → 中文名，冻结不可改 | — |
+| RPC 服务名表 | `rpcMethods`（`cloudwalker.js:8`） | 11 个类型键 → 牧云服务名，冻结不可改 | — |
+| 原始行 → 告警 | `normalizeAlert(type, row)`（`cloudwalker.js:31`） | 纯函数，无 IO | — |
+| 详情 → 证据条目 | `detailEvidence(detail)`（`cloudwalker.js:60`） | 纯函数，无 IO | — |
+| 连通性探测 | `CloudwalkerGateway.status()`（`cloudwalker.js:120`） | 探一种类型；P003-T037 起 45 秒缓存 | — |
+| 合并列表 | `CloudwalkerGateway.alerts({ count, offset, type, level, q, from, to, sort })`（`cloudwalker.js:164`） | 11 类合并分页；P003-T037 起首批走 15 秒快照 | — |
+| 单条详情 | `CloudwalkerGateway.alert(type, id)`（`cloudwalker.js:260`） | 带事件身份校验；失败路径的探活 5 秒复用 | — |
+| 缓存缺省 | `defaultTtls`（`cloudwalker.js:95`） | `{status: 45000, probe: 5000, snapshot: 15000}`，构造参数或环境变量覆盖 | ms |
+| RPC 传输 | `new RpcClient(baseUrl, token, fetcher?)`（`rpc-client.js:3`） | `fetcher` 默认 `fetch` | — |
+| 一次调用 | `RpcClient.call(method, params)`（`rpc-client.js:12`） | 白名单拦截 + JSON-RPC | — |
+
+表注：最后一列只对该行真带量纲的项写单位（如缓存 TTL 写 `ms`，`{status:45000}` 就是 45 秒）；能力型条目没有量纲，写「—」。
 
 `CloudwalkerGateway` 通过构造参数接收 RPC 客户端（`cloudwalker.js:77`），`RpcClient` 通过构造参数接收
 `fetcher`（`rpc-client.js:3`）。两个文件都没有本地 import：

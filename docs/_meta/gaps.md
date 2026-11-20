@@ -1,3 +1,8 @@
+---
+type: guide
+id: GUIDE-GAPS
+---
+
 # 已知边界与未决
 
 这份文件记录写文档时**查不清、查不动、或前后对不上**的地方。每条都带证据。
@@ -107,11 +112,11 @@ P003-T028 之前根 `package.json` 的 `test` 是裸 `node --test`。无参时�
 
 | 命令 | 跑什么 | 实测 |
 | --- | --- | --- |
-| `npm test` | `node --test --test-timeout=60000 --test-force-exit *.test.js`，只跑仓根后端单测；`--test-timeout`/`--test-force-exit` 是复审修复轮加的挂起上界 | 228 条全绿，约 0.8s，退出码 0 |
+| `npm test` | `node --test --test-timeout=60000 --test-force-exit *.test.js`，只跑仓根后端单测；`--test-timeout`/`--test-force-exit` 是复审修复轮加的挂起上界 | 235 条全绿，约 0.8s，退出码 0（P003-T055 复测；P003-T033 时是 228） |
 | `npm run test:web` | `npm --prefix web test`，跑 `web/test/**` | 447 条全绿，约 5.8s，退出码 0 |
-| `npm run test:all` | 上面两段串跑 | 228 + 447 全绿，约 6.3s，退出码 0 |
+| `npm run test:all` | 上面两段串跑 | 后端段 P003-T055 复测 235 条全绿；web 段沿用 P003-T028 的 447 条旧记录，本卡未复跑（`web/node_modules` 不在 git 里） |
 
-后端那一行由 P003-T033 复测（2026-11-20：22 个测试文件、`npm test` 报 `tests 228 / pass 228 / fail 0`、`duration_ms 820`）；web 段沿用 P003-T028 的记录，本次没装 `web/node_modules`，未复跑。
+后端那一行 P003-T055 复测（2026-11-20：`npm test` 报 `tests 235 / pass 235 / fail 0`、`duration_ms 800`；P003-T033 时是 228）；web 段沿用 P003-T028 的记录，本次没装 `web/node_modules`，未复跑。
 
 退出码：任一用例失败 → 1（实跑注入一条必红用例验证过），全绿 → 0。
 

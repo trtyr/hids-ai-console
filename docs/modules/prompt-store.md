@@ -1,3 +1,10 @@
+---
+type: module
+id: MOD-PROMPT-STORE
+covers: [prompt-store.js]
+updated: 2026-11-20
+---
+
 # prompt-store · 提示词与 SOP 的装载、覆盖与版本管理
 
 > **模块名**：`prompt-store`
@@ -48,13 +55,15 @@
 
 `PromptStore` 只导出一个类（`prompt-store.js:25`），共 6 个方法加 1 个构造函数。
 
-| 能力 | 方法 | 入参 | 返回 | 抛错 |
-| --- | --- | --- | --- | --- |
-| 装配生效正文 | `load()` | 无 | `{version, revision, source, prompts, scenarios, sop}`（`prompt-store.js:46-47`） | 读文件失败即抛（ENOENT、SyntaxError） |
-| 取可安装的章节快照 | `snapshot()` | 无 | `{sections, knowledge_revision}`（`prompt-store.js:52-58`） | 同上 |
-| 整包安装 | `install(sections, release, expectedRevision, knowledgeRevision)` | 4 个，见第 6 节 | 重新 `load()` 的结果（`prompt-store.js:82`） | 400 / 409 / TypeError，见第 6.2 节 |
-| 列出章节清单 | `metadata()` | 无 | `{version, revision, sections[]}`（`prompt-store.js:90-97`） | 同上 |
-| 改写单个章节 | `update(section, content, expectedRevision)` | 章节名、正文、期望指纹 | 重新 `load()` 的结果（`prompt-store.js:113`） | 章节名或正文不合法 → 普通 `Error`；版本不符 → `409`。见第 4.3 节 |
+| 能力 | 方法 | 入参 | 返回 | 抛错 | 单位 |
+| --- | --- | --- | --- | --- | --- |
+| 装配生效正文 | `load()` | 无 | `{version, revision, source, prompts, scenarios, sop}`（`prompt-store.js:46-47`） | 读文件失败即抛（ENOENT、SyntaxError） | — |
+| 取可安装的章节快照 | `snapshot()` | 无 | `{sections, knowledge_revision}`（`prompt-store.js:52-58`） | 同上 | — |
+| 整包安装 | `install(sections, release, expectedRevision, knowledgeRevision)` | 4 个，见第 6 节 | 重新 `load()` 的结果（`prompt-store.js:82`） | 400 / 409 / TypeError，见第 6.2 节 | — |
+| 列出章节清单 | `metadata()` | 无 | `{version, revision, sections[]}`（`prompt-store.js:90-97`） | 同上 | — |
+| 改写单个章节 | `update(section, content, expectedRevision)` | 章节名、正文、期望指纹 | 重新 `load()` 的结果（`prompt-store.js:113`） | 章节名或正文不合法 → 普通 `Error`；版本不符 → `409`。见第 4.3 节 | — |
+
+表注：本表列方法与入参形状，不含量纲，一律「—」；正文长度上限见第 9 节。
 
 两个读方法（`load()`、`snapshot()`）与一个清单方法（`metadata()`）不排队，直接读盘；
 两个写方法（`install()`、`update()`）共用实例内的一条串行队列（`prompt-store.js:62`、`prompt-store.js:84`、
