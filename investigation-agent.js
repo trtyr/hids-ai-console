@@ -90,11 +90,34 @@ function markLastTurn(transcript, fields) {
   if (last) Object.assign(last, fields);
 }
 
-// 失败附注只写「怎么死的」，不写原文：回包解不出 JSON 时错误文案会原样带出正文前几个字
-//（`Unexpected token 'S', "SECRET_BOD"...`），快照与日志都不许留这个（P003-T046 复审实锤）。
-function failureNote(error, summary, limit = 80) {
-  const detail = error?.model_decode ? '回包不是合法 JSON' : String(error?.message || error);
-  return `${summary}：${detail.slice(0, limit)}`;
+// ── 记录侧脱敏闸（P003-T051）────────────────────────────────────────────────
+// 落盘的四个去处（review.concerns / missing_evidence / trace / analysis）只写**固定文案 + 原文字符量**：
+// V8 的 JSON.parse 报错会把回包前 ~10 字原样带出（`Unexpected token 'S', "SECRET_BOD"...`），
+// 模型与上游错误文本同理。**错误对象本身一个字不动**——`model_decode` / `model_reply` / `model_call`
+// 三标记照旧上抛，`modelCallError` 抛给调用方的报错照旧原文：调用方要原文，磁盘不要。
+const namedFailures = new Set(['TypeError', 'SyntaxError', 'RangeError', 'TimeoutError', 'AbortError']);
+
+function recordFailure(error) {
+  const raw = String(error?.message ?? error ?? '');
+  const kind = error?.model_decode ? '模型回包不是合法 JSON'
+    : /timeout|超时|aborted/i.test(raw) ? '调用超时' : '上游调用失败';
+  const name = namedFailures.has(error?.name) ? `（${error.name}）` : '';
+  return `${kind}${name}，原文 ${raw.length} 字未落盘`;
+}
+
+// 未匹配 syslog 的 reason 可能拼进了上游错误原文（`syslog-case.js:54` / `:83` 的两条
+// `牧云事件…失败：<raw>`）：记录侧只留徽标，原文换成字符量。
+const upstreamFailure = /^(牧云事件(?: ID 详情读取|查询)失败)：/;
+
+function reasonForRecord(text) {
+  const raw = String(text ?? '');
+  const badge = raw.match(upstreamFailure);
+  return badge ? `${badge[1]}：${recordFailure(raw.slice(badge[0].length))}` : raw;
+}
+
+// 失败附注走同一道闸：快照（turns[].note）与日志都不许留原文（P003-T046 复审实锤）。
+function failureNote(error, summary) {
+  return `${summary}：${recordFailure(error)}`;
 }
 
 // 一行快照 = 一次模型调用的计量。`call` 为 undefined 时（调用本身挂了，没有回包）计量未知，记 null 而不是假零。
@@ -650,7 +673,7 @@ export class InvestigationAgent {
           }
         }
       } catch (error) {
-        trace.push({ kind: 'knowledge', matched: false, note: `经验核对失败，继续完整研判：${String(error.message).slice(0, 180)}` });
+        trace.push({ kind: 'knowledge', matched: false, note: `经验核对失败，继续完整研判：${recordFailure(error)}` });
       }
     }
     // 捷径命中：落案卷在这之后做（失败即真异常），不走调查循环。
@@ -784,7 +807,7 @@ export class InvestigationAgent {
         }
       } catch (error) {
         content = JSON.stringify({ error: String(error.message).slice(0, 250) });
-        trace.push({ kind: 'tool_error', name, requested_args: call.function?.arguments || '{}', error: String(error.message).slice(0, 250) });
+        trace.push({ kind: 'tool_error', name, requested_args: call.function?.arguments || '{}', error: recordFailure(error) });
       }
       return content;
     };
@@ -797,7 +820,8 @@ export class InvestigationAgent {
       // 回包到手但解不出 JSON 与调用本身失败要分开：前者退回重出（轮次照算），后者先超时重试、再整轮失败。
       const decode = value => (value.tool_calls?.length ? null : normalizeVerdict(parseJSON(value.content)));
       const parseFailure = (error, attempt) => {
-        const reason = `输出解析失败：${String(error.message).slice(0, 120)}`;
+        // 前缀保留（文档与用例按 `输出解析失败：` 认这一条），detail 过脱敏闸：原文不落盘。
+        const reason = `输出解析失败：${recordFailure(error)}`;
         problems.push(reason);
         // A3：同一轮把解析错误回给模型要求重出；退回次数与轮次落 trace，上限由 maxTurns 封顶。
         trace.push({ kind: 'parse_error', turn: turn + 1, attempt: trace.filter(item => item.kind === 'parse_error').length + 1, error: reason });
@@ -840,7 +864,7 @@ export class InvestigationAgent {
           const content = outcome.status === 'fulfilled' ? outcome.value
             : JSON.stringify({ error: String(outcome.reason?.message || outcome.reason).slice(0, 250) });
           if (outcome.status !== 'fulfilled') trace.push({ kind: 'tool_error', name: call.function?.name,
-            requested_args: call.function?.arguments || '{}', error: String(outcome.reason?.message || outcome.reason).slice(0, 250) });
+            requested_args: call.function?.arguments || '{}', error: recordFailure(outcome.reason) });
           messages.push({ role: 'tool', tool_call_id: call.id, content });
           let evidenceId = null;
           let pointer = false;
@@ -922,8 +946,8 @@ export class InvestigationAgent {
         review = reviewed.decoded;
         transcript.push(turnRecord(reviewMeta, reviewed.call, { note: `独立复核=${review.assessment}` }));
       } catch (error) {
-        review = { assessment: 'unavailable', concerns: [`独立复核未完成：${String(error.message).slice(0, 120)}`], missing_evidence: [] };
-        trace.push({ kind: 'review_unavailable', error: String(error.message).slice(0, 200) });
+        review = { assessment: 'unavailable', concerns: [`独立复核未完成：${recordFailure(error)}`], missing_evidence: [] };
+        trace.push({ kind: 'review_unavailable', error: recordFailure(error) });
         transcript.push(turnRecord(reviewMeta, error.model_call, { note: failureNote(error, '独立复核未完成') }));
       }
     }
@@ -944,7 +968,7 @@ export class InvestigationAgent {
         transcript.push(turnRecord(revisionMeta, revised.call, { conclusion: conclusionOf(verdict) }));
       } catch (error) {
         // A2：修订请求失败不静默沿用草稿——记 trace，并写进缺口（真实威胁还会被降成存疑）。
-        revisionFailed = String(error.message || error).slice(0, 200);
+        revisionFailed = recordFailure(error);
         trace.push({ kind: 'revision_failed', error: revisionFailed });
         transcript.push(turnRecord(revisionMeta, error.model_call, { note: failureNote(error, '修订失败') }));
       }
@@ -1019,7 +1043,7 @@ export class InvestigationAgent {
           validation = verifyOutputFacts(session, verdict);
           transcript.push(turnRecord(fixMeta, revised.call, { conclusion: conclusionOf(verdict) }));
         } catch (cause) {
-          trace.push({ kind: 'validation_error', note: String(cause.message || cause).slice(0, 200) });
+          trace.push({ kind: 'validation_error', note: recordFailure(cause) });
           transcript.push(turnRecord(fixMeta, cause.model_call, { note: failureNote(cause, '证据校验退回失败') }));
           break;
         }
@@ -1106,7 +1130,7 @@ export class InvestigationAgent {
       narrative = described.decoded;
       turns.push(turnRecord(narrativeMeta, described.call));
     } catch (error) {
-      narrative = { analysis: `牧云事件回查与模型说明未完成：${String(error.message).slice(0, 120)}` };
+      narrative = { analysis: `牧云事件回查与模型说明未完成：${recordFailure(error)}` };
       turns.push(turnRecord(narrativeMeta, error.model_call, { note: failureNote(error, '说明调用未完成') }));
     }
     const facts = Object.entries(input.parsed.payload).filter(([, value]) => value !== null && value !== '' && value !== undefined)
@@ -1114,8 +1138,8 @@ export class InvestigationAgent {
         citations: [{ evidence_id: 'syslog:1', pointer: `/payload/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`, value }] }));
     const verdict = finalizeTriageOutput({ verdict: 'uncertain', verdict_label: '存疑', confidence: '低',
       risk_level: '待核查', summary: String(narrative.summary || '已收到 syslog 告警，牧云 API 未匹配到对应事件').slice(0, 500),
-      analysis: String(narrative.analysis || matchResult.reason).slice(0, 3000), claims: facts,
-      missing_evidence: [...new Set([matchResult.reason, ...(Array.isArray(narrative.missing_data) ? narrative.missing_data : [])])],
+      analysis: String(narrative.analysis || reasonForRecord(matchResult.reason)).slice(0, 3000), claims: facts,
+      missing_evidence: [...new Set([reasonForRecord(matchResult.reason), ...(Array.isArray(narrative.missing_data) ? narrative.missing_data : [])])],
       next_actions: Array.isArray(narrative.recommended_actions) ? narrative.recommended_actions.slice(0, 5) : ['核对牧云事件详情与告警时间'] });
     verdict.rego = { status: rego.status, rule_ids: rego.rules.map(rule => rule.id) };
     // 降级路径没有工具循环：知识库工具与结论工具都不适用，结果里写明未采纳原因。
@@ -1123,12 +1147,12 @@ export class InvestigationAgent {
     return { alert_id: unmatchedAlertId,
       mode: 'triage', model: this.model.model, prompt_version: `${prompts.version}+${prompts.revision}`,
       scenario_ids: [type], verdict, turns,
-      review: { assessment: 'unavailable', concerns: ['对应牧云事件未匹配，无法独立复核完整事件详情'], missing_evidence: [matchResult.reason] },
+      review: { assessment: 'unavailable', concerns: ['对应牧云事件未匹配，无法独立复核完整事件详情'], missing_evidence: [reasonForRecord(matchResult.reason)] },
       validation: { ok: facts.length > 0, errors: facts.length ? [] : ['syslog 缺少可引用字段'] },
       trace: [{ kind: 'rego', status: rego.status, rule_ids: rego.rules.map(rule => rule.id) },
         { kind: 'wiki', action: 'index', category: wikiIndex.category },
         ...wikiPages.map(page => ({ kind: 'wiki', action: 'context', id: page.id, title: page.title })),
-        { kind: 'tool_error', name: `list_${type}_events`, error: matchResult.reason }],
+        { kind: 'tool_error', name: `list_${type}_events`, error: reasonForRecord(matchResult.reason) }],
       evidence: [{ evidence_id: 'syslog:1', tool: 'received_syslog', args: {}, fetched_at: new Date().toISOString(),
         sha256: createHash('sha256').update(JSON.stringify(input.parsed)).digest('hex'),
         view: boundSyslogView({ msgid: input.parsed.msgid, payload: input.parsed.payload }) }], auto_action: false };

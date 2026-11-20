@@ -261,23 +261,23 @@ max_turns, max_tool_calls, conclusion_retries}`（`investigation-agent.js:665-66
 `noConclusionReason({reply, problems, turns, calls})`（`investigation-agent.js:58-64`）就是 P003-T022 那条消息的文案，
 四段不变，只是现在**返回字符串**（进 `analysis` 与 `missing_evidence[0]`）而不是 Error。
 这段话同时是队列记录 `detail` 的来源：triage-monitor 用它（或结论文案）截到 250 字写进 `record.detail`
-（`triage-monitor.js:543`），所以按 240 字预算拼（`investigation-agent.js:34-36`）。
+（`triage-monitor.js:543`），所以按 240 字预算拼（`investigation-agent.js:36`）。
 
 | 段 | 内容 | 出处 |
 | --- | --- | --- |
-| 轮数与取证量 | `调查 N 轮、已查询 M 项证据后仍没有可用结论` | `investigation-agent.js:52` |
-| 末次回包 | `末次回包 K 字：「正文开头 50 字」`；正文为空时是 `末次回包没有正文`；这一轮点了工具再加 `末次工具调用：<名字>` | `investigation-agent.js:42-49`、`investigation-agent.js:556` |
-| 退回次数与原因 | `退回 N 次：<倒数第二个不同原因> → <最后一个原因>`，原因分四类：`输出解析失败：…`（`investigation-agent.js:658`）、`结论被退回：…`（结论工具 `submit_conclusion` 被 `conclusionProblem` 拒，`investigation-agent.js:561`）、`结论没查知识库被退回`（`investigation-agent.js:670`）、`模型超出调查轮数仍请求工具；…`（`investigation-agent.js:638`） | `investigation-agent.js:58-63` |
-| 原文 | `flatten()` 把换行压成空格、超出预算截断并补 `…` | `investigation-agent.js:36-39` |
+| 轮数与取证量 | `调查 N 轮、已查询 M 项证据后仍没有可用结论` | `investigation-agent.js:61` |
+| 末次回包 | `末次回包 K 字：「正文开头 50 字」`；正文为空时是 `末次回包没有正文`；这一轮点了工具再加 `末次工具调用：<名字>` | `investigation-agent.js:50-56`、`investigation-agent.js:850` |
+| 退回次数与原因 | `退回 N 次：<倒数第二个不同原因> → <最后一个原因>`，原因分四类：`输出解析失败：<固定文案>，原文 N 字未落盘`（**P003-T051 起不写 V8 报错原文**，`investigation-agent.js:822-826`）、`结论被退回：…`（结论工具 `submit_conclusion` 被 `conclusionProblem` 拒，`investigation-agent.js:753`）、`结论没查知识库被退回`（`investigation-agent.js:904`）、`模型超出调查轮数仍请求工具；…`（`investigation-agent.js:855`） | `investigation-agent.js:60-66` |
+| 原文 | `flatten()` 把换行压成空格、超出预算截断并补 `…` | `investigation-agent.js:44-47` |
 
-实测（假 model 每轮都只回散文，告警 `suspicious_operation:7`；下面是 `verdict.analysis` 的内容）：
+实测（假 model 每轮都只回散文，告警 `suspicious_operation:7`；下面是 `verdict.analysis` 的内容，127 字）：
 
 ```text
-模型未在调查轮数内给出有效 JSON 结论（调查 6 轮、已查询 0 项证据后仍没有可用结论；末次回包 50 字：「我先梳理一下这条告警：主机 10.0.0.5 上以 root 执行了 id，需要核对授权与前后会话。」；退回 6 次：输出解析失败：Unexpected token '我', "我先梳理一下这条告警…）
+模型未在调查轮数内给出有效 JSON 结论（调查 6 轮、已查询 0 项证据后仍没有可用结论；末次回包 18 字：「我先梳理一下这条告警：需要核对授权。」；退回 6 次：输出解析失败：模型回包不是合法 JSON（SyntaxError），原文 60 …）
 ```
 
 **模型调用本身失败时**（HTTP 错、超时重试后再失败、回包没有可用 message）：消息换成
-`模型调用失败（第 N 轮、已查询 M 项证据）：<回包摘要>（调用报错：<原报错 60 字>）`（`investigation-agent.js:57-64`），
+`模型调用失败（第 N 轮、已查询 M 项证据）：<回包摘要>（调用报错：<原报错 60 字>）`（`investigation-agent.js:67-72`），
 原错误挂在 `cause` 上。`模型没有返回可用消息` 这一句是 `model-client.js` 抛的，抛出时把不可用回包的摘要挂到
 `error.reply_excerpt`（`model-client.js:40-43`、`model-client.js:1-12`），所以这份摘要能传到队列记录里：
 
@@ -288,6 +288,25 @@ max_turns, max_tool_calls, conclusion_retries}`（`investigation-agent.js:665-66
 
 正文非空（哪怕只是空格）就是可用消息，`model-client` 不抛错；那种回包由研判循环自己判断，解析不了就落到上一段的
 `输出解析失败`。摘要里不含请求头、密钥与整段正文。
+
+**记录侧不写错误原文（P003-T051）**：`recordFailure(error)`（`investigation-agent.js:100-106`）是研判记录里唯一允许写
+失败原因的出口，产出的只有「固定文案 + 原文字符量」——`模型回包不是合法 JSON（SyntaxError），原文 60 字未落盘`、
+`调用超时，原文 6 字未落盘`、`上游调用失败，原文 24 字未落盘`（类名只在 `TypeError` / `SyntaxError` / `RangeError` /
+`TimeoutError` / `AbortError` 白名单里出现）。四个记录去处同一道闸：
+
+| 去处 | 字段 | 什么时候写 |
+| --- | --- | --- |
+| 复核结论 | `review.concerns[]`（前缀「独立复核未完成：」） | 复核调用失败或回包解不出 JSON（`investigation-agent.js:949`） |
+| 证据缺口 | `missing_evidence[]`（修订失败 → 「独立复核要求修订，修订请求失败：…」；降级结论的退回原因） | 修订轮失败（`investigation-agent.js:971`）、解析失败（`:824`） |
+| 调查过程 | `trace[]` 的 `review_unavailable` / `revision_failed` / `validation_error` / `parse_error` / `tool_error` / `knowledge` 六类 | 各自失败分支（`:676` `:810` `:950` `:1046`） |
+| 结论正文 | `verdict.analysis`（降级结论、未匹配 syslog 的说明） | `:927` `:1133` `:1141` |
+
+**为什么要这么挡**：V8 的 `JSON.parse` 报错会把回包前 ~10 字原样抄进 `error.message`
+（`Unexpected token 'S', "SECRET_BOD"...`），模型接口与牧云的错误文本同理——原件落盘等于把回包正文/上游报文
+写进研判记录（`<数据根>/investigations/*.json`，还会被队列状态文件再抄一份）。
+**原文不是被吞掉**：`modelCallError` 抛给调用方的报错、`traceModelCall` 抛出的 `model_decode` / `model_reply` /
+`model_call` 三标记一字不动（A2，与 T046 日志侧同一修法：错误对象给调用方，磁盘只留文案）。
+逐处断言见 `evidence/test/P003-T046/record-redaction.test.js`。
 
 **真异常仍然抛错**：模型调用本身失败（HTTP 错、超时重试后再失败）、告警 ID 非法、牧云事件详情读不出来，
 这些照旧抛错，队列记录转 `failed`。抛错路径不写降级结论、也不碰研判记录库（`InvestigationAgent` 不持有 `InvestigationStore`），
@@ -312,13 +331,15 @@ P003-T042 起这次调用走构造器第 6 参 `reviewModel`（`this.reviewModel
   P003-T039 之前这里是直接发 `record.view`（单条上限 12000）且判据页发整页正文。
 - **不传工具**：这一次调用的工具参数是空数组（`investigation-agent.js:477`）。
 - **期望输出**是 `{"concerns":[…],"missing_evidence":[…],"assessment":"supported|needs_revision"}`（`investigation-agent.js:472`）。
-- 复核调用失败或输出解析不了，`assessment` 记作 `unavailable`，concerns 里写「独立复核未完成：…」，
-  trace 再落一条 `review_unavailable`（`investigation-agent.js:702-707`）。
+- 复核调用失败或输出解析不了，`assessment` 记作 `unavailable`，concerns 里写「独立复核未完成：」+ 脱敏文案
+  （`recordFailure`：固定文案 + 原文字符量，不写报错原文），
+  trace 再落一条 `review_unavailable`（`investigation-agent.js:947-951`）。
 
 复核结果怎么影响结论（P003-T035 改）：
 
-- `needs_revision` 时让模型按复核意见重出一次结论（`investigation-agent.js:711-719`）。
-  **这次重出再失败不再静默沿用草稿**：`revisionFailed` 记下错误、trace 落 `revision_failed`（`investigation-agent.js:720-724`），
+- `needs_revision` 时让模型按复核意见重出一次结论（`investigation-agent.js:957-965`）。
+  **这次重出再失败不再静默沿用草稿**：`revisionFailed` 记下脱敏文案（`recordFailure`，同 `review.concerns` 口径）、
+  trace 落 `revision_failed`（`investigation-agent.js:970-973`），
   然后按下面第三条处理（真实威胁降存疑；其它结论把「修订请求失败」写进缺口）。
 - 降级条件（`reviewBlocksThreat`，`investigation-agent.js:729-730`）——满足任一条且结论本是「真实威胁」，就降为存疑、置信度降为低：
   1. 复核 `unavailable`：**不分告警类型**（P003-T035 前只有高风险五类才降，其余类型会顶着「真实威胁」出门）；
@@ -715,10 +736,12 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 | `tools` | string[] | **这一轮模型点了哪些工具**（不是请求里给了哪些可选工具——工具目录整轮不变，列它没意义） |
 | `outcome` | string | `ok` / `timeout` / `invalid_json` / `error`，与 `ai.model_call` 同一套结局。**挂掉的那一次也留快照**（超时重试的第一次 `attempt=1`、`outcome=timeout`，`note` 写「超时重试」），所以 `timeout` 在快照里真的看得见 |
 | `conclusion` | object \| null | 这一轮给出的三态结论摘要 `{verdict, verdict_label, confidence}`；点了工具 / 解析失败 / 复核轮为 null |
-| `note` | string \| null | 附注：`parse_error`、`submit_conclusion`、`conclusion_rejected_未查知识库`、`独立复核=…`、`修订失败：…` |
+| `note` | string \| null | 附注：`parse_error`、`submit_conclusion`、`conclusion_rejected_未查知识库`、`独立复核=…`、`独立复核未完成：<脱敏文案>`、`修订失败：<脱敏文案>`、`说明调用未完成：<脱敏文案>` |
 
 **正文一个字都不在快照里**：只记字符量、工具名与结论三态；提示词、回包正文、工具返回正文一律不进 `turns`。
-解析失败时 `note` 只写 `parse_error` / 「回包不是合法 JSON」这类固定文案——**不写解析错误原文**（V8 的 `JSON.parse` 报错会带出回包前几个字）；
+解析失败时 `note` 只写 `parse_error`；其它失败附注（`failureNote`，`investigation-agent.js:118-121`）走与
+`review.concerns` / `missing_evidence` / `trace` 同一道脱敏闸（`recordFailure`）——
+只写「固定文案 + 原文字符量」，**不写错误原文**（V8 的 `JSON.parse` 报错会带出回包前几个字）；
 事件侧 `ai.model_call` 的 `error` 字段同一口径（`log.js` 的 decode 分支写固定文案 + 错误类名）。
 `evidence/test/P003-T046/model-call-events.test.js` 有用例钉住「快照里搜不到提示词与正文片段」。
 
@@ -875,6 +898,16 @@ node --test investigation-agent.test.js 2>&1 | grep -E "A1 |A2 |A3 |model-client
 
 预期全 `✔`。本卡**新增 6 条**：复核不可用时非高危类型也降（A2）、修订请求失败降级（A2）、
 无效 JSON 同轮反馈与上限（A3）、一轮多工具并发与保序回填（A7）、降级路径并发加载（A8）、`05-研判结果.md` 落盘（A1）。
+
+记录侧脱敏（P003-T051）的逐处断言另成一套，可单独跑（7 条，不碰真网络/真时钟）：
+
+```bash
+node --test evidence/test/P003-T046/record-redaction.test.js
+```
+
+覆盖 `review.concerns`（复核回包解不出 JSON）、`missing_evidence`（修订失败）、`trace[validation_error]`、
+`trace[parse_error]` + 降级结论的 `analysis`、`trace[tool_error]`、未匹配 syslog 的 `analysis` / `missing_evidence`
+（含上游 `牧云事件…失败：<raw>` 那两条），以及 A2「抛错原文与三标记照旧到调用方」。
 **改写 5 条**（原文断言「抛错」的那几条）：六轮都没给 JSON、结论连续被退回、同一实例连出两次降级结论、
 真异常不覆盖已写成结论、常规研判把必查空页与 deep 采同一套。
 
@@ -882,13 +915,13 @@ node --test investigation-agent.test.js 2>&1 | grep -E "A1 |A2 |A3 |model-client
 
 | 用例 | 断言 |
 | --- | --- |
-| 六轮都没给 JSON（假 model 每轮回同一段散文） | `verdict.verdict === 'uncertain'`、`verdict_label === '存疑'`、`confidence === '低'`；`missing_evidence[0]` 含 `调查 6 轮、已查询 0 项证据后仍没有可用结论`、`末次回包 <正文长度> 字：「<开头>`、`退回 6 次：输出解析失败：`，且 `[...missing_evidence[0]].length <= 250`；trace 的 `degraded_conclusion` 里 `{turns:6, calls:0, parse_failures:6, max_turns:6, max_tool_calls:8, conclusion_retries:2}` |
+| 六轮都没给 JSON（假 model 每轮回同一段散文） | `verdict.verdict === 'uncertain'`、`verdict_label === '存疑'`、`confidence === '低'`；`missing_evidence[0]` 含 `调查 6 轮、已查询 0 项证据后仍没有可用结论`、`末次回包 <正文长度> 字：「<开头>`、`退回 6 次：输出解析失败：模型回包不是合法 JSON`（P003-T051：原文换成固定文案 + 字符量），且 `[...missing_evidence[0]].length <= 250`；`JSON.stringify(record)` 搜不到 `Unexpected token` / `is not valid JSON`；trace 的 `degraded_conclusion` 里 `{turns:6, calls:0, parse_failures:6, max_turns:6, max_tool_calls:8, conclusion_retries:2}` |
 | 结论连续被退回（有知识库但没查，前五轮 `submit_conclusion` 被拒） | 同一句话里含 `退回 6 次：结论被退回：…没有调用知识库工具…→ 输出解析失败：`、`末次回包 6 字：「结论：存疑。」`；`degraded_conclusion.conclusion_rejections === 5`、`parse_failures === 1`；`verdict.wiki.adopted` 为空且 reason 含「降级结论」 |
 | 模型没有返回可用消息 | 仍然抛错：消息含 `模型调用失败（第 1 轮、已查询 0 项证据）：` + 假 `reply_excerpt`，`error.cause.message === '模型没有返回可用消息'` |
 | 真异常不覆盖已写成结论 | 预存一条 `InvestigationStore` 记录 → 假 model 抛 `模型接口 HTTP 502` → `run` 抛错 → 目录里仍只有一个文件、`latest()` 与预存对象 `deepEqual` |
 | 同一实例连出两次降级结论 | 两次 `run` 的 `missing_evidence[0]` 各自只含自己那 6 条回包的开头；第三次 `run` 正常出结论且 `trace` 里没有 `degraded_conclusion` |
 | 复核不可用（非高危类型 `suspicious_operation`） | 模型第 2 次调用抛错 → `verdict.verdict === 'uncertain'`、`confidence === '低'`、`missing_evidence` 含 `独立复核未完成，真实威胁结论待复核`、trace 有 `review_unavailable` |
-| 修订请求失败 | 第 3 次调用抛错 → `verdict.verdict === 'uncertain'`、`summary` 含 `独立复核要求修订，修订请求失败`、`missing_evidence` 含 `修订请求失败：…`、trace 有 `revision_failed` |
+| 修订请求失败 | 第 3 次调用抛错 → `verdict.verdict === 'uncertain'`、`summary` 含 `独立复核要求修订，修订请求失败`、`missing_evidence` 含 `修订请求失败：调用超时，原文 6 字未落盘`（P003-T051：原文不落盘）、trace 有 `revision_failed` |
 | 无效 JSON 同轮反馈 + 上限 | 假 model 永远回散文 → 只被调用 6 次；trace 里 6 条 `parse_error`，`turn` 与 `attempt` 都是 1…6；第 2 次请求的 messages 里既有第一轮原文（assistant），也有一条以 `输出解析失败：` 开头的 user 消息 |
 | 一轮多工具并发 | 一条回包带两个 `tool_calls`（第一个故意慢 15ms）→ 两个工具同时在途（峰值 2），完成顺序与声明相反，但 tool 消息顺序仍是 `['call-a','call-b']`，证据编号按声明顺序分配 |
 | 降级路径并发加载 | 四个替身加载（提示词 / wiki 索引 / wiki 页 / Rego 求值）各自延迟 5ms → 同时在途峰值 4；串行实现只能是 1 |
@@ -913,7 +946,7 @@ console.log(JSON.stringify(result.trace.find(i => i.kind === 'degraded_conclusio
 
 ```text
 uncertain 存疑 低
-127 模型未在调查轮数内给出有效 JSON 结论（调查 6 轮、已查询 0 项证据后仍没有可用结论；末次回包 18 字：「我先梳理一下这条告警：需要核对授权。」；退回 6 次：输出解析失败：Unexpected token '我', "我先梳理一下这条告警…）
+127 模型未在调查轮数内给出有效 JSON 结论（调查 6 轮、已查询 0 项证据后仍没有可用结论；末次回包 18 字：「我先梳理一下这条告警：需要核对授权。」；退回 6 次：输出解析失败：模型回包不是合法 JSON（SyntaxError），原文 60 …）
 {"kind":"degraded_conclusion","turns":6,"calls":0,"reason":"…","parse_failures":6,"conclusion_rejections":0,"max_turns":6,"max_tool_calls":8,"conclusion_retries":2}
 ```
 

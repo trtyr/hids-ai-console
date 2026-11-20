@@ -820,9 +820,11 @@ test('A2 复核要求修订但修订请求失败：降级并写明，不静默�
   assert.equal(calls, 3);
   assert.equal(result.verdict.verdict, 'uncertain');
   assert.match(result.verdict.summary, /独立复核要求修订，修订请求失败，暂按存疑处理/);
-  assert.match(result.verdict.missing_evidence.join('；'), /修订请求失败：修订请求超时/);
+  assert.match(result.verdict.missing_evidence.join('；'), /修订请求失败：调用超时，原文 6 字未落盘/);
   const failed = result.trace.find(item => item.kind === 'revision_failed');
-  assert.match(failed.error, /修订请求超时/);
+  // P003-T051：记录侧只留固定文案 + 字符量，错误原文不落盘。
+  assert.equal(failed.error, '调用超时，原文 6 字未落盘');
+  assert.doesNotMatch(failed.error, /修订请求超时/);
 });
 
 test('A3 无效 JSON 同轮带错误反馈，退回上限按轮数封顶且落 trace', async () => {
