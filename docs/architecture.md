@@ -198,13 +198,13 @@ updated: 2026-11-20
 | 取证工具 | `agent-tools.js`、`api-tools.js` | 把「一次查询」包装成模型可调用的工具，并管住可调用的工具名范围 |
 | 证据投影 | `evidence-view.js` | 把工具原始返回压成带 JSON Pointer 的精简视图，控制塞进模型上下文的体积 |
 | 编排 | `investigation-agent.js`、`triage-monitor.js`、`trace-board.js`、`wiki-workbench.js`、`triage-rules.js` | 各条业务流程的编排者 |
-| 存储 | `investigation-store.js`、`wiki-store.js`、`prompt-store.js`、`update-store.js`、`knowledge-store.js` | 读写状态、判据、提示词、升级包、候选经验 |
+| 存储 | `investigation-store.js`、`wiki-store.js`、`rule-store.js`、`prompt-store.js`、`update-store.js`、`knowledge-store.js`、`record-store.js`、`record-redaction.js` | 读写状态、判据、规则、提示词、升级包、候选经验、脱敏闸 |
 | 入口 | `server.js`、`maintenance-server.js` | HTTP 路由与鉴权，把上面的件接成进程 |
 
 **依赖方向的两个具体证据**：
 
 - `server.js:1-26` 是唯一一处「什么都 import」的地方，它组装 `RpcClient → CloudwalkerGateway → ApiEvidenceToolbox`（`server.js:36-37`）、`CloudwalkerMcpClient → AgentToolbox`（`agent-tools.js:119-122`）、`ChatModelClient → InvestigationAgent`（`server.js:40-51`）。
-- 编排层向下依赖，存储层不依赖编排层：`investigation-store.js`、`knowledge-store.js` 没有任何本地 import；两个例外都只向下取路径——`prompt-store.js` 向配置存储取数据根、向判据库存储取库目录（判据库还没种子时由它触发一次整库种子），`rule-store.js` 向配置存储取数据根。
+- 编排层向下依赖，存储层不依赖编排层（P003-T055 全量实测：存储层八个模块里，`investigation-store.js`、`knowledge-store.js`、`record-store.js`、`record-redaction.js` 零本地 import；四个有 import 的都是单向、无环、只向下——`prompt-store.js` 取配置存储（数据根）与判据库存储（库目录 + 种子），`wiki-store.js` 取配置存储与规则存储（种子函数 `seedLibrary`），`rule-store.js` 取配置存储，`update-store.js` 取脱敏闸（`recordFailure`）。判断越界的口径不变：存储层不许 import 编排层，也不许出现环。）
 
 **两处容易看错的地方**：
 

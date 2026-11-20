@@ -11,7 +11,7 @@ updated: 2026-11-20
 > **落点**：本页（`docs/modules/prompt-store.md`），模块清单见 [\_breakdown.json](_breakdown.json)
 > **真源**：`prompt-store.js`（133 行，单文件模块；本地 import 只有两处，都向下取路径——`config-store.js` 的 `dataRoot` 与 `wiki-store.js` 的判据库目录/种子，见文末 `:132-133`）
 > **覆盖构件**：提示词装载、本地覆盖、版本指纹、整包安装（四个构件各占一节，见第 3 至第 6 节）
-> **行号基准**：对应提交 `35530d85`；该文件自 `a16e0d5` 起未改动。代码变了要重新核行号。
+> **行号基准**：本页行号取自 `35530d85`。该文件此后有多次改动（P003-T041 数据根外置、T050 同步、T052 脱敏、T054 收尾），**本页 119 处引用尚未逐条重取**——引用前必须 `grep -n <符号>` 对一遍，别照抄本页数字。全量重取另立卡（T056）。
 
 ## 1. 模块职责
 
@@ -35,8 +35,8 @@ updated: 2026-11-20
   判据页的增删改审核不在本模块。
 - **不负责把提示词送到模型**。本模块没有模型客户端、没有 HTTP 路由，`prompt-store.js:1-4` 只引入
   `node:crypto`、`node:fs/promises`、`node:path`、`node:url` 四个内置模块。
-- **除覆盖文件外不写任何文件**。写盘只发生在 `install()`（`prompt-store.js:78-81`）与
-  `update()`（`prompt-store.js:109-112`）两处，目标都是构造时指定的覆盖文件。
+- **自己的写盘只有覆盖文件两处**。`install()`（`prompt-store.js:86-87`，按当前代码实测）与 `update()`（`:117-118`）的目标都是构造时指定的覆盖文件。
+  **但要留一个副作用**：`load()` 第一次发现数据根里还没有判据库时，会经 `ensureWikiLibrary()` 触发一次整库种子（`:39`，与 `WikiStore.ready()` 共用同一份记忆化）——那一刻落盘的是判据库，不是本模块的数据。
 
 ### 1.3 覆盖文件在哪
 
@@ -45,7 +45,7 @@ updated: 2026-11-20
 | 覆盖文件默认路径 | `<数据根>/prompt-overrides.json`（数据根＝`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`；**不在仓库内**） | `prompt-store.js:17`、`prompt-store.js:126` |
 | 覆盖文件环境变量 | `HIDS_PROMPT_STORE_FILE`，配了就用它 | `prompt-store.js:17` |
 | 构造参数 | `new PromptStore(filename)`，给了就用给的 | `prompt-store.js:26` |
-| 判据目录环境变量 | `HIDS_WIKI_DIR`，缺省 `<本模块所在目录>/wiki` | `prompt-store.js:9` |
+| 判据目录环境变量 | `HIDS_WIKI_DIR`，缺省 `<数据根>/wiki`（`wikiLibraryDirectory()`，`wiki-store.js:417-419`；P003-T041 起判据库活数据住数据根，不是模块目录下的仓库副本） | `prompt-store.js:12` |
 | 提示词目录 | `<本模块所在目录>/prompts`（写死，不可配） | `prompt-store.js:7` |
 
 两个环境变量在模块 import 时读一次（`prompt-store.js:9`、`prompt-store.js:17`），进程启动后再改环境变量不生效——
