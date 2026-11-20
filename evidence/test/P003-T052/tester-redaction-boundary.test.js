@@ -69,7 +69,7 @@ test('O6 详情读取失败：返回体过闸、日志行留原文', async t => 
       + 'source_ip="192.0.2.2" event_id=7');
     const match = await matchSyslogEvent({ callTool: async () => { throw secretError(); } }, parsed);
     assert.equal(match.matched, false);
-    assert.match(match.reason, /^牧云事件 ID 详情读取失败：上游调用失败，原文 \d+ 字未落盘$/);
+    assert.match(match.reason, /^上游调用失败，原文 \d+ 字未落盘$/);
     assert.doesNotMatch(match.reason, /SECRET_RAW/);
     assert.ok(lines.some(line => line.event === 'syslog.match_failed' && String(line.reason).includes('SECRET_RAW')),
       'syslog.match_failed 的日志行仍应带原文（P003-T027 契约）');

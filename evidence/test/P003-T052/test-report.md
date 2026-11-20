@@ -22,7 +22,7 @@
 
 顺带核对写者 11 条的假件性质：`grep -nE "fetch\(|http|net\.|request\(|localhost|127\.0\.0\.1"` 在 `record-redaction.test.js` 上 **exit 1（零命中）**；
 16 条（写者 11 + 我 5）单条最长 **9.8ms**，整目录 0.15s——全内存替你件，不碰网络与真实时钟（`waitFor` 只轮询内存状态，200×5ms 上限）。
-（修复轮写者给他自己的文件补了 1 条 SyntaxError 支，第三轮又补 1 条 ruleEngine error 支，目录现为 18 条；单条仍 ≤10ms。）
+（修复轮写者给他自己的文件补了 1 条 SyntaxError 支，第三轮补 1 条 ruleEngine error 支、第四轮改成变体数据驱动 + 模板例外，目录现为 19 条；单条仍 ≤10ms。）
 
 ## 2. 我亲手跑的（命令原文 + 退出码 + 摘要）
 
@@ -38,7 +38,7 @@ $ node --test evidence/test/P003-T046/ evidence/test/P003-T051/
 
 $ node --test --test-timeout=60000 --test-force-exit evidence/test/*/*.test.js
 ℹ tests 407  pass 403  fail 3                         # 3 红：P003-T019 1 / P003-T034 1 / P003-T043 1（runtimePaths 七条路径）
-# 口径：我进场时（加我 5 条前）；当前树含 T052 用例 18 条 → 414/410/3（第三轮打回订正：前面写的 412/408/3 是错的），红的是同样 3 条（修复轮复跑同数）
+# 口径：我进场时（加我 5 条前）；当前树含 T052 用例 19 条 → 415/411/3（第三轮打回订正：前面写的 412/408/3 是错的；第四轮又补 2 条变体用例），红的是同样 3 条（修复轮复跑同数）
 
 # 基线对照（改动前 bea34bd 的干净导出树，不复活原工作树）
 $ git archive bea34bd | tar -x -C /tmp/t052-base
@@ -141,7 +141,7 @@ $ git checkout HEAD -- triage-monitor.js && node --test evidence/test/P003-T023/
 | A3 变异 8/8 恰红 | **pass** | §3.1 我按整文件回退复现 6/6 文件、O1–O8 逐点各恰红，还原全绿；写者 `mutations-output.txt` 的逐点记录与我这次结果不冲突 |
 | A4 闸不动错误对象 / `failure.code` 仍取 `error.code` / 回灌模型留原文 | **pass** | 写者 O1 用例断言 `thrown.message` 未变、`failure.code === 'Error'`；T036 断言 `ETIMEDOUT`；写者 O7 第二条断言模型消息里仍有「关系边缺少有效原始证据引用」；我回退 `trace-board.js` 时该条恰红 |
 | 旧用例 T023/T030/T036/T043 改断言后仍锁得住 | **pass** | §3.2：回退后 3 红、还原 53/0；T043 的 `566` 行锚点我按可复跑 grep 命令亲手核过（输出逐字一致） |
-| 新测试假件全内存 / 单条 ≤100ms | **pass（附 F3）** | 零网络符号；16 条最长 9.8ms（修复轮复跑 18 条最长 ≤10ms）；每跑一次留 3 个 tmp 目录（F3，修复轮已加清理） |
+| 新测试假件全内存 / 单条 ≤100ms | **pass（附 F3）** | 零网络符号；16 条最长 9.8ms（修复轮复跑 19 条最长 ≤11ms）；每跑一次留 3 个 tmp 目录（F3，修复轮已加清理） |
 | `docs/api` 契约与实测一致 | **fail（第 1 轮判定）** | F1：`openapi.yaml:2509/2736/2433` 三处与实测冲突（修复轮已改，见 `coding-reports/P003-T052.md` §七）；F4：`trace-board.md:344` 文案复现不出（已改） |
 
 ## 6. 我没跑的，为什么

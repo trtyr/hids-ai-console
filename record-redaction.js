@@ -8,9 +8,6 @@
 // 类名只在这几个里出现：判断失败类型有用，且不会把正文带出来。
 const namedFailures = new Set(['TypeError', 'SyntaxError', 'RangeError', 'TimeoutError', 'AbortError']);
 const timeoutFailure = /timeout|超时|aborted/i;
-// `syslog-case.js` 生产的两条上游失败徽标：`牧云事件 ID 详情读取失败：<raw>` / `牧云事件查询失败：<raw>`；
-// `triage-rules.js:263/267` 另两条：`规则集读取失败：<raw>` / `规则集校验失败：<raw>`。
-const upstreamFailure = /^(牧云事件(?: ID 详情读取|查询)失败|规则集(?:读取|校验)失败)：/;
 
 /**
  * 把错误对象压成「固定文案 + 原文字符量」。
@@ -30,11 +27,15 @@ export function recordFailure(error, { kind = '上游调用失败', keep = [] } 
 }
 
 /**
- * 带徽标的上游失败（`牧云事件…失败：<raw>`）：徽标留给读者，原文段换固定文案 + 字符量。
- * 不匹配徽标的文本原样返回（分支里写死的自造文案照旧）。
+ * 记录侧文本一律归一：任何 `reason` / `detail` 文本（不管前缀长什么样）都走 `recordFailure()`，
+ * 只留固定文案 + 原文字符量。
+ *
+ * 设计变更（第四轮打回，群主拍板）：**废掉徽标白名单**。旧版按前缀白名单（`牧云事件…失败：` / `规则集…失败：`）
+ * 保留徽标、只换原文段——白名单穷举不尽（第三轮就漏了无「ID」的 `牧云事件详情读取失败：`），
+ * 漏一个就是一条原文落盘的路。取舍：本地短文案一起变泛（丢「哪里失败」的语义），换零泄漏 + 无穷举债。
+ * 注意：`recordFailure()` 的 `keep` 是**调用点写死的整串**精确匹配（如「模型尚未配置」），
+ * 不是在文本内容上猜「这句像不像我们的话」；本函数不再提供任何内容白名单。
  */
-export function reasonForRecord(text, options) {
-  const raw = String(text ?? '');
-  const badge = raw.match(upstreamFailure);
-  return badge ? `${badge[1]}：${recordFailure(raw.slice(badge[0].length), options)}` : raw;
+export function reasonForRecord(text) {
+  return recordFailure(String(text ?? ''));
 }

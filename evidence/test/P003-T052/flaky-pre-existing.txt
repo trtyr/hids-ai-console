@@ -23,3 +23,19 @@ FAILED at run 28 (ok=27)
 - 断言是 `resumed.cases().total === 2`：`resumed` 是同一 state 文件上新建的第二个 monitor，`load()` 读到的是合并写窗口（≤1 次/秒）落盘后的状态；第一个 monitor 的写还没落地时就少一条。
 - 与记录侧脱敏闸无关：把本卡改过的 7 个产品文件回退成 bea34bd 版本再跑 20 轮，同样偶发（1/20）。
 - 修法属 `syslog-pipeline.test.js` 或 `triage-monitor` 的 flush 时序（scope 外），本卡不动，上报。
+
+## 补充（第四轮复跑时又见两条，同属预存抖动，与记录侧闸无关）
+
+1. `evidence/test/P003-T025/config-check.test.js` — `ENOTEMPTY: rmdir '/tmp/hids-config-check-data-*'`（用例自己的
+   `t.after` 清理撞上真进程还在写）；全量并行跑时偶发，单文件连跑 6 次 0 红。
+2. `evidence/test/P003-T034/acceptance.tester.test.js` / `P003-T043/context.test.js:23` — `ENOENT: open
+   /tmp/hids-t034-home-*/.local/share/hids-ai-console/config-overrides.json`（HOME 假根被提前清掉）。
+
+基线对照（`bea34bd` 导出树 `/tmp/t052-flake-base`，全量 evidence 跑两轮）：
+
+```
+run 1: ℹ fail 4   # 3 条 runtimePaths + A2 HIDS_DATA_DIR 注入（同一类清理竞态）
+run 2: ℹ fail 3   # 只有 3 条 runtimePaths
+```
+
+结论：这两条也是预存的环境/清理竞态，`npm test`（根 `*.test.js`）不跑它们，本卡不动。

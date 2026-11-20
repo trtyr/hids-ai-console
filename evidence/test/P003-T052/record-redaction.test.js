@@ -39,12 +39,21 @@ test('G1 闸本体：固定文案 + 字符量 + 类名白名单，且不改错�
   assert.equal(recordFailure(config, { keep: ['模型尚未配置'] }), '模型尚未配置');
 });
 
-test('G1 徽标闸：牧云事件徽标保留，只换原文段', () => {
-  const text = reasonForRecord(`牧云事件查询失败：${upstreamError().message}`);
-  assert.match(text, /^牧云事件查询失败：上游调用失败，原文 \d+ 字未落盘$/);
-  assert.doesNotMatch(text, /SECRET_BODY/);
-  // 自造文案原样通过（不是上游原文）。
-  assert.equal(reasonForRecord('牧云事件 ID 对应的主机与 syslog 不一致'), '牧云事件 ID 对应的主机与 syslog 不一致');
+// 第四轮拍板（设计变更）：废掉徽标白名单——任何前缀的文本一律归一，不再枚举上游把哪段当「徽标」。
+// 代价：本地短文案也一起变泛；收益：漏一个变体就是漏一条原文落盘的路，这条路没了。
+test('G1 文本闸：任何前缀的文本一律归一，不保留徽标', () => {
+  const raw = upstreamError().message;
+  const variants = [`牧云事件查询失败：${raw}`, `牧云事件 ID 详情读取失败：${raw}`,
+    `牧云事件详情读取失败：${raw}`, `规则集读取失败：${raw}`, `规则集校验失败：${raw}`, raw];
+  for (const variant of variants) {
+    const text = reasonForRecord(variant);
+    assert.equal(text, `上游调用失败，原文 ${variant.length} 字未落盘`, variant.slice(0, 12));
+    assert.doesNotMatch(text, /SECRET_BODY/);
+    assert.doesNotMatch(text, /失败：/, '徽标不再保留');
+  }
+  // 本地短文案也变泛：不泄漏，但丢「哪里失败」的语义（拍板接受的代价）。
+  const local = '牧云事件 ID 对应的主机与 syslog 不一致';
+  assert.equal(reasonForRecord(local), `上游调用失败，原文 ${local.length} 字未落盘`);
 });
 
 // O5（A1 点名）：必查项查询失败时，原文既不许进 trace[evidence_check].reason，
@@ -80,7 +89,7 @@ test('O6 未匹配 reason：返回体与案件文件过闸、日志行仍留原�
   try {
     const match = await matchSyslogEvent({ listEvents: async () => { throw upstreamError(); } }, parsed);
     assert.equal(match.matched, false);
-    assert.match(match.reason, /^牧云事件查询失败：上游调用失败，原文 \d+ 字未落盘$/);
+    assert.match(match.reason, /^上游调用失败，原文 \d+ 字未落盘$/);
     assert.doesNotMatch(match.reason, /SECRET_BODY/);
     const logLine = lines.find(line => line.event === 'syslog.match_failed');
     assert.match(logLine.reason, /牧云事件查询失败：Unexpected token 'S'/);
@@ -88,7 +97,7 @@ test('O6 未匹配 reason：返回体与案件文件过闸、日志行仍留原�
     t.after(() => rm(directory, { recursive: true, force: true }));
     const info = await writeSyslogCase({ directory, raw: 'raw line', parsed, context: {}, match });
     const fact = await readFile(path.join(info.case_dir, '03-研判事实.md'), 'utf8');
-    assert.match(fact, /匹配情况：牧云事件查询失败：上游调用失败，原文 \d+ 字未落盘/);
+    assert.match(fact, /匹配情况：上游调用失败，原文 \d+ 字未落盘/);
     assert.doesNotMatch(fact, /SECRET_BODY/);
   } finally { useJournal(); }
 });
@@ -207,36 +216,65 @@ test('O2 规则评估抛错：record.steps[].detail 过闸', async t => {
   const record = await waitFor(monitor, 'honeypot:2');
   assert.equal(record.status, 'done');
   const step = record.steps.find(item => item.stage === '规则评估');
-  assert.match(step.detail, /^规则评估失败：上游调用失败，原文 \d+ 字未落盘$/);
+  // 抛错那一路：catch 只带原文，不在 catch 里预套闸（避免二次归一报错字符量），统一在写入处归一。
+  assert.equal(step.detail, `上游调用失败，原文 ${`规则评估失败：${upstreamError().message}`.length} 字未落盘`);
   assert.doesNotMatch(step.detail, /SECRET_BODY/);
 });
 
-// O2b（第三轮打回）：`ruleEngine` 自己回 `status:'error'`（而不是抛错）时，`reason` 同样带原文
-// （`triage-rules.js:263/267/284` 三个形状），而它经 `triage-monitor.js:1017-1024` 落队列步骤、
-// 经 `result.rule_evaluation` 落研判记录与案件 `result.json`（`syslog-case.js:144` 直接序列化 result）。
-test('O2b 规则引擎回 status:error：steps.detail 与落盘的 rule_evaluation 过闸，回灌模型仍原文', async t => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-rule-error-'));
+// O2b（第四轮：设计变更后的守卫）：`ruleEngine` 回 `status:'error'` 时的理由形状不穷举
+// （`triage-rules.js:263/267/284` 今天三条，明天可能第四条），所以断言不做前缀白名单，
+// 而是枚举真实变体 + 裸原文，钉住「任何变体都不落原文」。
+const ruleErrorVariants = () => {
+  const raw = upstreamError().message;
+  return [`牧云事件查询失败：${raw}`,         // syslog-case 列表查询支
+    `牧云事件 ID 详情读取失败：${raw}`,       // syslog-case 详情支
+    `牧云事件详情读取失败：${raw}`,           // triage-rules.js:284（无「ID」——第三轮漏的就是这条）
+    `规则集读取失败：${raw}`,                 // triage-rules.js:263
+    `规则集校验失败：${raw}`,                 // triage-rules.js:267
+    raw];                                    // 裸原文：第五个变体长什么样都逃不掉
+};
+
+test('O2b 规则引擎任何 reason 变体都不落原文（steps / 队列文件 / 研判记录三面）', async t => {
+  for (const variant of ruleErrorVariants()) {
+    const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-rule-error-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    let seen = null;
+    const monitor = new TriageMonitor(queueOptions(directory, {
+      ruleEngine: { evaluate: async () => ({ status: 'error', reason: variant }) },
+      investigator: { run: async (alertId, { ruleEvaluation }) => { seen = ruleEvaluation;
+        return { alert_id: alertId, mode: 'triage',
+          verdict: { verdict: 'undetermined', summary: '待复核', claims: [] }, validation: { ok: true } }; } } }));
+    await monitor.load();
+    await monitor.enqueue('honeypot:3');
+    const record = await waitFor(monitor, 'honeypot:3');
+    assert.equal(record.status, 'done');
+    const expected = `上游调用失败，原文 ${variant.length} 字未落盘`;
+    const step = record.steps.find(item => item.stage === '规则评估');
+    assert.equal(step.detail, expected, variant.slice(0, 12));
+    // A4：回灌给模型的那份仍是原文（模型靠它认出配置/网络错在哪）。
+    assert.equal(seen.reason, variant);
+    await monitor.writeChain;
+    assert.doesNotMatch(await readFile(path.join(directory, 'queue.json'), 'utf8'), /SECRET_BODY/);
+    // 第二处：研判记录（`result.rule_evaluation`，与案件 `result.json` 同一个对象）。
+    const saved = await monitor.history.latest('honeypot:3', 'triage');
+    assert.equal(saved.rule_evaluation.reason, expected);
+    assert.doesNotMatch(JSON.stringify(saved), /SECRET_BODY/);
+  }
+});
+
+// 例外（第四轮定的边界）：`candidate` / `observed` 两条模板是我们自己拼的（含 rule.id、不含上游文本），
+// 不过闸——否则队列里会把「命中规则」写成「上游调用失败」，误导运维。
+test('O2c 规则命中的模板不过闸（不含上游文本）', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-rule-hit-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  let seen = null;
   const monitor = new TriageMonitor(queueOptions(directory, {
-    ruleEngine: { evaluate: async () => ({ status: 'error', reason: `规则集校验失败：${upstreamError().message}` }) },
-    investigator: { run: async (alertId, { ruleEvaluation }) => { seen = ruleEvaluation;
-      return { alert_id: alertId, mode: 'triage',
-        verdict: { verdict: 'undetermined', summary: '待复核', claims: [] }, validation: { ok: true } }; } } }));
+    ruleEngine: { evaluate: async () => ({ status: 'candidate', rule: { id: 'R-7' }, revision: 'r1' }) },
+    investigator: { run: async alertId => ({ alert_id: alertId, mode: 'triage',
+      verdict: { verdict: 'undetermined', summary: '待复核', claims: [] }, validation: { ok: true } }) } }));
   await monitor.load();
-  await monitor.enqueue('honeypot:3');
-  const record = await waitFor(monitor, 'honeypot:3');
-  assert.equal(record.status, 'done');
-  const step = record.steps.find(item => item.stage === '规则评估');
-  assert.match(step.detail, /^规则集校验失败：上游调用失败，原文 \d+ 字未落盘$/);
-  // A4：回灌给模型的那份仍是原文（模型靠它认出配置写错了）。
-  assert.match(seen.reason, /SECRET_BODY/);
-  await monitor.writeChain;
-  assert.doesNotMatch(await readFile(path.join(directory, 'queue.json'), 'utf8'), /SECRET_BODY/);
-  // 第二处：研判记录（`result.rule_evaluation`，与案件 `result.json` 同一个对象）。
-  const saved = await monitor.history.latest('honeypot:3', 'triage');
-  assert.match(saved.rule_evaluation.reason, /^规则集校验失败：上游调用失败，原文 \d+ 字未落盘$/);
-  assert.doesNotMatch(JSON.stringify(saved), /SECRET_BODY/);
+  await monitor.enqueue('honeypot:4');
+  const record = await waitFor(monitor, 'honeypot:4');
+  assert.equal(record.steps.find(item => item.stage === '规则评估').detail, '命中 R-7，作为误报候选交由 AI 复核');
 });
 
 test('O3 lastError 过闸：syslog 解析报错原文不落盘，自造判定语照留', async t => {

@@ -1012,16 +1012,16 @@ export class TriageMonitor {
       if (this.ruleEngine) {
         try { ruleDecision = await this.ruleEngine.evaluate({ alertId: targetId,
           parsed: record.input?.parsed || null, toolbox, match }); }
-        catch (error) { ruleDecision = { status: 'error', reason: `规则评估失败：${recordFailure(error)}` }; }
+        catch (error) { ruleDecision = { status: 'error', reason: `规则评估失败：${error?.message ?? error}` }; }
         if (['candidate', 'observed', 'error', 'identity_unverified'].includes(ruleDecision.status)) {
-          // 记录侧不写错误原文（P003-T052）：`ruleEngine` 自己回的 `status:'error'` 也会带原文
-          // （`triage-rules.js:263/267/284`：`规则集读取/校验失败：<V8 原文>`、`牧云事件详情读取失败：<原文>`），
-          // 这一格会落队列状态文件，所以在**写入这一步**过闸。`ruleDecision` 对象本身不动——
-          // 随后还要以 `ruleEvaluation` 回灌模型（模型靠原文认错、改配置）。
-          const reason = ruleDecision.status === 'candidate' ?
+          // 记录侧不写错误原文（P003-T052）：`ruleEngine` 自己回的理由也可能带原文
+          // （`triage-rules.js:263/267/284`，形状不穷举）——一律走 `reasonForRecord()` 归一（第四轮拍板：无白名单）。
+          // 两条**成功路径**的模板是我们自己拼的（含 rule.id、不含上游文本），不过闸。
+          // `ruleDecision` 对象本身不动——随后还要以 `ruleEvaluation` 回灌模型（模型靠原文认错、改配置）。
+          const detail = ruleDecision.status === 'candidate' ?
             `命中 ${ruleDecision.rule.id}，作为误报候选交由 AI 复核` : ruleDecision.status === 'observed' ?
-              `观察规则 ${ruleDecision.rule.id} 命中，继续 AI 研判` : ruleDecision.reason;
-          record.steps.push({ stage: '规则评估', detail: reasonForRecord(reason), at: new Date().toISOString() });
+              `观察规则 ${ruleDecision.rule.id} 命中，继续 AI 研判` : reasonForRecord(ruleDecision.reason);
+          record.steps.push({ stage: '规则评估', detail, at: new Date().toISOString() });
         }
       }
       if (record.input) {
