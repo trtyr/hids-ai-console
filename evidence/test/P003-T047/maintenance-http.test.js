@@ -112,9 +112,13 @@ test('A4 维护库入参：非数组、空数组、未知库名一律 400，且�
   }
   assert.equal(monitor.records.get(ALERT_ID).maintenance, undefined, '入参不合法却已经写了维护状态');
 
-  // 重复项是合法的：去重后仍是一到两项
+  // 契约是 openapi 的 `uniqueItems: true`（F1 审计）：重复项 400，且不静默去重放行
   const dup = await post(base, { reason: '运维的蜜罐探针，不是攻击', who: '值班分析员', libraries: ['rule', 'rule'] });
-  assert.equal(dup.status, 202, await dup.text());
+  const dupBody = await dup.json();
+  assert.equal(dup.status, 400, `重复库没有 400：${JSON.stringify(dupBody)}`);
+  assert.equal(dupBody.error, '维护库不能重复（libraries 每一项只能出现一次）');
+  assert.equal(dupBody.code, 'caller_error');
+  assert.equal(monitor.records.get(ALERT_ID).maintenance, undefined, '重复库被拒之前已经起了维护轮');
 });
 
 test('A1 维护会话查询：列表按 updated_at 倒序、单条可读全文、坏 ID 400、不存在 404', async t => {

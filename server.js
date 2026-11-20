@@ -1146,11 +1146,15 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const who = String(body.who ?? access?.user ?? 'operator').trim().replace(/\s+/g, ' ').slice(0, 100);
         if (who.length < 2) return callerError(res, '误报登记人至少 2 个字');
         // A4：可选 `libraries`——单腿补跑（只重跑失败的那一侧）。不传就是两侧都试。
+        // 契约（openapi 误报请求正文）是 `minItems:1 + uniqueItems:true`：重复项一律 400，不许静默去重——
+        // 幂等键是 `case_id:库:版本`，重复库是调用方把一次维护说成了两次，悄悄吞掉会让它看不出自己写错了。
         let libraries = FP_LIBRARIES;
         if (body.libraries !== undefined) {
           if (!Array.isArray(body.libraries) || !body.libraries.length ||
               body.libraries.some(value => !FP_LIBRARIES.includes(value)))
             return callerError(res, '维护库必须是 rule 或 wiki 组成的一到两项');
+          if (new Set(body.libraries).size !== body.libraries.length)
+            return callerError(res, '维护库不能重复（libraries 每一项只能出现一次）');
           libraries = FP_LIBRARIES.filter(value => body.libraries.includes(value));
         }
         const record = monitor.records.get(alertId);

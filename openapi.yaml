@@ -863,7 +863,8 @@ paths:
                   items: { type: string, enum: [rule, wiki] }
                   description: |
                     补跑选择器：只重跑指定的库。省略＝两侧都试（仍受幂等约束：已成功而且在同一库版本上的那一侧会跳过）。
-                    不是数组、空数组、含 `rule`/`wiki` 之外的值一律 400。
+                    不是数组、空数组、含 `rule`/`wiki` 之外的值、**含重复项**一律 400（`uniqueItems: true` 不静默去重：
+                    幂等键是 `case_id:库:版本`，重复库等于把一次维护说成两次，客户端该看出自己写错了）。
       responses:
         '202':
           description: 结论已落盘为误报，统一维护 Agent 已开始（或已在跑）
