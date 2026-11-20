@@ -56,6 +56,8 @@ id: GUIDE-API-GAPS-FRONTEND
 | B07 | Wiki 列表缺 `applies_to/refs/evidence/source`（只在单页正文里） | `wiki-store.js:25-28` |
 | B08 | 白板列表无 verdict/结论字段 | `openapi.yaml:960-990` |
 | B09 | investigations 详情 spec 未声明 `model/prompt_version/scenario_ids/auto_action` | `investigation-agent.js:1091-1094` |
+| B10 | **规则库错误定位是字符串**：`rules/<file>:<行>` 塞在 `error` 一句话里，前端要正则抠才能标到行 | `openapi.yaml:1130` |
+| B11 | **证据 id 两套体系**：`triage.evidence[]` 只有 `{evidence_id,tool,fetched_at,sha256}`，原文在 `investigation.evidence[].view`，前端要自己拼 | `triage-monitor.js:540-556` vs `investigation-agent.js` |
 
 ---
 
@@ -66,7 +68,9 @@ id: GUIDE-API-GAPS-FRONTEND
 | C01 | 5 个列表**全量返回无分页**：规则、规则会话、误报会话、知识库会话、工具目录 | `rule-store.js:218-222/468-480` 等 |
 | C02 | 无 cursor 语义，全 offset；`/api/alerts` 另有 500 条扫描上限，超限 `total` 不准 | `server.js:498`、`cloudwalker.js:249-252` |
 | C03 | 只有 2 个接口的排序可配（alerts、cases），其余写死 | `server.js:522/550` |
-| C04 | 筛选维度缺：告警无 host/account/source 精确筛（只有 `q` 模糊）；案件无 level/status/q；日志无正文全文 | `openapi.yaml:1707` vs `:1760` |
+| C04 | 筛选维度缺：告警无 host/account/source 精确筛（只有 `q` 模糊）；**案件无 level、无 status、无 `q`**；日志无正文全文 | `openapi.yaml:1707` vs `:1760`；`server.js:531-546` 只有 verdict/type/host/from/to |
+| C08 | **`level` 不支持「≥high」语义**：`level=high` 只出 high，不含 critical（按秩集合精确匹配） | `cloudwalker.js:139` |
+| C09 | **白板详情全量返回无分页**：`hops/links/nodes/edges/activity` 一次全吐，长链响应很大 | `server.js:990`、`openapi.yaml:1042` |
 | C05 | wiki 搜索硬截 50 条，`total` 也是截断后值 | `server.js:1238-1241` |
 | C06 | **数据盘点只覆盖 7/15 类存储** ✅ — `fp-sessions/` 27MB / 3187 文件不漏报也不可清；同理 rules-history/rule-sessions/wiki-history/prompt-overrides/triage-rules/update-packages | `server.js:621` `DATA_KINDS` |
 | C07 | 告警列表带宽筛选时，前端拿到的是「扫描窗口内」的数，不是全量 | `cloudwalker.js:249-252` |
@@ -77,7 +81,7 @@ id: GUIDE-API-GAPS-FRONTEND
 
 | ID | 前端现在得算什么 | 根因 |
 |---|---|---|
-| D01 | 趋势曲线、TOP-N、误报率、MTTR | A05 + C02 共同导致（自己算必然不全） |
+| D01 | 趋势曲线、TOP-N、误报率、MTTR；**概览页「今日新增告警」这一格** | A05 + C02 共同导致。实证：`web/pages/overview.js:7` 已明写「本页不再请求 `/api/alerts`」——因为拿不到可用数字 |
 | D02 | 11 个事件类型的中文名、等级中文化 | A09 |
 | D03 | 按钮显隐、admin token 需求 | A19 |
 
