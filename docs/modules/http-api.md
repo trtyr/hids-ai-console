@@ -52,7 +52,7 @@ P003-T044 加的数据管理两条路由（§3 路由表的 `GET /api/data/inven
 
 **`createServer` 是依赖注入点**（`server.js:815-820`）：18 个参数都带默认值，默认指向模块级单例。测试与探针靠传替身换掉 `service`、`investigator`、`history`、`monitor`、`wiki`、`wikiAgent` 这些件。其中 `monitor` 与 `boardService` 的默认值写成「`service` 是不是模块级 `gateway`」的条件式——换了 `service`，就不再挂默认的研判队列与溯源白板。
 
-**规则预筛挂在 `investigate()` 闭包上**（`server.js:859-875`）：`mode === 'triage'` 且 `monitor.ruleEngine` 存在时，先跑一次规则评估，把结果作为 `rule_evaluation` 挂到结论上；评估抛错就记成 `{ status: 'error' }` 继续往下走，不中断研判。回灌模型的那份（`options.ruleEvaluation`）带 `reason` 原文，**落盘副本**（`result.rule_evaluation`，随 result 进案件 `result.json` 与研判记录）的 `reason` 过记录侧闸，只留固定文案 + 原文字符量（P003-T054，与队列侧 `triage-monitor.js:1046-1047` 同口径）。
+**规则预筛挂在 `investigate()` 闭包上**（`server.js:859-875`）：`mode === 'triage'` 且 `monitor.ruleEngine` 存在时，先跑一次规则评估，把结果作为 `rule_evaluation` 挂到结论上；评估抛错就记成 `{ status: 'error' }` 继续往下走，不中断研判。回灌模型的那份（`options.ruleEvaluation`）带 `reason` 原文，**落盘副本**（`result.rule_evaluation`）的 `reason` 过记录侧闸，只留固定文案 + 原文字符量（P003-T054，与队列侧 `triage-monitor.js:1046-1047` 同口径）。落点随入口不同：syslog 推送路径进案件 `result.json` 与研判记录；本页这条 HTTP 深度研判只写研判记录（`server.js:1332` 走 `history.save`，不产 `result.json`）。
 
 **进程入口**（`server.js:1071-1095`，P003-T025 扩过）：`process.argv[1]` 的真实路径等于本文件路径时才算真进程启动，顺序是「先核配置，再监听」。闸门有**两类问题，一个出口**（`server.js:1076-1083`）：
 
