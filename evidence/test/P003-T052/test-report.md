@@ -172,3 +172,63 @@ $ git checkout HEAD -- triage-monitor.js && node --test evidence/test/P003-T023/
   `/tmp/hids-t052-*` 0 个。
 - 锚点（行为侧钉住，非读实现）：`triage-monitor.js:1084`（`detail` / `failure.reason` 过闸）、`:1046-1047`（`result.rule_evaluation`）、
   `:773`（轮询 `lastError`）——分别由 O1 / O2b / A2 用例覆盖，回退该文件各恰 1 红。
+
+## 9. 第六轮复验（重起 run：上一棒 runner 崩前未交判词）
+
+起活快照 HEAD `59e0875`（群主代笔第五轮文档整改）。本树实际 tip `c8b3832`——上一棒崩前提交的
+`59e0875..c8b3832` 只含本文件 §8 与 `tester-redaction-boundary.test.js:139` 的 O2b 超时变体（2 文件 47 插入 0 删除，
+无产品码、无文档改动），故本轮在 `c8b3832` 上重验。`bea34bd..HEAD` 的产品码改动仍是本卡前四轮那 7 个文件，
+本轮零改动。
+
+### 9.1 门禁（本终端亲跑）
+
+```
+$ npm test                                     → ℹ tests 228 / pass 228 / fail 0   exit 0（跑两次同数）
+$ node --test evidence/test/P003-T052/         → ℹ tests 20 / pass 20 / fail 0     exit 0（连跑 3 次 3/3）
+$ node --test evidence/test/P003-T046/ evidence/test/P003-T051/ → 32 / 32 / 0      exit 0
+$ git status --porcelain                       → 空
+$ ls -d /tmp/hids-t052-* | wc -l               → 0
+```
+
+### 9.2 A1–A4（行为侧，逐点）
+
+- A1：20 条用例全绿；`triage-monitor.js:1084`（detail / failure.reason）由 O1 盖、`:1046-1047`
+  （result.rule_evaluation）由 O2b / O2b 超时变体盖、`:773`（A2 轮询 lastError）由我那条盖——行号用
+  `grep -n "recordFailure\|reasonForRecord" triage-monitor.js` 结构核对，未读实现正文。
+- A2：`tester-redaction-boundary.test.js:40` 断 `summary().last_error` 是闸后文案、日志行仍原文。
+- A3：变异自证——**每个落点文件整文件回退到 bea34bd**，红点只落在该文件的落点，还原后全绿：
+
+  | 回退文件 | T052 目录结果 | 红点 |
+  | --- | --- | --- |
+  | `triage-monitor.js` | 13/20 pass，**fail 7** | O1 / O2 / O2b / O3 / A2 / O1 边界 / O2b 超时变体 |
+  | `trace-board.js` | 18/20，**fail 2** | O7 ×2 |
+  | `syslog-case.js` | 18/20，**fail 2** | O6 ×2 |
+  | `knowledge-workbench.js` | 18/20，**fail 2** | O4 + O4 边界 |
+  | `required-evidence.js` | 19/20，**fail 1** | O5 恰 1 条 |
+  | `wiki-replay.js` | 18/20，**fail 2** | O8 ×2 |
+
+  每次 `git checkout HEAD -- <file>` 还原后 `git status` 空、目录复绿（20/0）。O1–O8 八个落点全部被红点
+  逐一命中，断言不是永真。（注：首轮我把两条变异并行跑在同一棵树上，输出互相污染，已作废重跑——
+  M2/M3 的「同一批 4 红」是并发事故，顺序重跑后落点各自干净。）
+- A4：`record-redaction.js` 导出面探针（`node --input-type=module -e`）：
+  `recordFailure(new Error('SECRET_RAW_abc'))` 只返回字符串；`reasonForRecord` 任何文本入参都返回固定文案 + 字符量；
+  用例侧 O1 断 `thrown.message` 原样、O2b 断回灌模型的 `ruleEvaluation.reason` 仍是原文。
+
+### 9.3 文档侧三条 minor（doc-side，不影响行为，群主已认领统一改）
+
+1. `triage-pipeline.md:501-502` / `triage-rules.md:401`：三态里的「模型回包不是合法 JSON」在这两个落点
+   **不可达**——`reasonForRecord()` 入参是文本，`String(text)` 后拿不到 `model_decode`。实测：
+   `reasonForRecord('模型回包不是合法 JSON，原文 12 字未落盘')` → `上游调用失败，原文 24 字未落盘`；
+   `reasonForRecord('牧云事件查询失败：rpc timeout after 30s')` → `调用超时，原文 30 字未落盘`；
+   `recordFailure(SyntaxError)` → `上游调用失败（SyntaxError），原文 N 字未落盘`；只有 Error 对象带
+   `model_decode` 才出第三态（`recordFailure(Object.assign(new Error('x'),{model_decode:true}))`）。
+   建议：这两个落点收窄成两态，第三态注明只出现在 Error 对象入参的落点。
+2. `evidence/recon/P003-T052.md:162`：D2 触点仍写 `record-redaction.test.js:204-240`，实测
+   `ruleErrorVariants()` 在 `:227-235`、O2b 在 `:237-263`（块 :227-266）。
+3. `coding-reports/P003-T052.md:207`：D1 行第三处调用点仍写 `triage-monitor.js:1042-1045`，实测闸在 `:1046-1047`。
+
+### 9.4 文档 gate（`gate-cli.js docs`）与本卡关系
+
+本卡四篇文档不再 stale（`triage-pipeline` / `triage-rules` / `knowledge-base` / `experience-draft` updated
+均 2026-11-20）。gate 余红为预存积压：`event-gateway` / `maintenance-service` / `model-client` 三篇 stale 属别卡；
+`R-TRIAGE-xx` 与值语义表缺「单位」列在 `bea34bd` 就存在（`git show bea34bd:docs/modules/triage-pipeline.md | grep -c "R-TRIAGE-xx"` → 2，本卡 diff 未触及），不计本卡账。
