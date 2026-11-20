@@ -1,3 +1,6 @@
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（wiki/rules 读→种子，fp-sessions 写）。
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
@@ -32,6 +35,9 @@ async function listen(t,server) {
 const auth = {Authorization:'Basic '+Buffer.from('maintainer:test-maintenance-secret').toString('base64')};
 const writeHeaders = {...auth,'X-Hids-Maintenance':'1','Content-Type':'application/octet-stream','X-Package-Filename':'update.hids-policy'};
 const privateText = /PRIVATE-CANARY|ciphertext|sections|evidence_id/;
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('customer has version metadata only and legacy prompt upload is closed',async t=>{
   const {prompts}=await setup(t);

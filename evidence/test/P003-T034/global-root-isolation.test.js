@@ -3,8 +3,9 @@
 //   A3 首启种全局根：不设 `HIDS_DATA_DIR`、HOME 指向临时家目录 → 首启把仓内 `wiki/` 与 `rules/`
 //      种子到 `<HOME>/.local/share/hids-ai-console/`；二次启动不重种（改过的页面不被仓内副本盖回）。
 //      「不靠真实 HOME 观察」= 断言全写在临时家目录里，跟开发机上的运行态无关。
-//   A2/A4 隔离守卫：起子进程把**全量 evidence 套件**在临时 HOME 下跑一遍，跑完那个「影子全局根」必须零文件。
-//      哪个文件没注入临时根（或者将来新加一个没注入的），就写在那儿，这条立刻红。
+//   A2/A4 隔离守卫：起子进程把**全量测试**（`evidence/test/**` 套件 + 根目录 `npm test` 那套）在临时 HOME 下
+//      跑一遍，跑完那个「影子全局根」必须零文件。哪个文件没注入临时根（或者将来新加一个没注入的），就写/种在那儿，
+//      这条立刻红。两套都罩：`npm test` 是主门，只罩 evidence 就等于放过了主门。
 //      真全局根零痕迹（A4）是同一件事的另一面：套件连它的门都摸不到（`dataRoot()` 跟 HOME 走）。
 //
 // 两个子进程都用 `{ PATH, HOME }` 的干净环境：**故意不给 `HIDS_DATA_DIR`**，注入只能来自被测文件自己——
@@ -117,8 +118,10 @@ test('A3 首启把仓内 wiki/ 与 rules/ 种子进 <HOME>/.local/share/hids-ai-
   }
 });
 
-// ── A2/A4：全量 evidence 套件的隔离守卫 ──────────────────────────────────
-async function evidenceTestFiles() {
+// ── A2/A4：全量测试的隔离守卫 ────────────────────────────────────────────
+// 两套一起罩：`evidence/test/**` 的逐卡验证件 + 根目录 `*.test.js`（`npm test` 那一套）。本文件自己排除
+// （不然守卫跑守卫，无限递归）。
+async function suiteFiles() {
   const found = [];
   const walk = async directory => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -128,13 +131,16 @@ async function evidenceTestFiles() {
     }
   };
   await walk(evidenceRoot);
+  for (const entry of await readdir(repository, { withFileTypes: true }))
+    if (entry.isFile() && entry.name.endsWith('.test.js') && entry.name !== selfName)
+      found.push(path.join(repository, entry.name));
   return found.sort();
 }
 
-test('A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹）', async t => {
+test('A2/A4 全量测试（evidence 套件 + npm test）在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹）', async t => {
   const home = await newTemporaryHome(t);
-  const files = await evidenceTestFiles();
-  assert.ok(files.length >= 30, `evidence 套件只找到 ${files.length} 个文件，守卫覆盖面不对`);
+  const files = await suiteFiles();
+  assert.ok(files.length >= 55, `只找到 ${files.length} 个测试文件，守卫覆盖面不对`);
 
   const child = spawn(process.execPath, ['--test', '--test-timeout=60000', '--test-force-exit', ...files], {
     cwd: repository,
@@ -148,7 +154,7 @@ test('A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零�
 
   // 防空转：子套件确实跑起来了（不然「零文件」是句空话）
   const ran = Number((output.match(/^ℹ tests (\d+)/m) || [])[1]);
-  assert.ok(ran >= 300, `子套件没跑起来（tests=${ran}，exit=${code}）：${output.slice(-2000)}`);
+  assert.ok(ran >= 600, `子套件没跑起来（tests=${ran}，exit=${code}）：${output.slice(-2000)}`);
 
   // 判据：临时家目录下的全局根一个条目都不许有（文件、目录都算）
   const shadow = globalRootOf(home);

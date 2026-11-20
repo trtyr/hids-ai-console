@@ -17,6 +17,12 @@ say() { printf '%s\n' "$*" | tee -a "$out"; }
 
 files=(
   agent-api.test.js
+  api-tools.test.js
+  investigation-agent.test.js
+  maintenance-auth.test.js
+  update-store.test.js
+  wiki-current.test.js
+  wiki.test.js
   evidence/test/P003-T011/rego-rules.e2e.test.js
   evidence/test/P003-T013/acceptance.test.js
   evidence/test/P003-T014/acceptance.test.js

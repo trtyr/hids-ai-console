@@ -1,84 +1,74 @@
-# P003-T050 A5 变异自证（2026-11-20T10:44:11+08:00）
+# P003-T050 A5 变异自证（2026-11-20T10:45:38+08:00）
 # 基线：注入点在树上时，每一条都绿（见 t050-suite-concurrent.txt / -serial.txt）
 
 ## 删注入点：agent-api.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.034208ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.124512ms)
   整套守卫：exit=0  （守卫没红！）
 
 ## 删注入点：evidence/test/P003-T011/rego-rules.e2e.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (2.637341ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2955.618349ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (2.746433ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2961.837843ms)
 
 ## 删注入点：evidence/test/P003-T013/acceptance.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.88356ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2937.971586ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.073738ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3042.488233ms)
 
 ## 删注入点：evidence/test/P003-T014/acceptance.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.875319ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2982.454949ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.880138ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3055.928394ms)
 
 ## 删注入点：evidence/test/P003-T020/false-positive-http.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.80003ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2938.868836ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.819935ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3098.861352ms)
 
 ## 删注入点：evidence/test/P003-T023/logging.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.032113ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2953.614886ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.018004ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3146.542042ms)
 
 ## 删注入点：evidence/test/P003-T030/triage-http-contract.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.876366ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2964.286404ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.981338ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3088.449155ms)
 
 ## 删注入点：evidence/test/P003-T030/triage-real-fetch.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.853669ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3161.78124ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.873224ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3023.049486ms)
 
 ## 删注入点：evidence/test/P003-T039/context-slim.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.9717ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3169.567551ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.992093ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2990.017418ms)
 
 ## 删注入点：evidence/test/P003-T040/evidence-rollup.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.95871ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2984.159562ms)
-
-## 删注入点：evidence/test/P003-T041/acceptance.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.87043ms)
-  整套守卫：exit=0  （守卫没红！）
-
-## 删注入点：evidence/test/P003-T041/http-contract.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.988322ms)
-  整套守卫：exit=0  （守卫没红！）
-
-## 删注入点：evidence/test/P003-T041/rule-library.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.986227ms)
-  整套守卫：exit=0  （守卫没红！）
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.916944ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3033.55583ms)
 
 ## 删注入点：evidence/test/P003-T042/model-layers.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.990627ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3046.371261ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.951865ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3054.095622ms)
 
 ## 删注入点：evidence/test/P003-T042/model-layers.tester.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.973306ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3026.237735ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.005434ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3081.420132ms)
 
 ## 删注入点：evidence/test/P003-T046/investigation-replay.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.974494ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3075.290244ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.812253ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (2995.566647ms)
 
 ## 删注入点：evidence/test/P003-T046/model-call-events.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.867217ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3068.743405ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.871477ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3051.84988ms)
 
 ## 删注入点：evidence/test/P003-T046/tester-http-acceptance.test.js
-  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.858907ms)
-  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3300.071947ms)
+  该文件自证：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.86177ms)
+  整套守卫：exit=1  ✖ A2/A4 全量 evidence 套件在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (3132.623679ms)
 
 ## 删注入语句：evidence/test/P003-T034/isolate-data-root.js 的 `process.env.HIDS_DATA_DIR = isolatedRoot;`
-  evidence/test/P003-T013/acceptance.test.js：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.594264ms)
-  evidence/test/P003-T039/context-slim.test.js：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.794289ms)
-  agent-api.test.js：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.768936ms)
+  evidence/test/P003-T013/acceptance.test.js：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.653699ms)
+  evidence/test/P003-T039/context-slim.test.js：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.915464ms)
+  agent-api.test.js：exit=1  ✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.728498ms)
 
 ## 还原核对
   git status --short（应为空）：
-    ?? evidence/test/P003-T034/t050-mutation.txt
+     M evidence/test/P003-T034/t050-mutation.txt
   git diff --stat（应为空）：
+     evidence/test/P003-T034/t050-mutation.txt | 80 +++++++++++++------------------
+     1 file changed, 34 insertions(+), 46 deletions(-)
