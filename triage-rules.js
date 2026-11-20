@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reasonForRecord } from './record-redaction.js';
 
 const exampleFile = path.join(path.dirname(fileURLToPath(import.meta.url)), 'triage-rules.example.json');
 
@@ -232,8 +233,10 @@ export class TriageRuleEngine {
     try { return { config: validateRuleSet(JSON.parse(source)), origin, revision }; }
     catch (error) {
       if (origin === 'example') throw error;
+      // 接口侧不写错误原文（P003-T054）：`error` 随 `GET /api/triage/rules` 出接口，而 JSON.parse 的 message
+      // 会把配置文件前 ~10 字原样抄出来——只留固定文案 + 字符量。
       return { config: validateRuleSet(JSON.parse(await readFile(exampleFile, 'utf8'))),
-        origin: 'invalid', revision, error: error.message };
+        origin: 'invalid', revision, error: reasonForRecord(error.message) };
     }
   }
 

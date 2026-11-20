@@ -105,14 +105,12 @@ function recordFailure(error) {
   return `${kind}${name}，原文 ${raw.length} 字未落盘`;
 }
 
-// 未匹配 syslog 的 reason 可能拼进了上游错误原文（`syslog-case.js:54` / `:83` 的两条
-// `牧云事件…失败：<raw>`）：记录侧只留徽标，原文换成字符量。
-const upstreamFailure = /^(牧云事件(?: ID 详情读取|查询)失败)：/;
-
+// 未匹配 syslog 的 reason 可能拼进了上游错误原文（`syslog-case.js` 的 `牧云事件…失败：<raw>`）：
+// 记录侧一律归一（P003-T054，与 `record-redaction.js` 的 `reasonForRecord()` 同口径）。
+// 旧版按前缀白名单保留徽标（`牧云事件 ID 详情读取失败：` / `牧云事件查询失败：`）——白名单穷举不尽，
+// 漏一个就是一条原文落盘的路（P003-T052 第四轮拍板：删白名单，换零泄漏）。
 function reasonForRecord(text) {
-  const raw = String(text ?? '');
-  const badge = raw.match(upstreamFailure);
-  return badge ? `${badge[1]}：${recordFailure(raw.slice(badge[0].length))}` : raw;
+  return recordFailure(String(text ?? ''));
 }
 
 // 失败附注走同一道闸：快照（turns[].note）与日志都不许留原文（P003-T046 复审实锤）。

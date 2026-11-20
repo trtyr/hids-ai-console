@@ -142,7 +142,7 @@ test('A1 工具调用报错：trace[tool_error] 不写原文，模型会话里�
   assert.doesNotMatch(JSON.stringify(result), CLEAN);
 });
 
-test('A1 未匹配 syslog：模型说明失败与上游查询失败都只留徽标 + 字符量', async t => {
+test('A1 未匹配 syslog：模型说明失败与上游查询失败都只留固定文案 + 字符量（P003-T054 起不再保留徽标）', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-redact-syslog-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await writeFile(path.join(directory, '03-研判事实.md'), '# 研判事实\n来源 192.0.2.2\n');
@@ -159,7 +159,9 @@ test('A1 未匹配 syslog：模型说明失败与上游查询失败都只留徽�
   { case_dir: directory, files: ['03-研判事实.md'] });
 
   const modelFailure = `上游调用失败，原文 ${modelError.length} 字未落盘`;
-  const upstreamFailure = `牧云事件查询失败：上游调用失败，原文 ${upstream.length} 字未落盘`;
+  // P003-T054：`reasonForRecord()` 删了徽标白名单（与 record-redaction.js 同口径），
+  // 上游 reason 整串进闸——字符量算的是含「牧云事件查询失败：」前缀的全长。
+  const upstreamFailure = `上游调用失败，原文 ${`牧云事件查询失败：${upstream}`.length} 字未落盘`;
   assert.equal(result.verdict.analysis, `牧云事件回查与模型说明未完成：${modelFailure}`);
   assert.equal(result.turns[0].note, `说明调用未完成：${modelFailure}`);
   assert.equal(result.verdict.missing_evidence[0], upstreamFailure);

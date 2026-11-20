@@ -22,6 +22,7 @@ import { WikiWorkbench } from './wiki-workbench.js';
 import { TraceBoardService } from './trace-board.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
+import { reasonForRecord } from './record-redaction.js';
 import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
 import { FalsePositiveMaintainer, FP_LIBRARIES, FpSessionStore, fpSessionDirectory,
   maintenanceSide, maintenanceSides, scrubCredentials, wikiFeedbackTarget } from './fp-maintainer.js';
@@ -863,7 +864,11 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (decision.status === 'candidate') onProgress?.('规则评估', `命中 ${decision.rule.id}，交由 AI 复核`);
       const options = onProgress ? { mode, onProgress, ruleEvaluation: decision } : { mode, ruleEvaluation: decision };
       const result = await executor.run(alertId, options);
-      result.rule_evaluation = decision;
+      // 记录侧不写错误原文（P003-T054，与 `triage-monitor.js` 的 `result.rule_evaluation` 同口径）：
+      // 这份副本会随 `result` 进案件 `result.json` 与研判记录，所以 `reason` 过闸；
+      // 回灌模型的那份（上面 `options.ruleEvaluation`）仍是原文——模型靠它认出配置 / 网络错在哪。
+      result.rule_evaluation = decision.reason == null ? decision
+        : { ...decision, reason: reasonForRecord(decision.reason) };
       return result;
     }
     return executor.run(alertId, onProgress ? { mode, onProgress } : { mode });

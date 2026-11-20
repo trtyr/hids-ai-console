@@ -60,18 +60,20 @@ async function freePort() {
 async function runServer(t, env, until) {
   // HIDS_DATA_DIR 指到 tmp：真进程不许往仓库或真实全局根写运行态（P003-T034 A2）。
   const dataDirectory = await mkdtemp(path.join(tmpdir(), 'hids-config-check-data-'));
-  t.after(() => rm(dataDirectory, { recursive: true, force: true }));
   const child = spawn(process.execPath, ['server.js'], { cwd: ROOT,
     env: { PATH: process.env.PATH, ...env, HIDS_DATA_DIR: dataDirectory }, stdio: ['ignore', 'pipe', 'pipe'] });
   const seen = { stdout: '', stderr: '' };
   child.stdout.on('data', chunk => { seen.stdout += chunk; });
   child.stderr.on('data', chunk => { seen.stderr += chunk; });
   const exited = new Promise(resolve => child.once('exit', code => resolve(code)));
+  // 顺序有讲究（P003-T054 A6）：after 钩子按注册顺序跑——**先杀进程再删目录**。
+  // 反过来的话真进程还在 mkdir/writeFile，rm 会撞 ENOTEMPTY；`maxRetries` 只是同一件事的兜底。
   t.after(() => new Promise(done => {
     if (child.exitCode !== null || child.signalCode !== null) { done(); return; }
     child.once('exit', () => done());
     child.kill('SIGKILL');
   }));
+  t.after(() => rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
   const deadline = Date.now() + 8000;
   while (!until(seen, child)) {
     if (child.exitCode !== null) break;

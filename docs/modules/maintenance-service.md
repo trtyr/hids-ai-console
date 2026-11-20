@@ -3,7 +3,7 @@ type: module
 id: MOD-MAINTENANCE-SERVICE
 covers: [maintenance-server.js, update-store.js, package-policy.js]
 depth: detailed
-updated: 2026-11-17
+updated: 2026-11-20
 ---
 
 # 维护服务（maintenance-service）
@@ -87,7 +87,7 @@ updated: 2026-11-17
 | `/logout` | POST | 无 | 200 `logged_out:true` | `maintenance-server.js:102-106` |
 | `/overview` | GET | 无 | 200 当前发布、历史、模块列表、包列表、`writable` | `maintenance-server.js:111-121` |
 | `/packages` | POST | `application/octet-stream` 正文，`x-package-filename` 头带文件名 | 201 新包 `id` 与 `version` | `maintenance-server.js:122-129` |
-| `/packages/{id}` | GET | `id` 为 64 位十六进制 | 200 包详情，含 `compatible`、`applied`、`current` | `maintenance-server.js:130-132` |
+| `/packages/{id}` | GET | `id` 为 64 位十六进制 | 200 包详情，含 `compatible`、`applied`、`current`；不兼容时 `compatibility_reason` 只写固定文案 + 原文字符量（`升级包不适用于当前客户环境` 这类本模块自造提示照原样），见 `update-store.js:138-150` | `maintenance-server.js:130-132` |
 | `/packages/{id}/apply` | POST | `If-Match` 头带当前 `revision` | 200 `id`、`version`、`updated_at` | `maintenance-server.js:133-137` |
 
 `{id}` 必须是 64 位小写十六进制，正则写死在 `maintenance-server.js:130`；匹配不上就落到 404（`maintenance-server.js:139`）。

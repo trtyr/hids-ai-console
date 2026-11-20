@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, sign, verify } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { recordFailure } from './record-redaction.js';
 
 export const PACKAGE_LIMIT = 2 * 1024 * 1024;
 const FORMAT = 'hids-prompts/v1';
@@ -140,7 +141,12 @@ export class UpdateStore {
     const applied = (overrides._history || []).some(item => item.id === id);
     let compatible = true, compatibilityReason = '';
     try { if (!applied) await this.validate(payload); }
-    catch (cause) { compatible = false; compatibilityReason = cause.message; }
+    catch (cause) {
+      compatible = false;
+      // 接口侧不写错误原文（P003-T054）：本模块自己造的提示全过 `fail()`（带 status），原样留给运维看；
+      // 上游 / fs / 解析错误的 message 可能带路径或包内容片段，只留固定文案 + 字符量。
+      compatibilityReason = cause.status ? cause.message : recordFailure(cause);
+    }
     return { ...publicRelease(payload), id, filename: stored.filename, uploaded_at: stored.uploaded_at,
       current: overrides._release?.id === id, applied, compatible, compatibility_reason: compatibilityReason };
   }
