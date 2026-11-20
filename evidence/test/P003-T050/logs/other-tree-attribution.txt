@@ -1,0 +1,12 @@
+# 别树痕迹归因（12:39:11 那批）
+ps: pid 1930598（12:38:11 起）cwd=/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T052
+该树 agent-api.test.js 的隔离注入：
+0
+本树 evidence/ 内引用 trace-analysis 的文件（只有根单测，不在 evidence 套件内）：
+./agent-api.test.js
+本树根单测 agent-api.test.js 跑一遍（注入生效，写自己的临时根）：
+exit=0
+ℹ tests 23
+ℹ pass 23
+ℹ fail 0
+本树 agent-api.test.js 跑完真根 diff=0 行

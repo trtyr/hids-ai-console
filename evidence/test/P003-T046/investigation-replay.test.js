@@ -2,6 +2,9 @@
 // 口径只认文档：docs/modules/http-api.md §3.10（路由、参数、响应、失败）、openapi.yaml 的
 // `/api/agent/investigations/{alertId}/replay` 与 `InvestigationReplay`、docs/modules/investigation-agent.md（结果体 turns）。
 // 做法：进程内 server + 真研判（替身牧云 / 替身模型）+ tmp 数据根；不碰真网络、不碰真时钟。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -41,6 +44,9 @@ const investigate = async () => {
   const result = await new InvestigationAgent(toolbox, model).run('revshell:7');
   return { result, counter };
 };
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('A3 回放接口按告警 ID 给出逐轮消息摘要、工具调用序列、各轮结论变化——读完案卷不再调模型', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t046-replay-'));

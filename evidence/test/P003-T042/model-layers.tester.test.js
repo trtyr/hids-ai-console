@@ -5,6 +5,9 @@
 //   .env.example 的 LLM_REVIEW_* / LLM_LIGHT_* 注释（逐键回退、六个新键）
 // 做法：真 HTTP（进程内 createServer + 假上游只当 socket 对端，不是被测逻辑）+ 真研判一轮；每条请求 5s 超时。
 // 断言的是「契约说的行为」，不是「当前实现长什么样」：200 正文一律过 openapi 的 schema 校验（含 $ref 展开）。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -153,6 +156,9 @@ function assert400(response, text, pattern, label) {
 // ================================================================================================
 // A1 逐键回退矩阵（真 HTTP 客户端层）：三组配置各自逐键回退，角色之间不串组
 // ================================================================================================
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 test('A1 逐键回退矩阵：复核组 / 轻量组各三键的 8 种「设了哪几项」组合，地址·密钥·模型名逐字段回退', async t => {
   const main = await upstream(t, 'primary');
   const own = { review: await upstream(t, 'review'), light: await upstream(t, 'light') };

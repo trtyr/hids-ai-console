@@ -20,11 +20,13 @@ const doc = relative => readFile(path.join(repository, relative), 'utf8');
 const tmp = () => mkdtemp(path.join(tmpdir(), 't043-'));
 
 // ── A1：运行态路径与装配摘除 ────────────────────────────────────────────────
-test('A1 runtimePaths 只剩七个具名路径，baseline/intel 两键不在其中', () => {
+test('A1 runtimePaths 的具名路径是八条（本卡七条 + T047 的 fpSessions），baseline/intel 两键不在其中', () => {
   const paths = runtimePaths('/tmp/t043-root');
+  // P003-T050：T047 把误报维护会话加进了 runtimePaths（`server.js:1420`），本卡的七条变八条——
+  // 本用例钉的是「baseline/intel 没回来」，键集合按当时的现状钉全。
   assert.deepEqual(Object.keys(paths).sort(),
-    ['cases', 'data', 'investigations', 'traceBoards', 'triageMonitor', 'triageRules', 'wikiSessions'],
-    'runtimePaths 的具名路径清单不是砍掉 baseline/intel 之后的七条');
+    ['cases', 'data', 'fpSessions', 'investigations', 'traceBoards', 'triageMonitor', 'triageRules', 'wikiSessions'],
+    'runtimePaths 的具名路径清单不是砍掉 baseline/intel 之后的八条');
   assert.equal('baseline' in paths, false, 'baseline 键又回来了');
   assert.equal('intel' in paths, false, 'intel 键又回来了');
 });

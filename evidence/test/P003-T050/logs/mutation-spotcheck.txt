@@ -1,0 +1,20 @@
+# cmd: node --test --test-timeout=60000 --test-force-exit evidence/test/P003-T046/model-call-events.test.js（基线）
+ℹ tests 7
+ℹ pass 7
+ℹ fail 0
+# 删掉该文件第一条 import（isolate-data-root.js）后，临时 HOME 下重跑：
+ℹ tests 7
+ℹ pass 6
+ℹ fail 1
+✖ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.976239ms)
+# 同一变异树上跑整套守卫：
+✔ A3 首启把仓内 wiki/ 与 rules/ 种子进 <HOME>/.local/share/hids-ai-console，二次启动不重种 (217.881887ms)
+✖ A2/A4 全量测试（evidence 套件 + npm test）在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (10438.870517ms)
+✖ A2/A4 全量测试（evidence 套件 + npm test）在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (10438.870517ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+# git checkout 还原后重跑：
+ℹ tests 7
+ℹ pass 7
+ℹ fail 0

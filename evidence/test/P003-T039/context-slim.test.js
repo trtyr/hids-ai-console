@@ -3,6 +3,9 @@
 // 纪律：不碰网络、不碰真实时钟、不作真实模型调用；每条都在几十毫秒内跑完。
 // P003-T049：T040 起 run() 收尾会把必查项真写进 case_dir（syslog-case.js:187-206），所以案卷目录改成
 //   每轮一个真临时目录；A3 顺带断言落盘形状（total_reported / first_rows / files 回写）。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -120,6 +123,9 @@ const firstUser = requests => String(requests[0].messages[1].content);
 const reviewRequest = requests => requests.find(request => String(request.messages[0].content).startsWith('你是独立质疑者'));
 const finalRequest = requests => requests.find(request => String(request.messages.at(-1).content).startsWith('请根据以下已查询证据'));
 const toolMessages = request => request.messages.filter(message => message.role === 'tool');
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('A1 首轮与终局轮都不内联 match.event，只留匹配元信息', async () => {
   const { agent, requests, streamContext: context } = runAgent();

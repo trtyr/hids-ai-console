@@ -9,6 +9,9 @@
 //
 // 跑法（仓根，只跑这一个文件）：
 //   timeout 180 node --test evidence/test/P003-T020/false-positive-http.test.js
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js 求值前把 HIDS_DATA_DIR
+// 指到本进程的临时根，否则 createServer 的缺省 fpSessions 会往真全局根写维护会话。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -21,6 +24,9 @@ import { WikiStore } from '../../../wiki-store.js';
 import { WikiWorkbench } from '../../../wiki-workbench.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..', '..');
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 const FP_PATH = id => `/api/agent/triage/${encodeURIComponent(id)}/false-positive`;
 const GET_PATH = id => `/api/agent/triage/${encodeURIComponent(id)}`;
 const REASON = '运维的蜜罐探针，不是攻击，来源已核对授权扫描清单';

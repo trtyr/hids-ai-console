@@ -1,3 +1,6 @@
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（wiki/rules 读→种子，fp-sessions 写）。
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -7,6 +10,9 @@ import test from 'node:test';
 import { PromptStore } from './prompt-store.js';
 import { WikiStore } from './wiki-store.js';
 import { createServer } from './server.js';
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('current scene prompts and agent indexes use reviewed criteria', async () => {
   const prompts = await new PromptStore(path.join(tmpdir(), `hids-no-overrides-${randomUUID()}.json`)).load();
@@ -18,10 +24,14 @@ test('current scene prompts and agent indexes use reviewed criteria', async () =
   };
   for (const [eventType, criterion] of Object.entries(expected)) {
     assert.match(prompts.sop[eventType], new RegExp(`^id: ${criterion}$`, 'm'), eventType);
+    // 常驻页 = common 的两页（GEN-12 通用判定 + GEN-13 环境基线，`applies_to: [common]`）+ 本场景判定页。
+    // P003-T050：以前这里只写 GEN-12，能绿是因为本机真全局根里的 wiki 副本停在 GEN-13 之前
+    // （T043 把 GEN-13 加进了仓内种子，活库没重种）——注入临时根后按仓内种子读，才看见这条断言一直漏一页。
+    const resident = ['GEN-12', 'GEN-13', criterion].sort();
     const index = await wiki.agentIndex(eventType);
-    assert.deepEqual(index.pages.map(page => page.id).sort(), ['GEN-12', criterion].sort(), eventType);
+    assert.deepEqual(index.pages.map(page => page.id).sort(), resident, eventType);
     const context = await wiki.agentContextPages(eventType);
-    assert.deepEqual(context.map(page => page.id).sort(), ['GEN-12', criterion].sort(), eventType);
+    assert.deepEqual(context.map(page => page.id).sort(), resident, eventType);
     assert.ok(context.every(page => page.content.length > 100), eventType);
     assert.match((await wiki.agentPage(eventType, criterion)).content, /结论/);
   }

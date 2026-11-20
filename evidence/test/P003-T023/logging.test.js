@@ -1,6 +1,9 @@
 // P003-T023 后端全程日志：单一落点 + 五类事件 + 时间/事件名/告警 ID + 不泄凭据。
 // 只跑这个文件：node --test evidence/test/P003-T023/logging.test.js
 // 全部用内存 journal（注入 write / now），不碰真实 stdout、不碰真实时钟、不起外部服务。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js 求值前把 HIDS_DATA_DIR
+// 指到本进程的临时根，否则 createServer 的缺省 fpSessions 会往真全局根写维护会话。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -12,6 +15,9 @@ import { createServer } from '../../../server.js';
 import { InvestigationStore } from '../../../investigation-store.js';
 
 const AT = '2026-11-19T00:00:00.000Z';
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 // 每条日志一行 JSON：lines 里是解析后的对象，raw 里是原文（查「凭据有没有漏」按原文查）。
 function collect(time = AT) {
@@ -199,7 +205,9 @@ test('A2 syslog 收下 / 解析失败 / 跳过都在日志里，告警 ID 跟着
 
 test('A2 研判入队 → 完成 / 失败都留痕，带告警 ID 与结论', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-log-triage-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  // 回收要和后台的落盘抢时间：`rm` 撞上「队列刚又写了一个文件」就 ENOTEMPTY（并发跑套件时实测偶发）。
+  // 所以先等两条 chain 落完，再允许重试——这不是把红改绿，是把测试自己的收尾做对。
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
   const { lines } = capture(t);
   const verdict = { verdict: 'threat', verdict_label: '真实威胁', summary: '来源直接命中', claims: [] };
   const history = new InvestigationStore(path.join(directory, 'results'));
@@ -230,6 +238,7 @@ test('A2 研判入队 → 完成 / 失败都留痕，带告警 ID 与结论', as
   //    “日志行留原文”的是其它事件（`triage.poll_failed` / `syslog.match_failed` 等，归 P003-T046 的日志侧闸），
   //    守卫见 `evidence/test/P003-T052/tester-redaction-boundary.test.js`。
   assert.equal(failed.error, `上游调用失败，原文 ${'模型调用失败（第 2 轮）'.length} 字未落盘`);
+  await monitor.writeChain;
 });
 
 test('A2 误报维护结果（两侧状态与原因）留在 maintenance.result 里', async t => {

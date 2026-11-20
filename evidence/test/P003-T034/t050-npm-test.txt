@@ -1,0 +1,811 @@
+
+> test
+> node --test --test-timeout=60000 --test-force-exit *.test.js
+
+✔ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.922657ms)
+{"time":"2026-11-20T03:11:33.306Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/api/session","status":401}
+{"time":"2026-11-20T03:11:33.311Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":401,"duration_ms":5}
+{"time":"2026-11-20T03:11:33.328Z","level":"warn","event":"http.unauthorized","method":"POST","path":"/api/agent/prompts/upload","status":401}
+{"time":"2026-11-20T03:11:33.328Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/prompts/upload","status":401,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.337Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.343Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/","status":401}
+{"time":"2026-11-20T03:11:33.344Z","level":"info","event":"http.request","method":"GET","path":"/","status":401,"duration_ms":1}
+✔ remote access password protects API reads and writes (77.846548ms)
+{"time":"2026-11-20T03:11:33.404Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/status","status":200,"duration_ms":40}
+{"time":"2026-11-20T03:11:33.417Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/prompts","status":200,"duration_ms":7}
+{"time":"2026-11-20T03:11:33.421Z","level":"info","event":"http.request","method":"GET","path":"/backend/prompts/triage.md","status":404,"duration_ms":2}
+{"time":"2026-11-20T03:11:33.430Z","level":"info","event":"http.request","method":"PUT","path":"/api/agent/prompts","status":405,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.436Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/prompts/upload","status":410,"duration_ms":2}
+{"time":"2026-11-20T03:11:33.445Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":200,"duration_ms":3}
+{"time":"2026-11-20T03:11:33.450Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/investigations/revshell%3A7","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.454Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/investigations/revshell%3A8","status":404,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.457Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/investigations/not-an-id","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.460Z","level":"error","event":"http.failed","method":"POST","path":"/api/agent/investigations","status":400,"error":"请求正文不是 JSON"}
+{"time":"2026-11-20T03:11:33.461Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":400,"duration_ms":2}
+✔ investigation API accepts one typed alert and returns the Agent result (114.429409ms)
+{"time":"2026-11-20T03:11:33.474Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":200,"duration_ms":4}
+✔ streaming investigation reports progress and persists its result (13.924858ms)
+{"time":"2026-11-20T03:11:33.483Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.487Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/honeypot%3A7","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.489Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A7","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.491Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A7","status":202,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.493Z","level":"info","event":"http.request","method":"PUT","path":"/api/agent/triage/control","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.499Z","level":"info","event":"http.request","method":"PUT","path":"/api/agent/triage/control","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.501Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/bad-id","status":400,"duration_ms":0}
+✔ alert API exposes automatic triage state separately from deep investigation (23.816529ms)
+{"time":"2026-11-20T03:11:33.509Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.510Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.513Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.515Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.517Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.519Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.520Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.521Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.522Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.523Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.524Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.525Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.526Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.527Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.528Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.529Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.530Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.531Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.532Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.533Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.534Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.536Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.537Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/cases","status":400,"duration_ms":1}
+✔ 研判记录列表可按结论 / 类型 / 主机 / 时间筛，total 是过滤后条数，非法值回 400 (37.287769ms)
+{"time":"2026-11-20T03:11:33.545Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Arevshell%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e41","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.547Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Arevshell%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e41","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.548Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Awebshell%3Adddddddddddddddd%3A1763403600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e44","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.550Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Arevshell%3Axyz","status":400,"duration_ms":1}
+✔ syslog 形态的 alert_id 直接打开研判记录，不要求先有牧云事件号 (10.626679ms)
+{"time":"2026-11-20T03:11:33.555Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":202,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.560Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.561Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards/honeypot%3A7","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.562Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards/honeypot%3A8","status":404,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.563Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards/bad-id","status":400,"duration_ms":0}
+✔ trace board API starts and restores an alert board (12.841902ms)
+{"time":"2026-11-20T03:11:33.568Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.569Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.570Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.571Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.572Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+✔ 总览接口出结论分布 / 类型分布，带 since 只算该时刻后入队的记录，非法时间回 400 (8.982828ms)
+{"time":"2026-11-20T03:11:33.576Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.579Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":1}
+✔ 总览接口在 syslog 模式透出最后一条到达时刻，poll 模式不给这个键 (6.615703ms)
+{"time":"2026-11-20T03:11:33.582Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.583Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.584Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.585Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.586Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.587Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.588Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":0}
+✔ 白板列表把状态/类型/主机/时间筛选交给服务层，非法值回 400 且不调服务层 (8.467191ms)
+{"time":"2026-11-20T03:11:33.591Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.593Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":202,"duration_ms":1}
+✔ POST 白板：已有返回 200，新建返回 202，syslog 形态告警 ID 也收 (5.086042ms)
+✔ A4 分析证据从研判记录的案卷读原始报文，status() 的 input 一律不碰 (4.472697ms)
+✔ A4 研判记录还没落盘时用 status() 公开的 case_dir 定位案卷；都没有就回 null (5.078568ms)
+{"time":"2026-11-20T03:11:33.613Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":202,"duration_ms":7}
+✔ A4 真接线：POST syslog 告警起板走注入的 monitor/history，不查牧云事件详情 (14.316737ms)
+{"time":"2026-11-20T03:11:33.620Z","level":"info","event":"http.request","method":"POST","path":"/api/trace/boards","status":502,"duration_ms":1}
+✔ POST 白板：服务层未分类异常回 502 (2.641672ms)
+✔ A4 真 status() 剥掉 input 后仍能从研判记录复用原始报文 (2.61625ms)
+{"time":"2026-11-20T03:11:33.626Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.628Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.640Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.641Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.643Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"updated","session_id":"b9a26c18-738d-4aed-b090-23c62f96798a","sides":["rule","wiki"],"rule":"updated","wiki":"updated","rule_state":"updated","wiki_state":"updated","rule_error":null,"wiki_error":null}
+{"time":"2026-11-20T03:11:33.653Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.654Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+✔ A1 误报入口先把结论落成误报再回 202，维护者没跑完也已经是误报 (31.959309ms)
+{"time":"2026-11-20T03:11:33.657Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.658Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.659Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.660Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e40/false-positive","status":404,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.660Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/bad-id/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.661Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A9/false-positive","status":409,"duration_ms":0}
+✔ A1 误报入口的入参校验：理由必填，案件要存在且已完成 (7.239105ms)
+{"time":"2026-11-20T03:11:33.666Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"request","input_chars":737,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.667Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"response","input_chars":737,"duration_ms":1,"output_chars":245,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.670Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"request","input_chars":785,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.670Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"response","input_chars":785,"duration_ms":0,"output_chars":243,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.672Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"request","input_chars":887,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.672Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"response","input_chars":887,"duration_ms":0,"output_chars":190,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.673Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"request","input_chars":887,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.673Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"response","input_chars":887,"duration_ms":0,"output_chars":220,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.673Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"request","input_chars":887,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.673Z","level":"info","event":"ai.model_call","domain":"rule","role":"rule_maintainer","turn":1,"attempt":1,"phase":"maintain","direction":"response","input_chars":887,"duration_ms":0,"output_chars":40,"outcome":"ok","tool_calls":0}
+✔ A2 规则维护者只加一条或改一条 Rego，校验不过就不落盘 (11.905331ms)
+{"time":"2026-11-20T03:11:33.677Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.680Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"updated","session_id":"e2cd7c8b-8480-45f3-b7b6-2aedf96bb9c7","sides":["rule","wiki"],"rule":"updated","wiki":"updated","rule_state":"updated","wiki_state":"updated","rule_error":null,"wiki_error":null}
+✔ A3 两个维护者都不是跑研判的那个 Agent，各自改自己的东西 (13.595278ms)
+{"time":"2026-11-20T03:11:33.690Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.694Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"failed","session_id":"53fe1f14-82bf-431a-9109-1f8d7f57da0d","sides":["wiki"],"rule":"failed","wiki":"updated","rule_state":"failed","wiki_state":"updated","rule_error":"模型接口 HTTP 500: 上游不可用","wiki_error":null}
+{"time":"2026-11-20T03:11:33.702Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":200,"duration_ms":0}
+✔ A4 维护失败只改 maintenance，误报结论不变；一边成一败总态算失败 (15.605725ms)
+{"time":"2026-11-20T03:11:33.706Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":202,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.709Z","level":"info","event":"maintenance.result","alert_id":"syslog:honeypot:aaaaaaaaaaaaaaaa:1763392800:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":"failed","session_id":"6a6f7ea6-6f32-411a-829c-02d01d9b963b","sides":["rule"],"rule":"updated","wiki":"failed","rule_state":"updated","wiki_state":"failed","rule_error":null,"wiki_error":"知识维护端未配置"}
+✔ A4 记录停在 updating 但本进程没有在跑的维护时，重新登记会重起一轮 (13.551975ms)
+✔ agent sees read-only MCP tools and cannot invoke whitelist operations (15.095395ms)
+✔ 常规研判保留事件 API 身份校验，并接入只读 MCP 命令和连接证据 (3.166598ms)
+✔ tool result becomes cited evidence and output values are checked (7.790082ms)
+✔ parallel evidence calls get distinct identifiers (8.97368ms)
+{"time":"2026-11-20T03:11:33.392Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/tools","status":200,"duration_ms":6}
+{"time":"2026-11-20T03:11:33.420Z","level":"info","event":"http.request","method":"GET","path":"/backend/agent-tools.js","status":404,"duration_ms":1}
+✔ backend exposes the imported tool catalog without exposing credentials (83.405065ms)
+✔ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.673254ms)
+{"time":"2026-11-20T03:11:33.260Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":14672,"messages":2,"tools":8}
+{"time":"2026-11-20T03:11:33.261Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":14672,"duration_ms":1,"output_chars":194,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.262Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":7493,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.263Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":7493,"duration_ms":1,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ routine triage reads typed Cloudwalker API evidence and applies scenario SOP (56.928985ms)
+✔ API evidence adapter rejects other event identities and unsupported filters (1.3934ms)
+✔ A8 status 探活在 45 秒窗口内只发一次 RPC，失败不缓存 (5.209521ms)
+✔ A9 详情失败路径的探活按类型短 TTL 复用 (1.621153ms)
+✔ A10 列表首批按类型做 TTL 快照，轮询与研判筛选共用一份 (36.151104ms)
+✔ A1 列表固定排序键 created_at desc, id asc (1.333058ms)
+{"time":"2026-11-20T03:11:33.310Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/common%2FGEN-99.md","status":404,"duration_ms":7}
+{"time":"2026-11-20T03:11:33.341Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/common%2FGEN-99.md","status":404,"duration_ms":4}
+{"time":"2026-11-20T03:11:33.354Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/common%2FGEN-01.md","status":200,"duration_ms":5}
+✔ 知识库 404 正文只给相对路径，不带服务器目录 (93.614374ms)
+{"time":"2026-11-20T03:11:33.369Z","level":"info","event":"syslog.listening","bind":"udp://127.0.0.1:15514"}
+{"time":"2026-11-20T03:11:33.369Z","level":"error","event":"syslog.bind_failed","error":"bind EADDRINUSE 127.0.0.1:15514"}
+{"time":"2026-11-20T03:11:33.378Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/status","status":200,"duration_ms":1}
+✔ syslog 绑定失败时队列状态带出接收器状态 (19.009852ms)
+✔ 轮询模式的队列状态形状不变，不多出 syslog 键 (6.113125ms)
+{"time":"2026-11-20T03:11:33.394Z","level":"error","event":"cloudwalker.call_failed","op":"status","alert_id":null,"error":"connect ECONNREFUSED 10.0.0.1:443"}
+{"time":"2026-11-20T03:11:33.395Z","level":"info","event":"http.request","method":"GET","path":"/api/status","status":502,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.400Z","level":"info","event":"http.request","method":"GET","path":"/api/status","status":200,"duration_ms":0}
+✔ /api/status 连不上牧云是 502，正文带 configured/connected/reason (13.011056ms)
+{"time":"2026-11-20T03:11:33.408Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/api/session","status":401}
+{"time":"2026-11-20T03:11:33.409Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":401,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.412Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/api/status","status":401}
+{"time":"2026-11-20T03:11:33.413Z","level":"info","event":"http.request","method":"GET","path":"/api/status","status":401,"duration_ms":1}
+✔ 业务认证失败的 401 是纯文本正文且声明 text/plain (12.015471ms)
+{"time":"2026-11-20T03:11:33.426Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":3}
+{"time":"2026-11-20T03:11:33.437Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.442Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.446Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.448Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.452Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.454Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.459Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.463Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.466Z","level":"info","event":"http.request","method":"POST","path":"/api/triage/rules/validate","status":200,"duration_ms":1}
+✔ 规则校验接口先判正文形状，再读 config.rules (52.806122ms)
+✔ detail view uses readable facts and keeps raw JSON pointers (4.242151ms)
+✔ honeypot HTTP request is readable while its citation still verifies the raw digest (3.060369ms)
+✔ honeypot view keeps every request in a multi-step probe and marks TLS-format payload (1.263566ms)
+✔ long honeypot timeline exposes late HTTP requests and response coverage (1.769914ms)
+✔ privilege escalation view exposes the event UID change and parent process identity (0.718246ms)
+✔ list view aggregates returned page only and citations still verify against raw (1.452417ms)
+✔ list view flags a platform total smaller than its returned page (0.637091ms)
+✔ internal network definitions remain visible with source pointers (0.362406ms)
+✔ wrapped detail preserves its original result path (0.480368ms)
+✔ process asset view keeps decision fields and omits unrelated host attributes (1.11222ms)
+✔ firewall view includes both endpoints and returned-page connection counts (2.670935ms)
+✔ port asset view identifies listening port and process without host custom attributes (0.684793ms)
+✔ process detail separates process and executable file safety (2.153482ms)
+✔ oversized list view keeps citable rows within the model budget (2.065971ms)
+✔ A4 事件视图的裸 id 不当主机 ID，主机资产视图才认它 (0.914291ms)
+✔ RPC forwards API token in cookie and uses source method contract (8.822962ms)
+✔ event list preserves partial failures and typed IDs (26.736377ms)
+✔ merged pages contain distinct events in global time order (5.595253ms)
+✔ merged pagination refills an event type after its first batch (9.116714ms)
+✔ network audit uses its source API data field (1.223407ms)
+✔ detail rejects mismatched event IDs (0.603917ms)
+✔ outbound reverse shell directions follow source API fields (0.402983ms)
+{"time":"2026-11-20T03:11:33.383Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/revshell:1","status":200,"duration_ms":4}
+{"time":"2026-11-20T03:11:33.397Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/revshell%3A1","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.408Z","level":"info","event":"http.request","method":"GET","path":"/backend/server.js","status":404,"duration_ms":2}
+{"time":"2026-11-20T03:11:33.411Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+✔ HTTP API exposes typed alert and does not serve backend source (79.081828ms)
+✔ type 下推只查该类，total 等于该类总数 (4.001199ms)
+✔ level / q / from / to 合并后过滤再切页，total 为过滤后条数 (6.349469ms)
+✔ 扫描窗口上限之外置 truncated，total 只含窗口内匹配 (66.987646ms)
+✔ sort=level 按等级降序、同级按时间降序；默认按时间 (5.104341ms)
+{"time":"2026-11-20T03:11:33.508Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.510Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+✔ HTTP /api/alerts 把筛选参数下推给网关 (13.812833ms)
+{"time":"2026-11-20T03:11:33.514Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.518Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.521Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.524Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.525Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.527Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.528Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":400,"duration_ms":0}
+✔ HTTP /api/alerts 拒绝非法筛选参数 (17.794896ms)
+{"time":"2026-11-20T03:11:33.533Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.536Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.538Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.540Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.543Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+✔ triage_status / verdict 挂完 triage 后过滤并跨页统计 (15.930556ms)
+{"time":"2026-11-20T03:11:33.548Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":1}
+✔ 不带筛选参数时仍只挂 triage，不改 total 与分页 (4.170913ms)
+{"time":"2026-11-20T03:11:33.553Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:404","error":"牧云 WebShell 事件 #404 不存在或已不可见"}
+{"time":"2026-11-20T03:11:33.554Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:404","status":404,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.556Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:404","error":"牧云 WebShell 事件 #404 不存在或已不可见"}
+{"time":"2026-11-20T03:11:33.556Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:404","status":404,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.558Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:404","error":"牧云 WebShell 事件 #404 不存在或已不可见"}
+{"time":"2026-11-20T03:11:33.558Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:404","status":404,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.560Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:404","error":"牧云 WebShell 事件 #404 不存在或已不可见"}
+{"time":"2026-11-20T03:11:33.560Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:404","status":404,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.562Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:1","error":"fetch failed"}
+{"time":"2026-11-20T03:11:33.562Z","level":"error","event":"http.failed","method":"GET","path":"/api/alerts/webshell:1","status":502,"error":"fetch failed"}
+{"time":"2026-11-20T03:11:33.563Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:1","status":502,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.565Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:1","status":200,"duration_ms":1}
+✔ HTTP 详情语义：未知事件 ID 回 404，只有牧云不可达才 502 (17.147189ms)
+{"time":"2026-11-20T03:11:33.570Z","level":"error","event":"cloudwalker.call_failed","op":"alert","alert_id":"webshell:1","error":"牧云详情事件 ID 与请求不符"}
+{"time":"2026-11-20T03:11:33.570Z","level":"error","event":"http.failed","method":"GET","path":"/api/alerts/webshell:1","status":502,"error":"牧云详情事件 ID 与请求不符"}
+{"time":"2026-11-20T03:11:33.571Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:1","status":502,"duration_ms":1}
+✔ HTTP 详情：上游回了别的事件仍是 502，不说成 404 (4.939306ms)
+{"time":"2026-11-20T03:11:33.574Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.575Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.578Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":1}
+✔ /api/alerts 顶层 triage_configured 区分「没记录」与「没配研判」 (7.054096ms)
+{"time":"2026-11-20T03:11:33.581Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:0","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.582Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:abc","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.584Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.585Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/1.5","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.586Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/nope:1","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.588Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts/webshell:3","status":200,"duration_ms":0}
+✔ HTTP 详情：告警 ID 格式不对或类型不在枚举 → 400，不浪费一次牧云调用 (10.8948ms)
+{"time":"2026-11-20T03:11:33.595Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/webshell:1","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.597Z","level":"info","event":"triage.enqueued","alert_id":"webshell:1","source":"manual"}
+{"time":"2026-11-20T03:11:33.599Z","level":"info","event":"triage.done","alert_id":"webshell:1","verdict":null,"attempts":1,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.600Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/webshell:1","status":202,"duration_ms":3}
+{"time":"2026-11-20T03:11:33.601Z","level":"info","event":"http.request","method":"GET","path":"/api/alerts","status":200,"duration_ms":0}
+✔ TriageCase 三处都带 evidence[]：未入队详情、入队 202、告警列表挂的 triage (14.472133ms)
+✔ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (2.911817ms)
+{"time":"2026-11-20T03:11:33.297Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12656,"messages":2,"tools":4}
+{"time":"2026-11-20T03:11:33.298Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12656,"duration_ms":1,"output_chars":194,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3589,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3589,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.305Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10328,"messages":2,"tools":4}
+{"time":"2026-11-20T03:11:33.305Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10328,"duration_ms":0,"output_chars":194,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.306Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2685,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.306Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2685,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ 常规研判把必查空页与不可用来源写入结果，deep 采同一套必查项 (64.071289ms)
+{"time":"2026-11-20T03:11:33.317Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"shortcut","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3358,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.318Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"shortcut","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3358,"duration_ms":1,"output_chars":357,"outcome":"ok","tool_calls":0}
+✔ published customer experience avoids a full repeat investigation when current behavior is verified (15.606773ms)
+{"time":"2026-11-20T03:11:33.327Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"shortcut","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":3172,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.327Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"shortcut","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":3172,"duration_ms":0,"output_chars":317,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.328Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":12595,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.328Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":12595,"duration_ms":0,"output_chars":183,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.328Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":2859,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.328Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":2859,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ knowledge claims without a current behavior citation continue to full investigation (6.83249ms)
+{"time":"2026-11-20T03:11:33.341Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"shortcut","alert_id":"honeypot:36689","model":"fake","direction":"request","input_chars":3729,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.341Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"shortcut","alert_id":"honeypot:36689","model":"fake","direction":"response","input_chars":3729,"duration_ms":0,"output_chars":480,"outcome":"ok","tool_calls":0}
+✔ legacy unsuccessful attack experience is preserved but presented as uncertain (14.110076ms)
+{"time":"2026-11-20T03:11:33.348Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"elevation_process:62557","model":"fake","direction":"request","input_chars":13121,"messages":2,"tools":4}
+{"time":"2026-11-20T03:11:33.348Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"elevation_process:62557","model":"fake","direction":"response","input_chars":13121,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":8}
+{"time":"2026-11-20T03:11:33.351Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"elevation_process:62557","model":"fake","direction":"request","input_chars":11612,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.352Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"elevation_process:62557","model":"fake","direction":"response","input_chars":11612,"duration_ms":0,"output_chars":0,"outcome":"timeout","tool_calls":0,"error":"The operation was aborted due to timeout"}
+{"time":"2026-11-20T03:11:33.352Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":2,"phase":"investigate","alert_id":"elevation_process:62557","model":"fake","direction":"request","input_chars":11612,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.352Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":2,"phase":"investigate","alert_id":"elevation_process:62557","model":"fake","direction":"response","input_chars":11612,"duration_ms":0,"output_chars":203,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.352Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"elevation_process:62557","model":"fake","direction":"request","input_chars":3534,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.352Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"elevation_process:62557","model":"fake","direction":"response","input_chars":3534,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ final model timeout retries with the same collected evidence (10.130388ms)
+{"time":"2026-11-20T03:11:33.359Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12512,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.359Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12512,"duration_ms":0,"output_chars":0,"outcome":"timeout","tool_calls":0,"error":"The operation was aborted due to timeout"}
+{"time":"2026-11-20T03:11:33.359Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":2,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12512,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.360Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":2,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12512,"duration_ms":1,"output_chars":185,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.360Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2983,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.360Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2983,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ tool selection timeout retries with the same evidence and tool options (6.637912ms)
+{"time":"2026-11-20T03:11:33.366Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":10252,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.366Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":10252,"duration_ms":0,"output_chars":349,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.366Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":2136,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.366Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":2136,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ document scene prompt is routed to its alert type with three-state verdict (6.101463ms)
+{"time":"2026-11-20T03:11:33.373Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":10234,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.373Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":10234,"duration_ms":0,"output_chars":163,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.374Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":1907,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.374Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":1907,"duration_ms":0,"output_chars":0,"outcome":"timeout","tool_calls":0,"error":"review timeout"}
+✔ high-risk confirmation is reduced when independent review times out (8.641236ms)
+{"time":"2026-11-20T03:11:33.381Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:36870","model":"fake","direction":"request","input_chars":11073,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.381Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:36870","model":"fake","direction":"response","input_chars":11073,"duration_ms":0,"output_chars":183,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.381Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:36870","model":"fake","direction":"request","input_chars":2736,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.381Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:36870","model":"fake","direction":"response","input_chars":2736,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ loopback honeypot probe without responses cannot confirm host compromise (6.123741ms)
+{"time":"2026-11-20T03:11:33.386Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":10268,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.386Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":10268,"duration_ms":0,"output_chars":163,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.387Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":1907,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.387Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":1907,"duration_ms":0,"output_chars":77,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.387Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"revision","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":8878,"messages":4,"tools":0}
+{"time":"2026-11-20T03:11:33.387Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"revision","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":8878,"duration_ms":0,"output_chars":163,"outcome":"ok","tool_calls":0}
+✔ unresolved independent review keeps a revised high-risk verdict below confirmation (5.58792ms)
+✔ Agent list requests are bounded and scalar MCP filters become arrays (1.293668ms)
+{"time":"2026-11-20T03:11:33.396Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"revshell:7","model":"fake-model","direction":"request","input_chars":10176,"messages":2,"tools":4}
+{"time":"2026-11-20T03:11:33.396Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"revshell:7","model":"fake-model","direction":"response","input_chars":10176,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.397Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"revshell:7","model":"fake-model","direction":"request","input_chars":10794,"messages":4,"tools":4}
+{"time":"2026-11-20T03:11:33.397Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"revshell:7","model":"fake-model","direction":"response","input_chars":10794,"duration_ms":1,"output_chars":203,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.397Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"revshell:7","model":"fake-model","direction":"request","input_chars":2375,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.397Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"revshell:7","model":"fake-model","direction":"response","input_chars":2375,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ Agent chooses a read-only tool, then cites and verifies its result (7.993249ms)
+{"time":"2026-11-20T03:11:33.402Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"revshell:7","model":"fake","direction":"request","input_chars":9872,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.402Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"revshell:7","model":"fake","direction":"response","input_chars":9872,"duration_ms":0,"output_chars":196,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.402Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"revshell:7","model":"fake","direction":"request","input_chars":1935,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.402Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"revshell:7","model":"fake","direction":"response","input_chars":1935,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.402Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"revshell:7","model":"fake","direction":"request","input_chars":8514,"messages":4,"tools":0}
+{"time":"2026-11-20T03:11:33.403Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"revshell:7","model":"fake","direction":"response","input_chars":8514,"duration_ms":1,"output_chars":0,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（TypeError）"}
+✔ fabricated citations force human review (8.947489ms)
+{"time":"2026-11-20T03:11:33.412Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":10252,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.413Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":10252,"duration_ms":1,"output_chars":293,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.413Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":2069,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.413Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":2069,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ high-risk false positive requires independent positive benign evidence (6.976991ms)
+{"time":"2026-11-20T03:11:33.422Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13771,"messages":2,"tools":4}
+{"time":"2026-11-20T03:11:33.423Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13771,"duration_ms":1,"output_chars":171,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.423Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3274,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.423Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3274,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.428Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13476,"messages":2,"tools":4}
+{"time":"2026-11-20T03:11:33.428Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13476,"duration_ms":0,"output_chars":171,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.428Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3278,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.428Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3278,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A1 套上的 Rego 连整段正文进分析上下文，没命中就写明没有 (15.892003ms)
+{"time":"2026-11-20T03:11:33.436Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13263,"messages":2,"tools":5}
+{"time":"2026-11-20T03:11:33.436Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13263,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.436Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13565,"messages":4,"tools":5}
+{"time":"2026-11-20T03:11:33.436Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13565,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.438Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13964,"messages":6,"tools":5}
+{"time":"2026-11-20T03:11:33.438Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13964,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.438Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14778,"messages":8,"tools":5}
+{"time":"2026-11-20T03:11:33.438Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14778,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.439Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":5,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3533,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.439Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":5,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3533,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A2 有知识库时先交结论被退回；采纳页写进结果 (11.362666ms)
+{"time":"2026-11-20T03:11:33.446Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13263,"messages":2,"tools":5}
+{"time":"2026-11-20T03:11:33.447Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13263,"duration_ms":1,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.448Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13662,"messages":4,"tools":5}
+{"time":"2026-11-20T03:11:33.448Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13662,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.448Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13978,"messages":6,"tools":5}
+{"time":"2026-11-20T03:11:33.449Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13978,"duration_ms":1,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.449Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":4,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3064,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.449Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":4,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3064,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A2 查过判据不采纳时，结果里写原因；没写原因被退回 (9.385183ms)
+{"time":"2026-11-20T03:11:33.458Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10216,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.458Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10216,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.458Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":11001,"messages":4,"tools":3}
+{"time":"2026-11-20T03:11:33.458Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":11001,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.459Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2524,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.459Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2524,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A3 结论经 submit_conclusion 写出：501 字被退，500 字原样收下 (11.458557ms)
+{"time":"2026-11-20T03:11:33.468Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10216,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.468Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10216,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.468Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2056,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.468Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2056,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ deep 模式下结论工具忽略 wiki 字段，不因未查知识库被拒 (6.179824ms)
+{"time":"2026-11-20T03:11:33.471Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.471Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":0,"output_chars":50,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.472Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12795,"messages":4,"tools":3}
+{"time":"2026-11-20T03:11:33.472Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12795,"duration_ms":0,"output_chars":50,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.472Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13046,"messages":6,"tools":3}
+{"time":"2026-11-20T03:11:33.472Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13046,"duration_ms":0,"output_chars":50,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.472Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13297,"messages":8,"tools":3}
+{"time":"2026-11-20T03:11:33.472Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13297,"duration_ms":0,"output_chars":50,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.472Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13548,"messages":10,"tools":3}
+{"time":"2026-11-20T03:11:33.473Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13548,"duration_ms":1,"output_chars":50,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.473Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10718,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.473Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10718,"duration_ms":0,"output_chars":50,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+✔ A1 六轮都没给出 JSON 时出存疑降级结论，末次回包与退回原因留在里面 (5.125432ms)
+{"time":"2026-11-20T03:11:33.477Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.477Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":0,"output_chars":0,"outcome":"error","tool_calls":0,"error":"模型没有返回可用消息"}
+✔ A1 模型没有返回可用消息时，失败消息带 model-client 挂上的回包摘要 (4.079491ms)
+{"time":"2026-11-20T03:11:33.480Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13263,"messages":2,"tools":5}
+{"time":"2026-11-20T03:11:33.480Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13263,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.481Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13566,"messages":4,"tools":5}
+{"time":"2026-11-20T03:11:33.481Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13566,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.481Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13869,"messages":6,"tools":5}
+{"time":"2026-11-20T03:11:33.481Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13869,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.481Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14172,"messages":8,"tools":5}
+{"time":"2026-11-20T03:11:33.481Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14172,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.481Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14475,"messages":10,"tools":5}
+{"time":"2026-11-20T03:11:33.481Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14475,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.481Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10718,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.482Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10718,"duration_ms":1,"output_chars":6,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+✔ A1 结论连续被退回时，降级结论写退回次数与原因 (6.758248ms)
+{"time":"2026-11-20T03:11:33.488Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.488Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":0,"output_chars":13,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.488Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12758,"messages":4,"tools":3}
+{"time":"2026-11-20T03:11:33.488Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12758,"duration_ms":0,"output_chars":13,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.488Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12972,"messages":6,"tools":3}
+{"time":"2026-11-20T03:11:33.488Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12972,"duration_ms":0,"output_chars":13,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.488Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13186,"messages":8,"tools":3}
+{"time":"2026-11-20T03:11:33.488Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13186,"duration_ms":0,"output_chars":13,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.488Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13400,"messages":10,"tools":3}
+{"time":"2026-11-20T03:11:33.489Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13400,"duration_ms":1,"output_chars":13,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.489Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10718,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.489Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10718,"duration_ms":0,"output_chars":13,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.491Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.491Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":0,"output_chars":13,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.491Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12758,"messages":4,"tools":3}
+{"time":"2026-11-20T03:11:33.491Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12758,"duration_ms":0,"output_chars":13,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.491Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12972,"messages":6,"tools":3}
+{"time":"2026-11-20T03:11:33.492Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12972,"duration_ms":1,"output_chars":13,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.492Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13186,"messages":8,"tools":3}
+{"time":"2026-11-20T03:11:33.492Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13186,"duration_ms":0,"output_chars":14,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.492Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13402,"messages":10,"tools":3}
+{"time":"2026-11-20T03:11:33.492Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13402,"duration_ms":0,"output_chars":14,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.492Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10718,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.492Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10718,"duration_ms":0,"output_chars":14,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.494Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.494Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":0,"output_chars":178,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.494Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2995,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.494Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2995,"duration_ms":0,"output_chars":178,"outcome":"ok","tool_calls":0}
+✔ A2 同一个研判实例连出两次降级结论，摘要各是各的 (9.90131ms)
+{"time":"2026-11-20T03:11:33.499Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.499Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":0,"output_chars":0,"outcome":"error","tool_calls":0,"error":"模型接口 HTTP 502: 网关错误"}
+✔ A3 模型调用失败（真异常）不写降级结论，也不覆盖已写成的结论 (6.20762ms)
+✔ model-client 抛「没有返回可用消息」时把不可用回包的摘要挂到 error 上 (33.358157ms)
+{"time":"2026-11-20T03:11:33.545Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13486,"messages":2,"tools":4}
+{"time":"2026-11-20T03:11:33.545Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13486,"duration_ms":0,"output_chars":171,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.545Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3274,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.545Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3274,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.547Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.547Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":0,"output_chars":171,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.547Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2978,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.547Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2978,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A2 syslog 已取的事件详情随 match.event 进研判，入口不再拉第二次 (12.637685ms)
+✔ A2 复用已取详情不豁免取证上限：次数用尽与超 2MB 照抛 (8.659813ms)
+{"time":"2026-11-20T03:11:33.558Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.558Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":0,"output_chars":155,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.558Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2957,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.558Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2957,"duration_ms":0,"output_chars":0,"outcome":"timeout","tool_calls":0,"error":"review timeout"}
+✔ A2 独立复核不可用时，非高危告警的真实威胁也降为存疑 (2.6819ms)
+{"time":"2026-11-20T03:11:33.560Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.561Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":1,"output_chars":152,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.561Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2954,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.561Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2954,"duration_ms":0,"output_chars":82,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.561Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"revision","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":11179,"messages":4,"tools":0}
+{"time":"2026-11-20T03:11:33.561Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"revision","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":11179,"duration_ms":0,"output_chars":0,"outcome":"timeout","tool_calls":0,"error":"修订请求超时"}
+✔ A2 复核要求修订但修订请求失败：降级并写明，不静默沿用草稿 (2.592434ms)
+{"time":"2026-11-20T03:11:33.563Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12544,"messages":2,"tools":3}
+{"time":"2026-11-20T03:11:33.564Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12544,"duration_ms":1,"output_chars":6,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.564Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12744,"messages":4,"tools":3}
+{"time":"2026-11-20T03:11:33.564Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12744,"duration_ms":0,"output_chars":6,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.564Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12944,"messages":6,"tools":3}
+{"time":"2026-11-20T03:11:33.564Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12944,"duration_ms":0,"output_chars":6,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.564Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13144,"messages":8,"tools":3}
+{"time":"2026-11-20T03:11:33.564Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13144,"duration_ms":0,"output_chars":6,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.565Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":13344,"messages":10,"tools":3}
+{"time":"2026-11-20T03:11:33.565Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":13344,"duration_ms":0,"output_chars":6,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.565Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10718,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.565Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10718,"duration_ms":0,"output_chars":6,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+✔ A3 无效 JSON 同轮带错误反馈，退回上限按轮数封顶且落 trace (3.940088ms)
+{"time":"2026-11-20T03:11:33.569Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":12806,"messages":2,"tools":5}
+{"time":"2026-11-20T03:11:33.569Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":12806,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":2}
+{"time":"2026-11-20T03:11:33.584Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14379,"messages":5,"tools":5}
+{"time":"2026-11-20T03:11:33.584Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14379,"duration_ms":0,"output_chars":164,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.584Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3901,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.584Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3901,"duration_ms":0,"output_chars":164,"outcome":"ok","tool_calls":0}
+✔ A7 一轮多个工具调用并发执行，tool 消息按 tool_call_id 原序回填 (19.27462ms)
+{"time":"2026-11-20T03:11:33.592Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"narrative","alert_id":"syslog:honeypot:d7439bee24773bcb","model":"fake","direction":"request","input_chars":787,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.592Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"narrative","alert_id":"syslog:honeypot:d7439bee24773bcb","model":"fake","direction":"response","input_chars":787,"duration_ms":0,"output_chars":108,"outcome":"ok","tool_calls":0}
+✔ A8 降级路径五个互不依赖的加载并发拉齐 (7.949459ms)
+{"time":"2026-11-20T03:11:33.596Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f9452749-fa34-4247-bfaf-ee287b71b43f","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.602Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":13931,"messages":2,"tools":5}
+{"time":"2026-11-20T03:11:33.602Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":13931,"duration_ms":1,"output_chars":11,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.602Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":14141,"messages":4,"tools":5}
+{"time":"2026-11-20T03:11:33.602Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":14141,"duration_ms":0,"output_chars":11,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.602Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":14351,"messages":6,"tools":5}
+{"time":"2026-11-20T03:11:33.602Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":14351,"duration_ms":0,"output_chars":11,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.602Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":14561,"messages":8,"tools":5}
+{"time":"2026-11-20T03:11:33.602Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":14561,"duration_ms":0,"output_chars":11,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.603Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":14771,"messages":10,"tools":5}
+{"time":"2026-11-20T03:11:33.603Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":14771,"duration_ms":0,"output_chars":11,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.603Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":11745,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.603Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":6,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":11745,"duration_ms":0,"output_chars":11,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（SyntaxError）"}
+{"time":"2026-11-20T03:11:33.605Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f9452749-fa34-4247-bfaf-ee287b71b43f","verdict":"uncertain","attempts":1,"duration_ms":9}
+✔ A1 轮数用尽时案件目录照常写出 05-研判结果.md（存疑 + 缺口清单） (18.540589ms)
+✔ conversation keeps incomplete experience and resumes until ready for review (27.726935ms)
+✔ failed model turn still preserves customer input for later supplement (9.032346ms)
+✔ customer can defer a missing item, answer another, and later fill the deferred item (9.309126ms)
+{"time":"2026-11-20T03:11:33.377Z","level":"info","event":"http.request","method":"POST","path":"/api/knowledge/cases","status":404,"duration_ms":4}
+✔ retired knowledge API cannot create another source of truth (43.67565ms)
+✔ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.492785ms)
+✔ login issues an HttpOnly session; logout revokes it and rejects cross-site requests (104.010926ms)
+✔ viewer can log in but cannot upload or apply even by forging its client role (26.713889ms)
+✔ expired and fabricated session cookies do not authorize maintenance (18.653103ms)
+✔ login failures are rate limited; read-only preview never grants a write session (42.793695ms)
+✔ maintenance CLI starts when the deployment current path is a symlink (146.153144ms)
+✔ 白板 page 回本页摘要与切页前总数，按更新时间倒序 (27.676091ms)
+✔ 白板 page 在没有目录、坏文件时不抛，只数有效白板 (4.856125ms)
+{"time":"2026-11-20T03:11:33.374Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":5}
+{"time":"2026-11-20T03:11:33.391Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":200,"duration_ms":0}
+✔ HTTP 白板列表把 count / offset 交给服务层并回 total (53.14555ms)
+{"time":"2026-11-20T03:11:33.409Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.414Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.419Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.422Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.426Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.428Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":400,"duration_ms":0}
+✔ HTTP 白板列表分页参数不合法回 400，且不调服务层 (34.239692ms)
+{"time":"2026-11-20T03:11:33.440Z","level":"info","event":"http.request","method":"GET","path":"/api/trace/boards","status":503,"duration_ms":1}
+✔ HTTP 白板列表没配白板服务时 503 先于分页校验 (12.594664ms)
+{"time":"2026-11-20T03:11:33.450Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+✔ HTTP 知识库列表不带 count 时照旧回全部，并给出 total (9.867996ms)
+{"time":"2026-11-20T03:11:33.465Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.468Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.471Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":0}
+✔ HTTP 知识库列表按 count / offset 切页，total 是切页前条数 (18.663161ms)
+{"time":"2026-11-20T03:11:33.476Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.479Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+✔ HTTP 知识库列表 q 先过滤（保留 50 条上限）再切页，total 是过滤后条数 (7.162978ms)
+{"time":"2026-11-20T03:11:33.483Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.485Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.487Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.489Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.490Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.491Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":400,"duration_ms":0}
+✔ HTTP 知识库列表分页参数不合法回 400 (12.584396ms)
+{"time":"2026-11-20T03:11:33.497Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.499Z","level":"warn","event":"http.unauthorized","method":"GET","path":"/api/session","status":401}
+{"time":"2026-11-20T03:11:33.500Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":401,"duration_ms":1}
+✔ 配置了 Basic 账号时 /api/session 回 user 与 operator 角色 (8.439814ms)
+{"time":"2026-11-20T03:11:33.505Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":200,"duration_ms":0}
+✔ 配了密码没配账号名时 /api/session 与鉴权口径一致，落回 admin (4.900753ms)
+{"time":"2026-11-20T03:11:33.509Z","level":"info","event":"http.request","method":"GET","path":"/api/session","status":200,"duration_ms":0}
+✔ 未配置 Basic 密码时 /api/session 回 authenticated 但 user / role 为 null (3.528584ms)
+✔ 可疑命令按主机先查关联事件和命令会话，并分别记录空页与缺少数据源 (8.169319ms)
+✔ 网络告警只按已知来源查询连接，成功与接口失败分别保留 (0.795281ms)
+✔ 没有主机身份时不会对全库发起无筛选查询 (0.630805ms)
+✔ 命令会话使用牧云提供的带主机过滤工具，缺授权工具时标牧云暂无此数据源 (0.523739ms)
+✔ 目录里有的授权工具按告警事实组参数真查，不再标成不可用 (1.002849ms)
+✔ 授权工具在目录里但必需字段组不出来时记缺标识，不当成「查了没有」 (0.824265ms)
+✔ 必查项并发执行：互相不串行，status 与 plan 顺序一一对应 (17.246712ms)
+✔ 事件视图只有裸 id 时不拿事件 ID 当主机 ID：必查项退成缺标识，不报「已查未返回」 (2.915728ms)
+✔ 适配牧云 MCP 数组筛选字段和不支持 types 的主机事件接口 (1.167046ms)
+✔ HTTP 契约同步：必查项结果写出的每个键都在 openapi RequiredEvidence 里声明（含 catalog_absent） (2.420974ms)
+✔ A1 一条规则一份 Rego：能列出名字，能按 id 逐字读回原文 (19.355426ms)
+✔ A1 列表按 id 排序；没有规则文件时明确返回空列表 (12.859012ms)
+✔ A1 按 id 读不到：不存在或格式不对都回 null，不读目录外的文件 (3.398819ms)
+✔ A1 规则 id 由 package 决定：重复 id 装载即报错并点名两份文件 (3.911244ms)
+✔ A1 规则目录不存在时报错，不静默当成空规则库 (1.688829ms)
+✔ A2 规则没写的字段不限制：只写 type 的规则对任意用户、命令、对端都成立 (3.648711ms)
+✔ A2 七个字段（主机/对端/命令/用户/路径/类型/来源 IP）都能被规则取值 (5.151273ms)
+✔ A2 比较是严格相等；contains / startswith / endswith 只对字符串成立 (4.689204ms)
+✔ A2 字面量支持字符串、数字、true / false / null (5.204073ms)
+✔ A2 事实缺字段按 Rego 的 undefined 处理：引用它的条件不成立，not 才成立 (3.87339ms)
+✔ A3 命中时返回规则名字与 Rego 正文；没有命中时 matched 是空数组 (3.102134ms)
+✔ A3 空规则库求值：明确返回空结果而不是 null 或报错 (1.500817ms)
+✔ A3 事实必须是 JSON 对象：null / 数组 / 标量都拒绝 (2.127361ms)
+✔ 子集外的 Rego 在装载时报错，消息带 rules/<文件>:<行> (16.998217ms)
+{"time":"2026-11-20T03:11:33.463Z","level":"info","event":"http.request","method":"GET","path":"/api/rules","status":200,"duration_ms":5}
+{"time":"2026-11-20T03:11:33.484Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/ssh_bruteforce","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.496Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/no_such_rule","status":404,"duration_ms":2}
+{"time":"2026-11-20T03:11:33.500Z","level":"info","event":"http.request","method":"GET","path":"/api/rules/Bad-Id","status":400,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.507Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/evaluate","status":200,"duration_ms":2}
+{"time":"2026-11-20T03:11:33.512Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/evaluate","status":200,"duration_ms":3}
+{"time":"2026-11-20T03:11:33.518Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/evaluate","status":400,"duration_ms":4}
+{"time":"2026-11-20T03:11:33.520Z","level":"info","event":"http.request","method":"POST","path":"/api/rules/evaluate","status":400,"duration_ms":1}
+✔ HTTP 列规则 / 按 id 读原文 / 求值：命中给正文，没命中给空 (95.279527ms)
+✔ A6 求值命中 mtime 缓存：同 mtime 改写内容不重读重解析，mtime 一变立刻生效 (8.97354ms)
+✔ A6 语法错在同 mtime 下不重解析；mtime 变化后才报错；删掉的规则立即消失 (4.624951ms)
+✔ 牧云的三种 syslog 载荷保留同一组字段及未转义的内层引号 (2.249304ms)
+✔ 真实牧云键值对载荷保留未加引号的事件身份，并按显式时区解析事件时间 (2.136371ms)
+{"time":"2026-11-20T03:11:33.291Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f513c6c8-3c19-4f2c-9785-6902cd2aac6f","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.294Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f513c6c8-3c19-4f2c-9785-6902cd2aac6f","repeat_count":2}
+{"time":"2026-11-20T03:11:33.305Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f513c6c8-3c19-4f2c-9785-6902cd2aac6f","verdict":"uncertain","attempts":1,"duration_ms":12}
+{"time":"2026-11-20T03:11:33.310Z","level":"info","event":"syslog.reused_conclusion","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f513c6c8-3c19-4f2c-9785-6902cd2aac6f","repeat_count":3,"occurrence":2}
+{"time":"2026-11-20T03:11:33.311Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:b2c7c87731bc743e:1793692801:03fc05ab-b8d6-4b03-9fe9-93744a3b8008","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.313Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:b2c7c87731bc743e:1793692801:03fc05ab-b8d6-4b03-9fe9-93744a3b8008","verdict":"uncertain","attempts":1,"duration_ms":2}
+✔ syslog 逐条研判保留材料、三态结果，并区分重复投递与跨秒行为 (48.330282ms)
+{"time":"2026-11-20T03:11:33.330Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:aa392969-af41-4c73-80f5-10bb2b3119b2","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.330Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-20T03:11:33.336Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:aa392969-af41-4c73-80f5-10bb2b3119b2","verdict":"uncertain","attempts":1,"duration_ms":6}
+✔ 没有可关联事件 ID 时仍逐条归档存疑结论 (17.133849ms)
+{"time":"2026-11-20T03:11:33.348Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f3bfd0d5-a3d5-4392-bc26-596110a468f7","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.348Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-20T03:11:33.350Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f3bfd0d5-a3d5-4392-bc26-596110a468f7","attempts":1,"error":"model timeout"}
+{"time":"2026-11-20T03:11:33.355Z","level":"info","event":"triage.enqueued","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f3bfd0d5-a3d5-4392-bc26-596110a468f7","source":"retry"}
+{"time":"2026-11-20T03:11:33.355Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-20T03:11:33.357Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:f3bfd0d5-a3d5-4392-bc26-596110a468f7","verdict":"uncertain","attempts":2,"duration_ms":2}
+✔ 失败的 syslog 案件能保留原始报文并按同一任务重试 (19.152608ms)
+✔ concurrent board reads always see a complete saved snapshot (141.150352ms)
+✔ incomplete model action is recorded and retried without ending the investigation (13.862001ms)
+✔ AI investigation grows a persisted board and rejects unsupported links (12.496677ms)
+✔ IP start discovers touched hosts as program leads without claiming an AI path (8.849082ms)
+✔ asset investigation gives newly discovered external IPs the same ids as evidence edges (32.335193ms)
+✔ A1 已有溯源直接返回那条，不再查一遍告警详情 (2.420066ms)
+✔ A1 没有溯源时从告警新建，created 为真并标出告警起点 (3.951751ms)
+✔ A2 列表给出类型/主机/告警时间/状态/链长/断点/更新时间，能筛能分页 (5.288022ms)
+✔ A3 详情是 hops/links/gaps/discovery，线从更晚指向更早 (2.332695ms)
+✔ A3 两端时间相同时按离告警的远近定方向：从告警一侧指向原因一侧 (2.217037ms)
+✔ A4 告警分析已取到的证据直接引用，不为同一份再查一遍 (5.061807ms)
+✔ A4 syslog 告警没有分析证据时明确拒绝，不猜 (1.988936ms)
+{"time":"2026-11-20T03:11:33.367Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"poll"}
+{"time":"2026-11-20T03:11:33.372Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":"undetermined","attempts":1,"duration_ms":1}
+✔ new alerts enter triage once and the cursor survives restart (45.289958ms)
+{"time":"2026-11-20T03:11:33.391Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:manual","source":"manual"}
+{"time":"2026-11-20T03:11:33.392Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"poll"}
+{"time":"2026-11-20T03:11:33.410Z","level":"info","event":"triage.done","alert_id":"honeypot:manual","verdict":"undetermined","attempts":1,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.413Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":"undetermined","attempts":1,"duration_ms":3}
+✔ resume after restart keeps the cursor and the paused backlog instead of skipping it (33.454747ms)
+{"time":"2026-11-20T03:11:33.423Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:7","source":"manual"}
+{"time":"2026-11-20T03:11:33.424Z","level":"info","event":"triage.done","alert_id":"honeypot:7","verdict":"threat","attempts":1,"duration_ms":1}
+✔ 研判完成后 TriageCase 带 evidence 条目：RPC 形态的 args 保留，sha256 只增不减 (15.210005ms)
+✔ 旧队列记录缺 evidence 时从研判记录就地补齐 (3.619657ms)
+{"time":"2026-11-20T03:11:33.442Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:8","source":"manual"}
+{"time":"2026-11-20T03:11:33.443Z","level":"error","event":"triage.failed","alert_id":"honeypot:8","attempts":1,"error":"模型不可达"}
+{"time":"2026-11-20T03:11:33.446Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:9","source":"manual"}
+✔ 排队中与研判失败的 TriageCase 也带空的 evidence[] (11.693364ms)
+✔ cases() 按结论 / 类型 / 主机 / 时间筛，total 是过滤后条数 (2.574904ms)
+✔ cases({ sort: "verdict" }) 把 threat 排前面，同档保持时间倒序，无结论排最后 (0.681929ms)
+✔ 列表的重复次数沿用例记录上的 repeat_count，不另造计数 (0.393206ms)
+✔ summary() 出结论分布、类型分布，since 只算该时刻起进入队列的记录 (1.030367ms)
+{"time":"2026-11-03T08:00:00.000Z","level":"info","event":"syslog.listening","bind":"udp://127.0.0.1:15514"}
+{"time":"2026-11-03T08:00:00.000Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:7fb3f91a-c5a1-4f69-b6c1-62544b969802","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-03T08:00:00.000Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","reason":"牧云事件查询失败：Cannot read properties of null (reading 'listEvents')"}
+{"time":"2026-11-03T08:00:07.000Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:7fb3f91a-c5a1-4f69-b6c1-62544b969802","repeat_count":2}
+{"time":"2026-11-03T08:00:12.000Z","level":"warn","event":"syslog.parse_failed","error":"不是合法的 RFC5424 syslog 行","bytes":14}
+{"time":"2026-11-03T08:00:17.000Z","level":"warn","event":"syslog.skipped","reason":"no_agent_for_msgid","msgid":"cloudwalker-unknown-msgid"}
+{"time":"2026-11-03T08:00:22.000Z","level":"info","event":"syslog.buffered","reason":"paused","buffered":1}
+{"time":"2026-11-03T08:00:22.000Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:7fb3f91a-c5a1-4f69-b6c1-62544b969802","attempts":1,"error":"this.investigator.runUnmatchedSyslog is not a function"}
+✔ syslog 模式的 summary 给出最后一条到达时刻，重启后不丢，失败投递不算 (21.887866ms)
+✔ type_counts 不因 MsgId 撞上对象原型键名而冒出垃圾键 (0.846195ms)
+{"time":"2026-11-20T03:11:33.483Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"manual"}
+{"time":"2026-11-20T03:11:33.484Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.489Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"retry"}
+{"time":"2026-11-20T03:11:33.490Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"false_positive","attempts":2,"duration_ms":0}
+✔ A1 已标误报的记录重跑不覆盖结论三件，报告与证据照常刷新 (17.200058ms)
+{"time":"2026-11-20T03:11:33.499Z","level":"info","event":"triage.done","alert_id":"honeypot:12","verdict":"false_positive","attempts":1,"duration_ms":0}
+✔ A1 记录上已是 false_positive 时直接跑 run() 也不覆盖结论 (3.587181ms)
+{"time":"2026-11-20T03:11:33.503Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:13","source":"manual"}
+{"time":"2026-11-20T03:11:33.504Z","level":"info","event":"triage.done","alert_id":"honeypot:13","verdict":"false_positive","attempts":1,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.509Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:13","source":"retry"}
+{"time":"2026-11-20T03:11:33.510Z","level":"info","event":"triage.done","alert_id":"honeypot:13","verdict":"threat","attempts":2,"duration_ms":0}
+✔ A1 钉子：AI 自己判出的误报不算人工登记，重跑仍按这次研判覆盖 (15.749877ms)
+{"time":"2026-11-20T03:11:33.519Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:14","source":"manual"}
+{"time":"2026-11-20T03:11:33.520Z","level":"info","event":"triage.done","alert_id":"honeypot:14","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.525Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:14","source":"retry"}
+{"time":"2026-11-20T03:11:33.526Z","level":"info","event":"triage.done","alert_id":"honeypot:14","verdict":"threat","attempts":2,"duration_ms":0}
+✔ A2 没标误报的记录重跑仍按现在的方式写回 (16.578263ms)
+{"time":"2026-11-20T03:11:33.536Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:3","source":"poll"}
+{"time":"2026-11-20T03:11:33.537Z","level":"info","event":"triage.done","alert_id":"honeypot:3","verdict":"uncertain","attempts":1,"duration_ms":0}
+✔ A1 轮询按 from 增量取数：游标由 from 决定，排序键固定，一页取完不翻页 (9.77343ms)
+{"time":"2026-11-20T03:11:33.547Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"poll"}
+{"time":"2026-11-20T03:11:33.548Z","level":"info","event":"triage.done","alert_id":"honeypot:2","verdict":"uncertain","attempts":1,"duration_ms":1}
+✔ A1 连续空轮指数退避，见到新告警立刻回常态 (10.663347ms)
+{"time":"2026-11-20T03:11:33.556Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:5debc451f5440a90:1793692800:d22f575f-7b6e-439c-a924-4a7e041a73fe","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.556Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-20T03:11:33.558Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:5debc451f5440a90:1793692800:d22f575f-7b6e-439c-a924-4a7e041a73fe","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-20T03:11:33.563Z","level":"info","event":"syslog.reused_conclusion","alert_id":"syslog:honeypot:5debc451f5440a90:1793692800:d22f575f-7b6e-439c-a924-4a7e041a73fe","repeat_count":2,"occurrence":2}
+{"time":"2026-11-20T03:11:33.568Z","level":"info","event":"syslog.reused_conclusion","alert_id":"syslog:honeypot:5debc451f5440a90:1793692800:d22f575f-7b6e-439c-a924-4a7e041a73fe","repeat_count":3,"occurrence":3}
+{"time":"2026-11-20T03:11:33.569Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:0e9d18ad447c0f5f:1793692830:3fb96458-043a-42ca-8131-e41396a93baf","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.569Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-20T03:11:33.570Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:0e9d18ad447c0f5f:1793692830:3fb96458-043a-42ca-8131-e41396a93baf","verdict":"uncertain","attempts":1,"duration_ms":1}
+✔ A3 同指纹同主机且上一条已完结：复用结论只累加 repeat_count，不再跑完整研判 (20.604674ms)
+{"time":"2026-11-20T03:11:33.577Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:5debc451f5440a90:1793692800:aa2a551b-4a53-4d7c-a4d6-c0ed6ac83081","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.577Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-20T03:11:33.578Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:5debc451f5440a90:1793692800:aa2a551b-4a53-4d7c-a4d6-c0ed6ac83081","attempts":1,"error":"model timeout"}
+{"time":"2026-11-20T03:11:33.583Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:5debc451f5440a90:1793692810:1ea4e87c-673f-4416-9b5f-710b5651c882","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":2}
+{"time":"2026-11-20T03:11:33.583Z","level":"warn","event":"syslog.match_failed","rule":"time_window","type":"honeypot","msgid":"cloudwalker-honeypot","host_ip":"10.0.0.5","window_seconds":300,"candidates":0,"nearest_gap_seconds":null,"reason":"同主机首批事件中没有落在事件时间前后 5 分钟的同类记录"}
+{"time":"2026-11-20T03:11:33.584Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:5debc451f5440a90:1793692810:1ea4e87c-673f-4416-9b5f-710b5651c882","verdict":"uncertain","attempts":1,"duration_ms":1}
+✔ A3 上一条未完结（排队/失败）不复用结论 (14.73732ms)
+{"time":"2026-11-20T03:11:33.591Z","level":"error","event":"triage.failed","alert_id":"webshell:3","attempts":1,"error":"研判记录缺少告警 ID 或模式"}
+{"time":"2026-11-20T03:11:33.592Z","level":"error","event":"triage.failed","alert_id":"webshell:2","attempts":1,"error":"研判记录缺少告警 ID 或模式"}
+{"time":"2026-11-20T03:11:33.592Z","level":"error","event":"triage.failed","alert_id":"webshell:1","attempts":1,"error":"研判记录缺少告警 ID 或模式"}
+{"time":"2026-11-20T03:11:33.592Z","level":"error","event":"triage.failed","alert_id":"honeypot:1","attempts":1,"error":"研判记录缺少告警 ID 或模式"}
+{"time":"2026-11-20T03:11:33.592Z","level":"error","event":"triage.failed","alert_id":"network_audit:1","attempts":1,"error":"研判记录缺少告警 ID 或模式"}
+✔ A4 drain 按（类型风险，occurrence_count，created_at）取最高优先级 (7.099003ms)
+{"time":"2026-11-20T03:11:33.599Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:2","source":"manual"}
+{"time":"2026-11-20T03:11:33.630Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:1","source":"manual"}
+{"time":"2026-11-20T03:11:33.631Z","level":"info","event":"triage.done","alert_id":"honeypot:1","verdict":"uncertain","attempts":1,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.631Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:1","source":"manual"}
+{"time":"2026-11-20T03:11:33.632Z","level":"warn","event":"triage.dropped","reason":"manual","count":1,"dropped":1,"queue_limit":1}
+✔ A5 并发与队列上限可由配置查，队列到上限拒收并计丢弃数 (35.256719ms)
+{"time":"2026-11-20T03:11:33.634Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:5debc451f5440a90:1793692800:b8dd00a2-88c4-405e-9bbb-ba189cd34060","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.635Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:5debc451f5440a90:1793692800:b8dd00a2-88c4-405e-9bbb-ba189cd34060","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.639Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:8067557795693ae5:1793692830:5fca4058-366c-4270-9d8d-39667b556fa3","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T03:11:33.640Z","level":"warn","event":"syslog.match_failed","rule":"event_id","type":"honeypot","msgid":"cloudwalker-honeypot","event_id":8,"mismatch":{"event_id":{"wanted":8,"returned":7}},"reason":"牧云事件 ID 对应的主机与 syslog 不一致"}
+{"time":"2026-11-20T03:11:33.640Z","level":"error","event":"triage.failed","alert_id":"syslog:honeypot:8067557795693ae5:1793692830:5fca4058-366c-4270-9d8d-39667b556fa3","attempts":1,"error":"this.investigator.runUnmatchedSyslog is not a function"}
+✔ A2 一次研判内同一条事件详情只拉一次：syslog 匹配与规则评估共用缓存，agent 拿 match.event (14.21875ms)
+✔ customer judgment stays within 300 characters after a long model response (12.171007ms)
+✔ downgraded false positive report and contradictory action are replaced (2.263272ms)
+✔ customer report keeps a complete model sentence when only the verdict label is missing (3.8032ms)
+✔ fallback report omits overlong claims instead of clipping a command midword (0.428545ms)
+{"time":"2026-11-20T03:11:33.479Z","level":"info","event":"syslog.received","alert_id":"syslog:network_audit:a47344db76f17275:1794297600:6ed594b0-27cb-4aca-b904-35b691478841","msgid":"cloudwalker-abnormal-network","event_type":"network_audit","occurrence":1}
+{"time":"2026-11-20T03:11:33.491Z","level":"info","event":"triage.done","alert_id":"syslog:network_audit:a47344db76f17275:1794297600:6ed594b0-27cb-4aca-b904-35b691478841","verdict":"uncertain","attempts":1,"duration_ms":10}
+✔ 精确命中经审批网络规则后仍读取 Wiki 并交由 AI 复核 (31.377532ms)
+✔ 字段不符、等级高、观察模式或配置损坏时的规则状态可追溯 (4.943985ms)
+{"time":"2026-11-20T03:11:33.504Z","level":"info","event":"syslog.received","alert_id":"syslog:network_audit:a47344db76f17275:1794297600:99c874b6-4ade-497e-9428-d13a38827fd4","msgid":"cloudwalker-abnormal-network","event_type":"network_audit","occurrence":1}
+{"time":"2026-11-20T03:11:33.507Z","level":"info","event":"triage.done","alert_id":"syslog:network_audit:a47344db76f17275:1794297600:99c874b6-4ade-497e-9428-d13a38827fd4","verdict":"uncertain","attempts":1,"duration_ms":2}
+✔ 规则未命中时自动队列继续读取 Wiki 并调用 AI (13.218345ms)
+{"time":"2026-11-20T03:11:33.553Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":200,"duration_ms":7}
+{"time":"2026-11-20T03:11:33.564Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/investigations","status":200,"duration_ms":1}
+✔ 直接调用 triage API 也先运行规则，deep 模式继续独立流程 (51.18483ms)
+✔ 异常登录与暴力破解按各自的牧云字段匹配 (8.835254ms)
+✔ 规则字段按牧云场景校验，缺失或空值不能触发自动误报 (9.560135ms)
+✔ 其余八类牧云入侵告警按详情字段命中并形成 AI 复核候选 (13.701436ms)
+✔ A2 规则评估复用 match.event：身份一致不再拉一次详情，轮询入口照旧取数 (2.030282ms)
+✔ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.771171ms)
+{"time":"2026-11-20T03:11:33.577Z","level":"info","event":"http.request","method":"GET","path":"/api/updates","status":200,"duration_ms":6}
+{"time":"2026-11-20T03:11:33.591Z","level":"info","event":"http.request","method":"GET","path":"/api/maintenance/overview","status":404,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.593Z","level":"info","event":"http.request","method":"GET","path":"/maintenance.html","status":404,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.597Z","level":"info","event":"http.request","method":"GET","path":"/backend/prompts/triage.md","status":404,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.604Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/prompts/upload","status":410,"duration_ms":0}
+✔ customer has version metadata only and legacy prompt upload is closed (90.193624ms)
+✔ maintenance login is independent; upload stages before explicit apply without returning plaintext (58.269445ms)
+✔ tampered, wrong-customer, incomplete and knowledge-incompatible packages never stage (15.068227ms)
+✔ apply rechecks compatibility and monotonic release sequence; encrypted package survives restart (37.804454ms)
+✔ preview is read-only and no credentials or update keys are required (7.477054ms)
+✔ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.232416ms)
+✔ current scene prompts and agent indexes use reviewed criteria (343.916589ms)
+{"time":"2026-11-20T03:11:33.925Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":2}
+{"time":"2026-11-20T03:11:33.938Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":2}
+{"time":"2026-11-20T03:11:33.939Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.941Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/sessions","status":403,"duration_ms":1}
+✔ console Basic account saves a wiki page and gets the new revision back (35.611861ms)
+{"time":"2026-11-20T03:11:33.951Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.953Z","level":"warn","event":"http.unauthorized","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":401}
+{"time":"2026-11-20T03:11:33.953Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":401,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.954Z","level":"warn","event":"http.unauthorized","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":401}
+{"time":"2026-11-20T03:11:33.954Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":401,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.956Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":409,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.957Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.958Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/..%2Fserver.js","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.959Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2F..%2F..%2Fserver.js","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.960Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/%2Fetc%2Fpasswd","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.961Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/honeypot%2FHP-09.md","status":404,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.962Z","level":"info","event":"http.request","method":"PUT","path":"/api/wiki/pages/","status":400,"duration_ms":0}
+{"time":"2026-11-20T03:11:33.963Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":1}
+✔ wiki write answers 401 without the console account, 409 on a stale revision, 400 on paths outside the wiki (20.787938ms)
+✔ a wiki write that fails halfway leaves no partial page and no temporary files (4.355992ms)
+✔ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.771381ms)
+✔ wiki search stays in the current alert class and page revisions protect edits (32.359847ms)
+{"time":"2026-11-20T03:11:33.589Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"a0b04a07-1b53-4d34-a242-df02c107a0db","direction":"request","input_chars":1158,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.590Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"a0b04a07-1b53-4d34-a242-df02c107a0db","direction":"response","input_chars":1158,"duration_ms":1,"output_chars":937,"outcome":"ok","tool_calls":0}
+✔ customer experience remains outside triage until conversation and human publication (18.518449ms)
+{"time":"2026-11-20T03:11:33.605Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"e0b53d23-be09-43eb-8c0a-42a833942e19","direction":"request","input_chars":699,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.606Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"e0b53d23-be09-43eb-8c0a-42a833942e19","direction":"response","input_chars":699,"duration_ms":1,"output_chars":82,"outcome":"ok","tool_calls":0}
+✔ wiki maintenance reads the criterion and its cited evidence before proposing a change (7.191194ms)
+{"time":"2026-11-20T03:11:33.616Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"0c768263-8ab4-45eb-9b84-c5fe158b45c5","direction":"request","input_chars":1456,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.616Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"0c768263-8ab4-45eb-9b84-c5fe158b45c5","direction":"response","input_chars":1456,"duration_ms":0,"output_chars":249,"outcome":"ok","tool_calls":0}
+✔ case feedback stays pending until reviewed and publishes evidence with the revised criteria (17.656261ms)
+{"time":"2026-11-20T03:11:33.629Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"6fa4f144-35af-4d67-acd4-4ce84b73668f","direction":"request","input_chars":1376,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.629Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"6fa4f144-35af-4d67-acd4-4ce84b73668f","direction":"response","input_chars":1376,"duration_ms":0,"output_chars":237,"outcome":"ok","tool_calls":0}
+✔ case feedback with missing data fails the maintenance turn and leaves the reason behind (5.538542ms)
+{"time":"2026-11-20T03:11:33.635Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"cfe8876a-9d30-459f-ab10-99814fae619a","direction":"request","input_chars":1371,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.635Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"cfe8876a-9d30-459f-ab10-99814fae619a","direction":"response","input_chars":1371,"duration_ms":0,"output_chars":96,"outcome":"ok","tool_calls":0}
+✔ case feedback that is a criterion gap but has no draft says what is missing (4.71756ms)
+{"time":"2026-11-20T03:11:33.639Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"8ed4363f-6035-445a-9282-e87a4a040432","direction":"request","input_chars":1382,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.639Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"8ed4363f-6035-445a-9282-e87a4a040432","direction":"response","input_chars":1382,"duration_ms":0,"output_chars":7,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（Error）"}
+{"time":"2026-11-20T03:11:33.642Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"2114a8f1-2704-4f6d-acab-b8e4c7048908","direction":"request","input_chars":699,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.642Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"2114a8f1-2704-4f6d-acab-b8e4c7048908","direction":"response","input_chars":699,"duration_ms":0,"output_chars":7,"outcome":"invalid_json","tool_calls":0,"error":"模型回包无法解析为 JSON（Error）"}
+✔ a broken model turn on a feedback session fails with its cause while plain sessions keep the record (6.962533ms)
+{"time":"2026-11-20T03:11:33.646Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"73cd1e34-1a8d-4d59-8dab-1da8f8c40cca","direction":"request","input_chars":752,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.646Z","level":"info","event":"ai.model_call","domain":"wiki","role":"wiki_maintainer","turn":1,"attempt":1,"phase":"maintain","session_id":"73cd1e34-1a8d-4d59-8dab-1da8f8c40cca","direction":"response","input_chars":752,"duration_ms":0,"output_chars":441,"outcome":"ok","tool_calls":0}
+✔ new external source is published only after original text review (8.304531ms)
+{"time":"2026-11-20T03:11:33.674Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":4}
+{"time":"2026-11-20T03:11:33.681Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages/honeypot%2FHP-01.md","status":200,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.686Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/sessions","status":403,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.690Z","level":"info","event":"http.request","method":"POST","path":"/api/wiki/sessions","status":403,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.691Z","level":"info","event":"http.request","method":"GET","path":"/backend/wiki/honeypot/HP-01.md","status":404,"duration_ms":1}
+{"time":"2026-11-20T03:11:33.693Z","level":"info","event":"http.request","method":"GET","path":"/api/wiki/pages","status":200,"duration_ms":1}
+✔ wiki pages are readable but maintenance requires the administrator token and backend files stay private (43.652602ms)
+{"time":"2026-11-20T03:11:33.722Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"test","direction":"request","input_chars":14007,"messages":2,"tools":5}
+{"time":"2026-11-20T03:11:33.722Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"test","direction":"response","input_chars":14007,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T03:11:33.724Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"test","direction":"request","input_chars":14385,"messages":4,"tools":5}
+{"time":"2026-11-20T03:11:33.724Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"test","direction":"response","input_chars":14385,"duration_ms":0,"output_chars":190,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T03:11:33.724Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"test","direction":"request","input_chars":3306,"messages":2,"tools":0}
+{"time":"2026-11-20T03:11:33.724Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"test","direction":"response","input_chars":3306,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ triage reads a Wiki criterion while current alert facts come from the API toolbox (30.787234ms)
+✔ A7 agentIndex 按 mtime 缓存：同 mtime 同大小不重读，mtime 一变立刻生效 (5.481762ms)
+✔ A7 一次研判里反复要目录只读一遍：agentPage 与 agentContextPages 共用缓存 (4.701357ms)
+ℹ tests 235
+ℹ suites 0
+ℹ pass 235
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 858.92967

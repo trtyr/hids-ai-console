@@ -1,0 +1,9 @@
+# P003-T050 复审第二轮：隔离守卫（罩面扩到 evidence/** 之后）
+# 命令：node --test --test-timeout=600000 --test-force-exit evidence/test/P003-T034/global-root-isolation.test.js
+# 日期：2026-11-20T11:55:34+08:00
+✔ A3 首启把仓内 wiki/ 与 rules/ 种子进 <HOME>/.local/share/hids-ai-console，二次启动不重种 (215.761439ms)
+✔ A2/A4 全量测试（evidence 套件 + npm test）在临时 HOME 下跑完：影子全局根零文件（＝真全局根零痕迹） (10399.667547ms)
+ℹ tests 2
+ℹ pass 2
+ℹ fail 0
+ℹ duration_ms 10671.102436

@@ -1,0 +1,6 @@
+# cmd: npm test
+ℹ tests 235
+ℹ pass 235
+ℹ fail 0
+ℹ todo 0
+ℹ duration_ms 845.248978

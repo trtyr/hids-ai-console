@@ -7,6 +7,9 @@
 //   A4 .env.example 列全六键且注释写明回退；不设新键时结论与分层前一致
 //   A5 POST /api/config 可写六键（既有覆盖层），坏值报错点组内键名
 // 全部替身：假 fetcher / 假 env / 临时目录，不碰真实网络与真实 process.env。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -59,6 +62,9 @@ function post(base, patch) {
   return fetch(`${base}/api/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch) });
 }
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('A1 只设主判三项：五个角色逐键回退主判，地址与模型名与分层前一致', () => {
   const env = { ...PRIMARY };

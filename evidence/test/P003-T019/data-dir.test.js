@@ -8,13 +8,14 @@ import { dataRoot } from '../../../config-store.js';
 
 // P003-T019 立、P003-T034 改口径：运行态（案卷 / 研判记录 / 基线 / 规则集 / 白板）不再落仓库内 `.data/`，
 // 一律落在**数据根**下（`HIDS_DATA_DIR` 或 `~/.local/share/hids-ai-console`）。
-// 本文件只管两件事：① 七条具名路径的结构没变（子目录 / 文件名逐字一致）；② 换根时整批跟着走。
-// P003-T043：原九条里的 `baseline` / `intel` 两键已砍（研判背景改走判据库 `common/GEN-13.md` 与规则层），余七条不变。
+// 本文件只管两件事：① 八条具名路径的结构没变（子目录 / 文件名逐字一致）；② 换根时整批跟着走。
+// P003-T043：原九条里的 `baseline` / `intel` 两键已砍（研判背景改走判据库 `common/GEN-13.md` 与规则层）；
+// P003-T047 加了 `fpSessions`（误报维护会话 `<数据根>/fp-sessions/`，`server.js:1420`），下面按八条钉。
 // 数据根怎么算、别的模块落点在哪，见 `evidence/test/P003-T034/data-root.test.js`。
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 // 每一条路径在数据根下的固定位置（改这里等于改数据目录布局，得连着文档一起改）。
-// 七条 = P003-T019 的九条减去 `baseline`/`intel`（P003-T043 A1）。
+// 八条 = P003-T019 的九条减去 `baseline`/`intel`（P003-T043 A1），加上 `fpSessions`（P003-T047）。
 const layout = {
   data: '',
   investigations: 'investigations',
@@ -22,10 +23,11 @@ const layout = {
   triageMonitor: 'triage-monitor.json',
   cases: 'cases',
   wikiSessions: 'wiki-sessions',
+  fpSessions: 'fp-sessions',
   traceBoards: 'trace-boards'
 };
 
-test('A1 七条运行态路径都在数据根下，子结构与 P003-T019 时的仓内 .data/ 逐字一致', () => {
+test('A1 八条运行态路径都在数据根下，子结构与 P003-T019 时的仓内 .data/ 逐字一致', () => {
   const root = dataRoot();
   const paths = runtimePaths();
   assert.deepEqual(Object.keys(paths).sort(), Object.keys(layout).sort(), '运行态路径清单变了');

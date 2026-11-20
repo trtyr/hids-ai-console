@@ -59,37 +59,49 @@ async function listFiles(dir) {
 const sha256 = text => createHash('sha256').update(text).digest('hex');
 
 // 起真进程：env 从零拼（不继承 ambient 的 HIDS_* / HOME），cwd 可换（相对路径边界要用）。
+//
+// 端口是「先探空闲端口 → 关掉 → 再让子进程 bind」，两步之间端口可能被别的进程抢走：并发套件叠跑时实测撞过
+// （子进程一 bind 就死，`listen EADDRINUSE`，用例 300ms 就红）。这不是被测系统的错——撞它就换新端口重起，
+// 最多三次；输出里没有 `EADDRINUSE` 的其他死法照旧立刻抛，别把真错盖成重试。
+const BOOT_ATTEMPTS = 3;
+
 async function startServer(t, { cwd = repository, env = {}, home, script = 'server.js' } = {}) {
-  const port = await freePort();
-  const childEnv = {
-    PATH: process.env.PATH,
-    HOME: home,
-    HIDS_HOST: '127.0.0.1',
-    HIDS_PORT: String(port),
-    HIDS_TRIAGE_INPUT_MODE: 'poll',
-    ...REQUIRED_ENV,
-    ...env
-  };
-  const proc = spawn(process.execPath, [script], { cwd, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] });
-  let output = '';
-  proc.stdout.on('data', chunk => { output += chunk; });
-  proc.stderr.on('data', chunk => { output += chunk; });
-  const exited = new Promise(resolve => proc.once('exit', code => resolve(code)));
-  t.after(async () => {
-    if (proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL');
-    await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 5000))]);
-  });
-  const base = `http://127.0.0.1:${port}`;
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    if (proc.exitCode !== null) break;
-    try {
-      const response = await fetch(`${base}/api/config`, { signal: AbortSignal.timeout(1000) });
-      if (response.ok) return { base, proc, output: () => output, exited };
-    } catch { /* 还没起来 */ }
-    await new Promise(resolve => setTimeout(resolve, 100));
+  let failed = '';
+  for (let attempt = 1; attempt <= BOOT_ATTEMPTS; attempt += 1) {
+    const port = await freePort();
+    const childEnv = {
+      PATH: process.env.PATH,
+      HOME: home,
+      HIDS_HOST: '127.0.0.1',
+      HIDS_PORT: String(port),
+      HIDS_TRIAGE_INPUT_MODE: 'poll',
+      ...REQUIRED_ENV,
+      ...env
+    };
+    const proc = spawn(process.execPath, [script], { cwd, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+    proc.stdout.on('data', chunk => { output += chunk; });
+    proc.stderr.on('data', chunk => { output += chunk; });
+    const exited = new Promise(resolve => proc.once('exit', code => resolve(code)));
+    t.after(async () => {
+      if (proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL');
+      await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 5000))]);
+    });
+    const base = `http://127.0.0.1:${port}`;
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      if (proc.exitCode !== null) break;
+      try {
+        const response = await fetch(`${base}/api/config`, { signal: AbortSignal.timeout(1000) });
+        if (response.ok) return { base, proc, output: () => output, exited };
+      } catch { /* 还没起来 */ }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    failed = output;
+    if (!/EADDRINUSE/.test(output)) break;
+    await exited; // 让死掉那一只先收尾
   }
-  throw new Error(`server 没起来（cwd=${cwd}）：\n${output}`);
+  throw new Error(`server 没起来（cwd=${cwd}）：\n${failed}`);
 }
 
 function writeConfig(base, patch) {
@@ -177,7 +189,7 @@ test('A1 真进程不设 HIDS_DATA_DIR：覆盖层落 <HOME>/.local/share/hids-a
   assert.equal(existsSync(path.join(repository, '.data')), false, '跑测试时仓库里出现了 .data/');
 });
 
-test('A1 七条具名路径的结构与文档表一致，且默认根不在仓库内', async () => {
+test('A1 八条具名路径的结构与文档表一致，且默认根不在仓库内', async () => {
   const { runtimePaths } = await import(pathToFileURL(path.join(repository, 'server.js')).href);
   const { dataRoot } = await import(pathToFileURL(path.join(repository, 'config-store.js')).href);
 
@@ -189,10 +201,13 @@ test('A1 七条具名路径的结构与文档表一致，且默认根不在仓�
     triageMonitor: path.join(root, 'triage-monitor.json'),
     cases: path.join(root, 'cases'),
     wikiSessions: path.join(root, 'wiki-sessions'),
+    // P003-T047 加了误报维护会话（`<数据根>/fp-sessions/`），T043 之后的七条变八条。
+    fpSessions: path.join(root, 'fp-sessions'),
     traceBoards: path.join(root, 'trace-boards')
   };
-  // P003-T043 A1：原九条里的 `baseline`/`intel` 两键已砍（研判背景走判据库与规则层），余七条。
-  assert.deepEqual(runtimePaths(root), expected, 'runtimePaths 的七条具名路径结构与文档表不符');
+  // P003-T043 A1：原九条里的 `baseline`/`intel` 两键已砍（研判背景走判据库与规则层）；
+  // P003-T047 加 `fpSessions`，现在是八条。
+  assert.deepEqual(runtimePaths(root), expected, 'runtimePaths 的八条具名路径结构与文档表不符');
 
   // architecture.md §8.1 的解析代码块：不设 → <home>/.local/share/hids-ai-console；不读 XDG_DATA_HOME
   assert.equal(dataRoot({ env: {}, home: '/home/someone' }), '/home/someone/.local/share/hids-ai-console');

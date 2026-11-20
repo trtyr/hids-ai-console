@@ -11,6 +11,9 @@
 //   与公开类 AgentToolbox（docs/modules/evidence-tools.md §3），上游用假 MCP 客户端。
 // - A4 走文档里的生产路径 createAnalysisProvider({ monitor, history })（docs/modules/trace-board.md §4.3）：
 //   真 InvestigationStore 存一条带 case_dir 的记录，案卷 01-原始告警.txt 放一行 syslog。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
@@ -155,6 +158,9 @@ async function realStack({ withAnalysis = false } = {}) {
 }
 
 /* ---------------- A1：从一条告警创建溯源；已有则返回那条 ---------------- */
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('A1 IP 起点：POST 新建回 202，白板形状合 TraceBoard 契约，服务端落盘', async () => {
   const stack = await realStack();

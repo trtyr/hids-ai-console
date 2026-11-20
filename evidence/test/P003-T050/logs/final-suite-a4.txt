@@ -1,0 +1,20 @@
+# cmd: node --test --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js (final, 12:39:08)
+ℹ tests 395
+ℹ pass 394
+ℹ fail 0
+ℹ todo 1
+# cmd: node --test --test-concurrency=1 ... (12:39:20)
+ℹ tests 395
+ℹ pass 394
+ℹ fail 0
+ℹ todo 1
+# cmd: npm test (12:39:46)
+ℹ tests 235
+ℹ pass 235
+ℹ fail 0
+ℹ todo 0
+# 真全局根快照 diff（并发轮 12:39:08-12:39:20）= 12 行，全部为 P003-T052 别树痕迹（trace-analysis case_dir / 值班分析员 / agent-api.test.js 形态）；串行轮、npm test 窗口 diff=0
+  42bcabe1-35c9-44a5-a768-5ccb93820a1e.json 值班分析员 /tmp/trace-analysis-Ji84Zy/case 2026-11-20T04:39:11.023Z
+  54265f79-3d14-4f15-8fa6-17317003e558.json 值班分析员 /tmp/trace-analysis-fYWo1L/case 2026-11-20T04:39:11.183Z
+  8bc00ca2-f684-4950-b10a-2685f18beffd.json 值班分析员 /tmp/trace-analysis-uZgKwZ/case 2026-11-20T04:39:11.142Z
+  af05cfdc-83f4-442a-9dc3-d1a89db09f90.json 值班分析员 /tmp/trace-analysis-Qlo1SA/case 2026-11-20T04:39:11.118Z

@@ -2,6 +2,9 @@
 // 口径只认文档：docs/architecture.md §3.6 的 `ai.model_call` 两行（字段表与四类结局）、
 // docs/modules/http-api.md §3.10（回放接口）、docs/modules/investigation-agent.md §3.11（结果体 turns）。
 // 做法：`useJournal(createJournal({ write }))` 收行（不碰真 stdout）、替身模型/替身牧云（不碰真网络与真时钟）。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -28,6 +31,9 @@ const rig = t => {
   const events = () => lines.filter(entry => entry.event === 'ai.model_call');
   return { lines, raw, events };
 };
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('A1 一次调用落 request / response 两条事件：域、角色、轮次、方向、输入输出字符量、耗时、结局齐全', async t => {
   const sink = rig(t);

@@ -1,6 +1,9 @@
 // P003-T040 证据落盘复算单测。全部替身（假牧云工具箱 + 假模型），不碰真实网络 / 外部服务 / 真实时钟。
 // 一条 triage 研判走完：案卷里要有必查项结果（前 5 行 + returned_count + total）与 view 原文；
 // 复算（重跑）只读盘——替身牧云的调用计数在复算前后必须不变。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -51,6 +54,9 @@ function triageHarness({ caseDir = null, evidenceRows = rows } = {}) {
     : { assessment: 'supported', concerns: [], missing_evidence: [] }) }) };
   return { calls, agent: new InvestigationAgent(toolbox, model) };
 }
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('A1+A2+A8 一条 triage 研判走完：案卷有必查项前 5 行与计数，证据带 view 原文；复算只读盘不再发 RPC', async t => {
   const caseDir = await mkdtemp(path.join(tmpdir(), 'hids-t040-case-'));

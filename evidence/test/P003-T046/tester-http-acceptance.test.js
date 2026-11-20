@@ -3,6 +3,9 @@
 // §3.8.2（`/api/logs` 只按事件名/级别/时间过滤，读盘）、docs/architecture.md §3.6（`ai.model_call` 两行字段）、
 // docs/modules/investigation-agent.md §3.11（turns 字段 / 挂掉也留快照 / 正文不进快照）、openapi.yaml（InvestigationReplay / InvestigationTurn）。
 // 做法：真 HTTP（进程内 listen）+ 真文件 sink + 真研判（替身牧云 / 替身模型），不碰真网络、不碰真时钟。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -126,6 +129,9 @@ const get = async (base, route) => {
 };
 
 // ── A3：回放响应逐键过 OpenAPI（含 additionalProperties:false） ──────────────
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 test('A3 回放 200 体逐键过 InvestigationReplay schema（必填/类型/枚举/无多出字段），校验器自检能红', async t => {
   const directory = await workspace(t);
   const history = new InvestigationStore(path.join(directory, 'investigations'));
