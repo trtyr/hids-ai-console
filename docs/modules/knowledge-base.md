@@ -298,7 +298,10 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 **草案**（`record.proposal`，`wiki-workbench.js:249-252`）：`content`（当前页的新正文）、`changes[]`（每项 `path`、`content`、`rationale`、`page_revision`）、`evidence_preview`、`rationale`、`page_revision`、`replay`（回放报告，初始为 `null`）。
 
-**回放报告**（`wiki-replay.js:90-93`）：`status`、`at`、`proposal_hash`、`prompt_revision`、`model`、`corpus`（`eligible` / `selected` / `omitted`）、`cases[]`、`explanation`。每条样本含 `case_id`、`event_type`、`label_kind`、`expected_verdict`、`original_verdict`、`input_sha256`、`before`、`after`、`changed`、`status`（`wiki-replay.js:108-111`）；`before` / `after` 是模型结论（`verdict`、`verdict_label`、`basis_quote`、`criterion_quote`、`reason`、`missing_data`）或 `{ error }`（`wiki-replay.js:74-76`）。
+**回放报告**（`wiki-replay.js:90-93`）：`status`、`at`、`proposal_hash`、`prompt_revision`、`model`、`corpus`（`eligible` / `selected` / `omitted`）、`cases[]`、`explanation`。每条样本含 `case_id`、`event_type`、`label_kind`、`expected_verdict`、`original_verdict`、`input_sha256`、`before`、`after`、`changed`、`status`（`wiki-replay.js:108-111`）；`before` / `after` 是模型结论（`verdict`、`verdict_label`、`basis_quote`、`criterion_quote`、`reason`、`missing_data`）或 `{ error }`（`wiki-replay.js:75-82`）。
+`error` 是**闸后文案**（P003-T052）：模型调用失败 / 解析失败只留固定文案 + 原文字符量
+（`回放失败，原文 N 字未落盘`、`模型回包不是合法 JSON（SyntaxError），原文 N 字未落盘`），
+只有「摘录对不上」这条自造判定语照原样留。
 
 ## 6 依赖
 
@@ -463,7 +466,8 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 | 没有草案 | 当前没有可回放的判据草案 | 抛出 | `wiki-replay.js:80` |
 | 页版本对不上 | 判据 `<编号>` 已更新，请重新整理草案 | 抛出（409） | `wiki-replay.js:86` |
 | 模型未配置 | 知识回放模型尚未配置 | 抛出 | `wiki-replay.js:95` |
-| 摘录核不上 | 模型结论缺少可在冻结材料和判据中逐字核对的摘录 | 写进 `before.error` / `after.error` | `wiki-replay.js:72`、`wiki-replay.js:76` |
+| 摘录核不上 | 模型结论缺少可在冻结材料和判据中逐字核对的摘录 | 写进 `before.error` / `after.error` | `wiki-replay.js:73`、`wiki-replay.js:79` |
+| 模型调用 / 回包解析失败 | 闸后文案（P003-T052：`回放失败，原文 N 字未落盘` / `模型回包不是合法 JSON（SyntaxError），原文 N 字未落盘`） | 写进 `before.error` / `after.error`，该条 `status` 为 `invalid` | `wiki-replay.js:78-82` |
 
 ### 9.2 失败之后的状态
 

@@ -1,3 +1,5 @@
+import { recordFailure } from './record-redaction.js';
+
 // 常规研判的最低取证清单。只按当前事件的主机或来源查询，绝不做无条件全库扫描。
 const relatedTypes = {
   honeypot: ['honeypot', 'elevation_process', 'suspicious_operation', 'revshell', 'webshell', 'abnormal_login'],
@@ -148,14 +150,15 @@ export async function collectRequiredEvidence(plan, session, onProgress = () => 
         }
       } catch (error) {
         entry.status = 'query_failed';
-        entry.reason = String(error.message || error).slice(0, 180);
+        // 记录侧不写上游原文（P003-T052）：这条 reason 同时进 trace[evidence_check] 与 missing_evidence。
+        entry.reason = recordFailure(error);
       }
     }
     return entry;
   }));
   const checks = settled.map((outcome, index) => outcome.status === 'fulfilled' ? outcome.value
     : { id: plan[index].id, label: plan[index].label, tool: plan[index].tool, scope: plan[index].scope,
-      status: 'query_failed', reason: `必查项执行异常：${String(outcome.reason?.message || outcome.reason).slice(0, 180)}` });
+      status: 'query_failed', reason: `必查项执行异常：${recordFailure(outcome.reason)}` });
   for (const entry of checks) {
     if (entry.evidence_id) trace.push({ kind: 'tool', name: entry.tool, evidence_id: entry.evidence_id,
       args: entry.args, note: `必查项：${entry.label}；${entry.scope}` });

@@ -220,7 +220,9 @@ test('A2 研判入队 → 完成 / 失败都留痕，带告警 ID 与结论', as
   for (let n = 0; n < 100 && failing.status('honeypot:8')?.status !== 'failed'; n++) await new Promise(resolve => setTimeout(resolve, 5));
   const failed = lines.find(item => item.event === 'triage.failed');
   assert.equal(failed.alert_id, 'honeypot:8');
-  assert.match(failed.error, /模型调用失败/);
+  // P003-T052：`record.detail` / `failure.reason` / `triage.failed.error` 只写闸后文案（固定文案 + 原文字符量），
+  // 错误原文（这里 13 字）不再进队列状态文件与日志行。
+  assert.equal(failed.error, `上游调用失败，原文 ${'模型调用失败（第 2 轮）'.length} 字未落盘`);
 });
 
 test('A2 误报维护结果（两侧状态与原因）留在 maintenance.result 里', async t => {

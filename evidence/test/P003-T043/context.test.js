@@ -180,7 +180,7 @@ test('A5 对外文档里不再有九条路径与 04-上下文.md 带基线/情�
   // §1「不做什么」的可复跑验证块必须对**当前**代码成立：脚本体与终端输出都要跟实测一致。
   assert.ok(pipeline.includes("grep -niE 'http|router|auth|token' triage-monitor.js syslog-input.js syslog-case.js"),
     'triage-pipeline 的验证命令被改了');
-  assert.ok(pipeline.includes('triage-monitor.js:562:'), '验证块的输出里没有实测那条命中');
+  assert.ok(pipeline.includes('triage-monitor.js:566:'), '验证块的输出里没有实测那条命中');
   assert.equal(pipeline.includes('triage-monitor.js:914:'), false,
     '验证块还贴着已被删除的 :914 命中（那段基线读取随 P003-T043 一起删了）');
   assert.equal(pipeline.includes('两处命中'), false, '验证块还写着「两处命中」，与当前代码不符');

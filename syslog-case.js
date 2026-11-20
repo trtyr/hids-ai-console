@@ -3,12 +3,16 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eventSeconds, eventTypeFor, sessionKey } from './syslog-input.js';
 import { log } from './log.js';
+import { reasonForRecord } from './record-redaction.js';
 
 // 匹配不上的每条分支都从这里出：日志留「哪条规则、差在哪」，返回体保持原样（只增键）。
 // rule 取值见 docs/architecture.md「日志」一节的 syslog.match_failed 行。
+// 两条路分开走（P003-T052）：日志行是 P003-T027 的契约，留原文（log.js 自己擦凭据）；
+// 返回体里的 reason 会被写进案件文件 `03-研判事实.md` 与研判记录，必须过记录侧脱敏闸。
 function unmatched(fields) {
   log('syslog.match_failed', fields, 'warn');
-  return { matched: false, ...fields };
+  return { matched: false, ...fields,
+    ...(fields.reason == null ? {} : { reason: reasonForRecord(fields.reason) }) };
 }
 
 function apiSeconds(event) {

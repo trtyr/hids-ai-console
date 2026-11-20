@@ -260,8 +260,9 @@ max_turns, max_tool_calls, conclusion_retries}`（`investigation-agent.js:665-66
 
 `noConclusionReason({reply, problems, turns, calls})`（`investigation-agent.js:58-64`）就是 P003-T022 那条消息的文案，
 四段不变，只是现在**返回字符串**（进 `analysis` 与 `missing_evidence[0]`）而不是 Error。
-这段话同时是队列记录 `detail` 的来源：triage-monitor 用它（或结论文案）截到 250 字写进 `record.detail`
-（`triage-monitor.js:543`），所以按 240 字预算拼（`investigation-agent.js:36`）。
+这段话同时是队列记录 `detail` 的来源：研判成功时 triage-monitor 把结论 `summary` 抄进 `record.detail`
+（`triage-monitor.js:1062`）；研判**抛错**时 `detail` / `failure.reason` 写的是闸后文案（P003-T052），
+不再写 `error.message` 原文。降级结论按 240 字预算拼（`investigation-agent.js:36`）。
 
 | 段 | 内容 | 出处 |
 | --- | --- | --- |
@@ -289,8 +290,8 @@ max_turns, max_tool_calls, conclusion_retries}`（`investigation-agent.js:665-66
 正文非空（哪怕只是空格）就是可用消息，`model-client` 不抛错；那种回包由研判循环自己判断，解析不了就落到上一段的
 `输出解析失败`。摘要里不含请求头、密钥与整段正文。
 
-**记录侧不写错误原文（P003-T051）**：`recordFailure(error)`（`investigation-agent.js:100-106`）是研判记录里唯一允许写
-失败原因的出口，产出的只有「固定文案 + 原文字符量」——`模型回包不是合法 JSON（SyntaxError），原文 60 字未落盘`、
+**记录侧不写错误原文（P003-T051 起，P003-T052 补全其余落点）**：`recordFailure(error)`（`investigation-agent.js:100-106`）是**研判记录内部**
+唯一允许写失败原因的出口，产出的只有「固定文案 + 原文字符量」——`模型回包不是合法 JSON（SyntaxError），原文 60 字未落盘`、
 `调用超时，原文 6 字未落盘`、`上游调用失败，原文 24 字未落盘`（类名只在 `TypeError` / `SyntaxError` / `RangeError` /
 `TimeoutError` / `AbortError` 白名单里出现）。四个记录去处同一道闸：
 
@@ -300,6 +301,13 @@ max_turns, max_tool_calls, conclusion_retries}`（`investigation-agent.js:665-66
 | 证据缺口 | `missing_evidence[]`（修订失败 → 「独立复核要求修订，修订请求失败：…」；降级结论的退回原因） | 修订轮失败（`investigation-agent.js:971`）、解析失败（`:824`） |
 | 调查过程 | `trace[]` 的 `review_unavailable` / `revision_failed` / `validation_error` / `parse_error` / `tool_error` / `knowledge` 六类 | 各自失败分支（`:676` `:810` `:950` `:1046`） |
 | 结论正文 | `verdict.analysis`（降级结论、未匹配 syslog 的说明） | `:927` `:1133` `:1141` |
+
+**本模块之外的五类落点走同一道闸（P003-T052）**：共享实现在 `record-redaction.js`（`recordFailure()` +
+`reasonForRecord()`），`InvestigationAgent` 之外的记录侧全走它：队列状态文件（`triage-monitor.js` 的 `detail` /
+`failure.reason` / `steps[].detail` / `lastError`）、案件文件（`syslog-case.js:10-16` 的未匹配 `reason`）、
+白板 JSON（`trace-board.js`）、工作台会话（`knowledge-workbench.js:137-142`）、回放报告（`wiki-replay.js:78-82`）。
+注意口径：「唯一出口」说的是**本模块内部**的归一；全仓的合同是「记录侧一律固定文案 + 原文字符量」。
+`required-evidence.js` 那一侧特例只换 `reason` 文本，`status` / `evidence_id` / `returned_count` 等计量字段不变。
 
 **为什么要这么挡**：V8 的 `JSON.parse` 报错会把回包前 ~10 字原样抄进 `error.message`
 （`Unexpected token 'S', "SECRET_BOD"...`），模型接口与牧云的错误文本同理——原件落盘等于把回包正文/上游报文
@@ -431,7 +439,8 @@ P003-T042 起这次调用走构造器第 6 参 `reviewModel`（`this.reviewModel
 执行在 `collectRequiredEvidence(plan, session, onProgress, trace)`（`required-evidence.js:121-165`），
 **逐项并发**（P003-T035 改）：整个 plan 一次 `map` 成 `Promise.allSettled`（`required-evidence.js:124`），
 trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），与完成先后无关——所以状态、trace、返回数组三者顺序一致。
-单条抛出异常只影响它自己：落成 `query_failed` + 「必查项执行异常：…」（`required-evidence.js:156-158`）。
+单条抛出异常只影响它自己：落成 `query_failed` + 「必查项执行异常：…」，**异常原因同样过闸**（P003-T052：
+`必查项执行异常：上游调用失败，原文 N 字未落盘`）（`required-evidence.js:159-161`）。
 每项落一个状态，**五种状态互不混同**：
 
 | 状态 | 含义 | 证据 |
@@ -440,7 +449,7 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 | `empty_page` | 查了，当前页没有记录 | `required-evidence.js:112` |
 | `source_unavailable` | 没有可用数据源（`catalog_absent:true` 时是「牧云暂无此数据源」） | `required-evidence.js:126-130` |
 | `missing_identifier` | 原始事件缺少这项查询所需的主机或来源标识 | `required-evidence.js:99-101` |
-| `query_failed` | 查询抛错，或接口没返回可确认数量的列表 | `required-evidence.js:108-110`、`required-evidence.js:120-123` |
+| `query_failed` | 查询抛错，或接口没返回可确认数量的列表；抛错那一支的 `reason` 是闸后文案（P003-T052：`上游调用失败，原文 N 字未落盘`，接口回包不合约（没返回可确认数量）时仍是「接口未返回可确认数量的列表」） | `required-evidence.js:110-112`、`required-evidence.js:122-125`、`required-evidence.js:154-156` |
 
 提示词里专门交代了这三种空/错状态的区别，不许互相顶替（`investigation-agent.js:366`）。
 `status` 是**枚举**，取值只有上面五个，不存在第六种；`openapi.yaml` 的 `RequiredEvidence.status` 用同一个枚举，`id` 也同样是枚举（`required-evidence.js:33-35` 起的六个固定值）。
@@ -449,6 +458,7 @@ trace 在 settle 之后按 plan 顺序推（`required-evidence.js:159-163`），
 缺口汇总在 `requiredEvidenceGaps(checks)`（`required-evidence.js:167-176`）：
 状态不是 `records_returned` 的项进缺口，带 `reason` 的项也进缺口（例如接口报告部分类型查询失败）；
 **带 `catalog_absent` 的项一律跳过**（P003-T035 改：平台暂不提供这个数据源，不是本条告警缺证据）。
+P003-T052 起缺口里拼的 `reason` 是闸后文案（固定文案 + 原文字符量），`missing_evidence[0]` 与 `trace[evidence_check].reason` 同源。
 按状态拼成一句话的在 `requiredEvidenceReport(checks)`（`required-evidence.js:178-190`），同样先过滤掉 `catalog_absent`，
 追加到客户报告在 `appendEvidenceReport(report, checks, maxLength = 300)`（`required-evidence.js:154-165`）。
 

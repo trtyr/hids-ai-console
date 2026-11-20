@@ -283,14 +283,14 @@
 | --- | --- | --- |
 | `seed` | 建板 | `trace-board.js:182`、`trace-board.js:197` |
 | `tool` | 一次牧云查询 | `trace-board.js:383` |
-| `tool_error` | 查询失败，或动作未过校验 | `trace-board.js:388`、`trace-board.js:581` |
+| `tool_error` | 查询失败，或动作未过校验；详情是闸后文案（P003-T052，见 §5.3 末） | `trace-board.js:424`、`trace-board.js:619` |
 | `investigate` | 调查一个节点收尾 | `trace-board.js:482` |
 | `look` | 模型查看白板 | `trace-board.js:540` |
 | `link` | 模型连边 | `trace-board.js:563` |
 | `conclude` | 模型收尾 | `trace-board.js:575` |
 | `thinking` | 模型选下一步 | `trace-board.js:517` |
-| `model_error` | 模型输出格式错误正在重试 | `trace-board.js:525` |
-| `error` | 调查中断，或整板失败 | `trace-board.js:304`、`trace-board.js:363` |
+| `model_error` | 模型输出格式错误正在重试；详情是闸后文案（P003-T052） | `trace-board.js:562` |
+| `error` | 调查中断，或整板失败；详情是闸后文案（P003-T052） | `trace-board.js:340`、`trace-board.js:399` |
 
 ### 5.2 节点调查
 
@@ -337,7 +337,14 @@
 - **动作没过校验**：把错误回灌给模型并记一条 `tool_error`；连续 5 次失败就抛错（`trace-board.js:577-583`）。
 - **消息体裁剪**：超过 70000 字符时，从第 3 条起裁到只剩最近 8 条（`trace-board.js:584-589`）。
 - **32 轮用尽**：状态置 `done`，摘要写明已达轮次上限，`gaps` 添一条「未完成的路径需继续人工核查」（`trace-board.js:627-628`）。
-- **抛错的后果**：整张白板状态置 `failed`，错误进 `gaps`，并记一条 `error` 活动（`trace-board.js:362-367`）。
+- **抛错的后果**：整张白板状态置 `failed`，错误进 `gaps`，并记一条 `error` 活动（`trace-board.js:398-399`）。
+- **白板里不写错误原文（P003-T052）**：`activity[].detail` 与 `gaps[].reason` 过同一道闸
+  （`record-redaction.js` 的 `recordFailure()`），只留固定文案 + 原文字符量：
+  - 工具报错 → `上游调用失败，原文 N 字未落盘`（查询失败的 `tool_error`、整板失败/调查中断的 `gaps` 与 `error` 活动：`trace-board.js:398-399`、`trace-board.js:424`）
+  - 模型回包解析失败 → `模型返回的白板操作 JSON 不完整或格式错误（SyntaxError），原文 N 字未落盘`（`trace-board.js:560-562`）
+  - 动作未过校验 → `操作未通过校验，原文 N 字未落盘`（`trace-board.js:619-620`）
+
+  **唯一例外是回灌给模型的那份**：`tool_result.error` 仍是原文（模型靠它改参数；同 P003-T051 S2 口径，`trace-board.js:617`）。
 
 ### 5.4 白板持久化
 

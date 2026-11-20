@@ -97,11 +97,13 @@ updated: 2026-11-17
 
 两个补充：
 
-- `reply` 中间调模型失败**不会把错误抛给调用方**：它把错误消息截到 240 字存进 `last_error`，
-  再追加一条「这轮内容已保存，但自动整理暂时失败」的助手消息，然后正常返回记录
-  （knowledge-workbench.js:96、134-140）。调用方要判这一轮整理成没成，看 `last_error` 是否为空。
+- `reply` 中间调模型失败**不会把错误抛给调用方**：它把错误存成**闸后文案**写进 `last_error`
+  （P003-T052：`recordFailure()` 的固定文案 + 原文字符量，例如 `知识整理失败，原文 42 字未落盘`；
+  不再截原文 240 字），再追加一条「这轮内容已保存，但自动整理暂时失败」的助手消息，然后正常返回记录
+  （knowledge-workbench.js:137-142）。调用方要判这一轮整理成没成，看 `last_error` 是否为空。
 - `model` 为 `null` 时也会走上面那条失败路径，`last_error` 是「知识整理模型尚未配置」
   （knowledge-workbench.js:96）。`promptStore.load()` 抛错同理（knowledge-workbench.js:97 在同一个 `try` 里）。
+  这三条自造文案（未配置 / 回包里没文本 / 不是 JSON 对象）在闸的白名单里照原样留，其余错误一律换固定文案。
 
 ## 4 关键路径与状态机
 
@@ -338,7 +340,7 @@ withdraw(id)                                                          knowledge-
 | `next_field` / `next_question` | 下一个追问 | `create` / `reply` / `defer` | knowledge-store.js:33-34、knowledge-workbench.js:129、156 |
 | `scenario_id` | 发布后才有；撤回时置 `null` | `publish()` / `withdraw()` | knowledge-workbench.js:60、75 |
 | `review` | 发布后才有：`{note, verdict, reviewed_at, valid_until, expires_at}` | `publish()` | knowledge-workbench.js:61-62 |
-| `last_error` | 上一轮整理失败的短消息（≤ 240 字）；成功轮清空 | `reply()` | knowledge-workbench.js:128、136 |
+| `last_error` | 上一轮整理失败的短消息（P003-T052 起是固定文案 + 原文字符量，不再写错误原文；三条自造提示照原样）；成功轮清空 | `reply()` | knowledge-workbench.js:129、137-142 |
 
 **写盘方式**（knowledge-store.js:20-27）：
 
@@ -372,7 +374,7 @@ withdraw(id)                                                          knowledge-
 | `R-EXPD-07` | 同一 id 上整理台的四个写方法互斥（`reply` / `defer` / `publish` / `withdraw`） | `reply` 与 `publish` 并发 | knowledge-workbench.js:38、70、86、146 | 发布与整理交叉，发布状态被后到的整理盖掉 |
 | `R-EXPD-08` | 写盘要么完整可见要么不可见 | 直接往正式文件名写 | knowledge-store.js:20-27 | 读盘读到半个 JSON |
 | `R-EXPD-09` | 发布记录的 `review.expires_at` 晚于发布时间，且不晚于发布后 366 天 | 复核日期选过去 | knowledge-workbench.js:48-52 | 刚发布就过期，永远检索不到 |
-| `R-EXPD-10` | `last_error` 只在失败轮写，成功轮置 `null` | 成功后还留着上一轮的错 | knowledge-workbench.js:128、136 | 调用方误判「这轮也没成」 |
+| `R-EXPD-10` | `last_error` 只在失败轮写，成功轮置 `null` | 成功后还留着上一轮的错 | knowledge-workbench.js:129、137-142 | 调用方误判「这轮也没成」 |
 | `R-EXPD-11` | 撤回不删 `review`，也不改 `fields` | 撤回把审核信息清掉 | knowledge-workbench.js:69-80 | 审核痕迹丢失；下次发布时 `review` 被整体替换（knowledge-workbench.js:61） |
 
 ## 9 失败面
@@ -385,7 +387,7 @@ withdraw(id)                                                          knowledge-
 | 已发布还调 `reply` | 抛「已发布经验请先撤回再补充」 | `Error` / `409` | 不写盘 | 先撤回 | 无 |
 | 消息数已达 80 | 抛「当前对话已达到上限，请新建一条经验」 | `Error` / `400` | 不写盘 | 新建记录 | 无 |
 | 同一整理台实例上，同一 id 已有操作在跑 | 抛「上一轮整理仍在进行，请稍后再试」 | `Error` / `409` | 不写盘 | 稍后重试 | 无 |
-| 没传模型 / 模型抛错 / 返回非 JSON / 返回不是对象 | `last_error` 记一条短消息（≤ 240 字），追加一条助手消息 | 不抛错，靠 `last_error` 表达 | 用户原话已落盘，字段与状态不变 | 下一轮继续输入 | 人工先看原话 |
+| 没传模型 / 模型抛错 / 返回非 JSON / 返回不是对象 | `last_error` 记一条闸后短消息（P003-T052：固定文案 + 字符量；三条自造提示照原样），追加一条助手消息 | 不抛错，靠 `last_error` 表达 | 用户原话已落盘，字段与状态不变 | 下一轮继续输入 | 人工先看原话 |
 | `promptStore.load()` 抛错或返回体缺 `prompts.knowledge` | 同上一行（同一个 `try`） | 不抛错，靠 `last_error` | 同上 | 修提示词后再试 | 同上 |
 | 发布表单四类校验不过 | 抛对应消息（类型 / 说明 / 结论 / 日期） | `Error` / `400` | 不写盘 | 改参数 | 无 |
 | 发布时状态不是 `ready_for_review` 或字段不齐 | 抛「候选经验尚未达到人工审核标准」 | `Error` / `409` | 不写盘 | 补齐字段后重试 | 无 |
@@ -414,7 +416,7 @@ withdraw(id)                                                          knowledge-
 | 一条对话的消息数上限 | 拒收门槛：已有 80 条就拒新输入；因为一轮会加「用户一条 + 助手一条」，实测从 79 条起再收一轮后为 81 条 | knowledge-workbench.js:91 |
 | 字段 `value` / `source_quote` | 各 1000 字（先截断再判长度） | knowledge-workbench.js:111-112 |
 | 本轮归纳 `summary` | 700 字 | knowledge-workbench.js:120 |
-| `last_error` | 240 字 | knowledge-workbench.js:136 |
+| `last_error` | 闸后文案（固定文案 + 原文字符量；自造提示例外），不再有 240 字截断 | knowledge-workbench.js:137-142 |
 | 标题 | 32 字 | knowledge-workbench.js:130 |
 | 审核说明 `note` | 500 字（下限 5 字，去空白后算） | knowledge-workbench.js:42 |
 | 进模型的对话条数 | 最近 24 条用户原话（不含 `kind: 'defer'`） | knowledge-workbench.js:98-99、103 |
@@ -442,7 +444,7 @@ withdraw(id)                                                          knowledge-
 | `fields[key].value` | 记录 | 字符串，≤ 1000 字 | 字 | 没采纳过的键就不存在 |
 | `fields[key].source_quote` | 记录 | 字符串，≤ 1000 字，是客户原话的连续片段 | 字 | 同上；必须能在某条用户消息里找到 |
 | `title` | 记录顶层 | 字符串，≤ 32 字 | 字 | 没有 `behavior` 与 `record_ref` 时是「新建研判经验」 |
-| `last_error` | 记录顶层 | 字符串，≤ 240 字；成功轮为 `null`；从未失败过时不存在 | 字 | `null` = 上一轮整理成功 |
+| `last_error` | 记录顶层 | 字符串；P003-T052 起是固定文案 + 原文字符量（自造提示例外），成功轮为 `null`；从未失败过时不存在 | 字 | `null` = 上一轮整理成功 |
 | `review.valid_until` | `review` | `YYYY-MM-DD`，原样存输入值 | 日 | 只有 `published` 才有 `review`；撤回不删 |
 | `review.expires_at` | `review` | ISO 8601 时刻，当天 `23:59:59+08:00` | 毫秒级 ISO | `publishedFor` 拿它与「现在」比大小 |
 | `review.verdict` | `review` | `threat` / `uncertain` / `false_positive` | 无 | 缺省 `false_positive`（knowledge-workbench.js:37） |

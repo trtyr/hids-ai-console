@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { eventTypes, normalizeAlert } from './cloudwalker.js';
 import { PromptStore } from './prompt-store.js';
+import { recordFailure } from './record-redaction.js';
 
 const MAX_INVESTIGATIONS = 12;
 const MAX_ROUNDS = 32;
@@ -394,8 +395,8 @@ export class TraceBoardService {
     board.focus = short(focus, 300);
     await this.save(board);
     const work = this.explore(board, session).catch(async error => {
-      board.status = 'failed'; addGap(board, null, error.message);
-      board.activity.push({ at: now(), kind: 'error', title: '调查中断', detail: short(error.message) });
+      board.status = 'failed'; addGap(board, null, recordFailure(error));
+      board.activity.push({ at: now(), kind: 'error', title: '调查中断', detail: recordFailure(error) });
       await this.save(board);
     }).finally(() => this.running.delete(spec.boardId));
     this.running.set(spec.boardId, work);
@@ -420,7 +421,7 @@ export class TraceBoardService {
         await this.save(board);
         return record;
       } catch (error) {
-        board.activity.push({ at: now(), kind: 'tool_error', title: `${name} 查询失败`, detail: short(error.message) });
+        board.activity.push({ at: now(), kind: 'tool_error', title: `${name} 查询失败`, detail: recordFailure(error) });
         await this.save(board);
         return null;
       }
@@ -556,7 +557,8 @@ export class TraceBoardService {
       const reply = await this.model.complete(messages, [], 'none');
       let action;
       try { action = parseAction(reply.content); } catch (error) {
-        const detail = error instanceof SyntaxError ? '模型返回的白板操作 JSON 不完整或格式错误' : short(error.message);
+        const detail = error instanceof SyntaxError ? '模型返回的白板操作 JSON 不完整或格式错误'
+          : recordFailure(error, { kind: '白板操作失败' });
         board.activity.push({ at: now(), kind: 'model_error', title: 'AI 操作格式错误，正在重试',
           detail: `${detail}；响应长度 ${String(reply.content || '').length}` });
         await this.save(board);
@@ -613,7 +615,9 @@ export class TraceBoardService {
         failures = 0;
       } catch (error) {
         result = { error: short(error.message) };
-        board.activity.push({ at: now(), kind: 'tool_error', title: '操作未通过校验', detail: result.error });
+        // 回灌给模型的那份留原文（模型靠它改参数，P003-T051 S2 同口径）；落白板的只留固定文案。
+        board.activity.push({ at: now(), kind: 'tool_error', title: '操作未通过校验',
+          detail: recordFailure(error, { kind: '操作未通过校验' }) });
         await this.save(board);
         if (++failures >= 5) throw error;
       }

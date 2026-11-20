@@ -5,6 +5,10 @@ import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from
 import { eventTypes } from './cloudwalker.js';
 import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './syslog-case.js';
 import { log } from './log.js';
+import { recordFailure } from './record-redaction.js';
+
+// parseSyslog 自己写死的三条判定语（syslog-input.js:46/52/56）：不是上游原文，照原样留。
+const syslogParseFailures = ['不是合法的 RFC5424 syslog 行', 'syslog JSON 正文不是对象', 'syslog 正文解析后为空'];
 
 // 结论排序的档位：threat 在前，其余同档保持时间倒序；没有结论的记录排最后。
 const verdictRanks = Object.freeze({ threat: 0, uncertain: 1, false_positive: 2 });
@@ -765,7 +769,8 @@ export class TriageMonitor {
     } catch (error) {
       failed = true;
       if (pollEpoch === this.pollEpoch) {
-        this.lastError = error.message;
+        // 记录侧不写错误原文（P003-T052）：`lastError` 上状态接口，只留固定文案 + 字符量。
+        this.lastError = recordFailure(error);
         log('triage.poll_failed', { error: error.message }, 'warn');
       }
     }
@@ -810,7 +815,9 @@ export class TriageMonitor {
     let parsed;
     try { parsed = parseSyslog(line); }
     catch (error) {
-      this.lastError = `syslog 解析失败：${error.message}`;
+      // 记录侧不写错误原文（P003-T052）：`lastError` 经 `summary().last_error` 出状态接口；
+      // 日志行仍留原文（日志侧归 P003-T046 的闸，本卡不动）。
+      this.lastError = `syslog 解析失败：${recordFailure(error, { keep: syslogParseFailures })}`;
       this.syslogStats.rejected += 1;
       log('syslog.parse_failed', { error: error.message, bytes: String(line || '').length }, 'warn');
       return { error: this.lastError };
@@ -941,7 +948,8 @@ export class TriageMonitor {
       next.updated_at = new Date().toISOString();
       next.attempts = (next.attempts || 0) + 1;
       void this.run(next).catch(error => {
-        this.lastError = `研判状态保存失败：${error.message}`;
+        // 记录侧不写错误原文（P003-T052）：同 `lastError`，只留固定文案 + 字符量。
+        this.lastError = `研判状态保存失败：${recordFailure(error, { kind: '本地写入失败' })}`;
         log('triage.persist_failed', { alert_id: next.alert_id, error: error.message }, 'error');
       })
         .finally(() => { this.active--; this.drain(); });
@@ -1004,7 +1012,7 @@ export class TriageMonitor {
       if (this.ruleEngine) {
         try { ruleDecision = await this.ruleEngine.evaluate({ alertId: targetId,
           parsed: record.input?.parsed || null, toolbox, match }); }
-        catch (error) { ruleDecision = { status: 'error', reason: `规则评估失败：${String(error.message).slice(0, 180)}` }; }
+        catch (error) { ruleDecision = { status: 'error', reason: `规则评估失败：${recordFailure(error)}` }; }
         if (['candidate', 'observed', 'error', 'identity_unverified'].includes(ruleDecision.status)) {
           record.steps.push({ stage: '规则评估', detail: ruleDecision.status === 'candidate' ?
             `命中 ${ruleDecision.rule.id}，作为误报候选交由 AI 复核` : ruleDecision.status === 'observed' ?
@@ -1064,9 +1072,12 @@ export class TriageMonitor {
       log('triage.done', { alert_id: record.alert_id, verdict: record.verdict ?? null,
         attempts: record.attempts || 0, duration_ms: Date.now() - startedAt });
     } catch (error) {
-      record.status = 'failed'; record.stage = '研判失败'; record.detail = String(error.message || error).slice(0, 250);
+      // 记录侧不写错误原文（P003-T052）：这条文案随队列状态文件落盘（`persist()`），而
+      // `modelCallError` 拼的 reply_excerpt 与上游报错原文都会经这里——只留固定文案 + 字符量。
+      const detail = recordFailure(error);
+      record.status = 'failed'; record.stage = '研判失败'; record.detail = detail;
       // A1：失败记录带原因进重排队列；attempts 到上限进死信（status 仍是 failed + dead_letter:true）。
-      record.failure = { reason: record.detail, code: String(error?.code || error?.name || 'error'),
+      record.failure = { reason: detail, code: String(error?.code || error?.name || 'error'),
         at: new Date().toISOString() };
       this.scheduleRetry(record);
       log('triage.failed', { alert_id: record.alert_id, attempts: record.attempts || 0, error: record.detail }, 'error');

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { recordFailure } from './record-redaction.js';
 
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const verdicts = new Set(['threat', 'uncertain', 'false_positive']);
@@ -73,7 +74,12 @@ async function evaluate(model, prompts, item, pages) {
     return { verdict, verdict_label: names[verdict], basis_quote: basis.slice(0, 250),
       criterion_quote: criterion.slice(0, 250), reason: String(result.reason || '').slice(0, 500),
       missing_data: Array.isArray(result.missing_data) ? result.missing_data.map(value => String(value).slice(0, 200)).slice(0, 5) : [] };
-  } catch (error) { return { error: String(error.message || error).slice(0, 240) }; }
+  // 记录侧不写错误原文（P003-T052）：这份 error 经 `wiki-workbench.js` 的 `save()` 进 `proposal.replay`，
+  // 只留固定文案 + 原文字符量；「摘录对不上」是本模块自己写死的判定语，照原样留（调用方要知道差在哪）。
+  } catch (error) {
+    return { error: recordFailure(error, { kind: error instanceof SyntaxError ? '模型回包不是合法 JSON' : '回放失败',
+      keep: ['模型结论缺少可在冻结材料和判据中逐字核对的摘录'] }) };
+  }
 }
 
 export async function runWikiReplay({ record, directory, wiki, model, prompts }) {

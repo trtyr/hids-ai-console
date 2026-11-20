@@ -49,7 +49,7 @@ grep -niE 'http|router|auth|token' triage-monitor.js syslog-input.js syslog-case
 ```
 
 ```
-triage-monitor.js:562:      // 绑定失败不能让队列静默收不到消息：记进 summary()，队列照常服务（HTTP 还要活）。
+triage-monitor.js:566:      // 绑定失败不能让队列静默收不到消息：记进 summary()，队列照常服务（HTTP 还要活）。
 ```
 
 **当前只剩这一处命中**，是一句中文注释里的「HTTP」，不是路由或鉴权代码。（P003-T043 之前还有第二处：`contextFor` 里读
@@ -173,7 +173,10 @@ JSON + 自由文本 -> 抛错: Unexpected non-whitespace character after JSON at
 非 RFC5424 行  -> 抛错: 不是合法的 RFC5424 syslog 行
 ```
 
-解析失败不会中断接收：`_acceptSyslog` 捕获后记进 `lastError`，这一条丢弃（`triage-monitor.js:812-816`）。
+**解析失败不会中断接收（P003-T052）**：`_acceptSyslog` 捕获后记进 `lastError`，这一条丢弃（`triage-monitor.js:817-825`）。
+记进去的是**闸后文案**，不是 V8 报错原文：`JSON 正文后面跟自由文本` 那种会带正文片段的错误落成
+`syslog 解析失败：上游调用失败（SyntaxError），原文 N 字未落盘`；上面那三条 `syslog-input.js` 自己写死的判定语
+（`不是合法的 RFC5424 syslog 行` 等）照原样留（`record-redaction.js:9-29`、`triage-monitor.js:8-10`）。
 
 ### 3.4 事件类型映射
 
@@ -471,7 +474,7 @@ EOF
 | 1 | 先落一次盘 | `triage-monitor.js:365` |
 | 2 | 算上下文（同会话时间窗、会话键、投递次数、历史结论；**不含**研判背景，见下§6.2 的说明） | `triage-monitor.js:370-371`、`triage-monitor.js:313-332` |
 | 3 | 关联牧云事件，阶段写「关联事件」 | `triage-monitor.js:372-374` |
-| 4 | 规则评估（只记步骤，不决定结论） | `triage-monitor.js:376-386` |
+| 4 | 规则评估（只记步骤，不决定结论；评估抛错时步骤详情过闸：`规则评估失败：上游调用失败，原文 N 字未落盘`，P003-T052） | `triage-monitor.js:376-386`、`triage-monitor.js:1015` |
 | 5 | 写案件目录 | `triage-monitor.js:387-391` |
 | 6 | 调 `investigator` 研判 | `triage-monitor.js:1038-1042` |
 | 7 | 结果写回案件目录 | `triage-monitor.js:405-411` |
@@ -485,11 +488,18 @@ EOF
 
 阶段推进会留痕：`onProgress` 每次把阶段追加进 `steps`，超过 80 条就丢最早一条（`triage-monitor.js:1031-1035`）。
 
-失败处理（P003-T036 起会自动重排）：抛错就记 `status = 'failed'`、阶段「研判失败」、`detail` 截断到 250 字符，
-并把原因写进 `failure{reason, code, at}`；接着 `scheduleRetry()` 按 `attempts` 排下一次（第 n 次失败等
+失败处理（P003-T036 起会自动重排）：抛错就记 `status = 'failed'`、阶段「研判失败」、`detail` 记**闸后文案**
+（P003-T052：`上游调用失败，原文 N 字未落盘` / `调用超时，原文 N 字未落盘` / `模型回包不是合法 JSON，原文 N 字未落盘`，
+见 `record-redaction.js:22-29` 的 `recordFailure()`），并把同一条文案写进 `failure{reason, code, at}`
+（`code` 仍是 `error.code` 或错误名，不是正文）；接着 `scheduleRetry()` 按 `attempts` 排下一次（第 n 次失败等
 `min(retry_base_ms * 2^(n-1), retry_max_ms)`，缺省 1000ms 起、60s 封顶），`attempts` 到 `retry_max_attempts`
-（缺省 3）就标 `dead_letter`、不再自动跑（`triage-monitor.js:1078-1082`、`triage-monitor.js:357-380`）。
-收尾状态由合并写带走：有排队/等重试的记录就留给写窗口，真闲下来才立刻 `flush()`（`triage-monitor.js:1085-1094`）。
+（缺省 3）就标 `dead_letter`、不再自动跑（`triage-monitor.js:1083-1087`、`triage-monitor.js:361-384`）。
+收尾状态由合并写带走：有排队/等重试的记录就留给写窗口，真闲下来才立刻 `flush()`（`triage-monitor.js:1086-1093`）。
+
+**队列状态文件里不写错误原文（P003-T052）**：`detail` / `failure.reason` / `steps[].detail` / `lastError` 四个落点
+过同一道闸（`record-redaction.js` 的 `recordFailure()`）——只留固定文案 + 原文字符量，错误对象本身与
+`log()` 日志行照旧（日志侧归 P003-T046）。`summary().failure_reasons` 按 `failure.reason` 分桶，
+所以它的键现在是固定文案（同一类失败合并成一个桶，不再是每条告警一行原文）；具体错误码仍在 `failure.code`。
 
 **「模型没交卷」不是失败**（P003-T035）：`investigation-agent` 在调查轮数用尽时改出「存疑 + 缺口清单」的降级结论并正常返回
 （`investigation-agent.js:827-843`），所以这一档走的是成功通路——`writeSyslogResult` 照常写 `05-研判结果.md`、记录转 `done`。
@@ -668,7 +678,12 @@ files -> ["00-这是什么.md","01-原始告警.txt","02-告警字段.md","03-�
 
 **路径二：按同主机同类型的第一批事件匹配**（`syslog-case.js:57-83`）。只查第一页 50 条（`syslog-case.js:61`），在时间差不超过 300 秒的事件里取最近的一条（`syslog-case.js:63-70`）。没有落在窗口内的 → 「同主机首批事件中没有落在事件时间前后 5 分钟的同类记录」（`syslog-case.js:71-74`）；最近的一条没有合法 ID → 未匹配（`syslog-case.js:75-78`）；查询抛错 → 「牧云事件查询失败：…」（`syslog-case.js:82-83`）。成功时 `coverage.first_page_only` 为真，`returned` 与 `total` 是这一页的条数与总数（`syslog-case.js:81`）。
 
-缺主机 IP 或有效事件时间时直接未匹配（`syslog-case.js:57-59`）。**未匹配不是错误**，它是正常分支：主流程据此改走 `runUnmatchedSyslog`（`triage-monitor.js:1038-1039`）。
+缺主机 IP 或有效事件时间时直接未匹配（`syslog-case.js:61-63`）。**未匹配不是错误**，它是正常分支：主流程据此改走 `runUnmatchedSyslog`（`triage-monitor.js:1046-1047`）。
+
+**两条路分开走（P003-T052）**：`unmatched()` 先照旧 `log('syslog.match_failed', fields)`——日志行的 `reason` 仍是原文
+（P003-T027 契约，凭据由 `log.js` 擦）；返回体的 `reason` 会写进案件文件 `03-研判事实.md` 与研判记录，
+所以只留徽标 + `recordFailure()` 的固定文案（`syslog-case.js:10-16`）。上面两条失败分支因此落案卷是
+`牧云事件查询失败：上游调用失败，原文 N 字未落盘`，其它分支写死的判定语（主机不一致等）不受影响。
 
 ### 6.4 读回材料
 
@@ -975,7 +990,7 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 
 | 失败模式 | 表现 | 失败后状态 | 能否重试 | 降级 |
 | --- | --- | --- | --- | --- |
-| 报文不是 RFC5424 行 | 抛「不是合法的 RFC5424 syslog 行」 | 该条丢弃，`lastError` 记下（`triage-monitor.js:812-816`） | 能，重投同一条报文 | 无 |
+| 报文不是 RFC5424 行 | 抛「不是合法的 RFC5424 syslog 行」 | 该条丢弃，`lastError` 记下（`triage-monitor.js:817-825`） | 能，重投同一条报文 | 无 |
 | 正文解析后为空 | 抛「syslog 正文解析后为空」（`syslog-input.js:55`） | 同上 | 能 | 无 |
 | JSON 正文带尾随文本 | `JSON.parse` 抛语法错（`syslog-input.js:50`） | 同上 | 能 | 无 |
 | MsgId 没有类型映射 | 返回 `{ skipped: 'no_agent_for_msgid' }`，计入 `syslog_stats.rejected`（`triage-monitor.js:820-822`） | 该条不入队 | 不能，除非换 MsgId | 无 |
@@ -983,13 +998,13 @@ count=1 offset=1 | total=3 | -webshell/10.0.0.6/uncertain/repeat=1
 | 状态文件不是合法 JSON | `JSON.parse` 抛错（`triage-monitor.js:177`），`start()` 失败 | 进程起不来 | 能，修好文件即可 | 无 |
 | 牧云部分事件类型读取失败 | `lastError` =「部分牧云事件类型读取失败，暂缓推进自动研判游标」 | 游标不动，队列不动（`triage-monitor.js:726`、`triage-monitor.js:768`） | 能，下一轮自动重试 | 延迟处理 |
 | 一轮新增超过 20 页 | `lastError` =「新增告警超过本轮扫描上限，请检查自动研判积压」 | 游标不推进（`triage-monitor.js:745`） | 能，下一轮重来 | 积压 |
-| 牧云事件详情读取失败 | 匹配返回未匹配，原因写明「牧云事件 ID 详情读取失败：…」（`syslog-case.js:52-55`） | 走未匹配分支 | — | 结论按未匹配口径给 |
-| 牧云事件列表查询失败 | 匹配返回未匹配，原因写明「牧云事件查询失败：…」（`syslog-case.js:82-83`） | 同上 | — | 同上 |
+| 牧云事件详情读取失败 | 匹配返回未匹配，原因写明「牧云事件 ID 详情读取失败：…」；**徽标后的原文段过闸**（P003-T052：`…失败：上游调用失败，原文 N 字未落盘`）（`syslog-case.js:56-59`、`syslog-case.js:10-16`） | 走未匹配分支 | — | 结论按未匹配口径给 |
+| 牧云事件列表查询失败 | 匹配返回未匹配，原因写明「牧云事件查询失败：…」；原文段同样过闸（`syslog-case.js:86-87`、`syslog-case.js:10-16`） | 同上 | — | 同上 |
 | 牧云事件与 syslog 主机对不上 | 匹配返回未匹配，原因写明「牧云事件 ID 对应的主机与 syslog 不一致」（`syslog-case.js:37-48`） | 同上 | — | 同上 |
-| 研判抛错 | 记录置 `failed`，`detail` 截断到 250 字符，原因进 `failure{reason,code,at}` 并自动退避重排（`triage-monitor.js:1078-1082`） | 队列记录保留；到上限进死信 | 自动重排；死信后仍可 `enqueue(..., { retry: true })` 人工重跑 | 总共最多跑 `retry_max_attempts` 次（即自动重跑 `retry_max_attempts-1` 次），之后停在死信等人工 |
+| 研判抛错 | 记录置 `failed`，`detail` 与 `failure.reason` 记同一条闸后文案（P003-T052：固定文案 + 原文字符量，不写错误原文；错误码仍在 `failure.code`），自动退避重排（`triage-monitor.js:1074-1083`） | 队列记录保留；到上限进死信 | 自动重排；死信后仍可 `enqueue(..., { retry: true })` 人工重跑 | 总共最多跑 `retry_max_attempts` 次（即自动重跑 `retry_max_attempts-1` 次），之后停在死信等人工 |
 | 调查轮数用尽仍无结论 | **不抛错**：`investigator` 返回「存疑 + 缺口清单」降级结论（`investigation-agent.js:827-843`） | 记录置 `done`，`05-研判结果.md` 照常写（`triage-monitor.js:1051-1056`） | 能，用 `enqueue(..., { retry: true })` | 降级为存疑 |
 | 队列快照写盘失败 | 只记 `triage.persist_failed` 日志（不打断服务、等的人也不挂：`writtenGen` 推到目标代）（`triage-monitor.js:259-274`） | 研判继续 | — | 崩溃时最多丢一段状态，重启后 `running` 记录重跑 |
-| 进度落盘 | `onProgress` 只标脏（合并写窗口决定何时落，不抛错）；`drain()` 里 run 的兜底 catch 失败时 `lastError` =「研判状态保存失败：…」（`triage-monitor.js:1031-1037`、`triage-monitor.js:954-956`） | 研判继续 | — | 记录里的阶段可能滞后 |
+| 进度落盘 | `onProgress` 只标脏（合并写窗口决定何时落，不抛错）；`drain()` 里 run 的兜底 catch 失败时 `lastError` =「研判状态保存失败：本地写入失败，原文 N 字未落盘」（P003-T052 过闸）（`triage-monitor.js:1039-1045`、`triage-monitor.js:951-953`） | 研判继续 | — | 记录里的阶段可能滞后 |
 | 案件目录写不出来 | `run()` 抛错，记录转 `failed`（`triage-monitor.js:1027`、`triage-monitor.js:1077-1082`） | 记录保留 | 能 | 无 |
 | 回写重复次数时 `result.json` 不存在 | 直接返回，两个文件都不动（`syslog-case.js:154`） | 重复次数没更新 | — | 无 |
 | 读材料超过 25000 字符 | 返回 `{ name, error }`，不给内容（`syslog-case.js:172`） | — | 能，改读摘要文件 | 用 `03-研判事实.md` |
