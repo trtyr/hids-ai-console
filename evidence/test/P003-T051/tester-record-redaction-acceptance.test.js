@@ -3,6 +3,8 @@
 // §3.3（复核不可用与修订失败）、§3.11（turns.note 口径）、§5.6（断言与可复跑命令）、
 // docs/modules/http-api.md §3.10（`GET /api/agent/investigations/{alertId}` 与 `/replay` 的读面）。
 // 做法：真 HTTP（进程内 listen）+ 真 InvestigationStore 落盘（读回原始文件字节）+ 替身模型/替身牧云。
+// P003-T050 隔离：必须抢在 server.js / investigation-agent.js 之前——它们模块加载时就把数据根算死。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -309,4 +311,8 @@ test('A1 未匹配 syslog：模型说明失败与上游查询失败只留徽标 
   assert.equal(names.length, 1);
   assert.doesNotMatch(raw, CLEAN);
   assert.equal(raw.includes(upstream.slice(0, 20)), false);
+});
+
+test('P003-T050 A2：本文件的数据根按注入走（不写真实全局根）', () => {
+  assertIsolatedRoot();
 });

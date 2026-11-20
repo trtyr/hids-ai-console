@@ -3,6 +3,8 @@
 // 与 T046 的同族修法（日志侧换固定文案、错误对象三标记照旧上抛）。
 // 做法：替身模型 / 替身牧云，不碰真网络与真时钟；可检索标记 `SECRET_BODY_MARKER` 放进**错误原文**，
 // 断言它一个字都不落进研判记录（review.concerns / missing_evidence / trace / analysis / turns.note）。
+// P003-T050 隔离：必须抢在 server.js / investigation-agent.js 之前——它们模块加载时就把数据根算死。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -187,4 +189,8 @@ test('A2 上游原文仍可达调用方：抛错原文与 cause 链不动，三�
   assert.equal(failure.model_call.outcome, 'invalid_json');
   // V8 只抄开头 ~10 字（`Unexpected token 'S', "SECRET_BOD"...`）：片段在错误对象上照旧。
   assert.match(failure.message, /SECRET_BOD/);
+});
+
+test('P003-T050 A2：本文件的数据根按注入走（不写真实全局根）', () => {
+  assertIsolatedRoot();
 });
