@@ -8,8 +8,9 @@
 // 类名只在这几个里出现：判断失败类型有用，且不会把正文带出来。
 const namedFailures = new Set(['TypeError', 'SyntaxError', 'RangeError', 'TimeoutError', 'AbortError']);
 const timeoutFailure = /timeout|超时|aborted/i;
-// `syslog-case.js` 生产的两条上游失败徽标：`牧云事件 ID 详情读取失败：<raw>` / `牧云事件查询失败：<raw>`。
-const upstreamFailure = /^(牧云事件(?: ID 详情读取|查询)失败)：/;
+// `syslog-case.js` 生产的两条上游失败徽标：`牧云事件 ID 详情读取失败：<raw>` / `牧云事件查询失败：<raw>`；
+// `triage-rules.js:263/267` 另两条：`规则集读取失败：<raw>` / `规则集校验失败：<raw>`。
+const upstreamFailure = /^(牧云事件(?: ID 详情读取|查询)失败|规则集(?:读取|校验)失败)：/;
 
 /**
  * 把错误对象压成「固定文案 + 原文字符量」。

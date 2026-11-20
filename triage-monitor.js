@@ -5,7 +5,7 @@ import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from
 import { eventTypes } from './cloudwalker.js';
 import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './syslog-case.js';
 import { log } from './log.js';
-import { recordFailure } from './record-redaction.js';
+import { recordFailure, reasonForRecord } from './record-redaction.js';
 
 // parseSyslog 自己写死的三条判定语（syslog-input.js:46/52/56）：不是上游原文，照原样留。
 const syslogParseFailures = ['不是合法的 RFC5424 syslog 行', 'syslog JSON 正文不是对象', 'syslog 正文解析后为空'];
@@ -1014,10 +1014,14 @@ export class TriageMonitor {
           parsed: record.input?.parsed || null, toolbox, match }); }
         catch (error) { ruleDecision = { status: 'error', reason: `规则评估失败：${recordFailure(error)}` }; }
         if (['candidate', 'observed', 'error', 'identity_unverified'].includes(ruleDecision.status)) {
-          record.steps.push({ stage: '规则评估', detail: ruleDecision.status === 'candidate' ?
+          // 记录侧不写错误原文（P003-T052）：`ruleEngine` 自己回的 `status:'error'` 也会带原文
+          // （`triage-rules.js:263/267/284`：`规则集读取/校验失败：<V8 原文>`、`牧云事件详情读取失败：<原文>`），
+          // 这一格会落队列状态文件，所以在**写入这一步**过闸。`ruleDecision` 对象本身不动——
+          // 随后还要以 `ruleEvaluation` 回灌模型（模型靠原文认错、改配置）。
+          const reason = ruleDecision.status === 'candidate' ?
             `命中 ${ruleDecision.rule.id}，作为误报候选交由 AI 复核` : ruleDecision.status === 'observed' ?
-              `观察规则 ${ruleDecision.rule.id} 命中，继续 AI 研判` : ruleDecision.reason,
-          at: new Date().toISOString() });
+              `观察规则 ${ruleDecision.rule.id} 命中，继续 AI 研判` : ruleDecision.reason;
+          record.steps.push({ stage: '规则评估', detail: reasonForRecord(reason), at: new Date().toISOString() });
         }
       }
       if (record.input) {
@@ -1037,7 +1041,10 @@ export class TriageMonitor {
         : await this.investigator.run(targetId, { mode: 'triage', onProgress, streamContext: record.input ?
           { parsed: record.input.parsed, context: record.input.context, caseInfo, match } : null,
           ruleEvaluation: ruleDecision });
-      result.rule_evaluation = ruleDecision;
+      // 记录侧不写错误原文（P003-T052）：`rule_evaluation` 会随 result 进案件目录 `result.json` 与研判记录
+      // （`investigation-store.js:14-23`），所以落盘那份的 `reason` 同样过闸；模型那份不改（上面 `ruleEvaluation` 传的仍是原文）。
+      result.rule_evaluation = ruleDecision.reason == null ? ruleDecision
+        : { ...ruleDecision, reason: reasonForRecord(ruleDecision.reason) };
       if (match?.matched === false) result.alert_id = record.alert_id;
       if (record.input) {
         result.syslog = { msgid: record.input.parsed.msgid, event_time: record.input.parsed.payload.event_create_time || record.input.parsed.ts,

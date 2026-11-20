@@ -176,7 +176,7 @@ JSON + 自由文本 -> 抛错: Unexpected non-whitespace character after JSON at
 **解析失败不会中断接收（P003-T052）**：`_acceptSyslog` 捕获后记进 `lastError`，这一条丢弃（`triage-monitor.js:817-825`）。
 记进去的是**闸后文案**，不是 V8 报错原文：`JSON 正文后面跟自由文本` 那种会带正文片段的错误落成
 `syslog 解析失败：上游调用失败（SyntaxError），原文 N 字未落盘`；上面那三条 `syslog-input.js` 自己写死的判定语
-（`不是合法的 RFC5424 syslog 行` 等）照原样留（`record-redaction.js:9-29`、`triage-monitor.js:8-10`）。
+（`不是合法的 RFC5424 syslog 行` 等）照原样留（`record-redaction.js:9-29`、`triage-monitor.js:11`）。
 
 ### 3.4 事件类型映射
 
@@ -497,7 +497,19 @@ EOF
 收尾状态由合并写带走：有排队/等重试的记录就留给写窗口，真闲下来才立刻 `flush()`（`triage-monitor.js:1086-1093`）。
 
 **队列状态文件里不写错误原文（P003-T052）**：`detail` / `failure.reason` / `steps[].detail` / `lastError` 四个落点
-过同一道闸（`record-redaction.js` 的 `recordFailure()`）——只留固定文案 + 原文字符量，错误对象本身不动。
+过同一道闸（`record-redaction.js` 的 `recordFailure()` / `reasonForRecord()`）——只留固定文案 + 原文字符量，
+错误对象本身不动。其中 `steps[].detail` 的两路都在**写入这一步**过闸：
+
+- `ruleEngine.evaluate()` 自己抛错 → catch 直接写 `规则评估失败：<闸后文案>`（`triage-monitor.js:1015`）；
+- `ruleEngine` 不抛、回 `status:'error'` 并自带理由（`triage-rules.js:263/267/284` 三个形状：
+  `规则集读取失败：<V8 原文>` / `规则集校验失败：<…>` / `牧云事件详情读取失败：<…>`）→ 写入前过
+  `reasonForRecord()`：徽标保留、原文段换成 `上游调用失败，原文 N 字未落盘`（`triage-monitor.js:1017-1025`）。
+  规则引擎自己写死的判定语（`未配置规则集` / `syslog 与牧云事件 ID 未精确关联` 等）不带徽标，过闸后原样保留。
+
+同一份 `ruleDecision` 会以 `ruleEvaluation` 回灌模型，那一份仍是原文（模型靠它认出配置写错）；但**落盘**的副本
+——`result.rule_evaluation`，随 `result` 进案件 `result.json`（`syslog-case.js:144`）与研判记录
+（`investigation-store.js:14-23`）——同样过闸（`triage-monitor.js:1044-1047`）。
+
 `summary().failure_reasons` 按 `failure.reason` 分桶，所以它的键现在是固定文案（同一类失败合并成一个桶，
 不再是每条告警一行原文）；具体错误码仍在 `failure.code`（`openapi.yaml` 的 `TriageSummary.failure_reasons` /
 `TriageFailure.reason` / 队列记录 `detail` 三处描述同此口径）。

@@ -211,6 +211,34 @@ test('O2 规则评估抛错：record.steps[].detail 过闸', async t => {
   assert.doesNotMatch(step.detail, /SECRET_BODY/);
 });
 
+// O2b（第三轮打回）：`ruleEngine` 自己回 `status:'error'`（而不是抛错）时，`reason` 同样带原文
+// （`triage-rules.js:263/267/284` 三个形状），而它经 `triage-monitor.js:1017-1024` 落队列步骤、
+// 经 `result.rule_evaluation` 落研判记录与案件 `result.json`（`syslog-case.js:144` 直接序列化 result）。
+test('O2b 规则引擎回 status:error：steps.detail 与落盘的 rule_evaluation 过闸，回灌模型仍原文', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-rule-error-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  let seen = null;
+  const monitor = new TriageMonitor(queueOptions(directory, {
+    ruleEngine: { evaluate: async () => ({ status: 'error', reason: `规则集校验失败：${upstreamError().message}` }) },
+    investigator: { run: async (alertId, { ruleEvaluation }) => { seen = ruleEvaluation;
+      return { alert_id: alertId, mode: 'triage',
+        verdict: { verdict: 'undetermined', summary: '待复核', claims: [] }, validation: { ok: true } }; } } }));
+  await monitor.load();
+  await monitor.enqueue('honeypot:3');
+  const record = await waitFor(monitor, 'honeypot:3');
+  assert.equal(record.status, 'done');
+  const step = record.steps.find(item => item.stage === '规则评估');
+  assert.match(step.detail, /^规则集校验失败：上游调用失败，原文 \d+ 字未落盘$/);
+  // A4：回灌给模型的那份仍是原文（模型靠它认出配置写错了）。
+  assert.match(seen.reason, /SECRET_BODY/);
+  await monitor.writeChain;
+  assert.doesNotMatch(await readFile(path.join(directory, 'queue.json'), 'utf8'), /SECRET_BODY/);
+  // 第二处：研判记录（`result.rule_evaluation`，与案件 `result.json` 同一个对象）。
+  const saved = await monitor.history.latest('honeypot:3', 'triage');
+  assert.match(saved.rule_evaluation.reason, /^规则集校验失败：上游调用失败，原文 \d+ 字未落盘$/);
+  assert.doesNotMatch(JSON.stringify(saved), /SECRET_BODY/);
+});
+
 test('O3 lastError 过闸：syslog 解析报错原文不落盘，自造判定语照留', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-lasterror-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
