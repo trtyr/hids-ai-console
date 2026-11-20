@@ -234,6 +234,65 @@ test('列表的重复次数沿用例记录上的 repeat_count，不另造计数'
   assert.equal(monitor.cases().cases.find(item => item.alert_id === rows[0].alert_id).repeat_count, 1);
 });
 
+// P003-T060 待判定①：poll 模式入队的记录没有 input，旧版整条从列表消失（用户判 bug）。
+// 现在必须出现在 cases() 里，缺 input 的派生字段如实回 null，分页 total 把它算进去。
+test('无 input 的 poll 记录出现在 cases 列表里，派生字段为 null 不报错', t => {
+  const { monitor, rows } = casesMatrix();
+  const pollRecord = { alert_id: 'honeypot:99', status: 'done', verdict: 'threat', created_at: '2026-11-03T15:00:00.000Z',
+    updated_at: '2026-11-03T15:00:00.000Z' }; // poll 入口：没有 input
+  monitor.records.set(pollRecord.alert_id, pollRecord);
+  const listed = monitor.cases();
+  assert.equal(listed.total, 6);
+  const poll = listed.cases.find(item => item.alert_id === 'honeypot:99');
+  assert.ok(poll, 'poll 记录必须出现在列表里');
+  assert.equal(poll.msgid, null);
+  assert.equal(poll.event_time, null);
+  assert.equal(poll.host_ip, null);
+  assert.equal(poll.source_ip, null);
+  assert.equal(poll.command, null);
+  assert.equal(poll.verdict, 'threat');
+  // 不带 input 的记录不参与类型 / 主机 / 时间筛选（没有可判字段），但结论筛选照常生效
+  assert.equal(monitor.cases({ type: 'honeypot' }).total, 1);
+  assert.equal(monitor.cases({ host: '10.0.0.5' }).total, 3);
+  assert.equal(monitor.cases({ verdicts: ['threat'] }).total, 3);
+  // 有 input 的 syslog 记录字段不回归：msgid / 事件时间 / 主机照旧
+  const syslog = listed.cases.find(item => item.alert_id === rows[0].alert_id);
+  assert.equal(syslog.msgid, 'cloudwalker-revshell');
+  assert.equal(syslog.host_ip, '10.0.0.5');
+});
+
+// P003-T060 B03：command 四键回退，真序与 cloudwalker.js:60 一致；
+// 旧键 process_command_line 作兼容位插在末位。真实记录实测旧键 undefined、真键 process_cmdline 有值。
+test('cases 的 command 按 cmdline→command→shell_cmdline→process_cmdline 回退，旧键作末位兼容', t => {
+  const monitor = new TriageMonitor({ file: '/tmp/hids-command-fallback.json', service: {}, investigator: {}, history: {} });
+  const make = (payload) => {
+    const record = { alert_id: caseId('revshell', Math.floor(Math.random() * 1000)), status: 'done',
+      created_at: '2026-11-03T08:00:00.000Z', updated_at: '2026-11-03T08:00:00.000Z',
+      input: { raw: '', parsed: { msgid: 'cloudwalker-revshell', ts: '2026-11-03T08:00:00Z', payload } } };
+    monitor.records.set(record.alert_id, record);
+    return record;
+  };
+  // 真实键：process_cmdline 有值、旧键 process_command_line 不存在 → command 取到真键（修复前恒 null）
+  const real = make({ process_cmdline: 'curl http://x' });
+  assert.equal(monitor.cases({ count: 50 }).cases.find(item => item.alert_id === real.alert_id).command, 'curl http://x');
+  // 逐键优先级：cmdline 最优先
+  const all = make({ cmdline: 'cmdline 值', command: 'command 值', shell_cmdline: 'shell 值', process_cmdline: 'process 值' });
+  assert.equal(monitor.cases({ count: 50 }).cases.find(item => item.alert_id === all.alert_id).command, 'cmdline 值');
+  const onlyCommand = make({ command: 'command 值', process_cmdline: 'process 值' });
+  assert.equal(monitor.cases({ count: 50 }).cases.find(item => item.alert_id === onlyCommand.alert_id).command, 'command 值');
+  const onlyShell = make({ shell_cmdline: 'shell 值' });
+  assert.equal(monitor.cases({ count: 50 }).cases.find(item => item.alert_id === onlyShell.alert_id).command, 'shell 值');
+  // 旧键兼容位：只有旧键时也取得到（老载荷不回归）
+  const legacyOnly = make({ process_command_line: 'legacy 值' });
+  assert.equal(monitor.cases({ count: 50 }).cases.find(item => item.alert_id === legacyOnly.alert_id).command, 'legacy 值');
+  // 真键优先于旧键：两键都在时取真键
+  const both = make({ process_cmdline: '真键', process_command_line: '旧键' });
+  assert.equal(monitor.cases({ count: 50 }).cases.find(item => item.alert_id === both.alert_id).command, '真键');
+  // 全空 → null
+  const empty = make({});
+  assert.equal(monitor.cases({ count: 50 }).cases.find(item => item.alert_id === empty.alert_id).command, null);
+});
+
 // summary() 的三个聚合只看记录本身（状态 / 结论 / MsgId 类型 / 入队时刻），搭最小记录矩阵，不跑研判。
 function summaryRecord(alertId, { status = 'done', verdict, createdAt = '2026-11-03T08:00:00.000Z', msgid } = {}) {
   return { alert_id: alertId, status, verdict, created_at: createdAt, updated_at: createdAt,

@@ -91,6 +91,17 @@ function evidenceSummary(result) {
     evidence_sources: new Set(claims.flatMap(claim => claim.citations.map(citation => citation.evidence_id).filter(Boolean))).size };
 }
 
+// B03（P003-T060）：命令行字段四键回退，真序与 `cloudwalker.js:60` 一致（cmdline → command →
+// shell_cmdline → process_cmdline）；syslog 载荷沿用至今的旧键 process_command_line 作兼容位插在末位。
+// 三条真实记录实测旧键 undefined、真键 process_cmdline 有值——全仓只有 cases() 这一处没做兼容。
+function commandOf(payload) {
+  for (const key of ['cmdline', 'command', 'shell_cmdline', 'process_cmdline', 'process_command_line']) {
+    const value = payload?.[key];
+    if (typeof value === 'string' ? value.trim() : value != null) return value;
+  }
+  return null;
+}
+
 // syslog 逐条触发常规研判；兼容轮询入口。状态落盘，重启后续跑未完成任务。
 export class TriageMonitor {
   constructor({ service, investigator, history, file, intervalMs = 30000, concurrency = envConcurrency(),
@@ -525,12 +536,15 @@ export class TriageMonitor {
 
   // 列表口径：先按结论 / 事件类型 / 主机 / 事件时间筛，再倒序切页；total 是过滤后的条数。
   // from / to 是 Unix 秒（含端点），与 eventSeconds 同一个时间源，部署端偏移一并生效。
+  // 待判定①（P003-T060，用户判 bug）：poll 模式入队的记录没有 input，旧版整条从列表消失。
+  // 现在全部列出——缺 input 的派生字段（msgid / 事件时间 / 主机 / 来源 / 命令）如实回 null，不报错、不丢条。
   cases({ count = 20, offset = 0, verdicts = [], type = null, host = null, from = null, to = null, sort = 'time' } = {}) {
-    let records = [...this.records.values()].filter(record => record.input);
+    let records = [...this.records.values()];
     if (verdicts.length) records = records.filter(record => verdicts.includes(record.verdict || 'review'));
-    if (type) records = records.filter(record => eventTypeFor(record.input.parsed.msgid) === type);
-    if (host) records = records.filter(record => record.input.parsed.payload.host_ip === host);
+    if (type) records = records.filter(record => record.input && eventTypeFor(record.input.parsed.msgid) === type);
+    if (host) records = records.filter(record => record.input && record.input.parsed.payload.host_ip === host);
     if (from != null || to != null) records = records.filter(record => {
+      if (!record.input) return false;
       const seconds = eventSeconds(record.input.parsed);
       return seconds != null && (from == null || seconds >= from) && (to == null || seconds <= to);
     });
@@ -548,12 +562,13 @@ export class TriageMonitor {
         missing_evidence: record.missing_evidence || [], next_actions: record.next_actions || [],
         evidence_refs: record.evidence_refs || [], evidence: record.evidence || [],
         verified_facts: record.verified_facts || 0,
-        evidence_sources: record.evidence_sources || 0, msgid: record.input.parsed.msgid,
+        evidence_sources: record.evidence_sources || 0,
+        msgid: record.input?.parsed?.msgid ?? null,
         decision_source: record.decision_source || 'ai', rule_id: record.rule_id || null,
-        event_time: record.input.parsed.payload.event_create_time || record.input.parsed.ts,
-        host_ip: record.input.parsed.payload.host_ip || null,
-        source_ip: record.input.parsed.payload.source_ip || record.input.parsed.payload.login_ip || null,
-        command: record.input.parsed.payload.process_command_line || null
+        event_time: record.input ? (record.input.parsed.payload.event_create_time || record.input.parsed.ts) : null,
+        host_ip: record.input?.parsed.payload.host_ip ?? null,
+        source_ip: record.input ? (record.input.parsed.payload.source_ip || record.input.parsed.payload.login_ip) ?? null : null,
+        command: record.input ? commandOf(record.input.parsed.payload) : null
       })) };
   }
 
