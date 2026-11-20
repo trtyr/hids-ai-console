@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { reasonForRecord } from './record-redaction.js';
+import { reasonForRecord } from './src/shared/redaction.js';
 
 const exampleFile = path.join(path.dirname(fileURLToPath(import.meta.url)), 'triage-rules.example.json');
 

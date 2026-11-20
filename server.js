@@ -22,10 +22,10 @@ import { WikiWorkbench } from './wiki-workbench.js';
 import { TraceBoardService } from './trace-board.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
-import { reasonForRecord } from './record-redaction.js';
+import { reasonForRecord, scrubCredentials } from './src/shared/redaction.js';
 import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
 import { FalsePositiveMaintainer, FP_LIBRARIES, FpSessionStore, fpSessionDirectory,
-  maintenanceSide, maintenanceSides, scrubCredentials, wikiFeedbackTarget } from './fp-maintainer.js';
+  maintenanceSide, maintenanceSides, wikiFeedbackTarget } from './fp-maintainer.js';
 import { createConfigStore, dataRoot } from './config-store.js';
 
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()

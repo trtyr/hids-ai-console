@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { eventTypes, normalizeAlert } from './cloudwalker.js';
 import { PromptStore } from './prompt-store.js';
-import { recordFailure } from './record-redaction.js';
+import { recordFailure } from './src/shared/redaction.js';
 
 const MAX_INVESTIGATIONS = 12;
 const MAX_ROUNDS = 32;

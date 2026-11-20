@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isRuleId } from './rule-store.js';
 import { traceModelCall } from './log.js';
+import { scrubCredentials } from './src/shared/redaction.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SESSION_ID = /^[0-9a-f-]{36}$/i;
@@ -59,18 +60,8 @@ const nowIso = () => new Date().toISOString();
 const text = value => String(value ?? '').replace(/[\r\n\0]/g, ' ').trim();
 const clipped = (value, limit) => String(value ?? '').slice(0, limit);
 
-/**
- * 失败原因出记录/响应之前的凭据擦除（P003-T013 A4 的口径）。
- *
- * 上游模型客户端的报错常把请求头或 URL 拼进文案（`Authorization: Bearer …`、`?token=…`），
- * 维护侧的单边 `error` 会落进 `<数据根>/triage-monitor.json` 并经 `GET /api/agent/triage/{alertId}` 外发，
- * 所以**写之前**擦，而不是等出口再擦。实现只此一份：`server.js` 从这里 import（反向 import 会成环）。
- */
-export function scrubCredentials(text) {
-  return String(text ?? '')
-    .replace(/\b(Basic|Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [redacted]')
-    .replace(/\b(token|api[_-]?key|password|secret)=[^\s&"'，。；]+/gi, '$1=[redacted]');
-}
+// `scrubCredentials()` 已收口到 `src/shared/redaction.js`（批 0）：实现只此一份，
+// 本文件与 `server.js` 都直接 import 共享版——不再是「维护侧函数放这边避免成环」的特例。
 
 // 案件里命中的 Rego 规则 id：结果落盘的 result.json 里就有，没有就当没命中（旧案件可能没有这条轨迹）。
 export async function caseRegoRuleIds(caseDir) {

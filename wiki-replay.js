@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { recordFailure } from './record-redaction.js';
+import { recordFailure } from './src/shared/redaction.js';
 
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const verdicts = new Set(['threat', 'uncertain', 'false_positive']);

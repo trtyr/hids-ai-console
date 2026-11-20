@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eventSeconds, eventTypeFor, sessionKey } from './syslog-input.js';
 import { log } from './log.js';
-import { reasonForRecord } from './record-redaction.js';
+import { reasonForRecord } from './src/shared/redaction.js';
 
 // 匹配不上的每条分支都从这里出：日志留「哪条规则、差在哪」，返回体保持原样（只增键）。
 // rule 取值见 docs/architecture.md「日志」一节的 syslog.match_failed 行。

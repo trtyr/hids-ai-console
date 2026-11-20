@@ -11,7 +11,6 @@
 // 校验对象是「合并后的生效值」：只改 LLM_MODEL 也要三项齐全——进程里这三项本来就由启动闸门保证齐全。
 import { readFileSync } from 'node:fs';
 import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import path from 'node:path';
 import { log } from './log.js';
 import { RpcClient } from './rpc-client.js';
@@ -24,17 +23,10 @@ export const WRITABLE_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_URL', 'CLOUDWALK
   'LLM_REVIEW_BASE_URL', 'LLM_REVIEW_API_KEY', 'LLM_REVIEW_MODEL',
   'LLM_LIGHT_BASE_URL', 'LLM_LIGHT_API_KEY', 'LLM_LIGHT_MODEL']);
 
-// 运行态数据根的唯一定义（P003-T034）：`HIDS_DATA_DIR` 指向哪就落哪，没设就落机器全局的
-// `~/.local/share/hids-ai-console/`。**仓库里一个字都不写**——测试与探针注入 tmp 目录，别让它们写真实全局根。
-// 放在本模块而不是 server.js：`server.js` 已经 import 本模块（`server.js:26`），反向 import 会成环；
-// 而且 prompt-store / wiki-store 也要这个根，它们同样不该为了一个路径去 import server。
-// env / home 可注入：单测用字面量，不碰真实 process.env 与真实 HOME。
-// 空串与纯空白算「没设」（与 `server.js:56` 的 HIDS_CASES_DIR 同一个口径）；相对路径按当前工作目录绝对化。
-export function dataRoot({ env = process.env, home = homedir() } = {}) {
-  const configured = typeof env.HIDS_DATA_DIR === 'string' ? env.HIDS_DATA_DIR.trim() : '';
-  if (configured) return path.resolve(configured);
-  return path.join(home, '.local', 'share', 'hids-ai-console');
-}
+// 运行态数据根的唯一定义（P003-T034）已摘成零依赖叶子 `src/shared/data-root.js`（T075 批 0，
+// D034 §8.4 #1：原来这个纯路径函数让三个 store 的依赖图挂上 RpcClient/ChatModelClient）。
+// 这里 re-export 保持旧 import 路径稳定；批 6 迁 config-store 时删掉这一行。
+export { dataRoot } from './src/shared/data-root.js';
 
 export function defaultConfigFile(root = dataRoot()) {
   return path.join(root, 'config-overrides.json');

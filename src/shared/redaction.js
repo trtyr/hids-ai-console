@@ -1,7 +1,11 @@
-// 记录侧脱敏闸（P003-T052）：落盘只写「固定文案 + 原文字符量」，错误对象本身一个字不动。
-// 口径与 P003-T051 的 `investigation-agent.js` `recordFailure()` 同款；那个函数留在研判记录内部，
-// 本文件管其余记录侧：队列状态文件（triage-monitor）、案件文件（syslog-case）、白板 JSON（trace-board）、
-// 工作台会话（knowledge-workbench）、必查项 trace 与案卷（required-evidence）、回放报告（wiki-replay）。
+// 记录侧脱敏闸 + 出口凭据擦除（P003-T052 口径，批 0 归位到 shared）。
+//
+// 两个职责，一套闸：
+//   1) `recordFailure()` / `reasonForRecord()`：落盘只写「固定文案 + 原文字符量」，错误对象本身一个字不动。
+//      口径与 P003-T051 的 `investigation-agent.js` 同款（那份自抄已在批 0 删除，统一 import 这里）。
+//   2) `scrubCredentials()`：失败原因出记录/响应**之前**的凭据擦除（P003-T013 A4）。
+//      上游报错常把请求头或 URL 拼进文案（`Authorization: Bearer …`、`?token=…`），写之前擦，不等出口。
+//
 // 为什么：V8 的 JSON.parse 报错会把回包前 ~10 字原样带出（`Unexpected token 'S', "SECRET_BOD"...`），
 // 上游 HTTP/RPC 报错的 message 同理——这些字符串一旦写进磁盘就等于留档。
 
@@ -30,12 +34,21 @@ export function recordFailure(error, { kind = '上游调用失败', keep = [] } 
  * 记录侧文本一律归一：任何 `reason` / `detail` 文本（不管前缀长什么样）都走 `recordFailure()`，
  * 只留固定文案 + 原文字符量。
  *
- * 设计变更（第四轮打回，群主拍板）：**废掉徽标白名单**。旧版按前缀白名单（`牧云事件…失败：` / `规则集…失败：`）
- * 保留徽标、只换原文段——白名单穷举不尽（第三轮就漏了无「ID」的 `牧云事件详情读取失败：`），
- * 漏一个就是一条原文落盘的路。取舍：本地短文案一起变泛（丢「哪里失败」的语义），换零泄漏 + 无穷举债。
- * 注意：`recordFailure()` 的 `keep` 是**调用点写死的整串**精确匹配（如「模型尚未配置」），
- * 不是在文本内容上猜「这句像不像我们的话」；本函数不再提供任何内容白名单。
+ * 设计变更（P003-T052 第四轮打回，群主拍板）：**废掉徽标白名单**。旧版按前缀白名单保留徽标、只换原文段
+ * ——白名单穷举不尽，漏一个就是一条原文落盘的路。取舍：本地短文案一起变泛（丢「哪里失败」的语义），
+ * 换零泄漏 + 无穷举债。`recordFailure()` 的 `keep` 是**调用点写死的整串**精确匹配，
+ * 不是在文本内容上猜「这句像不像我们的话」；本函数不提供任何内容白名单。
  */
 export function reasonForRecord(text) {
   return recordFailure(String(text ?? ''));
+}
+
+/**
+ * 失败原因出记录/响应之前的凭据擦除（P003-T013 A4 口径，原实现住在 `fp-maintainer.js`，批 0 收口到这里）。
+ * Basic/Bearer 前缀整段（前缀 + 凭据）换成 `[redacted]`，token=xxx 之类键值对同样擦。
+ */
+export function scrubCredentials(text) {
+  return String(text ?? '')
+    .replace(/\b(Basic|Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [redacted]')
+    .replace(/\b(token|api[_-]?key|password|secret)=[^\s&"'，。；]+/gi, '$1=[redacted]');
 }

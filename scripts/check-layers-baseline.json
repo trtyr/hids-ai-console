@@ -63,10 +63,6 @@
     "kind": "struct.file-placement",
     "file": "prompt-store.js"
   },
-  "struct.file-placement|{\"file\":\"record-redaction.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "record-redaction.js"
-  },
   "struct.file-placement|{\"file\":\"required-evidence.js\"}": {
     "kind": "struct.file-placement",
     "file": "required-evidence.js"

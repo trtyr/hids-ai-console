@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eventTypes } from './cloudwalker.js';
+import { recordFailure, reasonForRecord } from './src/shared/redaction.js';
 import { traceModelCall } from './log.js';
 import { RuleStore } from './rule-store.js';
 import { eventTypeFor } from './syslog-input.js';
@@ -90,28 +91,12 @@ function markLastTurn(transcript, fields) {
   if (last) Object.assign(last, fields);
 }
 
-// ── 记录侧脱敏闸（P003-T051）────────────────────────────────────────────────
-// 落盘的四个去处（review.concerns / missing_evidence / trace / analysis）只写**固定文案 + 原文字符量**：
-// V8 的 JSON.parse 报错会把回包前 ~10 字原样带出（`Unexpected token 'S', "SECRET_BOD"...`），
-// 模型与上游错误文本同理。**错误对象本身一个字不动**——`model_decode` / `model_reply` / `model_call`
-// 三标记照旧上抛，`modelCallError` 抛给调用方的报错照旧原文：调用方要原文，磁盘不要。
-const namedFailures = new Set(['TypeError', 'SyntaxError', 'RangeError', 'TimeoutError', 'AbortError']);
-
-function recordFailure(error) {
-  const raw = String(error?.message ?? error ?? '');
-  const kind = error?.model_decode ? '模型回包不是合法 JSON'
-    : /timeout|超时|aborted/i.test(raw) ? '调用超时' : '上游调用失败';
-  const name = namedFailures.has(error?.name) ? `（${error.name}）` : '';
-  return `${kind}${name}，原文 ${raw.length} 字未落盘`;
-}
-
-// 未匹配 syslog 的 reason 可能拼进了上游错误原文（`syslog-case.js` 的 `牧云事件…失败：<raw>`）：
-// 记录侧一律归一（P003-T054，与 `record-redaction.js` 的 `reasonForRecord()` 同口径）。
-// 旧版按前缀白名单保留徽标（`牧云事件 ID 详情读取失败：` / `牧云事件查询失败：`）——白名单穷举不尽，
-// 漏一个就是一条原文落盘的路（P003-T052 第四轮拍板：删白名单，换零泄漏）。
-function reasonForRecord(text) {
-  return recordFailure(String(text ?? ''));
-}
+// ── 记录侧脱敏闸（P003-T051，批 0 收口）──────────────────────────────────────
+// 落盘的四个去处（review.concerns / missing_evidence / trace / analysis）只写**固定文案 + 原文字符量**。
+// 原来这里自抄了一份 `recordFailure` / `reasonForRecord`（无 `{kind, keep}` 且与共享版已分叉，D034 §8.1），
+// 批 0 起统一 import `src/shared/redaction.js`——闸只有一道，谁也别再抄。
+// **错误对象本身一个字不动**——`model_decode` / `model_reply` / `model_call` 三标记照旧上抛，
+// `modelCallError` 抛给调用方的报错照旧原文：调用方要原文，磁盘不要。
 
 // 失败附注走同一道闸：快照（turns[].note）与日志都不许留原文（P003-T046 复审实锤）。
 function failureNote(error, summary) {

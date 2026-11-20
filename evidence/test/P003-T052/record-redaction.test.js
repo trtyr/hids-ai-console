@@ -6,7 +6,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createJournal, useJournal } from '../../../log.js';
-import { recordFailure, reasonForRecord } from '../../../record-redaction.js';
+import { recordFailure, reasonForRecord } from '../../../src/shared/redaction.js';
 import { parseSyslog } from '../../../syslog-input.js';
 import { matchSyslogEvent, writeSyslogCase } from '../../../syslog-case.js';
 import { runWikiReplay } from '../../../wiki-replay.js';
