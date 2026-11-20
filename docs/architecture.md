@@ -613,7 +613,7 @@ node --test triage-rules.test.js   # 只跑一个文件
 | `wiki-current.test.js` | 当前生效判据与提示词是否一致（只读） |
 | `wiki.test.js` | 判据库读写、维护会话、发布与回放 |
 
-**本卡实测结果**（命令：`npm test`，即 `node --test --test-timeout=60000 --test-force-exit *.test.js`，198 条全绿，P003-T028 起）：
+**本卡实测结果**（命令：`npm test`，即 `node --test --test-timeout=60000 --test-force-exit *.test.js`；条数随卡递增，截至 P003-T055 是 235 条全绿——具体数字以 `docs/_meta/gaps.md` 第八节为准，2026-11-20）：
 
 ```
 ℹ tests 198
