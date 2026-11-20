@@ -691,7 +691,7 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 
 | 资源 | 硬上限 | 权威页 |
 | --- | --- | --- |
-| 请求正文 | 缺省 8192 字符，各路由按需要放宽（实测 12000～200000， 的 ） | [modules/http-api.md](modules/http-api.md) 第 8.1 节 |
+| 请求正文 | 缺省 8192 字符，各路由按需要放宽（实测 12000～200000，见 `server.js` 的 `readJSON(req, N)`） | [modules/http-api.md](modules/http-api.md) 第 8.1 节 |
 | 日志文件 | 单文件 10 MiB 轮转，历史只留 5 份 | [modules/http-api.md](modules/http-api.md) 第 3.8 节 |
 | 一次研判 | 调查 6 轮、工具调用 8 次、结论退回 2 次 | [modules/investigation-agent.md](modules/investigation-agent.md) 第 3.2 节 |
 | 单条工具结果 | 超过 20000 字符不给模型看正文 | [modules/investigation-agent.md](modules/investigation-agent.md) 第 3.2 节 |
