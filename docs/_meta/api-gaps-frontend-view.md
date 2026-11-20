@@ -37,7 +37,7 @@ id: GUIDE-API-GAPS-FRONTEND
 | A14 | **原始报文与完整载荷** | 告警详情「原始报文」页签、逐字段复核 | `status()` 剥掉 `input`（`triage-monitor.js:518`）；真实载荷 ~60 字段一个不出 |
 | A15 | **同主机/同源 IP 关联告警** | 这个攻击者还打了谁 | 全表无此路径 |
 | A16 | **证据原文** | 客户逐字段核对取证结果 | 只有投影 `view`（≤6000 字，省略字段只记计数） |
-| A17 | **白板重跑/版本/diff** | 同一目标再溯源一次、对比两次结果 | 同 target 直接返回旧白板（`server.js:1007`），无版本号 |
+| A17 | **白板重跑/版本/diff** | 同一目标再溯源一次、对比两次结果 | 同 target 直接返回旧白板（`server.js:990-998`），无版本号 |
 | A18 | **业务端「可装什么版本」** | 控制台提示「有新版本可更新」 | 升级包列表只在维护端 18081 + 独立账号；业务端 `/api/updates` 只给已装版本 |
 | A19 | **权限矩阵** | 这个账号能点哪些按钮 | `role` 恒 `operator`；哪条要 `X-Rule-Admin-Token` 前端只能硬编码 |
 
@@ -56,7 +56,7 @@ id: GUIDE-API-GAPS-FRONTEND
 | B07 | Wiki 列表缺 `applies_to/refs/evidence/source`（只在单页正文里） | `wiki-store.js:25-28` |
 | B08 | 白板列表无 verdict/结论字段 | `openapi.yaml:960-990` |
 | B09 | investigations 详情 spec 未声明 `model/prompt_version/scenario_ids/auto_action` | `investigation-agent.js:1091-1094` |
-| B10 | **规则库错误定位是字符串**：`rules/<file>:<行>` 塞在 `error` 一句话里，前端要正则抠才能标到行 | `openapi.yaml:1130` |
+| B10 | **规则库错误定位是字符串**：`rules/<file>:<行>` 塞在 `error` 一句话里，前端要正则抠才能标到行 | `openapi.yaml:1129-1130` |
 | B11 | **证据 id 两套体系**：`triage.evidence[]` 只有 `{evidence_id,tool,fetched_at,sha256}`，原文在 `investigation.evidence[].view`，前端要自己拼 | `triage-monitor.js:540-556` vs `investigation-agent.js` |
 
 ---
@@ -69,7 +69,7 @@ id: GUIDE-API-GAPS-FRONTEND
 | C02 | 无 cursor 语义，全 offset；`/api/alerts` 另有 500 条扫描上限，超限 `total` 不准 | `server.js:498`、`cloudwalker.js:249-252` |
 | C03 | 只有 2 个接口的排序可配（alerts、cases），其余写死 | `server.js:522/550` |
 | C04 | 筛选维度缺：告警无 host/account/source 精确筛（只有 `q` 模糊）；**案件无 level、无 status、无 `q`**；日志无正文全文 | `openapi.yaml:1707` vs `:1760`；`server.js:531-546` 只有 verdict/type/host/from/to |
-| C08 | **`level` 不支持「≥high」语义**：`level=high` 只出 high，不含 critical（按秩集合精确匹配） | `cloudwalker.js:139` |
+| C08 | **`level` 不支持「≥high」语义**：`level=high` 只出 high，不含 critical（按秩集合精确匹配） | `cloudwalker.js:172-175` |
 | C09 | **白板详情全量返回无分页**：`hops/links/nodes/edges/activity` 一次全吐，长链响应很大 | `server.js:990`、`openapi.yaml:1042` |
 | C05 | wiki 搜索硬截 50 条，`total` 也是截断后值 | `server.js:1238-1241` |
 | C06 | **数据盘点只覆盖 7/15 类存储** ✅ — `fp-sessions/` 27MB / 3187 文件不漏报也不可清；同理 rules-history/rule-sessions/wiki-history/prompt-overrides/triage-rules/update-packages | `server.js:621` `DATA_KINDS` |
@@ -107,7 +107,7 @@ id: GUIDE-API-GAPS-FRONTEND
 |---|---|---|
 | 1 | `cases` 列表**只列有 syslog 原始报文的记录**，poll 模式入队的案件不在列表里 | `triage-monitor.js:529` |
 | 2 | `knowledge-store.js` 整库未接线（`server.js` 0 次 import）✅ | `knowledge-store.js:7-38` |
-| 3 | 在跑的研判不可中止 | `server.js:792` 只删排队项 |
+| 3 | 在跑的研判不可中止 | `server.js:1218-1220` 只删排队项 |
 | 4 | 误报登记要求 `status=done`，在跑/排队的告警不能先标「待处置」 | `server.js:1169` |
 
 ---
