@@ -498,9 +498,10 @@ EOF
 
 **队列状态文件里不写错误原文（P003-T052）**：`detail` / `failure.reason` / `steps[].detail` / `lastError` 四个落点
 过同一道闸（`record-redaction.js` 的 `recordFailure()` / `reasonForRecord()`）——只留固定文案 + 原文字符量，
-错误对象本身不动。`reasonForRecord()` 自第四轮起**一律归一**：任何前缀的文本都换成
-`上游调用失败，原文 N 字未落盘`，**不做内容白名单**（旧版按 `牧云事件…失败：` / `规则集…失败：` 前缀保留徽标，
-白名单穷举不尽——第三轮就漏了无「ID」的 `牧云事件详情读���失败：`）。代价是本地短文案（`未配置规则集`、
+错误对象本身不动。`reasonForRecord()` 自第四轮起**一律归一**：任何前缀的文本都过 `recordFailure()`，
+按失败类型压成三态固定文案——超时类 → `调用超时，原文 N 字未落盘`，模型回包不可解析 →
+`模型回包不是合法 JSON，原文 N 字未落盘`，其余 → 兜底 `上游调用失败，原文 N 字未落盘`；**不做内容白名单**（旧版按 `牧云事件…失败：` / `规则集…失败：` 前缀保留徽标，
+白名单穷举不尽——第三轮就漏了无「ID」的 `牧云事件详情读取失败：`）。代价是本地短文案（`未配置规则集`、
 `syslog 与牧云事件 ID 未精确关联` 等）也一起变泛；拍板的取舍是零泄漏优先（`record-redaction.js:29-41`）。
 
 `steps[].detail` 的写入路径（`triage-monitor.js:1015-1025`）：
@@ -512,7 +513,7 @@ EOF
 
 同一份 `ruleDecision` 会以 `ruleEvaluation` 回灌模型，那一份仍是原文（模型靠它认出配置 / 网络错在哪）；但**落盘**的副本
 ——`result.rule_evaluation`，随 `result` 进案件 `result.json`（`syslog-case.js:144`）与研判记录
-（`investigation-store.js:14-23`）——同样过闸（`triage-monitor.js:1042-1045`）。
+（`investigation-store.js:14-23`）——同样过闸（`triage-monitor.js:1046-1047`）。
 
 `summary().failure_reasons` 按 `failure.reason` 分桶，所以它的键现在是固定文案（同一类失败合并成一个桶，
 不再是每条告警一行原文）；具体错误码仍在 `failure.code`（`openapi.yaml` 的 `TriageSummary.failure_reasons` /
@@ -702,7 +703,7 @@ files -> ["00-这是什么.md","01-原始告警.txt","02-告警字段.md","03-�
 
 **路径二：按同主机同类型的第一批事件匹配**（`syslog-case.js:57-83`）。只查第一页 50 条（`syslog-case.js:61`），在时间差不超过 300 秒的事件里取最近的一条（`syslog-case.js:63-70`）。没有落在窗口内的 → 「同主机首批事件中没有落在事件时间前后 5 分钟的同类记录」（`syslog-case.js:71-74`）；最近的一条没有合法 ID → 未匹配（`syslog-case.js:75-78`）；查询抛错 → 「牧云事件查询失败：…」（`syslog-case.js:82-83`）。成功时 `coverage.first_page_only` 为真，`returned` 与 `total` 是这一页的条数与总数（`syslog-case.js:81`）。
 
-缺主机 IP 或有效事件时间时直接未匹配（`syslog-case.js:61-63`）。**未匹配不是错误**，它是正常分支：主流程据此改走 `runUnmatchedSyslog`（`triage-monitor.js:1046-1047`）。
+缺主机 IP 或有效事件时间时直接未匹配（`syslog-case.js:61-63`）。**未匹配不是错误**，它是正常分支：主流程据此改走 `runUnmatchedSyslog`（`triage-monitor.js:1040`）。
 
 **两条路分开走（P003-T052，第四轮改口径）**：`unmatched()` 先照旧 `log('syslog.match_failed', fields)`——日志行的
 `reason` 仍是原文（P003-T027 契约，凭据由 `log.js` 擦）；返回体的 `reason` 会写进案件文件 `03-研判事实.md`

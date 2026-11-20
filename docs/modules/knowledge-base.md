@@ -3,7 +3,7 @@ type: module
 id: MOD-KNOWLEDGE-BASE
 covers: [wiki-store.js, wiki-workbench.js, wiki-replay.js]
 unit: knowledge-base
-updated: 2026-11-17
+updated: 2026-11-20
 ---
 
 # 判据库与维护流水线（knowledge-base）

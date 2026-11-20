@@ -2,7 +2,7 @@
 type: module
 id: MOD-EXPERIENCE-DRAFT
 covers: [knowledge-store.js, knowledge-workbench.js]
-updated: 2026-11-17
+updated: 2026-11-20
 ---
 
 # 候选经验整理台 · experience-draft
