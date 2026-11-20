@@ -155,3 +155,20 @@ $ git checkout HEAD -- triage-monitor.js && node --test evidence/test/P003-T023/
 1. `recordFailure`/`reasonForRecord` 走「keep 白名单精确匹配」与「无徽标原样放行」两套口径：`reasonForRecord('SECRET_RAW…')` 原样返回（我实测）。今天唯一调用方 `syslog-case.js` 传的都是自造判定语或带徽标的错误文案；将来新分支拼一段不合徽标的原文，会直通记录侧。
 2. O10（`triage-rules.js` 的 `reason` 经 `record.steps[].detail` 落盘）与 O6 消费侧二次包裹，按 T051/T052 申报仍是 scope 外未决。
 3. 写者用例的 `knowledgeTurn` tmp 泄漏（F3）在 CI 上长期跑会累积。（修复轮已加 `t.after` 清理）
+
+## 8. 第六轮复验（纯文档整改轮，HEAD `59e0875` + 本轮补 1 条用例）
+
+写者本轮只动文档与 recon（`docs/modules/triage-pipeline.md`、`triage-rules.md`、`knowledge-base.md`、
+`experience-draft.md`、`evidence/recon/P003-T052.md`），无代码改动。A1–A4 按行为重跑。
+
+- 补测写者六变体漏掉的形状：`O2b 超时变体`（`tester-redaction-boundary.test.js:139`）——`reason: '牧云事件查询失败：rpc timeout after 30s'`
+  走真实 `TriageMonitor`：断言 `steps[].detail` 与 `result.rule_evaluation.reason` 都是 `调用超时，原文 30 字未落盘`、
+  `queue.json` 不含该文本、回灌模型的 `ruleEvaluation.reason` 仍是原文。动机：`triage-pipeline.md:498-511` /
+  `triage-rules.md:398-402` 承诺超时态，而写者 O2b 六变体全是 `Unexpected token` 形状（只出兜底「上游调用失败」）。
+- 变异自证（我自己的，本树，`--test-name-pattern` 逐条）：`git checkout bea34bd -- triage-monitor.js` → O1 恰 1 红、
+  O2b 恰 1 红、O2b 超时变体恰 1 红；`required-evidence.js` → O5 恰 1 红；`wiki-replay.js` → O8 恰 1 红；
+  每次 `git checkout HEAD -- <file>` 还原后复绿。
+- 本轮数字：`npm test` 228/0；`node --test evidence/test/P003-T052/` **20/0**；`git status` 干净（本文件与新增用例随本轮提交）；
+  `/tmp/hids-t052-*` 0 个。
+- 锚点（行为侧钉住，非读实现）：`triage-monitor.js:1084`（`detail` / `failure.reason` 过闸）、`:1046-1047`（`result.rule_evaluation`）、
+  `:773`（轮询 `lastError`）——分别由 O1 / O2b / A2 用例覆盖，回退该文件各恰 1 红。

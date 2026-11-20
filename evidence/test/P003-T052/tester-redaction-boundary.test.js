@@ -132,3 +132,33 @@ test('O4 边界：300 字原文只留全量字符量、不截断也不落原文�
   const ok = await retry.reply(created.id, '再补一句');
   assert.equal(ok.last_error, null);
 });
+
+// ── O2b 超时变体（第六轮补）：文档承诺「超时类 → 调用超时」，写者六变体全是
+//    Unexpected token 形状（只能出兜底「上游调用失败」）。triage-pipeline §失败处理 /
+//    triage-rules §9 都写了 steps[].detail 与 result.rule_evaluation 的超时态，这里钉住。
+test('O2b 超时变体：steps / result.rule_evaluation 归一到「调用超时」，回灌模型仍是原文', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-timeout-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const variant = '牧云事件查询失败：rpc timeout after 30s';
+  const expected = `调用超时，原文 ${variant.length} 字未落盘`;
+  let seen = null;
+  const monitor = new TriageMonitor(options(directory, {
+    ruleEngine: { evaluate: async () => ({ status: 'error', reason: variant }) },
+    investigator: { run: async (alertId, { ruleEvaluation }) => { seen = ruleEvaluation;
+      return { alert_id: alertId, mode: 'triage',
+        verdict: { verdict: 'undetermined', summary: '待复核', claims: [] }, validation: { ok: true } }; } } }));
+  await monitor.load();
+  await monitor.enqueue('honeypot:31');
+  const record = await waitFor(monitor, 'honeypot:31');
+  assert.equal(record.status, 'done');
+  assert.equal(record.steps.find(item => item.stage === '规则评估').detail, expected);
+  await monitor.writeChain;
+  const raw = await readFile(path.join(directory, 'queue.json'), 'utf8');
+  assert.doesNotMatch(raw, /rpc timeout/);
+  assert.doesNotMatch(raw, /牧云事件查询失败/);
+  // A1 第二落点：result.rule_evaluation 随 result 进 result.json 与研判记录，同样过闸。
+  const saved = await monitor.history.latest('honeypot:31', 'triage');
+  assert.equal(saved.rule_evaluation.reason, expected);
+  // A4：回灌给模型的那份仍是原文。
+  assert.equal(seen.reason, variant);
+});
