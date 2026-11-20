@@ -1,0 +1,20 @@
+# P003-T050 复审修复：startServer EADDRINUSE 换口重试的牙（2026-11-20T11:54:48+08:00）
+# 做法：临时副本把 freePort 第一次换成「已被占用的端口」（后面自带的 holder 子进程 listens 20s 后自杀），
+#       T050_PROBE_ATTEMPTS=1（等于首版无重试）必红；=3（现版）应当起来。副本跑完即删，不进树。
+
+## retry=1（首版行为：探后即关 → 子进程 bind 撞死，直接抛）
+exit=1
+✖ A1 真进程不设 HIDS_DATA_DIR：覆盖层落 <HOME>/.local/share/hids-ai-console/，仓库内零写入 (1415.793659ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+  hmm 这份输出里 EADDRINUSE 出现 2 次
+      Error: server 没起来（cwd=/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T050）：
+      Error: listen EADDRINUSE: address already in use 127.0.0.1:34125
+
+## retry=3（现版：撞 EADDRINUSE 换新端口重起）
+exit=0
+✔ A1 真进程不设 HIDS_DATA_DIR：覆盖层落 <HOME>/.local/share/hids-ai-console/，仓库内零写入 (1553.729574ms)
+ℹ tests 1
+ℹ pass 1
+ℹ fail 0

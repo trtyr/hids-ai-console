@@ -1,0 +1,19 @@
+# P003-T050 复审第二轮 A4/A2：真全局根前后零痕迹 + 三份 verify 件的影子根
+# 日期：2026-11-20T11:55:39+08:00
+
+## A4 真全局根：整批（并发 ×3 + 串行 + npm test + 守卫 + 变异脚本）前后全量快照 diff
+# 快照：find ~/.local/share/hids-ai-console -printf '%T@ %s %p\n' | sort -k3
+before=/tmp/t050-r2-before.txt after=/tmp/t050-r2-after.txt
+delta lines: 0
+静置 20s 对照 delta lines: 0
+
+## A2 三份 verify 件在临时 HOME（不设 HIDS_DATA_DIR）下单跑：影子全局根条目数
+# 命令：env -i PATH HOME=<mktemp -d> node --test --test-timeout=60000 --test-force-exit <file>；影子根 = <HOME>/.local/share/hids-ai-console
+p003-t012-verify/acceptance.test.js  tests 17 / pass 15 / fail 2  影子根条目 0
+  （那 2 条红是既有：结果形状 / A4 去重 id，真 HOME 下同样红，与数据根无关，申报在报告未决）
+p003-t018-verify/acceptance.test.js  tests 9 / pass 9 / fail 0   影子根条目 0（注入前是 9 条目：fp-sessions/ + rules/）
+p003-t047-verify/acceptance.test.js  tests 17 / pass 17 / fail 0  影子根条目 0（子进程自带 HIDS_DATA_DIR，实测本就不碰根，故不注入）
+
+## A2 p003-t018-verify 单跑对真全局根的影响（复审判词实测 Δ+3，本卡判据 Δ0）
+rc=0  tests 9 / pass 9 / fail 0
+真全局根快照 diff（/tmp/t050-fix-before.txt → /tmp/t050-fix-after.txt）：0 行

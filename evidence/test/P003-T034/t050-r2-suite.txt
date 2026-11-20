@@ -1,0 +1,32 @@
+# P003-T050 复审第二轮 A1：全量 evidence 套件并发 ×3 + 串行 ×1 + npm test
+# 日期：2026-11-20T11:55:34+08:00
+## 并发 #1（node --test --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js）
+exit=0
+ℹ tests 395
+ℹ pass 394
+ℹ fail 0
+ℹ todo 1
+## 并发 #2（node --test --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js）
+exit=0
+ℹ tests 395
+ℹ pass 394
+ℹ fail 0
+ℹ todo 1
+## 并发 #3（node --test --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js）
+exit=0
+ℹ tests 395
+ℹ pass 394
+ℹ fail 0
+ℹ todo 1
+## 串行（加 --test-concurrency=1）
+exit=0
+ℹ tests 395
+ℹ pass 394
+ℹ fail 0
+ℹ todo 1
+## npm test（根目录 *.test.js）
+exit=0
+ℹ tests 235
+ℹ pass 235
+ℹ fail 0
+ℹ todo 0
