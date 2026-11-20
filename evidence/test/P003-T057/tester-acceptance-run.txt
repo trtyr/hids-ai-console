@@ -1,0 +1,95 @@
+=== TREE: /home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057
+=== HEAD: ba797d6  BASE: 3d68055
+
+=== A1 残留扫描：页面上不得再有「6 个核心」「21 个章节」等旧口径 ===
+grep EXIT=1（1 = 无残留）
+
+=== A1 键列与实跑：coreFiles 键数 + load() 公开输出 ===
+core keys: triage,deep,trace,knowledge,knowledge_reuse,cross,rule
+core count: 7
+scenario cards: 13
+sop ids: common,webshell,memory_webshell,memory_security,revshell,suspicious_operation,command_session,command_whitelist,malware,brute_force,honeypot,elevation_process,abnormal_login,network_audit
+sop count: 14
+version: merged-three-state-2026-11-06 | revision: 065221c4b66f7660
+EXIT=0
+
+=== A2 章节数：snapshot().sections 与算式 7+13+2 ===
+sections: 22 | core: 7 scenario: 13 sop: 2 | 算式: 22 | knowledge_revision: c8bc944a1b6c5b41
+EXIT=0
+
+=== A2/§6.2 边界：22 真键装上 / 22 键改名拒 / 21 键拒 ===
+正面 22 真键 => version: demo-x | 顶层键数: 24 | _history: 2
+边界1 22 键改名 => Error | status: 400 | message: 升级包缺少必需章节或正文格式不正确
+边界2 21 键 => Error | status: 400 | message: 升级包缺少必需章节或正文格式不正确
+EXIT=0
+
+=== A3 读盘次数：strace 数 openat，不读源码 ===
+revision: 065221c4b66f7660
+strace EXIT=0
+--- 读盘明细（各一次）---
+"/home/trtyr/.local/share/hids-ai-console/wiki/abnormal-login/AL-11.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/bruteforce/BF-10.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/cmdaudit/CA-08.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/elevation/LP-10.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/honeypot/HP-10.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/malware/MA-09.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/memwebshell/MW-08.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/net/NA-09.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/rasp/RP-09.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/revshell/RS-09.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/suspicious-command/SC-15.md"
+"/home/trtyr/.local/share/hids-ai-console/wiki/webshell/WS-13.md"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/cross-scenario.md"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/deep-investigation.md"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/knowledge-maintenance.md"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/knowledge-reuse.md"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/rule-maintenance.md"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/scenarios.json"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/sop/command_whitelist.md"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/sop/common.md"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/trace-board.md"
+"/home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T057/prompts/triage.md"
+"/tmp/t057-strace/prompt-overrides.json"
+--- 读盘总次数 ---
+23
+--- 分类计数（core / scenarios / 仓内 SOP / 判据库 SOP / 覆盖文件）---
+core=7 scenarios=1 sop(仓内)=2 sop(判据库)=12 override=1 合计=23
+
+=== A3 章节数字段：metadata() 字数合计 39802 = 13177 + 14415 + 12210 ===
+core: 7 13177 | scenario: 13 14415 | sop: 14 12210
+合计: 39802 (页面写 39802)
+EXIT=0
+
+=== 页面自带脚本逐字复跑（§5.3 键序 / §5.4 复算 / §6.4 安装）===
+§5.3 原序: 065221c4b66f7660 | 倒序: 9da15df422ed3b7d | 相同: false
+§5.4 复算: 065221c4b66f7660 | 上报: 065221c4b66f7660 | 一致: true
+EXIT=0
+
+=== A4 门禁：改前（3d68055 导出树）/ 改后（本树） ===
+--- 改前基线树里旧口径确认（应有输出）---
+12
+--- 改前 ---
+{"ok":true,"reason":"docs_ok_with_warnings","findings":[{"code":"coverage_degraded","file":"docs/","detail":"分母缺一路：no_base_commit——覆盖率不是全量，报告里必须写明","severity":"warning"},{"code":"coverage_degraded","file":"docs/","detail":"分母缺一路：no_codegraph_affected——覆盖率不是全量，报告里必须写明","severity":"warning"}],"counts":{"docs":18,"architecture":2,"modules":14,"files":0,"covered":0,"total":0},"violations":[],"warnings":[{"code":"coverage_degraded","file":"docs/","detail":"分母缺一路：no_base_commit——覆盖率不是全量，报告里必须写明","severity":"warning"},{"code":"coverage_degraded","file":"docs/","detail":"分母缺一路：no_codegraph_affected——覆盖率不是全量，报告里必须写明","severity":"warning"}]}
+改前 EXIT=0
+--- 改后 ---
+{"ok":true,"reason":"docs_ok_with_warnings","findings":[{"code":"coverage_degraded","file":"docs/","detail":"分母缺一路：no_base_commit——覆盖率不是全量，报告里必须写明","severity":"warning"},{"code":"coverage_degraded","file":"docs/","detail":"分母缺一路：no_codegraph_affected——覆盖率不是全量，报告里必须写明","severity":"warning"}],"counts":{"docs":18,"architecture":2,"modules":14,"files":0,"covered":0,"total":0},"violations":[],"warnings":[{"code":"coverage_degraded","file":"docs/","detail":"分母缺一路：no_base_commit——覆盖率不是全量，报告里必须写明","severity":"warning"},{"code":"coverage_degraded","file":"docs/","detail":"分母缺一路：no_codegraph_affected——覆盖率不是全量，报告里必须写明","severity":"warning"}]}
+改后 EXIT=0
+
+=== A5 产品代码零改动 ===
+--- diff --name-only 3d68055..HEAD ---
+coding-reports/P003-T057.md
+docs/modules/prompt-store.md
+evidence/recon/P003-T057.md
+--- 只点了 js/web/prompts/package/openapi ---
+代码面 EXIT=0（无输出即零改动）
+
+=== 附：全套单测 ===
+ℹ tests 235
+ℹ suites 0
+ℹ pass 235
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 825.137523
+npm test EXIT=0
