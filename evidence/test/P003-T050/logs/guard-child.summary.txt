@@ -1,0 +1,9 @@
+# cmd: env -i PATH HOME=<tmp> node --test --test-concurrency=2 --test-timeout=60000 --test-force-exit <63 files: evidence/**/*.test.js 除守卫自身 + 根 *.test.js>
+ℹ tests 671
+ℹ pass 668
+ℹ fail 2
+ℹ todo 1
+# failing:
+✖ A4 同主机同事件秒同告警只研判一次，重复投递只累加 repeat_count (11.674088ms)
+✖ failing tests:
+✖ 结果形状：run() 必备字段与枚举值符合文档 (3.743346ms)

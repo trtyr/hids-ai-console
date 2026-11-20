@@ -1,0 +1,14 @@
+# cmd: node --test --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js
+ℹ tests 395
+ℹ suites 0
+ℹ pass 394
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 1
+ℹ duration_ms 12107.384925
+# todo 明细:
+⚠ 边界（待定口径）who 101 字：按 openapi maxLength=100 应为 400 (27.922421ms) # openapi maxLength 100 vs http-api 未写上限；实测 202 截断，待群主定口径
+{"time":"2026-11-20T04:29:36.841Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3A0123456789abcdef%3A1763373600%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43/false-positive","status":503,"duration_ms":0}
+--
+✖ failing tests:

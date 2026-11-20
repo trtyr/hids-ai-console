@@ -1,0 +1,6 @@
+# cmd: node --test --test-concurrency=1 --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js
+ℹ tests 395
+ℹ pass 394
+ℹ fail 0
+ℹ todo 1
+ℹ duration_ms 24725.802614

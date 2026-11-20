@@ -1,0 +1,105 @@
+✔ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (0.971839ms)
+{"time":"2026-11-20T04:31:24.965Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"manual"}
+{"time":"2026-11-20T04:31:24.970Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":6}
+{"time":"2026-11-20T04:31:24.979Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"uncertain","attempts":1,"duration_ms":11}
+{"time":"2026-11-20T04:31:24.980Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":1}
+{"time":"2026-11-20T04:31:24.982Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:24.988Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":202,"duration_ms":2}
+{"time":"2026-11-20T04:31:24.990Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"retry"}
+{"time":"2026-11-20T04:31:24.991Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:24.993Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":1}
+{"time":"2026-11-20T04:31:24.994Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"false_positive","attempts":2,"duration_ms":4}
+{"time":"2026-11-20T04:31:25.003Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.005Z","level":"info","event":"maintenance.result","alert_id":"honeypot:11","status":"failed","session_id":"3a26a1bd-0b6b-4cf5-bfc3-72023d1235b8","sides":[],"rule":"failed","wiki":"failed","rule_state":"failed","wiki_state":"failed","rule_error":"规则维护者未配置","wiki_error":"Wiki 没有 null 对应的判据分类"}
+{"time":"2026-11-20T04:31:25.005Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.007Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+✔ A1 走真 HTTP：误报登记后重试，verdict/verdict_label/summary/decision_source/feedback 原样，报告与证据刷新 (66.09801ms)
+{"time":"2026-11-20T04:31:25.015Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"manual"}
+{"time":"2026-11-20T04:31:25.016Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.017Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-20T04:31:25.017Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.018Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.019Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"retry"}
+{"time":"2026-11-20T04:31:25.019Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.020Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.020Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"threat","attempts":2,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.031Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.032Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.032Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+✔ A2 走真 HTTP：没标误报的记录重试后结论区换成这次研判的 (21.357143ms)
+{"time":"2026-11-20T04:31:25.037Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"manual"}
+{"time":"2026-11-20T04:31:25.037Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.039Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"false_positive","attempts":1,"duration_ms":2}
+{"time":"2026-11-20T04:31:25.039Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.040Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.040Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"retry"}
+{"time":"2026-11-20T04:31:25.041Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.041Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.042Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"threat","attempts":2,"duration_ms":2}
+{"time":"2026-11-20T04:31:25.053Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.054Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.054Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+✔ 钉子：AI 自判 false_positive（decision_source=ai）重试后仍被这次研判覆盖 (21.23506ms)
+{"time":"2026-11-20T04:31:25.058Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"manual"}
+{"time":"2026-11-20T04:31:25.058Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.059Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.059Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.061Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.062Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"retry"}
+{"time":"2026-11-20T04:31:25.063Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.064Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.064Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"false_positive","attempts":2,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.067Z","level":"info","event":"maintenance.result","alert_id":"honeypot:11","status":"failed","session_id":"9c273f2b-f260-42d5-bd96-b903f2c704ca","sides":[],"rule":"failed","wiki":"failed","rule_state":"failed","wiki_state":"failed","rule_error":"规则维护者未配置","wiki_error":"Wiki 没有 null 对应的判据分类"}
+{"time":"2026-11-20T04:31:25.074Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.075Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+✔ 误报登记 + 重跑后重启进程，结论与 feedback 重载后仍在 (20.685341ms)
+{"time":"2026-11-20T04:31:25.079Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/bad-id","status":400,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.080Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/%E0%A4%A","status":400,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.080Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:999999","source":"manual"}
+{"time":"2026-11-20T04:31:25.081Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A999999","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.081Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A999999","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.081Z","level":"info","event":"triage.done","alert_id":"honeypot:999999","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.093Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A999999","status":200,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.094Z","level":"error","event":"http.failed","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":404,"error":"该 syslog 告警的原始报文不存在，无法重试"}
+{"time":"2026-11-20T04:31:25.094Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/syslog%3Ahoneypot%3Aaaaaaaaaaaaaaaaa%3A1763392800%3A6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43","status":404,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.095Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.096Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.097Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.098Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.099Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":400,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.100Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A999998/false-positive","status":404,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.100Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"manual"}
+{"time":"2026-11-20T04:31:25.101Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.102Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":409,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.102Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.103Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.103Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+✔ 错误码：重试与误报登记的 400/404/409 都给出 Error 形状的正文 (28.037449ms)
+{"time":"2026-11-20T04:31:25.108Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"manual"}
+{"time":"2026-11-20T04:31:25.108Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.109Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"uncertain","attempts":1,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.109Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.110Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":202,"duration_ms":1}
+{"time":"2026-11-20T04:31:25.111Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":202,"duration_ms":0}
+✔ 边界：理由恰好 10 字与 4000 字、登记人恰好 100 字都能登记（202） (7.549269ms)
+{"time":"2026-11-20T04:31:25.114Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11/false-positive","status":503,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.115Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":503,"duration_ms":0}
+✔ 没有研判队列时误报登记回 503，正文是 Error 形状 (2.661297ms)
+{"time":"2026-11-20T04:31:25.117Z","level":"info","event":"triage.enqueued","alert_id":"honeypot:11","source":"manual"}
+{"time":"2026-11-20T04:31:25.117Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.118Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.119Z","level":"info","event":"http.request","method":"POST","path":"/api/agent/triage/honeypot%3A11","status":202,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.120Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.120Z","level":"info","event":"triage.done","alert_id":"honeypot:11","verdict":"uncertain","attempts":1,"duration_ms":3}
+{"time":"2026-11-20T04:31:25.121Z","level":"info","event":"maintenance.result","alert_id":"honeypot:11","status":"failed","session_id":"92d8d9c5-5f4a-4dbb-8487-c49366d2972d","sides":[],"rule":"failed","wiki":"failed","rule_state":"failed","wiki_state":"failed","rule_error":"规则维护者未配置","wiki_error":"Wiki 没有 null 对应的判据分类"}
+{"time":"2026-11-20T04:31:25.130Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+{"time":"2026-11-20T04:31:25.131Z","level":"info","event":"http.request","method":"GET","path":"/api/agent/triage/honeypot%3A11","status":200,"duration_ms":0}
+✔ 重试：研判正在跑时再 POST 只回 202，不重复启动研判 (17.44094ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 285.70637

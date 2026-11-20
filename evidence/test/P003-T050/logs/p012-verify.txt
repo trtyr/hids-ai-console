@@ -1,0 +1,188 @@
+✔ 全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根 (1.01982ms)
+{"time":"2026-11-20T04:31:25.289Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":13785,"messages":2,"tools":4}
+{"time":"2026-11-20T04:31:25.289Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":13785,"duration_ms":0,"output_chars":64,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.290Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":2937,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.290Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":2937,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.290Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":12132,"messages":4,"tools":0}
+{"time":"2026-11-20T04:31:25.290Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":12132,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.290Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":2,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":12114,"messages":4,"tools":0}
+{"time":"2026-11-20T04:31:25.290Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":2,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":12114,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A1 真规则库命中：整段 Rego 进系统提示，verdict.rego/trace 同口径 (28.504756ms)
+{"time":"2026-11-20T04:31:25.294Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":13374,"messages":2,"tools":4}
+{"time":"2026-11-20T04:31:25.294Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":13374,"duration_ms":0,"output_chars":64,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.294Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":2874,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.294Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":2874,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.294Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":11720,"messages":4,"tools":0}
+{"time":"2026-11-20T04:31:25.294Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":11720,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.294Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":2,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":11702,"messages":4,"tools":0}
+{"time":"2026-11-20T04:31:25.294Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":2,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":11702,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A1 未命中：上下文写明没有套上的规则，status=none (2.735049ms)
+{"time":"2026-11-20T04:31:25.297Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":13348,"messages":2,"tools":4}
+{"time":"2026-11-20T04:31:25.297Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":13348,"duration_ms":0,"output_chars":64,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.297Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":2848,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.297Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":2848,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.297Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":11668,"messages":4,"tools":0}
+{"time":"2026-11-20T04:31:25.297Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":11668,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.297Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":2,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":11650,"messages":4,"tools":0}
+{"time":"2026-11-20T04:31:25.297Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":2,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":11650,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A1 边界：载荷缺 target_ip 时 peer 不进事实，依赖 peer 非空的规则套不上 (2.868725ms)
+{"time":"2026-11-20T04:31:25.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":10261,"messages":2,"tools":3}
+{"time":"2026-11-20T04:31:25.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":10261,"duration_ms":0,"output_chars":64,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":1785,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":1785,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":8724,"messages":4,"tools":0}
+{"time":"2026-11-20T04:31:25.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":8724,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":2,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":8706,"messages":4,"tools":0}
+{"time":"2026-11-20T04:31:25.299Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":2,"phase":"validation","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":8706,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A1 deep 模式没有 syslog 事实：not_applicable，上下文写明没有可求值事实 (1.919304ms)
+{"time":"2026-11-20T04:31:25.302Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":13421,"messages":2,"tools":4}
+{"time":"2026-11-20T04:31:25.302Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":13421,"duration_ms":0,"output_chars":170,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.302Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"request","input_chars":2999,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.302Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"honeypot:7","model":"fake","direction":"response","input_chars":2999,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A1 规则库读不了：status=unavailable，研判不中断且原因进上下文 (2.549481ms)
+{"time":"2026-11-20T04:31:25.342Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14007,"messages":2,"tools":5}
+{"time":"2026-11-20T04:31:25.342Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14007,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.348Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14837,"messages":4,"tools":5}
+{"time":"2026-11-20T04:31:25.348Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14837,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.348Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3426,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.348Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3426,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A2 真判据库：wiki_page 后 submit_conclusion 采纳，consulted/adopted/reason 落结果 (46.219544ms)
+{"time":"2026-11-20T04:31:25.375Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14007,"messages":2,"tools":5}
+{"time":"2026-11-20T04:31:25.375Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14007,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.380Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14994,"messages":4,"tools":5}
+{"time":"2026-11-20T04:31:25.380Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14994,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.380Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3426,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.380Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3426,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A2 真判据库：wiki_search 的每条命中都记进 consulted (31.68183ms)
+{"time":"2026-11-20T04:31:25.409Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14007,"messages":2,"tools":5}
+{"time":"2026-11-20T04:31:25.409Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14007,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.410Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14309,"messages":4,"tools":5}
+{"time":"2026-11-20T04:31:25.410Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14309,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.416Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":15139,"messages":6,"tools":5}
+{"time":"2026-11-20T04:31:25.416Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":15139,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.416Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":15478,"messages":8,"tools":5}
+{"time":"2026-11-20T04:31:25.416Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":4,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":15478,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.416Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":15797,"messages":10,"tools":5}
+{"time":"2026-11-20T04:31:25.416Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":5,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":15797,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.417Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":6,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3452,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.417Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":6,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3452,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A2 三条硬校验：未查先交、采纳未查页、未采纳又不写原因都被退回 (36.799649ms)
+{"time":"2026-11-20T04:31:25.442Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14007,"messages":2,"tools":5}
+{"time":"2026-11-20T04:31:25.442Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14007,"duration_ms":0,"output_chars":155,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.443Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":14318,"messages":4,"tools":5}
+{"time":"2026-11-20T04:31:25.443Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":14318,"duration_ms":0,"output_chars":155,"outcome":"ok","tool_calls":0}
+{"time":"2026-11-20T04:31:25.443Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3415,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.443Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":3,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3415,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A2 模型直接吐 JSON 的兼容路径：先催一轮知识库，未调用也照收但写下缺口 (25.888017ms)
+{"time":"2026-11-20T04:31:25.448Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"shortcut","alert_id":"webshell:7","model":"fake","direction":"request","input_chars":3371,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.448Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"shortcut","alert_id":"webshell:7","model":"fake","direction":"response","input_chars":3371,"duration_ms":0,"output_chars":397,"outcome":"ok","tool_calls":0}
+✔ A1/A2 捷径：命中已审核客户经验时 rego 与主路径同口径，wiki 写明未调用知识库工具 (6.64308ms)
+{"time":"2026-11-20T04:31:25.451Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10216,"messages":2,"tools":3}
+{"time":"2026-11-20T04:31:25.451Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10216,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.451Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10478,"messages":4,"tools":3}
+{"time":"2026-11-20T04:31:25.451Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10478,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.451Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":11263,"messages":6,"tools":3}
+{"time":"2026-11-20T04:31:25.451Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":11263,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.452Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":4,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2529,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.452Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":4,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2529,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A3 submit_conclusion 正文边界：空正文与 501 字被退，500 字收下 (1.7718ms)
+{"time":"2026-11-20T04:31:25.453Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10216,"messages":2,"tools":3}
+{"time":"2026-11-20T04:31:25.453Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10216,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.453Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":3029,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.453Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":3029,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A3 500 字按字符计：500 个四字节字符收下（UTF-16 长度 1000） (1.379433ms)
+{"time":"2026-11-20T04:31:25.455Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10216,"messages":2,"tools":3}
+{"time":"2026-11-20T04:31:25.455Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10216,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.455Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2061,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.455Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2061,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A3 deep 模式忽略 wiki_adopted/wiki_reason：不因未查知识库被拒 (2.415456ms)
+{"time":"2026-11-20T04:31:25.457Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10216,"messages":2,"tools":3}
+{"time":"2026-11-20T04:31:25.457Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10216,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.457Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10477,"messages":4,"tools":3}
+{"time":"2026-11-20T04:31:25.457Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":2,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10477,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.457Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10756,"messages":6,"tools":3}
+{"time":"2026-11-20T04:31:25.457Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":3,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10756,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.457Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":4,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2033,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.457Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":4,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2033,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✔ A3 结论必须是三态：缺 verdict 与表外写法被退回，不落库 (1.972384ms)
+{"time":"2026-11-20T04:31:25.459Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":10216,"messages":2,"tools":3}
+{"time":"2026-11-20T04:31:25.459Z","level":"info","event":"ai.model_call","domain":"triage","role":"triage","turn":1,"attempt":1,"phase":"investigate","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":10216,"duration_ms":0,"output_chars":0,"outcome":"ok","tool_calls":1}
+{"time":"2026-11-20T04:31:25.459Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"request","input_chars":2031,"messages":2,"tools":0}
+{"time":"2026-11-20T04:31:25.459Z","level":"info","event":"ai.model_call","domain":"triage","role":"review","turn":2,"attempt":1,"phase":"review","alert_id":"suspicious_operation:7","model":"fake","direction":"response","input_chars":2031,"duration_ms":0,"output_chars":62,"outcome":"ok","tool_calls":0}
+✖ 结果形状：run() 必备字段与枚举值符合文档 (3.013296ms)
+{"time":"2026-11-20T04:31:25.464Z","level":"info","event":"syslog.received","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:c2660f95-22fb-45ce-b457-cc1710caa20c","msgid":"cloudwalker-honeypot","event_type":"honeypot","occurrence":1}
+{"time":"2026-11-20T04:31:25.465Z","level":"info","event":"syslog.collapsed","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:c2660f95-22fb-45ce-b457-cc1710caa20c","repeat_count":2}
+{"time":"2026-11-20T04:31:25.466Z","level":"info","event":"triage.done","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:c2660f95-22fb-45ce-b457-cc1710caa20c","verdict":"uncertain","attempts":1,"duration_ms":2}
+{"time":"2026-11-20T04:31:25.471Z","level":"info","event":"syslog.reused_conclusion","alert_id":"syslog:honeypot:72315cc57737d756:1793692800:c2660f95-22fb-45ce-b457-cc1710caa20c","repeat_count":3,"occurrence":2}
+✖ A4 同主机同事件秒同告警只研判一次，重复投递只累加 repeat_count (11.667033ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 15
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 283.580964
+
+✖ failing tests:
+
+test at evidence/p003-t012-verify/acceptance.test.js:342:1
+✖ 结果形状：run() 必备字段与枚举值符合文档 (3.013296ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   {
+  +     id: 'related_events',
+  +     label: '同主机关联事件',
+  +     reason: '牧云 MCP 未提供可按本条告警限定范围的 list_host_events 查询',
+  +     scope: '同主机全部事件类型的当前返回页；不能代表全部历史',
+  +     status: 'source_unavailable',
+  +     tool: 'list_host_events'
+  +   },
+  +   {
+  +     id: 'command_history',
+  +     label: '同主机命令会话',
+  +     reason: '牧云 MCP 未提供可按本条告警限定范围的 list_full_commands_by_host 查询',
+  +     scope: '同主机命令记录的当前返回页；不能证明命令获得授权或执行成功',
+  +     status: 'source_unavailable',
+  +     tool: 'list_full_commands_by_host'
+  +   },
+  +   {
+  +     catalog_absent: true,
+  +     id: 'authorization',
+  +     label: '操作授权与测试工单',
+  +     reason: '牧云暂无此数据源：本次 MCP 目录未提供 authorization_record',
+  +     scope: '需核对执行人、目标主机、批准范围和时间窗',
+  +     status: 'source_unavailable',
+  +     tool: 'authorization_record'
+  +   }
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file:///home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T050/evidence/p003-t012-verify/acceptance.test.js:357:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ { id: 'related_events', label: '同主机关联事件', tool: 'list_host_events', scope: '同主机全部事件类型的当前返回页；不能代表全部历史', status: 'source_unavailable', reason: '牧云 MCP 未提供可按本条告警限定范围的 list_host_events 查询' }, { id: 'command_history', label: '同主机命令会话', tool: 'list_full_commands_by_host', scope: '同主机命令记录的当前返回页；不能证明命令获得授权或执行成功', status: 'source_unavailable', reason: '牧云 MCP 未提供可按本条告警限定范围的 list_full_commands_by_host 查询' }, { id: 'authorization', label: '操作授权与测试工单', tool: 'authorization_record', scope: '需核对执行人、目标主机、批准范围和时间窗', status: 'source_unavailable', catalog_absent: true, reason: '牧云暂无此数据源：本次 MCP 目录未提供 authorization_record' } ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at evidence/p003-t012-verify/acceptance.test.js:365:1
+✖ A4 同主机同事件秒同告警只研判一次，重复投递只累加 repeat_count (11.667033ms)
+  AssertionError [ERR_ASSERTION]: Expected "actual" to be strictly unequal to:
+  
+  'syslog:honeypot:72315cc57737d756:1793692800:c2660f95-22fb-45ce-b457-cc1710caa20c'
+      at TestContext.<anonymous> (file:///home/trtyr/.pi-worktrees/hids-ai-console/hids-ai-console/P003-T050/evidence/p003-t012-verify/acceptance.test.js:401:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'syslog:honeypot:72315cc57737d756:1793692800:c2660f95-22fb-45ce-b457-cc1710caa20c',
+    expected: 'syslog:honeypot:72315cc57737d756:1793692800:c2660f95-22fb-45ce-b457-cc1710caa20c',
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
