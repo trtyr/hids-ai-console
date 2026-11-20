@@ -7,7 +7,7 @@ id: GUIDE-API-GAPS-FRONTEND
 
 **口径**：前端所有数据都从后端来，前端不造数据。判据是——前端渲染任何一屏时，需要自己拼装、计算、写死的，都算后端缺口。
 
-**基线**：`e98cd2a` / 50 路径 57 操作 / server.js 1505 行 / openapi.yaml 3339 行。
+**基线**：`e98cd2a` / 50 路径 57 操作 / server.js **1504 行** / openapi.yaml 3339 行。
 **材料**：四路只读审计原始件在 `evidence/recon/P003-T058/`（759 行，含逐条 file:line）。
 **标注**：✅ = 群主亲自复跑验证；其余为检索席实测。
 
@@ -29,7 +29,7 @@ id: GUIDE-API-GAPS-FRONTEND
 | A06 | **导出** | 告警/案件/日志导 CSV、研判报告下载 | 全仓 `csv|attachment|content-disposition` **0 命中** |
 | A07 | **业务级批量** | 勾选 20 条批量送研判/批量标误报 | 只有存储级 cleanup；`batch|批量|bulk` 0 命中 |
 | A08 | **统一审计留痕** | 谁在何时做了什么 | HTTP 日志行无 user（`server.js:890`）；维护包 `actor` 落盘但 `publicRelease()` 丢掉（`update-store.js:17-23`）；配置变更无流水 |
-| A09 | **字典接口** ✅ | 类型/等级/状态中文名 | 表在 `cloudwalker.js:2-6`、`:29`；前端已硬编码 11 个类型名（`web/src/trace-view.js:13-18`） |
+| A09 | **字典接口** ✅ | 类型/等级/状态中文名 | 类型表 `cloudwalker.js:2-6`、等级表 `:25-26`（`levelNames`/`levelRanks`，模块私有未导出）；前端硬编码 11 个类型名（`web/src/trace-view.js:13-18`） |
 | A10 | **队列归档读取** | 查 TTL 归档掉的旧案件 | `.archive.jsonl` 写而不读（`triage-monitor.js:429/482`）；只有 count 和字节数 |
 | A11 | **规则维护会话详情** | 模型提了什么、为什么、验过没过 | 列表只给 rule_id/validated，rationale/result/error 全丢；且无 `/api/rules/sessions/{id}` 路由 |
 | A12 | **规则历史正文** | 看某版 Rego 原文再决定回不回滚 | 无 `GET /api/rules/{id}/history/{rev}`；`history()` 只给 rev/bytes/note，`replaced_by` 也不出 |
