@@ -13,6 +13,9 @@
 //   - docs/modules/event-gateway.md §4 详情方法表、§5 只读白名单、§12 失败面（/rpc 报文与文案）
 //   - docs/modules/evidence-tools.md §4.1/§4.2 取数七步、§9.1/§9.2 错误文案、R-EVID-07 详情身份校验
 //   - docs/modules/http-api.md §3.9 现查告警送研判（记录没有 syslog / case_dir、不进 cases）
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -181,6 +184,9 @@ function monitorWith({ directory, investigator, eventToolbox = null, concurrency
 }
 
 // ── R1 真链路：POST 事件 ID → 真 agent → 真工具箱 → 替身牧云 /rpc 取详情 → done 落记录 ──
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 test('R1 真取数：POST 事件 ID 一次 GetEvent 取详情，记录 done 且带证据（现查记录无 syslog/case_dir）', async t => {
   const stub = await startStubMuyun(t);
   stub.state.details.set(TID, { id: 9001, event_id: 9001, host_id: 5, host_ip: '10.0.0.5',

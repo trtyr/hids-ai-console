@@ -7,6 +7,9 @@
 //
 // 这是契约测试，不是实现测试：每条断言都指得出文档出处；笔记在注释里。全部在本机回环口跑，
 // 不碰真牧云、不碰真模型（替身 investigator / 替身 service），没有固定 sleep（等状态用 until()）。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js 求值前把 HIDS_DATA_DIR
+// 指到本进程的临时根，否则 createServer 的缺省 fpSessions 会往真全局根写维护会话。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -21,6 +24,9 @@ const SYSLOG_ID = 'syslog:webshell:0123456789abcdef:1767225600:aaaaaaaa-bbbb-ccc
 const triagePath = id => `/api/agent/triage/${encodeURIComponent(id)}`;
 const ERROR_CODES = new Set(['caller_error', 'not_configured', 'upstream_error', 'internal_error']);
 const CASE_STATUSES = new Set(['not_queued', 'queued', 'running', 'done', 'failed']);
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 async function tempDir(t, prefix = 'hids-t030-it-') {
   const directory = await mkdtemp(path.join(tmpdir(), prefix));

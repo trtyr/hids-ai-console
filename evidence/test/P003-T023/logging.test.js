@@ -1,6 +1,9 @@
 // P003-T023 后端全程日志：单一落点 + 五类事件 + 时间/事件名/告警 ID + 不泄凭据。
 // 只跑这个文件：node --test evidence/test/P003-T023/logging.test.js
 // 全部用内存 journal（注入 write / now），不碰真实 stdout、不碰真实时钟、不起外部服务。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js 求值前把 HIDS_DATA_DIR
+// 指到本进程的临时根，否则 createServer 的缺省 fpSessions 会往真全局根写维护会话。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -12,6 +15,9 @@ import { createServer } from '../../../server.js';
 import { InvestigationStore } from '../../../investigation-store.js';
 
 const AT = '2026-11-19T00:00:00.000Z';
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 // 每条日志一行 JSON：lines 里是解析后的对象，raw 里是原文（查「凭据有没有漏」按原文查）。
 function collect(time = AT) {

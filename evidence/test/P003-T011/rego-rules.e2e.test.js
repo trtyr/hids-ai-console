@@ -12,6 +12,9 @@
 // A3 求值返回命中规则名与 Rego 正文、无命中明确空 {count:0,matched:[]}
 //
 // 只写集成/e2e（真 HTTP，真规则目录），不写单测。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
+// 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -93,6 +96,9 @@ after(async () => { await main?.close(); });
 // =====================================================================
 // A1 一条规则一份 Rego，有名字，能列、能按 id 读到原文
 // =====================================================================
+
+// 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('A1 列表：每条规则一个 .rego、字段齐全、按 id 排序', { timeout: 15000 }, async () => {
   const res = await getJSON(main.port, '/api/rules');
