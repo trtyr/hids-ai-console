@@ -9,7 +9,7 @@ updated: 2026-11-20
 
 > **模块名**：`prompt-store`
 > **落点**：本页（`docs/modules/prompt-store.md`），模块清单见 [\_breakdown.json](_breakdown.json)
-> **真源**：`prompt-store.js`（133 行，单文件模块；本地 import 只有两处，都向下取路径——`config-store.js` 的 `dataRoot` 与 `wiki-store.js` 的判据库目录/种子，见文末 `:132-133`）
+> **真源**：`prompt-store.js`（133 行，单文件模块；本地 import 只有两处，见文末 `:132-133`——`config-store.js` 的 `dataRoot` 是向下取，`wiki-store.js` 的判据库目录/种子是**同层取用**：两者都属架构篇的存储组）
 > **覆盖构件**：提示词装载、本地覆盖、版本指纹、整包安装（四个构件各占一节，见第 3 至第 6 节）
 > **行号基准**：本页行号取自 `35530d85`。该文件此后有多次改动（P003-T041 数据根外置、T050 同步、T052 脱敏、T054 收尾），**本页 119 处引用尚未逐条重取**——引用前必须 `grep -n <符号>` 对一遍，别照抄本页数字。全量重取另立卡（T056）。
 
@@ -45,7 +45,7 @@ updated: 2026-11-20
 | 覆盖文件默认路径 | `<数据根>/prompt-overrides.json`（数据根＝`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`；**不在仓库内**） | `prompt-store.js:17`、`prompt-store.js:126` |
 | 覆盖文件环境变量 | `HIDS_PROMPT_STORE_FILE`，配了就用它 | `prompt-store.js:17` |
 | 构造参数 | `new PromptStore(filename)`，给了就用给的 | `prompt-store.js:26` |
-| 判据目录环境变量 | `HIDS_WIKI_DIR`，缺省 `<数据根>/wiki`（`wikiLibraryDirectory()`，`wiki-store.js:417-419`；P003-T041 起判据库活数据住数据根，不是模块目录下的仓库副本） | `prompt-store.js:12` |
+| 判据目录环境变量 | `HIDS_WIKI_DIR`，缺省 `<数据根>/wiki`（`wikiLibraryDirectory()`，`wiki-store.js:417-419`；P003-T041 起判据库活数据住数据根，不是模块目录下的仓库副本）。**配了它就不种子**：外部库整个换掉判据目录，`load()` 跳过整库种子（`prompt-store.js:13` 的 `wikiNeedsSeed`） | `prompt-store.js:12-13` |
 | 提示词目录 | `<本模块所在目录>/prompts`（写死，不可配） | `prompt-store.js:7` |
 
 两个环境变量在模块 import 时读一次（`prompt-store.js:9`、`prompt-store.js:17`），进程启动后再改环境变量不生效——
