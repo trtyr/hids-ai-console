@@ -89,7 +89,7 @@ SOP 正文来自 `prompts/sop/command_whitelist.md`。
 
 当前数据下（命令见下）：
 
-- 核心提示词 7 个，键与 `prompt-store.js:22` 的 `coreFiles` 一一对应（第 7 个是 `rule` → `rule-maintenance.md`，P003-T047 引入）。
+- 核心提示词 7 个，键与 `prompt-store.js:22` 的 `coreFiles` 一一对应（第 7 个是 `rule` → `rule-maintenance.md`，P003-T013 引入，commit `5256d0e`；`git log -S` 全仓只此一处）。
 - 场景卡 13 张，SOP 14 条（`common` + 13 张卡各一条）。
 - 生效版本 `merged-three-state-2026-11-06`，指纹 `065221c4b66f7660`。
 
