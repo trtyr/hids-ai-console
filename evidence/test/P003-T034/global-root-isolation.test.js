@@ -142,7 +142,11 @@ test('A2/A4 全量测试（evidence 套件 + npm test）在临时 HOME 下跑完
   const files = await suiteFiles();
   assert.ok(files.length >= 55, `只找到 ${files.length} 个测试文件，守卫覆盖面不对`);
 
-  const child = spawn(process.execPath, ['--test', '--test-timeout=60000', '--test-force-exit', ...files], {
+  // `--test-concurrency=2`：子套件与外层套件叠着跑，再用满并发会让 T034 那份 tester 验收里
+  // 「先探空闲端口再让子进程去 bind」的写法撞上端口争用（实测偶发一次 POST /api/config 400）。
+  // 降到 2 只慢几百毫秒，换来可复跑的稳定判定——守卫要的是「零文件」，不是吞吐。
+  const child = spawn(process.execPath, ['--test', '--test-concurrency=2', '--test-timeout=60000',
+    '--test-force-exit', ...files], {
     cwd: repository,
     env: { PATH: process.env.PATH, HOME: home },
     stdio: ['ignore', 'pipe', 'pipe']

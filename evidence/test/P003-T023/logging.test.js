@@ -205,7 +205,9 @@ test('A2 syslog 收下 / 解析失败 / 跳过都在日志里，告警 ID 跟着
 
 test('A2 研判入队 → 完成 / 失败都留痕，带告警 ID 与结论', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-log-triage-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  // 回收要和后台的落盘抢时间：`rm` 撞上「队列刚又写了一个文件」就 ENOTEMPTY（并发跑套件时实测偶发）。
+  // 所以先等两条 chain 落完，再允许重试——这不是把红改绿，是把测试自己的收尾做对。
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
   const { lines } = capture(t);
   const verdict = { verdict: 'threat', verdict_label: '真实威胁', summary: '来源直接命中', claims: [] };
   const history = new InvestigationStore(path.join(directory, 'results'));
@@ -227,6 +229,8 @@ test('A2 研判入队 → 完成 / 失败都留痕，带告警 ID 与结论', as
   const failed = lines.find(item => item.event === 'triage.failed');
   assert.equal(failed.alert_id, 'honeypot:8');
   assert.match(failed.error, /模型调用失败/);
+  await failing.writeChain;
+  await monitor.writeChain;
 });
 
 test('A2 误报维护结果（两侧状态与原因）留在 maintenance.result 里', async t => {
