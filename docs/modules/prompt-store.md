@@ -11,7 +11,7 @@ updated: 2026-11-20
 > **落点**：本页（`docs/modules/prompt-store.md`），模块清单见 [\_breakdown.json](_breakdown.json)
 > **真源**：`prompt-store.js`（133 行，单文件模块；本地 import 只有两处，见文末 `:132-133`）——`config-store.js` 的 `dataRoot` 是**向下取**（取配置与路径那层，该层不在架构篇的存储组清单里），`wiki-store.js` 的判据库目录/种子是**同层取用**（`prompt-store.js` 与 `wiki-store.js` 同在存储组）
 > **覆盖构件**：提示词装载、本地覆盖、版本指纹、整包安装（四个构件各占一节，见第 3 至第 6 节）
-> **行号基准**：本页行号取自 `35530d85`。该文件此后有多次改动（P003-T041 数据根外置、T050 同步、T052 脱敏、T054 收尾），**本页 119 处引用尚未逐条重取**——引用前必须 `grep -n <符号>` 对一遍，别照抄本页数字。全量重取另立卡（T056）。
+> **行号基准**：本页 162 处 `prompt-store.js` 引用（159 处 `prompt-store.js:NNN` / `:NNN-NNN` + 3 处裸 `:NNN`）**按 `c6f35901` 实测**逐条重取（P003-T056），每条都用 `grep -n <符号>` 对过当前源码。该文件此后若再改动（历史上 P003-T041、T050、T052、T054 都挪过行），引用前仍必须 `grep -n` 重对一遍，别照抄本页数字。
 
 ## 1. 模块职责
 
@@ -23,15 +23,15 @@ updated: 2026-11-20
 
 | 能力 | 构件 | 一句话 | 入口 |
 | --- | --- | --- | --- |
-| 提示词装载 | 第 3 节 | 把核心提示词、场景卡、SOP 三类来源的正文拼成一份 | `load()`（`prompt-store.js:33`） |
-| 本地覆盖 | 第 4 节 | 允许用本机的一份覆盖文件改写其中若干章节 | `update()`（`prompt-store.js:100`） |
-| 版本指纹 | 第 5 节 | 给生效正文算一个可比较的短指纹 | `load()` 与 `snapshot()` 的返回值（`prompt-store.js:45`、`prompt-store.js:56-57`） |
-| 整包安装 | 第 6 节 | 用一个升级包整体替换 21 个章节 | `install()`（`prompt-store.js:61`） |
+| 提示词装载 | 第 3 节 | 把核心提示词、场景卡、SOP 三类来源的正文拼成一份 | `load()`（`prompt-store.js:37`） |
+| 本地覆盖 | 第 4 节 | 允许用本机的一份覆盖文件改写其中若干章节 | `update()`（`prompt-store.js:106`） |
+| 版本指纹 | 第 5 节 | 给生效正文算一个可比较的短指纹 | `load()` 与 `snapshot()` 的返回值（`prompt-store.js:51`、`prompt-store.js:62-63`） |
+| 整包安装 | 第 6 节 | 用一个升级包整体替换 21 个章节 | `install()`（`prompt-store.js:67`） |
 
 ### 1.2 不做什么
 
 - **不判断正文好坏**。本模块搬运正文、统计字数、算指纹；提示词该不该这么写，不在这里判。
-- **不管理判据库本身**。它只按映射表从判据目录读 12 个 SOP 文件（`prompt-store.js:10-16`、`prompt-store.js:43`），
+- **不管理判据库本身**。它只按映射表从判据目录读 12 个 SOP 文件（`prompt-store.js:14-20`、`prompt-store.js:49`），
   判据页的增删改审核不在本模块。
 - **不负责把提示词送到模型**。本模块没有模型客户端、没有 HTTP 路由，`prompt-store.js:1-4` 只引入
   `node:crypto`、`node:fs/promises`、`node:path`、`node:url` 四个内置模块。
@@ -42,54 +42,54 @@ updated: 2026-11-20
 
 | 项 | 取值 | 出处 |
 | --- | --- | --- |
-| 覆盖文件默认路径 | `<数据根>/prompt-overrides.json`（数据根＝`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`；**不在仓库内**） | `prompt-store.js:17`、`prompt-store.js:126` |
-| 覆盖文件环境变量 | `HIDS_PROMPT_STORE_FILE`，配了就用它 | `prompt-store.js:17` |
-| 构造参数 | `new PromptStore(filename)`，给了就用给的 | `prompt-store.js:26` |
+| 覆盖文件默认路径 | `<数据根>/prompt-overrides.json`（数据根＝`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`；**不在仓库内**） | `prompt-store.js:21`、`prompt-store.js:126` |
+| 覆盖文件环境变量 | `HIDS_PROMPT_STORE_FILE`，配了就用它 | `prompt-store.js:21` |
+| 构造参数 | `new PromptStore(filename)`，给了就用给的 | `prompt-store.js:30` |
 | 判据目录环境变量 | `HIDS_WIKI_DIR`，缺省 `<数据根>/wiki`（`wikiLibraryDirectory()`，`wiki-store.js:417-419`；P003-T041 起判据库活数据住数据根，不是模块目录下的仓库副本）。**配了它就不种子**：外部库整个换掉判据目录，`load()` 跳过整库种子（`prompt-store.js:13` 的 `wikiNeedsSeed`） | `prompt-store.js:12-13` |
 | 提示词目录 | `<本模块所在目录>/prompts`（写死，不可配） | `prompt-store.js:7` |
 
-两个环境变量在模块 import 时读一次（`prompt-store.js:9`、`prompt-store.js:17`），进程启动后再改环境变量不生效——
+两个环境变量在模块 import 时读一次（`prompt-store.js:12`、`prompt-store.js:21`），进程启动后再改环境变量不生效——
 实测：`import` 之后设 `HIDS_WIKI_DIR` 再 `load()`，仍然读到原来的判据目录。
 
 ## 2. 公开面
 
-`PromptStore` 只导出一个类（`prompt-store.js:25`），共 6 个方法加 1 个构造函数。
+`PromptStore` 只导出一个类（`prompt-store.js:29`），共 6 个方法加 1 个构造函数。
 
 | 能力 | 方法 | 入参 | 返回 | 抛错 | 单位 |
 | --- | --- | --- | --- | --- | --- |
-| 装配生效正文 | `load()` | 无 | `{version, revision, source, prompts, scenarios, sop}`（`prompt-store.js:46-47`） | 读文件失败即抛（ENOENT、SyntaxError） | — |
-| 取可安装的章节快照 | `snapshot()` | 无 | `{sections, knowledge_revision}`（`prompt-store.js:52-58`） | 同上 | — |
-| 整包安装 | `install(sections, release, expectedRevision, knowledgeRevision)` | 4 个，见第 6 节 | 重新 `load()` 的结果（`prompt-store.js:82`） | 400 / 409 / TypeError，见第 6.2 节 | — |
-| 列出章节清单 | `metadata()` | 无 | `{version, revision, sections[]}`（`prompt-store.js:90-97`） | 同上 | — |
-| 改写单个章节 | `update(section, content, expectedRevision)` | 章节名、正文、期望指纹 | 重新 `load()` 的结果（`prompt-store.js:113`） | 章节名或正文不合法 → 普通 `Error`；版本不符 → `409`。见第 4.3 节 | — |
+| 装配生效正文 | `load()` | 无 | `{version, revision, source, prompts, scenarios, sop}`（`prompt-store.js:52-53`） | 读文件失败即抛（ENOENT、SyntaxError） | — |
+| 取可安装的章节快照 | `snapshot()` | 无 | `{sections, knowledge_revision}`（`prompt-store.js:58-64`） | 同上 | — |
+| 整包安装 | `install(sections, release, expectedRevision, knowledgeRevision)` | 4 个，见第 6 节 | 重新 `load()` 的结果（`prompt-store.js:88`） | 400 / 409 / TypeError，见第 6.2 节 | — |
+| 列出章节清单 | `metadata()` | 无 | `{version, revision, sections[]}`（`prompt-store.js:96-103`） | 同上 | — |
+| 改写单个章节 | `update(section, content, expectedRevision)` | 章节名、正文、期望指纹 | 重新 `load()` 的结果（`prompt-store.js:119`） | 章节名或正文不合法 → 普通 `Error`；版本不符 → `409`。见第 4.3 节 | — |
 
 表注：本表列方法与入参形状，不含量纲，一律「—」；正文长度上限见第 9 节。
 
 两个读方法（`load()`、`snapshot()`）与一个清单方法（`metadata()`）不排队，直接读盘；
-两个写方法（`install()`、`update()`）共用实例内的一条串行队列（`prompt-store.js:62`、`prompt-store.js:84`、
-`prompt-store.js:101`、`prompt-store.js:115`）。
+两个写方法（`install()`、`update()`）共用实例内的一条串行队列（`prompt-store.js:68`、`prompt-store.js:90`、
+`prompt-store.js:107`、`prompt-store.js:121`）。
 
 ## 3. 构件一：提示词装载
 
 ### 3.1 三处来源
 
-`load()`（`prompt-store.js:33-48`）并行读三类来源（`prompt-store.js:34-37`），SOP 分两个目录取：
+`load()`（`prompt-store.js:37-54`）并行读三类来源（`prompt-store.js:40-43`），SOP 分两个目录取：
 
 | 来源 | 内容 | 位置 | 出处 |
 | --- | --- | --- | --- |
-| 核心提示词 | 6 个 Markdown 文件，键为 `triage` / `deep` / `trace` / `knowledge` / `knowledge_reuse` / `cross` | `<模块目录>/prompts/<文件名>` | 键与文件名见 `prompt-store.js:18`，读取见 `prompt-store.js:35` |
-| 场景卡 | 一个 `scenarios.json`，含 `version` 与 `cards` 数组 | `<模块目录>/prompts/scenarios.json` | `prompt-store.js:36` |
-| 判据目录里的 SOP | 12 个场景各一份 SOP 文件 | `<判据目录>/<映射表给出的路径>` | 映射表 `prompt-store.js:10-16`，读取 `prompt-store.js:43` |
-| 仓内 SOP | 2 份：`common` 与 `command_whitelist` | `<模块目录>/prompts/sop/<id>.md` | `prompt-store.js:42` |
+| 核心提示词 | 6 个 Markdown 文件，键为 `triage` / `deep` / `trace` / `knowledge` / `knowledge_reuse` / `cross` | `<模块目录>/prompts/<文件名>` | 键与文件名见 `prompt-store.js:22`，读取见 `prompt-store.js:41` |
+| 场景卡 | 一个 `scenarios.json`，含 `version` 与 `cards` 数组 | `<模块目录>/prompts/scenarios.json` | `prompt-store.js:42` |
+| 判据目录里的 SOP | 12 个场景各一份 SOP 文件 | `<判据目录>/<映射表给出的路径>` | 映射表 `prompt-store.js:14-20`，读取 `prompt-store.js:49` |
+| 仓内 SOP | 2 份：`common` 与 `command_whitelist` | `<模块目录>/prompts/sop/<id>.md` | `prompt-store.js:48` |
 
 `common` 与 `command_whitelist` 这两个 id 走 `prompts/sop/`，其余场景卡 id 走判据目录——
-分流条件写在 `prompt-store.js:42` 的三元表达式里。因此 `wikiSop` 映射表（`prompt-store.js:10-16`）
+分流条件写在 `prompt-store.js:48` 的三元表达式里。因此 `wikiSop` 映射表（`prompt-store.js:14-20`）
 只列 12 项，`command_whitelist` 不在其中；它是 13 张场景卡中的一张（当前排在第 7 位），卡片正文来自 `scenarios.json`，
 SOP 正文来自 `prompts/sop/command_whitelist.md`。
 
 当前数据下（命令见下）：
 
-- 核心提示词 6 个，键与 `prompt-store.js:18` 的 `coreFiles` 一一对应。
+- 核心提示词 6 个，键与 `prompt-store.js:22` 的 `coreFiles` 一一对应。
 - 场景卡 13 张，SOP 14 条（`common` + 13 张卡各一条）。
 - 生效版本 `merged-three-state-2026-11-06`，指纹 `deabe4abb842db81`。
 
@@ -108,18 +108,18 @@ import('./prompt-store.js').then(async m => {
 
 ### 3.2 装配顺序
 
-1. **并行读**：核心 6 个文件、`scenarios.json`、覆盖文件三路同时读（`prompt-store.js:34-37`）。
-2. **叠加覆盖**：核心章节用覆盖文件的同名键覆盖（`prompt-store.js:38`），场景卡用 `scenario:<card.id>` 键覆盖
-   （`prompt-store.js:40`），`sop:common` 与 `sop:command_whitelist` 用 `sop:<id>` 键覆盖（`prompt-store.js:44`）。
+1. **并行读**：核心 6 个文件、`scenarios.json`、覆盖文件三路同时读（`prompt-store.js:40-43`）。
+2. **叠加覆盖**：核心章节用覆盖文件的同名键覆盖（`prompt-store.js:44`），场景卡用 `scenario:<card.id>` 键覆盖
+   （`prompt-store.js:46`），`sop:common` 与 `sop:command_whitelist` 用 `sop:<id>` 键覆盖（`prompt-store.js:50`）。
    键名表见第 4.2 节。
-3. **算指纹**：对生效正文算 `revision`（`prompt-store.js:45`），算法见第 5 节。
-4. **组装返回**：`{version, revision, source, prompts, scenarios, sop}`（`prompt-store.js:46-47`）。
+3. **算指纹**：对生效正文算 `revision`（`prompt-store.js:51`），算法见第 5 节。
+4. **组装返回**：`{version, revision, source, prompts, scenarios, sop}`（`prompt-store.js:52-53`）。
 
 两个字段的来源要说清楚：
 
 - **`version`**：优先取覆盖文件里的 `_release.version`；没有 `_release` 时取 `scenarios.json` 里的 `version`
-  （`prompt-store.js:46`）。整包安装之后，这个值会变成升级包自带的版本号。
-- **`source`**：固定的一行说明文案，不随内容变化（`prompt-store.js:47`）。
+  （`prompt-store.js:52`）。整包安装之后，这个值会变成升级包自带的版本号。
+- **`source`**：固定的一行说明文案，不随内容变化（`prompt-store.js:53`）。
 
 ### 3.3 装配失败的样子
 
@@ -135,19 +135,19 @@ import('./prompt-store.js').then(async m => {
 ```
 
 判据页缺失时**不会**退回仓内 `wiki/` 目录——`HIDS_WIKI_DIR` 一旦配了，它就是唯一来源
-（`prompt-store.js:9`）。
+（`prompt-store.js:12`）。
 
 ## 4. 构件二：本地覆盖
 
 ### 4.1 覆盖文件怎么读
 
-`readOverrides()`（`prompt-store.js:28-31`）读构造时指定的覆盖文件：
+`readOverrides()`（`prompt-store.js:32-35`）读构造时指定的覆盖文件：
 
 | 情况 | 结果 | 出处 |
 | --- | --- | --- |
-| 文件不存在（ENOENT） | 当作空覆盖 `{}`，不报错 | `prompt-store.js:30` |
-| 文件不是合法 JSON | 抛 `SyntaxError`，不吞 | `prompt-store.js:29-30`（只特判了 ENOENT） |
-| 其他读错误（权限等） | 原样抛出 | `prompt-store.js:30` |
+| 文件不存在（ENOENT） | 当作空覆盖 `{}`，不报错 | `prompt-store.js:34` |
+| 文件不是合法 JSON | 抛 `SyntaxError`，不吞 | `prompt-store.js:33-34`（只特判了 ENOENT） |
+| 其他读错误（权限等） | 原样抛出 | `prompt-store.js:34` |
 
 覆盖文件的键就是章节名，可以手写；`load()` 读的键见下表。
 
@@ -155,19 +155,19 @@ import('./prompt-store.js').then(async m => {
 
 | 键名形式 | 覆盖对象 | 生效处 | 出处 |
 | --- | --- | --- | --- |
-| `triage`、`deep`、`trace`、`knowledge`、`knowledge_reuse`、`cross` | 6 个核心提示词 | 覆盖值不是 null/undefined 时用覆盖值，否则用文件正文 | `prompt-store.js:38` |
-| `scenario:<card.id>` | 对应场景卡的提示词正文 | 同上 | `prompt-store.js:40` |
-| `sop:common`、`sop:command_whitelist` | 仓内那两份 SOP | 同上 | `prompt-store.js:44` |
-| `_release` | 升级包元信息（`version` / `sequence` 等） | `version` 取自此处 | `prompt-store.js:45-46` |
-| `_history` | 安装历史（模块自己维护） | 不影响生效正文 | `prompt-store.js:77` |
+| `triage`、`deep`、`trace`、`knowledge`、`knowledge_reuse`、`cross` | 6 个核心提示词 | 覆盖值不是 null/undefined 时用覆盖值，否则用文件正文 | `prompt-store.js:44` |
+| `scenario:<card.id>` | 对应场景卡的提示词正文 | 同上 | `prompt-store.js:46` |
+| `sop:common`、`sop:command_whitelist` | 仓内那两份 SOP | 同上 | `prompt-store.js:50` |
+| `_release` | 升级包元信息（`version` / `sequence` 等） | `version` 取自此处 | `prompt-store.js:51-52` |
+| `_history` | 安装历史（模块自己维护） | 不影响生效正文 | `prompt-store.js:83` |
 
-覆盖优先级高于仓内文件：命中覆盖键时，文件正文被替换（`prompt-store.js:38`、`prompt-store.js:40`、
-`prompt-store.js:44`）。未命中的章节照旧用文件正文。
+覆盖优先级高于仓内文件：命中覆盖键时，文件正文被替换（`prompt-store.js:44`、`prompt-store.js:46`、
+`prompt-store.js:50`）。未命中的章节照旧用文件正文。
 
 ### 4.3 改写单个章节：`update()`
 
-`update(section, content, expectedRevision)`（`prompt-store.js:100-117`）按三步检查，顺序写在
-`prompt-store.js:103-106`：
+`update(section, content, expectedRevision)`（`prompt-store.js:106-123`）按三步检查，顺序写在
+`prompt-store.js:109-112`：
 
 | 检查 | 不通过时的表现 | 错误对象带 `status` |
 | --- | --- | --- |
@@ -175,14 +175,14 @@ import('./prompt-store.js').then(async m => {
 | 正文是字符串、去空白后非空、长度 ≤ 20000、不含 NUL | `提示词正文必须为 1 到 20000 字` | 否 |
 | `expectedRevision` 等于当前 `revision` | `提示词已由其他操作更新，请刷新后再保存` | 是，`409` |
 
-白名单是「6 个核心键 + 13 个 `scenario:<id>` 键」（`prompt-store.js:103`），由当前场景卡列表现算。
+白名单是「6 个核心键 + 13 个 `scenario:<id>` 键」（`prompt-store.js:109`），由当前场景卡列表现算。
 **SOP 键不在白名单里**：拿 `sop:common` 调 `update()` 会得到 `不支持的提示词章节`；
 SOP 只能随整包安装（第 6 节）或手改覆盖文件来变。
 
 通过检查后：读回整个覆盖对象 → 只改这一个键 → 落盘 → 返回重新 `load()` 的结果
-（`prompt-store.js:107-113`）。落盘方式与整包安装一致：先建目录（`0o700`），再写临时文件
+（`prompt-store.js:113-119`）。落盘方式与整包安装一致：先建目录（`0o700`），再写临时文件
 （`<覆盖文件>.<uuid>.tmp`，`0o600`，`flag: 'wx'` 防覆盖），最后 `rename` 原子替换
-（`prompt-store.js:109-112`）。
+（`prompt-store.js:115-118`）。
 
 实测：
 
@@ -205,25 +205,25 @@ import('node:fs/promises').then(async fs => {
 
 ### 5.1 算法
 
-`revisionOf()`（`prompt-store.js:21-23`）就一句：对入参做 `JSON.stringify`，算 SHA-256，取十六进制前 16 位。
+`revisionOf()`（`prompt-store.js:25-27`）就一句：对入参做 `JSON.stringify`，算 SHA-256，取十六进制前 16 位。
 
 ```js
 createHash('sha256').update(JSON.stringify(prompts)).digest('hex').slice(0, 16)
 ```
 
-入参名叫 `prompts`，但调用处传进来的不只有提示词（`prompt-store.js:45`）。
+入参名叫 `prompts`，但调用处传进来的不只有提示词（`prompt-store.js:51`）。
 
 ### 5.2 两个指纹的区别
 
 | | `revision` | `knowledge_revision` |
 | --- | --- | --- |
-| 算什么 | `{prompts, scenarios, sop, release}` 整体（`prompt-store.js:45`） | 去掉 `common` 与 `command_whitelist` 之后的 SOP 字典（`prompt-store.js:56-57`） |
+| 算什么 | `{prompts, scenarios, sop, release}` 整体（`prompt-store.js:51`） | 去掉 `common` 与 `command_whitelist` 之后的 SOP 字典（`prompt-store.js:62-63`） |
 | 覆盖范围 | 6 个核心提示词 + 13 张场景卡 + 14 条 SOP + 发布版本号 | 判据目录里那 12 条场景 SOP |
-| 从哪取 | `load()`、`metadata()` 都返回（`prompt-store.js:46`、`prompt-store.js:90`） | 只在 `snapshot()` 里返回（`prompt-store.js:56-57`） |
+| 从哪取 | `load()`、`metadata()` 都返回（`prompt-store.js:52`、`prompt-store.js:96`） | 只在 `snapshot()` 里返回（`prompt-store.js:62-63`） |
 | 用途 | 乐观并发的校验值；写章节与整包安装都要比 | 整包安装的第二道校验（第 6 节） |
 
 `knowledge_revision` 只能从 `snapshot()` 拿：`metadata()` 的返回里没有这个字段
-（`prompt-store.js:88-97`）。
+（`prompt-store.js:94-103`）。
 
 ### 5.3 指纹会变什么
 
@@ -274,25 +274,25 @@ import('node:crypto').then(async ({createHash}) => {
 
 ### 6.1 入口与入参
 
-`install(sections, release, expectedRevision, knowledgeRevision)`（`prompt-store.js:61`）把 21 个章节整体换成一份升级包。
+`install(sections, release, expectedRevision, knowledgeRevision)`（`prompt-store.js:67`）把 21 个章节整体换成一份升级包。
 
 | 入参 | 是什么 | 从哪来 |
 | --- | --- | --- |
-| `sections` | 章节字典，键是 21 个章节名（6 核心 + 13 场景 + 2 SOP），值是正文 | `snapshot()` 的 `sections`（`prompt-store.js:52-55`） |
+| `sections` | 章节字典，键是 21 个章节名（6 核心 + 13 场景 + 2 SOP），值是正文 | `snapshot()` 的 `sections`（`prompt-store.js:58-61`） |
 | `release` | 升级包元信息；`version` 决定安装后的生效版本号，`sequence` 参与序号检查 | 升级包自己带的 |
 | `expectedRevision` | 调用方看到的当前指纹 | `load()` 或 `metadata()` 的 `revision` |
-| `knowledgeRevision` | 调用方看到的当前知识库指纹 | `snapshot()` 的 `knowledge_revision`（`prompt-store.js:56-57`） |
+| `knowledgeRevision` | 调用方看到的当前知识库指纹 | `snapshot()` 的 `knowledge_revision`（`prompt-store.js:62-63`） |
 
 ### 6.2 四道检查，按顺序
 
 | # | 检查 | 不通过时的表现 | 错误带 `status` | 出处 |
 | --- | --- | --- | --- | --- |
-| 1 | 当前 `revision` 等于 `expectedRevision` | `当前版本已变化，请刷新后重新确认替换` | `409` | `prompt-store.js:65` |
-| 2 | 当前 `knowledge_revision` 等于 `knowledgeRevision` | `升级包与当前知识库版本不兼容` | `409` | `prompt-store.js:66` |
-| 3 | `sections` 的键数等于 21；21 个值逐一检查：必须是字符串、去空白后非空、长度 ≤ 20000、不含 NUL | `升级包缺少必需章节或正文格式不正确` | `400` | `prompt-store.js:67-70` |
-| 4 | `release.sequence` 大于已记录的 `sequence`（无记录时按 0 算） | `不允许重复应用或降级到旧版本` | `409` | `prompt-store.js:72-73` |
+| 1 | 当前 `revision` 等于 `expectedRevision` | `当前版本已变化，请刷新后重新确认替换` | `409` | `prompt-store.js:71` |
+| 2 | 当前 `knowledge_revision` 等于 `knowledgeRevision` | `升级包与当前知识库版本不兼容` | `409` | `prompt-store.js:72` |
+| 3 | `sections` 的键数等于 21；21 个值逐一检查：必须是字符串、去空白后非空、长度 ≤ 20000、不含 NUL | `升级包缺少必需章节或正文格式不正确` | `400` | `prompt-store.js:73-76` |
+| 4 | `release.sequence` 大于已记录的 `sequence`（无记录时按 0 算） | `不允许重复应用或降级到旧版本` | `409` | `prompt-store.js:78-79` |
 
-第 3 条的实际效果是「键集合必须与当前快照一致」，实现方式是两步（`prompt-store.js:67-70`）：先比键数是否等于 21，
+第 3 条的实际效果是「键集合必须与当前快照一致」，实现方式是两步（`prompt-store.js:73-76`）：先比键数是否等于 21，
 再拿**快照里那 21 个键**逐个查传入字典的值是不是合法字符串。传入的键名不同就会查不到某个键，
 那个键的值是 `undefined`，按「非字符串」处理，整包被拒。实测把 21 个键换成另一套 21 个名字，键数不变，照样被拒：
 
@@ -301,20 +301,20 @@ import('node:crypto').then(async ({createHash}) => {
 ```
 
 `release` 缺字段时，第 4 条会在读 `release.sequence` 时抛 `TypeError`
-（`prompt-store.js:72`），而不是返回 400：
+（`prompt-store.js:78`），而不是返回 400：
 
 ```
 release undefined => TypeError | status: undefined | Cannot read properties of undefined (reading 'sequence')
 ```
 
 注意这是「`release` 整个缺失」的情况。`release` 存在但字段缺时行为不同：
-`release.version` 缺失时生效版本号回落到 `scenarios.json` 的 `version`（`prompt-store.js:46`）；
+`release.version` 缺失时生效版本号回落到 `scenarios.json` 的 `version`（`prompt-store.js:52`）；
 `release.sequence` 缺失时第 4 条的比较结果是 false，检查放行——实测一个既没有 `version` 也没有 `sequence`
 的 `release` 能装上，装完的版本号是 `merged-three-state-2026-11-06`。
 
 ### 6.3 写入什么
 
-通过四道检查后，覆盖文件被整体重写（`prompt-store.js:76-77`）：
+通过四道检查后，覆盖文件被整体重写（`prompt-store.js:82-83`）：
 
 | 键 | 内容 |
 | --- | --- |
@@ -322,12 +322,12 @@ release undefined => TypeError | status: undefined | Cannot read properties of u
 | `_release` | 升级包元信息，原样写入 |
 | `_history` | 安装历史：已有历史则追加一条 `release`；没有则先放一条「初始研判策略」再追加 |
 
-那条「初始研判策略」是本模块硬编码的兜底记录（`prompt-store.js:74-75`）：版本取安装前的 `current.version`，
+那条「初始研判策略」是本模块硬编码的兜底记录（`prompt-store.js:80-81`）：版本取安装前的 `current.version`，
 标题 `初始研判策略`，摘要 `随当前应用安装的研判策略`，日期 `2026-11-06`，模块列表
 `['告警研判', '深度溯源', '知识经验']`，`updated_at` 为 `null`。
 
 落盘三步：建目录（`0o700`）→ 写临时文件 `<覆盖文件>.<uuid>.tmp`（`0o600`，`flag: 'wx'`）→ `rename` 原子替换
-（`prompt-store.js:78-81`）。最后重新 `load()` 并把结果返回（`prompt-store.js:82`），
+（`prompt-store.js:84-87`）。最后重新 `load()` 并把结果返回（`prompt-store.js:88`），
 所以调用方拿到的就是安装后的生效状态。
 
 ### 6.4 实测
@@ -359,9 +359,9 @@ import('node:fs/promises').then(async fs => {
 
 ```
 load()
-  → 并行读 6 个核心文件 + scenarios.json + 覆盖文件      prompt-store.js:34-37
-  → 叠加覆盖（核心 / 场景卡 / 两份仓内 SOP）                prompt-store.js:38-44
-  → 算 revision                                           prompt-store.js:45
+  → 并行读 6 个核心文件 + scenarios.json + 覆盖文件      prompt-store.js:40-43
+  → 叠加覆盖（核心 / 场景卡 / 两份仓内 SOP）                prompt-store.js:44-50
+  → 算 revision                                           prompt-store.js:51
   → 返回 {version, revision, source, prompts, scenarios, sop}
 ```
 
@@ -371,50 +371,50 @@ load()
 
 ```
 load() 或 metadata()            → 拿到当前 revision
-  → update(section, content, expectedRevision)            prompt-store.js:100
-      → 章节名 / 正文形状 / 版本三道检查                    prompt-store.js:103-106
-      → 读回覆盖对象，只改一个键                            prompt-store.js:107-108
-      → 临时文件 + rename 落盘                              prompt-store.js:109-112
-      → 返回重新 load() 的结果                              prompt-store.js:113
+  → update(section, content, expectedRevision)            prompt-store.js:106
+      → 章节名 / 正文形状 / 版本三道检查                    prompt-store.js:109-112
+      → 读回覆盖对象，只改一个键                            prompt-store.js:113-114
+      → 临时文件 + rename 落盘                              prompt-store.js:115-118
+      → 返回重新 load() 的结果                              prompt-store.js:119
 ```
 
 用途：在本机试一段提示词正文。特点：**只影响覆盖文件里的那一个章节**，其余章节照旧；
-改完 `revision` 变，别的调用方拿旧 `revision` 再来写会被 409 拦下（`prompt-store.js:106`）。
+改完 `revision` 变，别的调用方拿旧 `revision` 再来写会被 409 拦下（`prompt-store.js:112`）。
 
 ### 路径 C：整包替换
 
 ```
 snapshot()                      → 拿到 sections（21 个章节）与 knowledge_revision
 load() 或 metadata()            → 拿到当前 revision
-  → install(sections, release, expectedRevision, knowledgeRevision)   prompt-store.js:61
-      → revision 检查 → knowledge_revision 检查 → 章节形状检查 → 序号检查   prompt-store.js:65-73
-      → 写 21 个章节 + _release + _history                 prompt-store.js:76-77
-      → 临时文件 + rename 落盘                              prompt-store.js:78-81
-      → 返回重新 load() 的结果                              prompt-store.js:82
+  → install(sections, release, expectedRevision, knowledgeRevision)   prompt-store.js:67
+      → revision 检查 → knowledge_revision 检查 → 章节形状检查 → 序号检查   prompt-store.js:71-79
+      → 写 21 个章节 + _release + _history                 prompt-store.js:82-83
+      → 临时文件 + rename 落盘                              prompt-store.js:84-87
+      → 返回重新 load() 的结果                              prompt-store.js:88
 ```
 
 用途：把一整套新提示词换上去。特点：**整体替换**，21 个章节一次性换掉；
-版本号从升级包带过来（此后 `load()` 的 `version` 取 `_release.version`，`prompt-store.js:46`）。
+版本号从升级包带过来（此后 `load()` 的 `version` 取 `_release.version`，`prompt-store.js:52`）。
 
 ### 三条路径的共同点
 
-写路径（路径 B、C）都在实例内的同一条队列上排队（`prompt-store.js:62`、`prompt-store.js:84`、
-`prompt-store.js:101`、`prompt-store.js:115`）；读路径不排队。同一实例上两个并发 `update()`，
+写路径（路径 B、C）都在实例内的同一条队列上排队（`prompt-store.js:68`、`prompt-store.js:90`、
+`prompt-store.js:107`、`prompt-store.js:121`）；读路径不排队。同一实例上两个并发 `update()`，
 后到的那个会拿到 409（实测：一次 fulfilled、一次 409 `提示词已由其他操作更新，请刷新后再保存`）。
 
 ## 8. 不变量
 
 | 编号 | 陈述 | 反例 | 依据 | 违反症状 |
 | --- | --- | --- | --- | --- |
-| `R-PROMPT-01` | 覆盖文件里对应键的值不是 null/undefined 时，生效正文取覆盖值 | 覆盖文件写了 `triage`，生效的却是仓内 `triage.md` | `prompt-store.js:38`、`prompt-store.js:40`、`prompt-store.js:44` | 本机改的提示词不生效 |
-| `R-PROMPT-02` | `revision` 的输入包含生效中的核心提示词、场景卡、SOP 与发布版本 | 改了场景卡正文而 `revision` 不变 | `prompt-store.js:45` | 乐观并发失效，旧指纹仍能写入 |
-| `R-PROMPT-03` | `update()` 不接受 SOP 章节 | 拿 `sop:common` 调 `update()` 并成功 | `prompt-store.js:103-104` | SOP 被局部改写，与整包安装口径不一致 |
-| `R-PROMPT-04` | 整包安装要求 `sequence` 严格大于当前值，等于或更小都拒绝 | `sequence` 等于当前值也能装上 | `prompt-store.js:72-73` | 旧包覆盖新包 |
-| `R-PROMPT-05` | 整包安装的章节集合必须与当前快照一致（21 个） | 少一个章节也能装上 | `prompt-store.js:67-70` | 装出一套残缺的提示词 |
-| `R-PROMPT-06` | 单章节改写不丢覆盖文件里的其他键 | 改完 `triage`，`_release` 与 `_history` 没了 | `prompt-store.js:107-108` | 版本号与安装历史被清掉 |
-| `R-PROMPT-07` | 同一实例上两个写操作不交叉 | 两个 `update()` 同时读到同一份旧覆盖文件并各自落盘 | `prompt-store.js:62`、`prompt-store.js:84`、`prompt-store.js:101`、`prompt-store.js:115` | 后写覆盖前写 |
-| `R-PROMPT-08` | 覆盖文件权限 `0600`、所在目录 `0700` | 覆盖文件是 `0644` | `prompt-store.js:78-80`、`prompt-store.js:109-111` | 提示词正文对本机其他用户可读 |
-| `R-PROMPT-09` | 章节正文长度不超过 20000 字、不含 NUL | 写入 20001 字或带 NUL 的正文 | `prompt-store.js:69`、`prompt-store.js:105` | 写入被拒 |
+| `R-PROMPT-01` | 覆盖文件里对应键的值不是 null/undefined 时，生效正文取覆盖值 | 覆盖文件写了 `triage`，生效的却是仓内 `triage.md` | `prompt-store.js:44`、`prompt-store.js:46`、`prompt-store.js:50` | 本机改的提示词不生效 |
+| `R-PROMPT-02` | `revision` 的输入包含生效中的核心提示词、场景卡、SOP 与发布版本 | 改了场景卡正文而 `revision` 不变 | `prompt-store.js:51` | 乐观并发失效，旧指纹仍能写入 |
+| `R-PROMPT-03` | `update()` 不接受 SOP 章节 | 拿 `sop:common` 调 `update()` 并成功 | `prompt-store.js:109-110` | SOP 被局部改写，与整包安装口径不一致 |
+| `R-PROMPT-04` | 整包安装要求 `sequence` 严格大于当前值，等于或更小都拒绝 | `sequence` 等于当前值也能装上 | `prompt-store.js:78-79` | 旧包覆盖新包 |
+| `R-PROMPT-05` | 整包安装的章节集合必须与当前快照一致（21 个） | 少一个章节也能装上 | `prompt-store.js:73-76` | 装出一套残缺的提示词 |
+| `R-PROMPT-06` | 单章节改写不丢覆盖文件里的其他键 | 改完 `triage`，`_release` 与 `_history` 没了 | `prompt-store.js:113-114` | 版本号与安装历史被清掉 |
+| `R-PROMPT-07` | 同一实例上两个写操作不交叉 | 两个 `update()` 同时读到同一份旧覆盖文件并各自落盘 | `prompt-store.js:68`、`prompt-store.js:90`、`prompt-store.js:107`、`prompt-store.js:121` | 后写覆盖前写 |
+| `R-PROMPT-08` | 覆盖文件权限 `0600`、所在目录 `0700` | 覆盖文件是 `0644` | `prompt-store.js:84-86`、`prompt-store.js:115-117` | 提示词正文对本机其他用户可读 |
+| `R-PROMPT-09` | 章节正文长度不超过 20000 字、不含 NUL | 写入 20001 字或带 NUL 的正文 | `prompt-store.js:75`、`prompt-store.js:111` | 写入被拒 |
 
 ## 9. 失败面
 
@@ -436,44 +436,44 @@ load() 或 metadata()            → 拿到当前 revision
 两点补充：
 
 - **写失败不留半成品**。两个写方法都是「先算好内容，再落盘」，落盘本身是临时文件 + `rename`
-  （`prompt-store.js:79-81`、`prompt-store.js:110-112`）；`rename` 是同目录原子替换，中断不会留下半个覆盖文件。
-- **检查与写之间存在时间窗**。第 1、2 道检查读的是当时的状态（`prompt-store.js:63-64`），
-  落盘发生在其后（`prompt-store.js:78-81`）。同一个实例内的两个写操作被队列串起来（`R-PROMPT-07`），
-  但不同实例之间不共享队列（`prompt-store.js:26` 的 `this.pending` 是实例字段）。
+  （`prompt-store.js:85-87`、`prompt-store.js:116-118`）；`rename` 是同目录原子替换，中断不会留下半个覆盖文件。
+- **检查与写之间存在时间窗**。第 1、2 道检查读的是当时的状态（`prompt-store.js:69-70`），
+  落盘发生在其后（`prompt-store.js:84-87`）。同一个实例内的两个写操作被队列串起来（`R-PROMPT-07`），
+  但不同实例之间不共享队列（`prompt-store.js:30` 的 `this.pending` 是实例字段）。
 
 ## 10. 资源与限额
 
 | 项 | 数值 / 现状 | 依据 |
 | --- | --- | --- |
-| 一次 `load()` 的读盘次数 | 22 次 `readFile`：6 个核心文件 + `scenarios.json` + 14 份 SOP + 1 份覆盖文件 | `prompt-store.js:29`、`prompt-store.js:35`、`prompt-store.js:36`、`prompt-store.js:41-43` |
-| 读盘并发度 | 6 个核心文件、场景卡、覆盖文件三路并发；14 份 SOP 也并发 | `prompt-store.js:34-37`、`prompt-store.js:41` |
-| 章节数 | 21（6 核心 + 13 场景 + 2 SOP） | `prompt-store.js:18`、`prompt-store.js:52-55` |
-| 单章节正文上限 | 20000 字（写与装都是这个数） | `prompt-store.js:69`、`prompt-store.js:105` |
-| 覆盖文件大小上限 | 无显式上限；受 21 个章节各自的 20000 字约束 | `prompt-store.js:69`、`prompt-store.js:105` |
-| 指纹长度 | 十六进制 16 位，即 64 位摘要 | `prompt-store.js:22` |
-| 指纹计算量 | 一次 `JSON.stringify` 加一次 SHA-256，体积与生效正文总量成正比 | `prompt-store.js:22`、`prompt-store.js:45` |
-| 缓存 | 无。`load()` / `snapshot()` / `metadata()` 每次调用都重新读盘 | `prompt-store.js:33`、`prompt-store.js:51`、`prompt-store.js:89` |
+| 一次 `load()` 的读盘次数 | 22 次 `readFile`：6 个核心文件 + `scenarios.json` + 14 份 SOP + 1 份覆盖文件 | `prompt-store.js:33`、`prompt-store.js:41`、`prompt-store.js:42`、`prompt-store.js:47-49` |
+| 读盘并发度 | 6 个核心文件、场景卡、覆盖文件三路并发；14 份 SOP 也并发 | `prompt-store.js:40-43`、`prompt-store.js:47` |
+| 章节数 | 21（6 核心 + 13 场景 + 2 SOP） | `prompt-store.js:22`、`prompt-store.js:58-61` |
+| 单章节正文上限 | 20000 字（写与装都是这个数） | `prompt-store.js:75`、`prompt-store.js:111` |
+| 覆盖文件大小上限 | 无显式上限；受 21 个章节各自的 20000 字约束 | `prompt-store.js:75`、`prompt-store.js:111` |
+| 指纹长度 | 十六进制 16 位，即 64 位摘要 | `prompt-store.js:26` |
+| 指纹计算量 | 一次 `JSON.stringify` 加一次 SHA-256，体积与生效正文总量成正比 | `prompt-store.js:26`、`prompt-store.js:51` |
+| 缓存 | 无。`load()` / `snapshot()` / `metadata()` 每次调用都重新读盘 | `prompt-store.js:37`、`prompt-store.js:57`、`prompt-store.js:95` |
 
 数据量本身由仓里的文件决定：当前 6 个核心文件、13 张场景卡、14 份 SOP 的正文合计 37680 字
-（`metadata()` 报告的各章节 `characters` 之和，`prompt-store.js:92-96` 实测值：
+（`metadata()` 报告的各章节 `characters` 之和，`prompt-store.js:98-102` 实测值：
 核心 11182 + 场景 14415 + SOP 12083）。
 
 ## 11. 约束与理由
 
 - **SOP 是只读的，这条纪律由两处代码共同保证**。`load()` 会读 `sop:common` 与 `sop:command_whitelist`
-  两个覆盖键（`prompt-store.js:44`），而 `update()` 的白名单只收核心键与 `scenario:<id>` 键
-  （`prompt-store.js:103`）。结果是：SOP 正文要么随整包安装整体换掉，要么手工改覆盖文件，
+  两个覆盖键（`prompt-store.js:50`），而 `update()` 的白名单只收核心键与 `scenario:<id>` 键
+  （`prompt-store.js:109`）。结果是：SOP 正文要么随整包安装整体换掉，要么手工改覆盖文件，
   局部接口碰不到它。
-- **整包安装的四道检查分成三组**：前两道是「对得上吗」（当前版本、知识库版本，`prompt-store.js:65-66`），
-  第三道是「长得对吗」（章节集合与正文形状，`prompt-store.js:67-70`），
-  第四道是「往前进吗」（发布序号，`prompt-store.js:72-73`）。
-- **两处写盘都是临时文件 + rename**（`prompt-store.js:79-81`、`prompt-store.js:110-112`），
+- **整包安装的四道检查分成三组**：前两道是「对得上吗」（当前版本、知识库版本，`prompt-store.js:71-72`），
+  第三道是「长得对吗」（章节集合与正文形状，`prompt-store.js:73-76`），
+  第四道是「往前进吗」（发布序号，`prompt-store.js:78-79`）。
+- **两处写盘都是临时文件 + rename**（`prompt-store.js:85-87`、`prompt-store.js:116-118`），
   临时名带 UUID 且用 `flag: 'wx'` 防止覆盖已有文件；目录 `0o700`、文件 `0o600`。
 - **指纹只比一次**。`install()` 与 `update()` 拿 `expectedRevision` 与当前 `revision` 做一次字符串相等比较
-  （`prompt-store.js:65`、`prompt-store.js:106`）；截断到 64 位摘要之后不再做二次确认。
-- **已知边界一**：写操作的串行化只在单个实例内成立（`prompt-store.js:26`）。
+  （`prompt-store.js:71`、`prompt-store.js:112`）；截断到 64 位摘要之后不再做二次确认。
+- **已知边界一**：写操作的串行化只在单个实例内成立（`prompt-store.js:30`）。
   两个 `PromptStore` 实例各写各的，没有跨实例的互斥。
-- **已知边界二**：读方法不入队列（`prompt-store.js:33`、`prompt-store.js:50`、`prompt-store.js:88`），
+- **已知边界二**：读方法不入队列（`prompt-store.js:37`、`prompt-store.js:56`、`prompt-store.js:94`），
   与写操作并发时可能读到写前或写后的状态。
 
 ## 12. 指针
