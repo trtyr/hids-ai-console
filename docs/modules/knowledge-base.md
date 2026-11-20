@@ -254,39 +254,43 @@ try { await wiki.agentIndex("nope_type"); } catch (e) { console.log("未知类�
 
 **`WikiStore`**
 
-| 参数 | 出现在 | 含义 | 合法域 | 违反时 | 依据 |
-| --- | --- | --- | --- | --- | --- |
-| `directory` | 构造 | 判据库目录 | 存在的目录（缺省库在首次读时自动种出来） | 后续读写抛文件错误 | `wiki-store.js:30`；缺省取 `HIDS_WIKI_DIR`，再缺省为数据根下的 `wiki/`（`wiki-store.js:6`、`wiki-store.js:417`） |
-| `historyDirectory` | 构造 | 历史版本目录 | 可写目录 | 修订时写历史失败则整次修订失败 | `wiki-store.js:30`；缺省：数据根库与仓内 `wiki/` → `<数据根>/wiki-history/`，注入目录 → 它同级 `.data/wiki-history/`（`wiki-store.js:421-425`） |
-| `seedFrom` | 构造 | 种子源目录 | 目录或 `null` | 拷失败抛错并清掉半成品库 | `wiki-store.js:30`；只有缺省的数据根库才从仓内 `wiki/` 种（`wiki-store.js:427-429`） |
-| `filename` | `get` / `update` | 页面路径 | 两段式 `<目录>/<文件名>.md`（目录在 16 个约定目录内）或根文档 `index.md`/`rules.md`/`log.md`/`_schema.md` | 抛 400「知识库页面路径无效」；路径合法但文件不存在抛 404「知识库页面不存在：`<相对路径>`」 | `wiki-store.js:54-59`、`wiki-store.js:127-133` |
-| `expectedRevision` | `update` | 期望的当前版本指纹 | 必须等于当前页的 `revision` | 抛 409「知识库页面已更新，请刷新后再提交」 | `wiki-store.js:217` |
-| `content` | `update` | 新正文 | 1 到 30000 字，不含空字符 | 抛 400「页面正文必须为 1 到 30000 字」 | `wiki-store.js:218-219` |
-| `changes[].path` | `checkBundle` / `publishBundle` | 被修订页的路径 | 判据页格式，且不是 `customer-experience/` | 检查阶段报「无效的判据路径」 | `wiki-store.js:261`、`wiki-store.js:298-299` |
-| `changes[].content` | 同上 | 新正文 | `publishBundle` 下 100 到 30000 字 | 抛 400「判据 `<编号>` 正文无效」 | `wiki-store.js:305-306` |
-| `changes[].page_revision` | 同上 | 起草时的页版本指纹 | 必须等于当前页 `revision` | 抛 409「判据 `<编号>` 已更新，请重新整理草案」 | `wiki-store.js:302-303` |
-| `audit.reviewer` | `publishBundle` | 审核人姓名 | 去空白后至少 2 字 | 抛 400「维护发布需要 1 至 6 条判据修订及审核人」 | `wiki-store.js:290-292` |
-| `evidence.path` | `publishBundle` | 新证据页路径 | `_evidence/<8 到 100 位小写字母数字或连字符>.md` | 抛 400「反馈证据页格式无效」 | `wiki-store.js:316` |
-| `evidence.content` | 同上 | 新证据页正文 | 不超过 12000 字，含 `id: EV-...` 与 `source:` | 同上 | `wiki-store.js:317-320` |
-| `scenarioId` | `publishedFor` | 告警场景标识 | 场景标识字符串；匹配不上就返回空数组 | 不抛错 | `wiki-store.js:387` |
+| 参数 | 出现在 | 含义 | 合法域 | 违反时 | 依据 | 单位 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `directory` | 构造 | 判据库目录 | 存在的目录（缺省库在首次读时自动种出来） | 后续读写抛文件错误 | `wiki-store.js:30`；缺省取 `HIDS_WIKI_DIR`，再缺省为数据根下的 `wiki/`（`wiki-store.js:6`、`wiki-store.js:417`） | — |
+| `historyDirectory` | 构造 | 历史版本目录 | 可写目录 | 修订时写历史失败则整次修订失败 | `wiki-store.js:30`；缺省：数据根库与仓内 `wiki/` → `<数据根>/wiki-history/`，注入目录 → 它同级 `.data/wiki-history/`（`wiki-store.js:421-425`） | — |
+| `seedFrom` | 构造 | 种子源目录 | 目录或 `null` | 拷失败抛错并清掉半成品库 | `wiki-store.js:30`；只有缺省的数据根库才从仓内 `wiki/` 种（`wiki-store.js:427-429`） | — |
+| `filename` | `get` / `update` | 页面路径 | 两段式 `<目录>/<文件名>.md`（目录在 16 个约定目录内）或根文档 `index.md`/`rules.md`/`log.md`/`_schema.md` | 抛 400「知识库页面路径无效」；路径合法但文件不存在抛 404「知识库页面不存在：`<相对路径>`」 | `wiki-store.js:54-59`、`wiki-store.js:127-133` | — |
+| `expectedRevision` | `update` | 期望的当前版本指纹 | 必须等于当前页的 `revision` | 抛 409「知识库页面已更新，请刷新后再提交」 | `wiki-store.js:217` | 字符 |
+| `content` | `update` | 新正文 | 1 到 30000 字，不含空字符 | 抛 400「页面正文必须为 1 到 30000 字」 | `wiki-store.js:218-219` | 字符 |
+| `changes[].path` | `checkBundle` / `publishBundle` | 被修订页的路径 | 判据页格式，且不是 `customer-experience/` | 检查阶段报「无效的判据路径」 | `wiki-store.js:261`、`wiki-store.js:298-299` | — |
+| `changes[].content` | 同上 | 新正文 | `publishBundle` 下 100 到 30000 字 | 抛 400「判据 `<编号>` 正文无效」 | `wiki-store.js:305-306` | 字符 |
+| `changes[].page_revision` | 同上 | 起草时的页版本指纹 | 必须等于当前页 `revision` | 抛 409「判据 `<编号>` 已更新，请重新整理草案」 | `wiki-store.js:302-303` | 字符 |
+| `audit.reviewer` | `publishBundle` | 审核人姓名 | 去空白后至少 2 字 | 抛 400「维护发布需要 1 至 6 条判据修订及审核人」 | `wiki-store.js:290-292` | 字符 |
+| `evidence.path` | `publishBundle` | 新证据页路径 | `_evidence/<8 到 100 位小写字母数字或连字符>.md` | 抛 400「反馈证据页格式无效」 | `wiki-store.js:316` | — |
+| `evidence.content` | 同上 | 新证据页正文 | 不超过 12000 字，含 `id: EV-...` 与 `source:` | 同上 | `wiki-store.js:317-320` | 字符 |
+| `scenarioId` | `publishedFor` | 告警场景标识 | 场景标识字符串；匹配不上就返回空数组 | 不抛错 | `wiki-store.js:387` | — |
+
+表注：单位列只对长度类字段写「字符」；路径、标识、枚举类不含量纲，写「—」。
 
 **`WikiWorkbench`**
 
-| 参数 | 出现在 | 含义 | 合法域 | 违反时 | 依据 |
-| --- | --- | --- | --- | --- | --- |
-| `wiki` / `model` / `prompts` / `directory` | 构造 | 判据库、模型、提示词仓、会话目录 | —— | —— | `wiki-workbench.js:78-81` |
-| `page` | `create` | 要维护的页路径，或 `'new-experience'` | 存在的页路径，或字符串 `'new-experience'` | 读页时抛文件错误 | `wiki-workbench.js:107`、`wiki-workbench.js:138` |
-| `feedback.case_id` / `case_dir` / `event_type` | `create` | 反馈对应的案件 | 三者都要有 | 抛 400「反馈需要案件、预期结论、至少 10 字理由和反馈人」 | `wiki-workbench.js:109-113` |
-| `feedback.expected_verdict` | 同上 | 人工预期的结论 | `threat` / `uncertain` / `false_positive` | 同上 | `wiki-workbench.js:18`、`wiki-workbench.js:110` |
-| `feedback.reason` | 同上 | 人工理由 | 10 到 4000 字 | 同上 | `wiki-workbench.js:111` |
-| `feedback.who` | 同上 | 反馈人 | 2 到 100 字 | 同上 | `wiki-workbench.js:112` |
-| `content` | `reply` | 本轮用户输入 | 1 到 4000 字，不含空字符 | 抛 400「输入必须为 1 到 4000 字」 | `wiki-workbench.js:148-149` |
-| `id` | `reply` / `replay` / `publish` | 会话标识 | UUID 形式 | 抛 400「知识维护会话 ID 无效」 | `wiki-workbench.js:7`、`wiki-workbench.js:83` |
-| `review.reviewer` / `review.note` | `publish` | 判据页发布的审核人与说明 | 审核人 2 到 100 字，说明 10 到 500 字 | 抛 400「请填写审核人和至少 10 字审核说明」 | `wiki-workbench.js:308-311` |
-| `review.verdict` / `review.valid_until` / `review.note` | `publish` | 客户经验发布的审核三件套 | 结论三选一；日期 `YYYY-MM-DD` 且落在未来 366 天内；说明 5 到 500 字 | 抛 400「请选择三态结论、未来一年内的复核日期，并填写至少 5 字审核说明」 | `wiki-workbench.js:295-300` |
-| `review.replay_no_cases_ack` | `publish` | 回放无样本时的确认 | 必须是 `true` | 抛 400「没有可用的已保存案件；请确认样本覆盖缺口」 | `wiki-workbench.js:319-320` |
-| `review.replay_override_reason` | `publish` | 回放需人工复核时的理由 | 至少 20 字 | 抛 400「回放存在结论不符、退化或无效结果；须说明至少 20 字的人工复核理由」 | `wiki-workbench.js:323-325` |
-| `review.source_verified` | `publish` | 外部原文已核查的确认 | 外部证据时必须是 `true` | 抛 400「请先核查新证据原文、摘录及适用边界，再确认来源已核查」 | `wiki-workbench.js:327-328` |
+| 参数 | 出现在 | 含义 | 合法域 | 违反时 | 依据 | 单位 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `wiki` / `model` / `prompts` / `directory` | 构造 | 判据库、模型、提示词仓、会话目录 | —— | —— | `wiki-workbench.js:78-81` | — |
+| `page` | `create` | 要维护的页路径，或 `'new-experience'` | 存在的页路径，或字符串 `'new-experience'` | 读页时抛文件错误 | `wiki-workbench.js:107`、`wiki-workbench.js:138` | — |
+| `feedback.case_id` / `case_dir` / `event_type` | `create` | 反馈对应的案件 | 三者都要有 | 抛 400「反馈需要案件、预期结论、至少 10 字理由和反馈人」 | `wiki-workbench.js:109-113` | — |
+| `feedback.expected_verdict` | 同上 | 人工预期的结论 | `threat` / `uncertain` / `false_positive` | 同上 | `wiki-workbench.js:18`、`wiki-workbench.js:110` | — |
+| `feedback.reason` | 同上 | 人工理由 | 10 到 4000 字 | 同上 | `wiki-workbench.js:111` | 字符 |
+| `feedback.who` | 同上 | 反馈人 | 2 到 100 字 | 同上 | `wiki-workbench.js:112` | 字符 |
+| `content` | `reply` | 本轮用户输入 | 1 到 4000 字，不含空字符 | 抛 400「输入必须为 1 到 4000 字」 | `wiki-workbench.js:148-149` | 字符 |
+| `id` | `reply` / `replay` / `publish` | 会话标识 | UUID 形式 | 抛 400「知识维护会话 ID 无效」 | `wiki-workbench.js:7`、`wiki-workbench.js:83` | — |
+| `review.reviewer` / `review.note` | `publish` | 判据页发布的审核人与说明 | 审核人 2 到 100 字，说明 10 到 500 字 | 抛 400「请填写审核人和至少 10 字审核说明」 | `wiki-workbench.js:308-311` | 字符 |
+| `review.verdict` / `review.valid_until` / `review.note` | `publish` | 客户经验发布的审核三件套 | 结论三选一；日期 `YYYY-MM-DD` 且落在未来 366 天内；说明 5 到 500 字 | 抛 400「请选择三态结论、未来一年内的复核日期，并填写至少 5 字审核说明」 | `wiki-workbench.js:295-300` | — |
+| `review.replay_no_cases_ack` | `publish` | 回放无样本时的确认 | 必须是 `true` | 抛 400「没有可用的已保存案件；请确认样本覆盖缺口」 | `wiki-workbench.js:319-320` | — |
+| `review.replay_override_reason` | `publish` | 回放需人工复核时的理由 | 至少 20 字 | 抛 400「回放存在结论不符、退化或无效结果；须说明至少 20 字的人工复核理由」 | `wiki-workbench.js:323-325` | 字符 |
+| `review.source_verified` | `publish` | 外部原文已核查的确认 | 外部证据时必须是 `true` | 抛 400「请先核查新证据原文、摘录及适用边界，再确认来源已核查」 | `wiki-workbench.js:327-328` | — |
+
+表注：`WikiWorkbench` 一侧同理——长度类字段写「字符」，路径、枚举、布尔确认类写「—」。
 
 ### 5.2 返回值
 

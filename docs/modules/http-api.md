@@ -1,3 +1,10 @@
+---
+type: module
+id: MOD-HTTP-API
+covers: [server.js]
+updated: 2026-11-20
+---
+
 # HTTP API 模块（http-api）
 
 业务 HTTP 接口的唯一入口。本页讲 `server.js` 这一个文件：它怎么把请求分发到各条路由、怎么判身份、怎么校验入参、怎么把结果封装成响应。
@@ -453,15 +460,17 @@ node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 
 
 `kind` 的枚举顺序就是响应里 `stores[]` 的顺序，测试按它写期望：
 
-| `kind` | 中文 | 路径来源（缺省值） | 什么算「一条」 | 条目时刻（`oldest_at` / `newest_at` / 排序） |
-| --- | --- | --- | --- | --- |
-| `cases` | 案卷 | `monitor.casesDirectory` → `HIDS_CASES_DIR` → `<数据根>/cases` | 一级子目录（一个案件目录） | 目录内**文件**的最新 mtime；空目录退回目录自身 mtime |
-| `investigations` | 研判记录 | `history.directory` → `<数据根>/investigations` | 一个 `*.json` | 文件 mtime |
-| `boards` | 溯源白板 | `boardService.directory` → `<数据根>/trace-boards` | 一个 `*.json` | 文件 mtime |
-| `wiki_sessions` | 知识库会话 | `wikiAgent.directory` → `<数据根>/wiki-sessions` | 一个 `*.json` | 文件 mtime |
-| `queue` | 研判队列 | `monitor.file` → `<数据根>/triage-monitor.json` | 一条队列记录 | 记录上 `updated_at` → `saved_at` → `created_at` 第一个能解析的 |
-| `logs` | 日志 | `HIDS_LOG_FILE` 的目录（缺省＝数据根） | 该目录**顶层**的一个 `*.log`（当前活动文件 + 轮转出的历史文件） | 文件 mtime |
-| `config_overrides` | 配置覆盖层 | `config.file` → `<数据根>/config-overrides.json` | 那一个文件（0 或 1） | 文件 mtime |
+| `kind` | 中文 | 路径来源（缺省值） | 什么算「一条」 | 条目时刻（`oldest_at` / `newest_at` / 排序） | 单位 |
+| --- | --- | --- | --- | --- | --- |
+| `cases` | 案卷 | `monitor.casesDirectory` → `HIDS_CASES_DIR` → `<数据根>/cases` | 一级子目录（一个案件目录） | 目录内**文件**的最新 mtime；空目录退回目录自身 mtime | 个案卷 |
+| `investigations` | 研判记录 | `history.directory` → `<数据根>/investigations` | 一个 `*.json` | 文件 mtime | 个文件 |
+| `boards` | 溯源白板 | `boardService.directory` → `<数据根>/trace-boards` | 一个 `*.json` | 文件 mtime | 个文件 |
+| `wiki_sessions` | 知识库会话 | `wikiAgent.directory` → `<数据根>/wiki-sessions` | 一个 `*.json` | 文件 mtime | 个文件 |
+| `queue` | 研判队列 | `monitor.file` → `<数据根>/triage-monitor.json` | 一条队列记录 | 记录上 `updated_at` → `saved_at` → `created_at` 第一个能解析的 | 条记录 |
+| `logs` | 日志 | `HIDS_LOG_FILE` 的目录（缺省＝数据根） | 该目录**顶层**的一个 `*.log`（当前活动文件 + 轮转出的历史文件） | 文件 mtime | 个文件 |
+| `config_overrides` | 配置覆盖层 | `config.file` → `<数据根>/config-overrides.json` | 那一个文件（0 或 1） | 文件 mtime | 个文件 |
+
+表注：这一列说的是「一条」怎么数——案卷按一级子目录数，其余按文件数或队列记录数。
 - **路径全部取自注入件**（`createServer` 的 `history` / `monitor` / `boardService` / `wikiAgent` / `config`）：换替身就是换盘点对象，测试不必碰真实数据根。响应里的 `data_dir` 取配置覆盖层文件所在目录（`config.file` 的 `dirname`），缺省就是数据根。
 - **`logs` 的真相**（P003-T045 起）：后端**配了 `HIDS_LOG_FILE` 就落文件**，不配仍只上 stdout（见 §3.8）。所以这一类现在有两拨来源：进程自己写的 `*.log`（含轮转出的 `<名>.<时刻>.log`），以及部署端把 stdout 重定向到同目录时产生的文件。**没配 `HIDS_LOG_FILE` 的正常部署恒为 `count: 0`**；子目录里的 `*.log` 不算（只认顶层）。
 - **`bytes` 口径**：文件取 `stat.size`；案卷按目录内文件递归累加；`queue` 是队列文件 + 同名 `.archive.jsonl`；读不到的条目按 0 算（一个断掉的符号链接不该让整次盘点 500）。
@@ -510,7 +519,7 @@ node --test evidence/test/P003-T029/config-write.test.js   # 10 条全绿，约 
 - **阈值至少给一个**：`older_than` 与 `keep` 都不给回 400——不许无阈值一把抹掉。
 - **两条同给取并集**：早于时间的 ∪ 超出数量的，同一「条」不会重复计。
 - **`archive` 落到哪**：文件/案卷目录 `rename` 进 `<数据根>/archive/<kind>/<执行时刻>-<原名>`（前缀是 ISO 时间去掉了 `:` 与 `.`，同一路径清两次不会覆盖上一份）；队列记录追加到 `<数据根>/triage-monitor.json.archive.jsonl`（带 `archived_at`，与 TTL 归档 `archiveDone()` 同格式）再移出队列。**归档目录不在七类盘点的任何一类里**，所以盘点数字会降。
-- **`delete` 落到哪**：文件/目录 `rm -r`；队列记录从内存与队列文件里删掉，并按 R-TRIAGE-13 同时失效指向它的 `dedupe` 条目（走 `dropRecord()`，`triage-monitor.js:322-330`）。
+- **`delete` 落到哪**：文件/目录 `rm -r`；队列记录从内存与队列文件里删掉，并按 triage-pipeline 页「删记录必须同时失效 `dedupe` 条目」那条承诺（[triage-pipeline.md](triage-pipeline.md) 第 10 节）同时失效指向它的 `dedupe` 条目（走 `dropRecord()`，`triage-monitor.js:322-330`）。
 - **`config_overrides` 的特殊后果**：删/归档只动盘上的覆盖层文件，**进程内的 `env` 仍是旧值**；要回到「按环境变量生效」必须重启进程（覆盖层是启动时同步读进 `env` 的，见 §3.6）。
 
 **已完结案件才可清（A4）**：
@@ -919,20 +928,24 @@ D1 原始报文="data: {\"type\":\"progress\",\"stage\":\"查询证据\",\"detai
 
 分页参数出现在五条路由上，缺省与边界基本一样，只有知识库列表的 `count` 例外：
 
-| 路由 | 出处 | `count` 缺省 |
-| --- | --- | --- |
-| `GET /api/agent/triage/cases` | `server.js:365-368` | 20 |
-| `GET /api/alerts` | `server.js:513-515` | 20 |
-| `GET /api/trace/boards` | `server.js:310-313` | 20 |
-| `GET /api/logs` | `server.js:931-932` | 20 |
-| `GET /api/wiki/pages` | `server.js:395-399` | **不切页，返回全部** |
+| 路由 | 出处 | `count` 缺省 | 单位 |
+| --- | --- | --- | --- |
+| `GET /api/agent/triage/cases` | `server.js:365-368` | 20 | 条 |
+| `GET /api/alerts` | `server.js:513-515` | 20 | 条 |
+| `GET /api/trace/boards` | `server.js:310-313` | 20 | 条 |
+| `GET /api/logs` | `server.js:931-932` | 20 | 条 |
+| `GET /api/wiki/pages` | `server.js:395-399` | **不切页，返回全部** | 条 |
+
+表注：`count` 的单位是条（页大小）；知识库列表那行不切页，按整份集合返回，单位仍记作条。
 
 **取值与边界**：
 
-| 参数 | 缺省值 | 合法范围 | 不合法时 |
-| --- | --- | --- | --- |
-| `count` | 20 | 1 到 50 之间的安全整数 | 400「分页参数无效」 |
-| `offset` | 0 | 大于等于 0 的安全整数 | 400「分页参数无效」 |
+| 参数 | 缺省值 | 合法范围 | 不合法时 | 单位 |
+| --- | --- | --- | --- | --- |
+| `count` | 20 | 1 到 50 之间的安全整数 | 400「分页参数无效」 | 条 |
+| `offset` | 0 | 大于等于 0 的安全整数 | 400「分页参数无效」 | 条 |
+
+表注：`count` 量页大小（条），`offset` 量跳过的条数，两者同单位。
 
 取值写法是 `Number(url.searchParams.get('count') || 20)`：参数缺省与传空串都落回缺省值；传 `abc` 得到 `NaN`，`isSafeInteger` 判否；传 `20.5` 也不是整数，一样判否。
 
@@ -1101,5 +1114,18 @@ LLM_API_KEY=fake-key-abcdef LLM_MODEL=fake-model HIDS_TRIAGE_INPUT_MODE=pirate n
 ```
 
 探针不写任何文件、不连外部服务；它注入替身服务跑真实 HTTP 请求，输出见 [evidence/recon/P001-T002.md](../../evidence/recon/P001-T002.md) 第四节。
+
+## 11. 行为承诺
+
+接口层面的可被测试反驳的行为：每条都能用一次 HTTP 请求判真假。正文在前面各节，本表只做索引。
+
+| 承诺 | 反例 | 正文 |
+| --- | --- | --- |
+| 闸门先于路由：认证不过直接 401、纯文本回包，连 `/api/session` 也拿不到；未配密码则全部放行 | 没带凭据却拿到 200 的业务数据 | 第 4 节 |
+| 请求正文超过该路由上限回 400「请求正文过大」，不是合法 JSON 回 400「请求正文不是 JSON」 | 超长正文被截断后照常解析 | 第 8.1 节 |
+| 错误翻译成四类、一类一个稳定 `code`；测试判 `code`，不判中文文案 | 同一类错误今天 `caller_error` 明天 `internal` | 第 8.3 节 |
+| 分页参数非法一律 400「分页参数无效」；「服务没配」的 503 判定先于分页 | `count=abc` 回 200 的空列表 | 第 7 节 |
+| SSE 分支里研判异常变成 `error` 帧，HTTP 状态仍是 200；判成败看帧不看状态码 | 拿 200 当成功并读 `result` | 第 6 节 |
+| 知识库列表不传 `count` 时返回全量，不静默切成 20 | 默认切页导致控制台漏页 | 第 7 节 |
 
 本页只描述现状。哪一处该改、改成什么样，是评审的活，不在文档范围内。

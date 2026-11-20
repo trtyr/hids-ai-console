@@ -1,10 +1,17 @@
+---
+type: module
+id: MOD-PROMPT-STORE
+covers: [prompt-store.js]
+updated: 2026-11-20
+---
+
 # prompt-store · 提示词与 SOP 的装载、覆盖与版本管理
 
 > **模块名**：`prompt-store`
 > **落点**：本页（`docs/modules/prompt-store.md`），模块清单见 [\_breakdown.json](_breakdown.json)
-> **真源**：`prompt-store.js`（118 行，单文件模块，无本地 import）
+> **真源**：`prompt-store.js`（133 行，单文件模块；本地 import 只有两处，见文末 `:132-133`）——`config-store.js` 的 `dataRoot` 是**向下取**（取配置与路径那层，该层不在架构篇的存储组清单里），`wiki-store.js` 的判据库目录/种子是**同层取用**（`prompt-store.js` 与 `wiki-store.js` 同在存储组）
 > **覆盖构件**：提示词装载、本地覆盖、版本指纹、整包安装（四个构件各占一节，见第 3 至第 6 节）
-> **行号基准**：对应提交 `35530d85`；该文件自 `a16e0d5` 起未改动。代码变了要重新核行号。
+> **行号基准**：本页行号取自 `35530d85`。该文件此后有多次改动（P003-T041 数据根外置、T050 同步、T052 脱敏、T054 收尾），**本页 119 处引用尚未逐条重取**——引用前必须 `grep -n <符号>` 对一遍，别照抄本页数字。全量重取另立卡（T056）。
 
 ## 1. 模块职责
 
@@ -28,8 +35,8 @@
   判据页的增删改审核不在本模块。
 - **不负责把提示词送到模型**。本模块没有模型客户端、没有 HTTP 路由，`prompt-store.js:1-4` 只引入
   `node:crypto`、`node:fs/promises`、`node:path`、`node:url` 四个内置模块。
-- **除覆盖文件外不写任何文件**。写盘只发生在 `install()`（`prompt-store.js:78-81`）与
-  `update()`（`prompt-store.js:109-112`）两处，目标都是构造时指定的覆盖文件。
+- **自己的写盘只有覆盖文件两处**。`install()`（`prompt-store.js:86-87`，按当前代码实测）与 `update()`（`:117-118`）的目标都是构造时指定的覆盖文件。
+  **但要留一个副作用**：`load()` 第一次发现数据根里还没有判据库时，会经 `ensureWikiLibrary()` 触发一次整库种子（`:39`，与 `WikiStore.ready()` 共用同一份记忆化）——那一刻落盘的是判据库，不是本模块的数据。
 
 ### 1.3 覆盖文件在哪
 
@@ -38,7 +45,7 @@
 | 覆盖文件默认路径 | `<数据根>/prompt-overrides.json`（数据根＝`HIDS_DATA_DIR`，没设就是 `~/.local/share/hids-ai-console`；**不在仓库内**） | `prompt-store.js:17`、`prompt-store.js:126` |
 | 覆盖文件环境变量 | `HIDS_PROMPT_STORE_FILE`，配了就用它 | `prompt-store.js:17` |
 | 构造参数 | `new PromptStore(filename)`，给了就用给的 | `prompt-store.js:26` |
-| 判据目录环境变量 | `HIDS_WIKI_DIR`，缺省 `<本模块所在目录>/wiki` | `prompt-store.js:9` |
+| 判据目录环境变量 | `HIDS_WIKI_DIR`，缺省 `<数据根>/wiki`（`wikiLibraryDirectory()`，`wiki-store.js:417-419`；P003-T041 起判据库活数据住数据根，不是模块目录下的仓库副本）。**配了它就不种子**：外部库整个换掉判据目录，`load()` 跳过整库种子（`prompt-store.js:13` 的 `wikiNeedsSeed`） | `prompt-store.js:12-13` |
 | 提示词目录 | `<本模块所在目录>/prompts`（写死，不可配） | `prompt-store.js:7` |
 
 两个环境变量在模块 import 时读一次（`prompt-store.js:9`、`prompt-store.js:17`），进程启动后再改环境变量不生效——
@@ -48,13 +55,15 @@
 
 `PromptStore` 只导出一个类（`prompt-store.js:25`），共 6 个方法加 1 个构造函数。
 
-| 能力 | 方法 | 入参 | 返回 | 抛错 |
-| --- | --- | --- | --- | --- |
-| 装配生效正文 | `load()` | 无 | `{version, revision, source, prompts, scenarios, sop}`（`prompt-store.js:46-47`） | 读文件失败即抛（ENOENT、SyntaxError） |
-| 取可安装的章节快照 | `snapshot()` | 无 | `{sections, knowledge_revision}`（`prompt-store.js:52-58`） | 同上 |
-| 整包安装 | `install(sections, release, expectedRevision, knowledgeRevision)` | 4 个，见第 6 节 | 重新 `load()` 的结果（`prompt-store.js:82`） | 400 / 409 / TypeError，见第 6.2 节 |
-| 列出章节清单 | `metadata()` | 无 | `{version, revision, sections[]}`（`prompt-store.js:90-97`） | 同上 |
-| 改写单个章节 | `update(section, content, expectedRevision)` | 章节名、正文、期望指纹 | 重新 `load()` 的结果（`prompt-store.js:113`） | 章节名或正文不合法 → 普通 `Error`；版本不符 → `409`。见第 4.3 节 |
+| 能力 | 方法 | 入参 | 返回 | 抛错 | 单位 |
+| --- | --- | --- | --- | --- | --- |
+| 装配生效正文 | `load()` | 无 | `{version, revision, source, prompts, scenarios, sop}`（`prompt-store.js:46-47`） | 读文件失败即抛（ENOENT、SyntaxError） | — |
+| 取可安装的章节快照 | `snapshot()` | 无 | `{sections, knowledge_revision}`（`prompt-store.js:52-58`） | 同上 | — |
+| 整包安装 | `install(sections, release, expectedRevision, knowledgeRevision)` | 4 个，见第 6 节 | 重新 `load()` 的结果（`prompt-store.js:82`） | 400 / 409 / TypeError，见第 6.2 节 | — |
+| 列出章节清单 | `metadata()` | 无 | `{version, revision, sections[]}`（`prompt-store.js:90-97`） | 同上 | — |
+| 改写单个章节 | `update(section, content, expectedRevision)` | 章节名、正文、期望指纹 | 重新 `load()` 的结果（`prompt-store.js:113`） | 章节名或正文不合法 → 普通 `Error`；版本不符 → `409`。见第 4.3 节 | — |
+
+表注：本表列方法与入参形状，不含量纲，一律「—」；正文长度上限见第 9 节。
 
 两个读方法（`load()`、`snapshot()`）与一个清单方法（`metadata()`）不排队，直接读盘；
 两个写方法（`install()`、`update()`）共用实例内的一条串行队列（`prompt-store.js:62`、`prompt-store.js:84`、

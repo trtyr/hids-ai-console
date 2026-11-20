@@ -1,3 +1,9 @@
+---
+type: architecture
+id: AR-BACKEND
+updated: 2026-11-20
+---
+
 # HIDS 智能研判平台 · 后端架构
 
 这份文档写给第一次进这个仓的人。它回答三个问题：这套后端在干什么、由哪些件组成、每个件落在哪个文件。
@@ -6,6 +12,15 @@
 - 页面地图见 [docs/index.md](index.md)
 - 模块级细节见 [docs/modules/](modules/)，清单来源见 [docs/modules/_breakdown.json](modules/_breakdown.json)
 - 没查到的、存疑的、留了口子的地方见 [docs/_meta/gaps.md](_meta/gaps.md)
+
+## 0. 定位
+
+本页是这套后端的第一入口：读完它，你应当能说出有哪几个进程、分了哪几层、一条告警从进来到落地穿过哪些件，
+以及每条结论的代码依据在哪一行。它**不**写接口字段、不写错误码、不写某个函数的入参域——那些在 [docs/modules/](modules/)
+的模块页里，一门课一处真源。文档怎么分层（L0 架构 / L1 模块 / L2 文件）见 [docs/architecture/architecture.md](architecture/architecture.md)。
+
+读者对象：第一次进这个仓的后端、要改研判链路的开发、以及写测试的人（第 11 节给了复跑命令）。不面向客户，也不替代
+`openapi.yaml` 的接口契约。
 
 ## 1. 这份文档覆盖什么
 
@@ -183,13 +198,13 @@
 | 取证工具 | `agent-tools.js`、`api-tools.js` | 把「一次查询」包装成模型可调用的工具，并管住可调用的工具名范围 |
 | 证据投影 | `evidence-view.js` | 把工具原始返回压成带 JSON Pointer 的精简视图，控制塞进模型上下文的体积 |
 | 编排 | `investigation-agent.js`、`triage-monitor.js`、`trace-board.js`、`wiki-workbench.js`、`triage-rules.js` | 各条业务流程的编排者 |
-| 存储 | `investigation-store.js`、`wiki-store.js`、`prompt-store.js`、`update-store.js`、`knowledge-store.js` | 读写状态、判据、提示词、升级包、候选经验 |
+| 存储 | `investigation-store.js`（记录存储）、`wiki-store.js`（判据库）、`rule-store.js`（规则库）、`prompt-store.js`（提示词）、`update-store.js`（升级包）、`knowledge-store.js`（候选经验）、`record-redaction.js`（脱敏闸） | 读写状态、判据、规则、提示词、升级包、候选经验、脱敏闸 |
 | 入口 | `server.js`、`maintenance-server.js` | HTTP 路由与鉴权，把上面的件接成进程 |
 
 **依赖方向的两个具体证据**：
 
 - `server.js:1-26` 是唯一一处「什么都 import」的地方，它组装 `RpcClient → CloudwalkerGateway → ApiEvidenceToolbox`（`server.js:36-37`）、`CloudwalkerMcpClient → AgentToolbox`（`agent-tools.js:119-122`）、`ChatModelClient → InvestigationAgent`（`server.js:40-51`）。
-- 编排层向下依赖，存储层不依赖编排层：`prompt-store.js`、`investigation-store.js`、`knowledge-store.js` 三个文件没有任何本地 import。
+- 编排层向下依赖，存储层不依赖编排层（P003-T055 逐个 `test -f` 实测）：存储层是**七个文件**——`investigation-store.js`、`knowledge-store.js`、`record-redaction.js` 零本地 import；四个有 import 的单向无环，方向是层内取用或向下——`prompt-store.js` 取配置存储（数据根）与判据库存储（库目录 + 种子 `ensureWikiLibrary`），`wiki-store.js` 取配置存储与规则存储（种子函数 `seedLibrary`）、`rule-store.js` 取配置存储、`update-store.js` 取脱敏闸（`recordFailure`）。判断越界的口径：存储层不许 import 编排层，层内取用不许出现环。
 
 **两处容易看错的地方**：
 
@@ -387,11 +402,8 @@ SOP 分两类：`prompts/sop/common.md` 和 `prompts/sop/command_whitelist.md` �
 `server.js:27` 取模块级常量 `runtime`；具体路径清单由导出的 `runtimePaths(root = dataRoot())`（`server.js:1073-1085`）给出。
 数据根 `dataRoot()` **只有一处定义**（`config-store.js:31-35`）：`server.js` 与 `prompt-store.js`、`wiki-store.js` 共用这一份，别在别处另拼一套。
 
-```js
-const configured = typeof env.HIDS_DATA_DIR === 'string' ? env.HIDS_DATA_DIR.trim() : '';
-if (configured) return path.resolve(configured);                  // 设了就用它
-return path.join(home, '.local', 'share', 'hids-ai-console');     // 没设就是机器全局位置
-```
+判定只有两句：`HIDS_DATA_DIR` 是非空白字符串就按它绝对化（相对路径也绝对化），否则落到机器全局位置。
+这段的代码形态属实现细节，住 L1：[modules/http-api.md](modules/http-api.md) 第 2 节与 `config-store.js:31-35`。
 
 - 设了 `HIDS_DATA_DIR` 就用它；相对路径按当前工作目录绝对化（进程换了工作目录不该换落点）。
 - 空串与纯空白算「没设」（与 `HIDS_CASES_DIR` 同一个口径）。
@@ -447,16 +459,9 @@ P003-T043 起**不再有** `<数据根>/baseline.json` 与 `<数据根>/intel.js
 
 ### 8.3 案件目录长什么样
 
-syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间戳>-<摘要>-<随机后缀>/`（`syslog-case.js:94-98`）。目录里先是研判材料：
-
-| 文件 | 内容 | 证据 |
-| --- | --- | --- |
-| `00-这是什么.md` | 入口，说明先看哪份文件 | `syslog-case.js:102` |
-| `01-原始告警.txt` | syslog 原始报文 | `syslog-case.js:103` |
-| `02-告警字段.md` | 字段表 | `syslog-case.js:104` |
-| `03-研判事实.md` | 主机、时间、来源、命令、牧云匹配情况与 API 补充事件 | `syslog-case.js:105` |
-| `04-上下文.md` | 同会话时间窗、出现/投递次数、历史结论（**不含**研判背景：P003-T043 已砍） | `syslog-case.js:106` |
-| `03b-判据索引.md` | 本次可用判据编号（传入 wiki 时才有） | `syslog-case.js:108-111` |
+syslog 触发的告警会落一个目录，路径形如 `<cases>/<msgid>/<时间戳>-<摘要>-<随机后缀>/`（`syslog-case.js:94-98`）。目录里先是研判材料：五份固定文件（入口说明、原始告警、字段表、研判事实、上下文），传入知识库时多一份判据索引。
+**逐份文件写什么、依据在哪一行，唯一出处是 [modules/triage-pipeline.md](modules/triage-pipeline.md) 第 6.2 节**——
+本页只交代「案卷目录是这套后端的主要落地形态」这一层，不再复制一张表（跨层抄一份就是双权威）。
 
 研判结束后追加 `05-研判结果.md` 与 `result.json`（`syslog-case.js:140`）。模型在常规研判里可以用 `read_case_file` 工具读这些文件，但文件内容被当作**数据**而不是指令（工具描述写在 `investigation-agent.js:101-103`）。
 
@@ -608,7 +613,7 @@ node --test triage-rules.test.js   # 只跑一个文件
 | `wiki-current.test.js` | 当前生效判据与提示词是否一致（只读） |
 | `wiki.test.js` | 判据库读写、维护会话、发布与回放 |
 
-**本卡实测结果**（命令：`npm test`，即 `node --test --test-timeout=60000 --test-force-exit *.test.js`，198 条全绿，P003-T028 起）：
+**本卡实测结果**（命令：`npm test`，即 `node --test --test-timeout=60000 --test-force-exit *.test.js`；条数随卡递增，截至 P003-T055 是 235 条全绿——具体数字以 `docs/_meta/gaps.md` 第八节为准，2026-11-20）：
 
 ```
 ℹ tests 198
@@ -679,5 +684,22 @@ $ for p in /api/session /api/status /api/agent/status /api/updates /api/agent/pr
 2. **候选经验整理台未接线**。`knowledge-store.js` 与 `knowledge-workbench.js` 只被测试文件引用（第 4 节末）。
 3. **`createServer` 有两个没被路由使用的参数**：`maintenanceEntry`（`server.js:818`）与 `knowledge`（`server.js:815`）。
 4. **接口契约有两套真源**：`openapi.yaml` 与 `server.js` 的路由各自独立（第 11.3 节）。
+
+## 14. 资源与余量
+
+进程级硬上限只有这几处，各自有模块页作为权威。查容量先看这张索引再去细节页，本页不维护第二份数字：
+
+| 资源 | 硬上限 | 权威页 |
+| --- | --- | --- |
+| 请求正文 | 缺省 8192 字符，各路由按需要放宽（实测 12000～200000，见 `server.js` 的 `readJSON(req, N)`） | [modules/http-api.md](modules/http-api.md) 第 8.1 节 |
+| 日志文件 | 单文件 10 MiB 轮转，历史只留 5 份 | [modules/http-api.md](modules/http-api.md) 第 3.8 节 |
+| 一次研判 | 调查 6 轮、工具调用 8 次、结论退回 2 次 | [modules/investigation-agent.md](modules/investigation-agent.md) 第 3.2 节 |
+| 单条工具结果 | 超过 20000 字符不给模型看正文 | [modules/investigation-agent.md](modules/investigation-agent.md) 第 3.2 节 |
+| 研判队列 | 排队加在跑有限制，超出拒收并计数 | [modules/triage-pipeline.md](modules/triage-pipeline.md) 第 10 节 |
+| 白板 | 节点 64 个、单次追查 12 个节点、轮次 32 | [modules/trace-board.md](modules/trace-board.md) 第 6 节、第 8 节 |
+| 列表分页 | `count` 取 1 到 50、缺省 20（知识库列表不分页） | [modules/http-api.md](modules/http-api.md) 第 7 节 |
+
+**余量口径**：这些数字都是单进程内的硬编码或环境变量，没有跳进程配额、不回压到牧云侧、也不做自适应限流。
+超限一律走「拒收 + 计数」或「降级 + 记缺口」，不排队等锁；研判队列那一处还额外保证丢弃数只增不减（进程重启归零）。
 
 本页只描述现状。哪一处该改、改成什么样，是评审的活，不在本页范围内。

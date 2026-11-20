@@ -48,14 +48,16 @@ updated: 2026-11-20
 
 本模块导出六个符号（`grep -n '^export' evidence-view.js` 输出六行，命令见 §10.2）：
 
-| 导出 | 种类 | 用途 | 定义处 |
-| --- | --- | --- | --- |
-| `projectEvidence(tool, result)` | 函数 | 把 `(工具名, 原始返回)` 投成视图 | `evidence-view.js:164` |
-| `boundEvidenceView(view, maxChars)` | 函数 | 把视图裁到字符预算内 | `evidence-view.js:244` |
-| `agentDisplayLimits` | 冻结对象 | 模型侧展示上限：`timeline: 8`、`commands: 4`、`cmdlines: 4`（P003-T039 / P003-T040） | `evidence-view.js:281` |
-| `compactEvidenceView(view, limits)` | 函数 | 只裁嵌套序列展示行，计数一律保留（P003-T039） | `evidence-view.js:302` |
-| `boundSyslogView(view, maxChars=3000)` | 函数 | `syslog:1` 载荷视图的长度上限（P003-T039） | `evidence-view.js:341` |
-| `syslogOmittedFieldsLimit` | 常量 | 记账数组（`omitted_fields` / `truncated_fields`）最多列几个名字：40（P003-T040） | `evidence-view.js:331` |
+| 导出 | 种类 | 用途 | 定义处 | 单位 |
+| --- | --- | --- | --- | --- |
+| `projectEvidence(tool, result)` | 函数 | 把 `(工具名, 原始返回)` 投成视图 | `evidence-view.js:164` | — |
+| `boundEvidenceView(view, maxChars)` | 函数 | 把视图裁到字符预算内 | `evidence-view.js:244` | 字符 |
+| `agentDisplayLimits` | 冻结对象 | 模型侧展示上限：`timeline: 8`、`commands: 4`、`cmdlines: 4`（P003-T039 / P003-T040） | `evidence-view.js:281` | 行 |
+| `compactEvidenceView(view, limits)` | 函数 | 只裁嵌套序列展示行，计数一律保留（P003-T039） | `evidence-view.js:302` | 行 |
+| `boundSyslogView(view, maxChars=3000)` | 函数 | `syslog:1` 载荷视图的长度上限（P003-T039） | `evidence-view.js:341` | 字符 |
+| `syslogOmittedFieldsLimit` | 常量 | 记账数组（`omitted_fields` / `truncated_fields`）最多列几个名字：40（P003-T040） | `evidence-view.js:331` | 个 |
+
+表注：单位列只对带数值预算的条目写——`boundEvidenceView` 与 `boundSyslogView` 量的是字符，`agentDisplayLimits` / `compactEvidenceView` 量的是展示行；纯函数写「—」。
 
 业务代码里的调用点（本模块自带测试另有引用，见 `evidence-view.test.js:3`）：
 
@@ -188,12 +190,14 @@ timeline 另带五个统计（`evidence-view.js:144-150`）：`nonempty_request_
 
 ### 5.1 入参
 
-| 参数 | 出现在 | 类型 | 合法域 | 默认 | 越界怎么办 | 依据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `tool` | `projectEvidence` | 字符串 | 不校验格式 | 无 | 无 | `evidence-view.js:155` |
-| `result` | `projectEvidence` | 任意 JSON 值（对象、数组、字符串、数字、`null`） | 不校验 | 无 | 无 | `evidence-view.js:155` |
-| `view` | `boundEvidenceView` | 视图对象 | 不校验 | 无 | 非对象会在 `JSON.stringify` 后按字符串长度算 | `evidence-view.js:234-235` |
-| `maxChars` | `boundEvidenceView` | 整数（字符数） | 实测 0 与负数都走裁剪分支并返回带 `error` 的视图 | 12000 | 见 §9.2 | `evidence-view.js:234-235`、`evidence-view.js:254-255` |
+| 参数 | 出现在 | 类型 | 合法域 | 默认 | 越界怎么办 | 依据 | 单位 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `tool` | `projectEvidence` | 字符串 | 不校验格式 | 无 | 无 | `evidence-view.js:155` | — |
+| `result` | `projectEvidence` | 任意 JSON 值（对象、数组、字符串、数字、`null`） | 不校验 | 无 | 无 | `evidence-view.js:155` | — |
+| `view` | `boundEvidenceView` | 视图对象 | 不校验 | 无 | 非对象会在 `JSON.stringify` 后按字符串长度算 | `evidence-view.js:234-235` | — |
+| `maxChars` | `boundEvidenceView` | 整数（字符数） | 实测 0 与负数都走裁剪分支并返回带 `error` 的视图 | 12000 | 见 §9.2 | `evidence-view.js:234-235`、`evidence-view.js:254-255` | 字符 |
+
+表注：本节只有 `maxChars` 带量纲（字符），其余入参不含量纲，写「—」。
 
 ### 5.2 返回值
 

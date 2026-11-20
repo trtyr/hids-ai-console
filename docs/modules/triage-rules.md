@@ -46,12 +46,14 @@ updated: 2026-11-20
 
 ## 3 公开面
 
-| 能力 | 入口 | 正常返回 | 失败形式 |
-| --- | --- | --- | --- |
-| 校验规则集 | `validateRuleSet(config)`（triage-rules.js:126） | 原样返回入参（triage-rules.js:137） | 抛 `Error`，消息见第 5.1 节 |
-| 读当前规则集 | `TriageRuleEngine#readConfig()`（triage-rules.js:223） | `{ config, origin, revision }`（triage-rules.js:232、235-236） | 示例文件也非法时抛错（triage-rules.js:234） |
-| 保存规则集 | `TriageRuleEngine#saveConfig(config, expectedRevision)`（triage-rules.js:240） | `{ config, origin: 'file', revision }`（triage-rules.js:252） | 抛 `Error`；版本不符时 `error.status = 409`（triage-rules.js:245） |
-| 评估一条告警 | `TriageRuleEngine#evaluate({ alertId, parsed, toolbox, match })`（triage-rules.js:258） | `{ status, revision, ... }`（triage-rules.js:262-305） | 不抛错，失败以 `status: 'error'` 之类返回（triage-rules.js:263、267、277、280） |
+| 能力 | 入口 | 正常返回 | 失败形式 | 单位 |
+| --- | --- | --- | --- | --- |
+| 校验规则集 | `validateRuleSet(config)`（triage-rules.js:126） | 原样返回入参（triage-rules.js:137） | 抛 `Error`，消息见第 5.1 节 | — |
+| 读当前规则集 | `TriageRuleEngine#readConfig()`（triage-rules.js:223） | `{ config, origin, revision }`（triage-rules.js:232、235-236） | 示例文件也非法时抛错（triage-rules.js:234） | — |
+| 保存规则集 | `TriageRuleEngine#saveConfig(config, expectedRevision)`（triage-rules.js:240） | `{ config, origin: 'file', revision }`（triage-rules.js:252） | 抛 `Error`；版本不符时 `error.status = 409`（triage-rules.js:245） | — |
+| 评估一条告警 | `TriageRuleEngine#evaluate({ alertId, parsed, toolbox, match })`（triage-rules.js:258） | `{ status, revision, ... }`（triage-rules.js:262-305） | 不抛错，失败以 `status: 'error'` 之类返回（triage-rules.js:263、267、277、280） | — |
+
+表注：本表列能力与入参形状，不含量纲，一律「—」；带量纲的值见 §11.1。
 
 `evaluate` 的 `status` 取值只有这七个：`disabled`、`error`、`no_candidate`、
 `identity_unverified`、`candidate`、`observed`、`no_match`（triage-rules.js:262-305）。
@@ -424,15 +426,17 @@ updated: 2026-11-20
 
 ### 11.1 值语义
 
-| 值 | 出现在 | 类型与格式 | 空值与异常含义 |
-| --- | --- | --- | --- |
-| `revision` | `readConfig` / `saveConfig` / `evaluate` 的返回体 | 16 位十六进制字符串：规则集文件**文本**的 SHA-256 摘要前 16 位（triage-rules.js:231、252、268） | 文件不存在、回落到示例时是 `null`（triage-rules.js:231） |
-| `expectedRevision` | `saveConfig` 入参 | 必须是当前 `revision` 的同一个值（triage-rules.js:244） | 与当前值不相等 → 409（triage-rules.js:245） |
-| `alertId` | `evaluate` 入参 | `<事件类型>:<数字>`（triage-rules.js:270） | 数字部分不是正整数 → `identity_unverified`（triage-rules.js:275-276） |
-| `parsed` | `evaluate` 入参 | syslog 解析结果，用到 `payload.event_id`（triage-rules.js:275、190） | 不传则跳过 syslog 字段核对（triage-rules.js:189、275）；传了但 `payload` 缺失会被判身份不符 |
-| `match` | `evaluate` 入参 | 用到 `matched` 与 `event_id`（triage-rules.js:275） | 传了 `parsed` 就必须传 `match`，否则 `identity_unverified` |
-| `status` | `evaluate` 返回 | 七个取值，见第 3 节 | — |
-| `origin` | `readConfig` 返回 | 三个取值，见第 7 节 | — |
+| 值 | 出现在 | 类型与格式 | 空值与异常含义 | 单位 |
+| --- | --- | --- | --- | --- |
+| `revision` | `readConfig` / `saveConfig` / `evaluate` 的返回体 | 16 位十六进制字符串：规则集文件**文本**的 SHA-256 摘要前 16 位（triage-rules.js:231、252、268） | 文件不存在、回落到示例时是 `null`（triage-rules.js:231） | 字符 |
+| `expectedRevision` | `saveConfig` 入参 | 必须是当前 `revision` 的同一个值（triage-rules.js:244） | 与当前值不相等 → 409（triage-rules.js:245） | 字符 |
+| `alertId` | `evaluate` 入参 | `<事件类型>:<数字>`（triage-rules.js:270） | 数字部分不是正整数 → `identity_unverified`（triage-rules.js:275-276） | — |
+| `parsed` | `evaluate` 入参 | syslog 解析结果，用到 `payload.event_id`（triage-rules.js:275、190） | 不传则跳过 syslog 字段核对（triage-rules.js:189、275）；传了但 `payload` 缺失会被判身份不符 | — |
+| `match` | `evaluate` 入参 | 用到 `matched` 与 `event_id`（triage-rules.js:275） | 传了 `parsed` 就必须传 `match`，否则 `identity_unverified` | — |
+| `status` | `evaluate` 返回 | 七个取值，见第 3 节 | — | — |
+| `origin` | `readConfig` 返回 | 三个取值，见第 7 节 | — | — |
+
+表注：`revision` 与 `expectedRevision` 是 16 位十六进制指纹，按字符计；`alertId` / `parsed` / `match` / `status` / `origin` 是标识或枚举，写「—」。
 
 ### 11.2 怎么验（可复跑命令）
 

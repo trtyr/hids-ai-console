@@ -1,3 +1,10 @@
+---
+type: module
+id: MOD-TRACE-BOARD
+covers: [trace-board.js]
+updated: 2026-11-20
+---
+
 # 深度溯源白板 · trace-board
 
 这篇讲一个模块：`trace-board.js`。它把「一条告警」或「一个 IP」变成一张可追溯的白板——节点是资产与 IP，边是它们之间的关系，
@@ -38,18 +45,20 @@
 
 ### 2.1 类与函数
 
-| 能力 | 入口 | 证据 |
-| --- | --- | --- |
-| 开一张新白板并启动追查 | `TraceBoardService.start` | `trace-board.js:326-369`、`trace-board.js:358-359` |
-| 读一张白板 | `TraceBoardService.get` | `trace-board.js:297-307` |
-| 列白板（按更新时间倒序，返回数组） | `TraceBoardService.list` | `trace-board.js:294-295` |
-| 分页列白板（回 `{ boards, total }`） | `TraceBoardService.page` | `trace-board.js:282-292` |
-| 全量摘要（`list`／`page` 共用，读目录并排序） | `TraceBoardService.summaries` | `trace-board.js:268-280` |
-| 调查一个节点 | `TraceBoardService.investigate` | `trace-board.js:371-374` |
-| 跑一轮自主追查 | `TraceBoardService.explore` | `trace-board.js:505-513` |
-| 保存白板 | `TraceBoardService.save` | `trace-board.js:309-322` |
-| 造告警起点的初始白板 | `traceBoardSeed` | `trace-board.js:158-186` |
-| 造 IP 起点的初始白板 | `traceIpSeed` | `trace-board.js:188-202` |
+| 能力 | 入口 | 证据 | 单位 |
+| --- | --- | --- | --- |
+| 开一张新白板并启动追查 | `TraceBoardService.start` | `trace-board.js:326-369`、`trace-board.js:358-359` | — |
+| 读一张白板 | `TraceBoardService.get` | `trace-board.js:297-307` | — |
+| 列白板（按更新时间倒序，返回数组） | `TraceBoardService.list` | `trace-board.js:294-295` | — |
+| 分页列白板（回 `{ boards, total }`） | `TraceBoardService.page` | `trace-board.js:282-292` | — |
+| 全量摘要（`list`／`page` 共用，读目录并排序） | `TraceBoardService.summaries` | `trace-board.js:268-280` | — |
+| 调查一个节点 | `TraceBoardService.investigate` | `trace-board.js:371-374` | — |
+| 跑一轮自主追查 | `TraceBoardService.explore` | `trace-board.js:505-513` | — |
+| 保存白板 | `TraceBoardService.save` | `trace-board.js:309-322` | — |
+| 造告警起点的初始白板 | `traceBoardSeed` | `trace-board.js:158-186` | — |
+| 造 IP 起点的初始白板 | `traceIpSeed` | `trace-board.js:188-202` | — |
+
+表注：本表列能力入口，不含量纲，一律「—」；节点、调查次数、轮次的数量上限见第 6、8 节。
 
 各能力的细节在第 5 节按构件逐段展开。
 
