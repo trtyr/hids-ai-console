@@ -1,0 +1,38 @@
+# P003-T054 tester 亲跑记录（2026-11-20T06:55:23Z）
+## npm test
+ℹ tests 235
+ℹ pass 235
+ℹ fail 0
+ℹ todo 0
+npm_exit=0
+## evidence/test/P003-T054/*.test.js
+ℹ tests 15
+ℹ pass 15
+ℹ fail 0
+## p003-t012-verify
+ℹ tests 17
+ℹ pass 17
+ℹ fail 0
+## p003-t018-verify
+ℹ tests 9
+ℹ pass 9
+ℹ fail 0
+## evidence 全量套件（node --test --test-timeout=120000 --test-force-exit evidence/test/*/*.test.js）
+ℹ tests 449
+ℹ pass 448
+ℹ fail 0
+ℹ todo 1
+suite_exit=0
+## p003-t047-verify 单跑
+ℹ tests 17
+ℹ pass 17
+ℹ fail 0
+## p003-t047-verify 两份并发
+A_exit=0
+B_exit=0
+A: ℹ tests 17
+A: ℹ pass 17
+A: ℹ fail 0
+B: ℹ tests 17
+B: ℹ pass 17
+B: ℹ fail 0
