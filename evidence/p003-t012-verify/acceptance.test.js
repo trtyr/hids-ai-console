@@ -1,6 +1,9 @@
 // P003-T012 后端验收（黑盒）：只按 docs/modules/investigation-agent.md §3.8 / §4 与
 // docs/modules/triage-pipeline.md 写断言，不参考实现文件内容。
 // 跑法：node --test evidence/p003-t012-verify/acceptance.test.js
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 wiki-store.js / rule-store.js 求值前把
+// HIDS_DATA_DIR 指到本进程的临时根，否则 `new WikiStore()` 的缺省目录会整目录种子进真全局根（实测影子根 209 条目）。
+import { assertIsolatedRoot } from '../test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -16,6 +19,8 @@ import { KnowledgeStore } from '../../knowledge-store.js';
 import { KnowledgeWorkbench, knowledgeFields } from '../../knowledge-workbench.js';
 
 const REVIEW_OK = { assessment: 'supported', concerns: [], missing_evidence: [] };
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 // 按脚本触发工具调用；tools 为空数组的那次调用是独立复核（doc §3.3）。
 function scriptedModel(steps) {
@@ -183,7 +188,9 @@ test('A2 真判据库：wiki_search 的每条命中都记进 consulted', async (
   const result = await new InvestigationAgent(toolboxFor('suspicious_operation', suspiciousEvent), model,
     undefined, new WikiStore(), new RuleStore('rules')).run('suspicious_operation:7', { mode: 'triage' });
 
-  assert.deepEqual([...result.verdict.wiki.consulted].sort(), ['GEN-12', 'SC-15']);
+  // 注入临时根后按仓内种子读：`wiki/common/GEN-13.md`（applies_to: [common]）也在命中里。
+  // 曾写成 ['GEN-12','SC-15']——那能绿只因本机真全局根里的 wiki/ 副本还停在加 GEN-13 之前，属假绿。
+  assert.deepEqual([...result.verdict.wiki.consulted].sort(), ['GEN-12', 'GEN-13', 'SC-15']);
   assert.deepEqual(result.verdict.wiki.adopted, ['SC-15']);
 });
 

@@ -1,5 +1,9 @@
 // P003-T018 黑盒验收（tester 何东阳）：只按 docs/api（openapi.yaml）+ docs/modules/http-api.md 断言，
 // 全程走真 HTTP + 真 TriageMonitor，不碰实现文件。
+// 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js 求值前把 HIDS_DATA_DIR 指到本进程的
+// 临时根，否则 createServer 的缺省 fpSessions 会往 ~/.local/share/hids-ai-console/fp-sessions 写误报会话
+// （实测单跑 8/8 绿、真全局根 +3 份）。
+import { assertIsolatedRoot } from '../test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -10,6 +14,8 @@ import { TriageMonitor } from '../../triage-monitor.js';
 import { InvestigationStore } from '../../investigation-store.js';
 
 const TRIAGE_ID = 'honeypot:11';
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 const verdictOf = (verdict, verdictLabel, summary, evidenceId) => ({
   verdict: { verdict, verdict_label: verdictLabel, summary, report: `${summary}的报告`,

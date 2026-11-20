@@ -40,6 +40,8 @@ files=(
   evidence/test/P003-T046/investigation-replay.test.js
   evidence/test/P003-T046/model-call-events.test.js
   evidence/test/P003-T046/tester-http-acceptance.test.js
+  evidence/p003-t012-verify/acceptance.test.js
+  evidence/p003-t018-verify/acceptance.test.js
 )
 guard=evidence/test/P003-T034/global-root-isolation.test.js
 summary() { grep -E "^ℹ (pass|fail)" | tr '\n' ' '; }
@@ -73,8 +75,9 @@ sed -i 's|^  process.env.HIDS_DATA_DIR = isolatedRoot;$|  // 变异：注入语�
 for file in evidence/test/P003-T013/acceptance.test.js evidence/test/P003-T039/context-slim.test.js agent-api.test.js; do
   mutated_home=$(mktemp -d)
   own=$(env -i PATH="$PATH" HOME="$mutated_home" timeout 180 node --test --test-timeout=60000 --test-force-exit "$file" 2>&1)
+  own_exit=$?        # 必须紧接命令替换取 —— 先跑 rm 再取 $? 拿到的是 rm 的 0（首版就这么把证据写成 exit=0）
   rm -rf "$mutated_home"
-  say "  $file：exit=$?  $(grep -E '^✖ 全局根隔离' <<<"$own" | head -1)"
+  say "  $file：exit=$own_exit  $(grep -E '^✖ 全局根隔离' <<<"$own" | head -1)"
 done
 git checkout -- evidence/test/P003-T034/isolate-data-root.js
 say

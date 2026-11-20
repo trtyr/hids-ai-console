@@ -3,9 +3,9 @@
 //   A3 首启种全局根：不设 `HIDS_DATA_DIR`、HOME 指向临时家目录 → 首启把仓内 `wiki/` 与 `rules/`
 //      种子到 `<HOME>/.local/share/hids-ai-console/`；二次启动不重种（改过的页面不被仓内副本盖回）。
 //      「不靠真实 HOME 观察」= 断言全写在临时家目录里，跟开发机上的运行态无关。
-//   A2/A4 隔离守卫：起子进程把**全量测试**（`evidence/test/**` 套件 + 根目录 `npm test` 那套）在临时 HOME 下
+//   A2/A4 隔离守卫：起子进程把**全量测试**（整个 `evidence/**` 套件 + 根目录 `npm test` 那套）在临时 HOME 下
 //      跑一遍，跑完那个「影子全局根」必须零文件。哪个文件没注入临时根（或者将来新加一个没注入的），就写/种在那儿，
-//      这条立刻红。两套都罩：`npm test` 是主门，只罩 evidence 就等于放过了主门。
+//      这条立刻红。两套都罩：`npm test` 是主门，只罩 evidence/test 就等于放过了主门与 verify 件。
 //      真全局根零痕迹（A4）是同一件事的另一面：套件连它的门都摸不到（`dataRoot()` 跟 HOME 走）。
 //
 // 两个子进程都用 `{ PATH, HOME }` 的干净环境：**故意不给 `HIDS_DATA_DIR`**，注入只能来自被测文件自己——
@@ -21,7 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const evidenceRoot = path.join(repository, 'evidence', 'test');
+const evidenceHome = path.join(repository, 'evidence');
 const selfName = path.basename(fileURLToPath(import.meta.url));
 const globalRootOf = home => path.join(home, '.local', 'share', 'hids-ai-console');
 const urlOf = name => `file://${path.join(repository, name)}`;
@@ -119,8 +119,10 @@ test('A3 首启把仓内 wiki/ 与 rules/ 种子进 <HOME>/.local/share/hids-ai-
 });
 
 // ── A2/A4：全量测试的隔离守卫 ────────────────────────────────────────────
-// 两套一起罩：`evidence/test/**` 的逐卡验证件 + 根目录 `*.test.js`（`npm test` 那一套）。本文件自己排除
-// （不然守卫跑守卫，无限递归）。
+// 两套一起罩：整个 `evidence/**`（逐卡验证件 `evidence/test/**` **以及** `evidence/p003-*-verify/**`）
+// + 根目录 `*.test.js`（`npm test` 那一套）。本文件自己排除（不然守卫跑守卫，无限递归）。
+// 首版只 walk `evidence/test`，把三份 `p003-*-verify/acceptance.test.js` 整片漏在罩外——
+// 复审判词实测 `p003-t018-verify` 单跑 8/8 绿却往真全局根写了 3 份 `fp-sessions`。所以从 `evidence/` 根走。
 async function suiteFiles() {
   const found = [];
   const walk = async directory => {
@@ -130,10 +132,14 @@ async function suiteFiles() {
       else if (entry.name.endsWith('.test.js') && entry.name !== selfName) found.push(full);
     }
   };
-  await walk(evidenceRoot);
+  await walk(evidenceHome);
   for (const entry of await readdir(repository, { withFileTypes: true }))
     if (entry.isFile() && entry.name.endsWith('.test.js') && entry.name !== selfName)
       found.push(path.join(repository, entry.name));
+  // 罩面自证：verify 件曾经整片漏在罩外，这里逐个点名，别再让它悄悄缩回去。
+  for (const directory of ['p003-t012-verify', 'p003-t018-verify', 'p003-t047-verify'])
+    assert.ok(found.some(file => file.endsWith(path.join(directory, 'acceptance.test.js'))),
+      `${directory}/acceptance.test.js 不在守卫罩面里`);
   return found.sort();
 }
 
