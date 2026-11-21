@@ -18,11 +18,11 @@ import { createServer } from '../../../server.js';
 import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
-import { PromptStore } from '../../../prompt-store.js';
+import { PromptStore } from '../../../src/contexts/knowledge/infrastructure/prompt-store.js';
 import { RegoRuleMaintainer } from '../../../server.js';
-import { RuleSessionStore, RuleStore, seedLibrary } from '../../../rule-store.js';
-import { WikiWorkbench } from '../../../wiki-workbench.js';
-import { WikiStore } from '../../../wiki-store.js';
+import { RuleSessionStore, RuleStore, seedLibrary } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
+import { WikiWorkbench } from '../../../src/contexts/maintenance/application/wiki-workbench.js';
+import { WikiStore } from '../../../src/contexts/knowledge/infrastructure/wiki-store.js';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 

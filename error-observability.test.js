@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
-import { WikiStore } from './wiki-store.js';
+import { WikiStore } from './src/contexts/knowledge/infrastructure/wiki-store.js';
 import { createServer } from './server.js';
 
 // 进程内起服务：假上游全部是本地替身，不碰真实网络 / 真实时钟。

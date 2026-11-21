@@ -10,7 +10,7 @@ test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，�
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from '../../../server.js';
-import { FP_DECISION_SOURCES } from '../../../fp-maintainer.js';
+import { FP_DECISION_SOURCES } from '../../../src/contexts/maintenance/application/fp-maintainer.js';
 import { CASE_ID, REASON, TARGET_PAGE, WHO, stack } from './helpers.js';
 
 const FP_PATH = `/api/agent/triage/${encodeURIComponent(CASE_ID)}/false-positive`;

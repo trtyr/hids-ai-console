@@ -9,7 +9,7 @@ import { createServer } from './server.js';
 import { createConfigStore } from './config-store.js';
 import { createMaintenanceServer } from './maintenance-server.js';
 import { UpdateStore } from './update-store.js';
-import { PromptStore } from './prompt-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
 import { auditEvent, redactValues, AUDIT_ACTIONS } from './src/contexts/audit/domain/audit-event.js';

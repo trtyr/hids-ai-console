@@ -13,7 +13,7 @@ import path from 'node:path';
 import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
 import { InvestigationAgent, replayInvestigation } from '../../../src/contexts/triage/application/investigation-agent.js';
 import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
-import { PromptStore } from '../../../prompt-store.js';
+import { PromptStore } from '../../../src/contexts/knowledge/infrastructure/prompt-store.js';
 import { createServer } from '../../../server.js';
 
 const listen = async (t, server) => {

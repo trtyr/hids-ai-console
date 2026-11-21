@@ -20,7 +20,7 @@ const { InvestigationAgent } = await import(path.join(base, 'investigation-agent
 const { InvestigationStore } = await import(path.join(base, 'investigation-store.js'));
 const { TriageMonitor } = await import(path.join(base, 'triage-monitor.js'));
 const { ChatModelClient } = await import(path.join(base, 'model-client.js'));
-const { WikiStore } = await import(path.join(base, 'wiki-store.js'));
+const { WikiStore } = await import(path.join(base, 'src/contexts/knowledge/infrastructure/wiki-store.js'));
 
 let failed = 0;
 const ok = (name, fn) => {

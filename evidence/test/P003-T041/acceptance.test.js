@@ -10,8 +10,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RegoRuleMaintainer, createServer } from '../../../server.js';
-import { RuleSessionStore, RuleStore, ruleRevision } from '../../../rule-store.js';
-import { WikiStore } from '../../../wiki-store.js';
+import { RuleSessionStore, RuleStore, ruleRevision } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
+import { WikiStore } from '../../../src/contexts/knowledge/infrastructure/wiki-store.js';
 
 // P003-T041 验收替身（A1/A2/A4/A5/A6/A8）：起真 createServer、注入临时库，
 // 按「维护者改一条规则 → 外置库变更 → 历史有副本 → 回滚生效」整条链验一遍，另验种子只初始化一次。
@@ -274,7 +274,7 @@ test('A8 判据库同一条口径：数据根无库时种子一次，二次启�
     else process.env.HIDS_DATA_DIR = previous;
   });
   // 缺省目录在模块加载时定：带 query 拿一份新实例，才认得出新的数据根（与 P003-T034 测试同一手法）
-  const first = await import(`../../../wiki-store.js?seed=${Date.now()}`);
+  const first = await import(`../../../src/contexts/knowledge/infrastructure/wiki-store.js?seed=${Date.now()}`);
   const store = new first.WikiStore();
   assert.equal(store.directory, path.join(dataRootDir, 'wiki'));
   const listed = await store.list();
@@ -284,14 +284,14 @@ test('A8 判据库同一条口径：数据根无库时种子一次，二次启�
   // 在数据根库上改一页：下一份实例（＝下一次启动）读到的必须是改过的，不能被仓库副本盖回
   const page = await store.get('honeypot/HP-10.md');
   await store.update('honeypot/HP-10.md', page.content.replace('蜜罐', '蜜罐（外置库改过）'), page.revision);
-  const second = await import(`../../../wiki-store.js?seed2=${Date.now()}`);
+  const second = await import(`../../../src/contexts/knowledge/infrastructure/wiki-store.js?seed2=${Date.now()}`);
   const reopened = new second.WikiStore();
   assert.match((await reopened.get('honeypot/HP-10.md')).content, /外置库改过/, '二次启动把仓库副本盖回去了');
   assert.equal((await reopened.list()).length, listed.length);
 
   // SOP 也读这本库（A6）：提示词装载看得到外置库的改动。
   // `prompt-store.js` 的库目录同样是模块加载时定的，所以带 query 取一份新实例。
-  const freshPrompts = await import(`../../../prompt-store.js?sop=${Date.now()}`);
+  const freshPrompts = await import(`../../../src/contexts/knowledge/infrastructure/prompt-store.js?sop=${Date.now()}`);
   const prompts = await new freshPrompts.PromptStore(path.join(base, 'no-overrides.json')).load();
   assert.match(prompts.sop.honeypot, /外置库改过/, 'SOP 还在读仓内 wiki/ 副本');
 });

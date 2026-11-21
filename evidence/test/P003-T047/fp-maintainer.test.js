@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { useJournal } from '../../../src/shared/logging/log.js';
-import { FP_AUTO_VERDICT, FP_DOMAIN, FP_LIBRARIES, maintenanceSide, maintenanceSides } from '../../../fp-maintainer.js';
+import { FP_AUTO_VERDICT, FP_DOMAIN, FP_LIBRARIES, maintenanceSide, maintenanceSides } from '../../../src/contexts/maintenance/application/fp-maintainer.js';
 import { CASE_ID, REASON, TARGET_PAGE, WHO, readSession, stack } from './helpers.js';
 
 const decideWith = libraries => () => JSON.stringify({ libraries, why: `这一轮动 ${libraries.join('、') || '无'}：案卷与两库对不上` });

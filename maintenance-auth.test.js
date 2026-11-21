@@ -4,7 +4,7 @@ import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMaintenanceServer } from './maintenance-server.js';
-import { PromptStore } from './prompt-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { UpdateStore } from './update-store.js';
 
 async function listen(t,server) {

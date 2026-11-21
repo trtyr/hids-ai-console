@@ -291,7 +291,7 @@ test('A2/A5 HIDS_WIKI_DIR 注入：判据历史落判据库同级 .data/wiki-his
   const original = await readFile(path.join(repository, 'wiki', 'common', 'GEN-01.md'), 'utf8');
 
   await reviseWikiPage(t, {
-    modulePath: path.join(repository, 'wiki-store.js'),
+    modulePath: path.join(repository, 'src/contexts/knowledge/infrastructure/wiki-store.js'),
     env: { HOME: home, HIDS_DATA_DIR: data, HIDS_WIKI_DIR: externalWiki }
   });
 
@@ -314,7 +314,7 @@ test('A2/A5 构造参数注入判据库目录：历史同样跟判据库走（�
   const data = path.join(await tempDir(t, 'hids-t034-data-'), 'root');
 
   await reviseWikiPage(t, {
-    modulePath: path.join(repository, 'wiki-store.js'),
+    modulePath: path.join(repository, 'src/contexts/knowledge/infrastructure/wiki-store.js'),
     directory: externalWiki,
     env: { HOME: home, HIDS_DATA_DIR: data }
   });
@@ -326,7 +326,7 @@ test('A1/A5 内置 wiki/：判据历史落数据根 wiki-history/，部署目录
   const tree = await copyBackend(t);
   const home = await tempDir(t, 'hids-t034-home-');
   await reviseWikiPage(t, {
-    modulePath: path.join(tree, 'wiki-store.js'),
+    modulePath: path.join(tree, 'src/contexts/knowledge/infrastructure/wiki-store.js'),
     env: { HOME: home } // 不设 HIDS_DATA_DIR、不设 HIDS_WIKI_DIR → 内置 wiki/ + 默认数据根
   });
   const historyDir = path.join(globalRootOf(home), 'wiki-history');
@@ -340,7 +340,7 @@ test('A2/A5 提示词覆盖文件默认落数据根；HIDS_PROMPT_STORE_FILE 仍
   const home = await tempDir(t, 'hids-t034-home-');
   const data = path.join(await tempDir(t, 'hids-t034-data-'), 'root');
   const script = [
-    `import { PromptStore } from ${JSON.stringify(pathToFileURL(path.join(repository, 'prompt-store.js')).href)};`,
+    `import { PromptStore } from ${JSON.stringify(pathToFileURL(path.join(repository, 'src/contexts/knowledge/infrastructure/prompt-store.js')).href)};`,
     'const store = new PromptStore();',
     'const loaded = await store.load();',
     "await store.update('triage', loaded.prompts.triage, loaded.revision);",

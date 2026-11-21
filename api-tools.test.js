@@ -1,6 +1,6 @@
 // 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
 // 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（wiki/rules 读→种子，fp-sessions 写）。
-import { PromptStore } from './prompt-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, readdir, rename, stat as statFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { repositoryRoot } from '../../../shared/data-root.js';
 
 const defaultDirectory = process.env.HIDS_WIKI_DIR || wikiLibraryDirectory(); // 库目录与历史落点见文件末尾
 const idPattern = /^[A-Z]{2,3}-\d+[a-z]?$/;
@@ -410,7 +411,7 @@ export class WikiStore {
 // 「设了 HIDS_WIKI_DIR 就当数据根库」，历史就落到数据根，与上面这条规则相反（P003-T034 复审打回的那条）。
 // 仓内 `wiki/` 这个分支留着：单测/探针显式传仓内目录时，历史仍落数据根，不往仓库里写（P003-T034 A3）。
 function builtinWikiDirectory() {
-  return path.join(path.dirname(fileURLToPath(import.meta.url)), 'wiki');
+  return path.join(repositoryRoot(), 'wiki');
 }
 
 /** 判据库缺省目录：数据根下的 `wiki/`（`HIDS_WIKI_DIR` 仍可整个换掉，见文件头 `defaultDirectory`）。 */
@@ -437,7 +438,7 @@ export function ensureWikiLibrary() {
   return wikiSeeded;
 }
 
-import { dataRoot } from './config-store.js';
+import { dataRoot } from '../../../shared/data-root.js';
 import { seedLibrary } from './rule-store.js';
 
 // P003-T039 A4：判据页给模型的常驻形态不是整页正文，而是「编号 + 标题 + 要点摘要」；

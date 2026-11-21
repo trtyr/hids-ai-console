@@ -17,8 +17,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { CloudwalkerGateway, eventTypes, rpcMethods } from '../../../src/contexts/ingestion/infrastructure/gateway.js';
-import { RuleStore } from '../../../rule-store.js';
-import { WikiStore } from '../../../wiki-store.js';
+import { RuleStore } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
+import { WikiStore } from '../../../src/contexts/knowledge/infrastructure/wiki-store.js';
 import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');

@@ -10,7 +10,7 @@ import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
 import { recordFailure, reasonForRecord } from '../../../src/shared/redaction.js';
 import { parseSyslog } from '../../../src/contexts/ingestion/application/parsing.js';
 import { matchSyslogEvent, writeSyslogCase } from '../../../src/contexts/triage/application/correlate.js';
-import { runWikiReplay } from '../../../wiki-replay.js';
+import { runWikiReplay } from '../../../src/contexts/maintenance/application/wiki-replay.js';
 import { KnowledgeStore } from '../../../knowledge-store.js';
 import { KnowledgeWorkbench } from '../../../knowledge-workbench.js';
 import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';

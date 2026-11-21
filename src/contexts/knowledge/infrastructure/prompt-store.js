@@ -2,8 +2,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { repositoryRoot } from '../../../shared/data-root.js';
 
-const defaults = path.dirname(fileURLToPath(import.meta.url));
+const defaults = repositoryRoot();
 const promptDir = path.join(defaults, 'prompts');
 const sopDir = path.join(promptDir, 'sop');
 // SOP 12 个场景的正文来自判据库（P003-T041）：判据库活数据住数据根（`wiki-store.js` 的
@@ -129,5 +130,5 @@ export class PromptStore {
 // 仓库运行时不写任何东西。
 // import 放文件末尾（ESM 会提升，模块顶层就能用）是为了不挪动上面所有 `prompt-store.js:NNN` 引用的行号；
 // `server.js` 末尾的 runtimePaths() 是同一个理由。
-import { dataRoot } from './config-store.js';
+import { dataRoot } from '../../../shared/data-root.js';
 import { ensureWikiLibrary, wikiLibraryDirectory } from './wiki-store.js';

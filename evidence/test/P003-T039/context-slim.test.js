@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
 import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
-import { WikiStore, pageExcerpts, pageSummary } from '../../../wiki-store.js';
+import { WikiStore, pageExcerpts, pageSummary } from '../../../src/contexts/knowledge/infrastructure/wiki-store.js';
 import { boundSyslogView, compactEvidenceView, projectEvidence } from '../../../src/contexts/triage/infrastructure/evidence-view.js';
 
 const wiki = new WikiStore(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'wiki'));
@@ -327,7 +327,7 @@ test('A8 Wiki 摘要与命中段：摘要取首段要点，命中段按关键词
 });
 
 test('A8 triage 提示词不再重复 submit_conclusion 的字段模板', async () => {
-  const { PromptStore } = await import('../../../prompt-store.js');
+  const { PromptStore } = await import('../../../src/contexts/knowledge/infrastructure/prompt-store.js');
   const prompts = await new PromptStore(path.join(path.dirname(fileURLToPath(import.meta.url)), 'no-overrides.json')).load();
   assert.equal(/"false_positive_reason":/.test(prompts.prompts.triage), false);
   assert.match(prompts.prompts.triage, /submit_conclusion/);

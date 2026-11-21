@@ -6,7 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const work = process.argv[2] ?? '/tmp/t057-bnd';
-const {PromptStore} = await import('file://' + path.resolve(process.cwd(), 'prompt-store.js'));
+const {PromptStore} = await import('file://' + path.resolve(process.cwd(), 'src/contexts/knowledge/infrastructure/prompt-store.js'));
 
 const rel = {
   version: 'demo-x', sequence: 1, title: 't', summary: 's',

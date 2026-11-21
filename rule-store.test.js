@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { RuleStore } from './rule-store.js';
+import { RuleStore } from './src/contexts/knowledge/infrastructure/rule-store.js';
 import { createServer } from './server.js';
 
 // 一条规则的 Rego 文本：package + 显示名 + 一个 match 体。

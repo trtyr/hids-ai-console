@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { recordFailure } from './src/shared/redaction.js';
-import { VERDICT_LABELS as names } from './src/contexts/triage/domain/triage-case.js';
+import { recordFailure } from '../../../shared/redaction.js';
+import { VERDICT_LABELS as names } from '../../triage/domain/triage-case.js';
 
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const verdicts = new Set(['threat', 'uncertain', 'false_positive']);

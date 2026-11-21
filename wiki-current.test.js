@@ -7,8 +7,8 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { PromptStore } from './prompt-store.js';
-import { WikiStore } from './wiki-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
+import { WikiStore } from './src/contexts/knowledge/infrastructure/wiki-store.js';
 import { createServer } from './server.js';
 
 // 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。

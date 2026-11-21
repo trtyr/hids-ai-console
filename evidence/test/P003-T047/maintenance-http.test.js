@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createServer } from '../../../server.js';
-import { FP_AUTO_VERDICT, FpSessionStore } from '../../../fp-maintainer.js';
+import { FP_AUTO_VERDICT, FpSessionStore } from '../../../src/contexts/maintenance/application/fp-maintainer.js';
 
 const ALERT_ID = 'syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43';
 const FP_PATH = `/api/agent/triage/${encodeURIComponent(ALERT_ID)}/false-positive`;

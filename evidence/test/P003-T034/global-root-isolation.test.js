@@ -30,8 +30,8 @@ const urlOf = name => `file://${path.join(repository, name)}`;
 // 首次读会从仓内 `wiki/`、`rules/` 整目录种子一次（`wiki-store.js` 的 ensureWikiLibrary / `rule-store.js` 的 ready）。
 const SEED_SCRIPT = `
 const { dataRoot } = await import(${JSON.stringify(urlOf('config-store.js'))});
-const { WikiStore } = await import(${JSON.stringify(urlOf('wiki-store.js'))});
-const { RuleStore } = await import(${JSON.stringify(urlOf('rule-store.js'))});
+const { WikiStore } = await import(${JSON.stringify(urlOf('src/contexts/knowledge/infrastructure/wiki-store.js'))});
+const { RuleStore } = await import(${JSON.stringify(urlOf('src/contexts/knowledge/infrastructure/rule-store.js'))});
 const pages = await new WikiStore().list();
 const rules = await new RuleStore().list();
 console.log(JSON.stringify({ root: dataRoot(), pages: pages.length, rules: rules.count }));

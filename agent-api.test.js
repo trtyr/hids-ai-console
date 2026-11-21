@@ -7,11 +7,11 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, createAnalysisProvider, RegoRuleMaintainer } from './server.js';
-import { RuleStore } from './rule-store.js';
+import { RuleStore } from './src/contexts/knowledge/infrastructure/rule-store.js';
 import { TraceBoardService } from './src/contexts/trace/application/trace-service.js';
 import { BoardStore } from './src/contexts/trace/infrastructure/board-store.js';
 import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
-import { PromptStore } from './prompt-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 
 // 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。

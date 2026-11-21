@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { cp, mkdir, readdir, readFile, rename, rm, stat as statFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { repositoryRoot } from '../../../shared/data-root.js';
 
 // Rego 规则库（P003-T011）。
 //
@@ -409,7 +410,7 @@ export function ruleSessionsDirectory() {
 
 /** 仓内 `rules/`：种子源，也是「这本库原本长什么样」的出处。进程只读它。 */
 function repositoryRulesDirectory() {
-  return path.join(path.dirname(fileURLToPath(import.meta.url)), 'rules');
+  return path.join(repositoryRoot(), 'rules');
 }
 
 function seedSourceFor(directory) {
@@ -478,4 +479,4 @@ export class RuleSessionStore {
   }
 }
 
-import { dataRoot } from './config-store.js';
+import { dataRoot } from '../../../shared/data-root.js';

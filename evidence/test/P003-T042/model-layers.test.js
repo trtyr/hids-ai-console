@@ -22,7 +22,7 @@ import { InvestigationAgent } from '../../../src/contexts/triage/application/inv
 import { createServer, applyLiveConfig, configSummary } from '../../../server.js';
 import { RegoRuleMaintainer } from '../../../server.js';
 import { createConfigStore, WRITABLE_CONFIG_KEYS } from '../../../config-store.js';
-import { WikiWorkbench } from '../../../wiki-workbench.js';
+import { WikiWorkbench } from '../../../src/contexts/maintenance/application/wiki-workbench.js';
 import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';;
 import { createModelRolesFromEnv, modelRoleSummary, MODEL_ROLES,
   MODEL_ROLE_GROUPS } from '../../../src/contexts/triage/infrastructure/model-client.js';

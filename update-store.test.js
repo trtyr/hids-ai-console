@@ -7,7 +7,7 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { PromptStore } from './prompt-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { UpdateStore, sealPackage } from './update-store.js';
 import { createMaintenanceServer } from './maintenance-server.js';
 import { createServer } from './server.js';

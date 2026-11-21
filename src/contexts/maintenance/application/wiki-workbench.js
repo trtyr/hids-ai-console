@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { eventTypes } from './src/shared/vocabulary.js';
+import { eventTypes } from '../../../shared/vocabulary.js';
 import { replayProposalHash, runWikiReplay } from './wiki-replay.js';
-import { traceModelCall } from './src/shared/logging/log.js';
+import { traceModelCall } from '../../../shared/logging/log.js';
 
 const validId = value => /^[0-9a-f-]{36}$/i.test(value || '');
 const parse = text => {

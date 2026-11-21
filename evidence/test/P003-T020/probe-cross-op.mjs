@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RegoRuleMaintainer } from '../../../server.js';
-import { RuleStore } from '../../../rule-store.js';
+import { RuleStore } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
 
 const ORIGINAL = `package hids.rules.webshell_drop
 

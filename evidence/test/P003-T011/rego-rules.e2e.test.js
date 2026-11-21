@@ -24,7 +24,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createServer } from '../../../server.js';
-import { RuleStore } from '../../../rule-store.js';
+import { RuleStore } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');

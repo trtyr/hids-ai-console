@@ -4,7 +4,7 @@
 import { cp, copyFile, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RuleStore } from '../../../rule-store.js';
+import { RuleStore } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
 
 let pass = 0; const fails = [];
 const ok = (cond, label, detail = '') => {

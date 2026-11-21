@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-PROMPT-STORE
-covers: [prompt-store.js]
+covers: [src/contexts/knowledge/infrastructure/prompt-store.js]
 updated: 2026-11-20
 ---
 

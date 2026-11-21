@@ -179,7 +179,7 @@ function scriptedReply(index, messages, tools) {
 export async function measure(tree = repoRoot) {
   const load = name => import(pathToFileURL(path.join(tree, name)));
   const [{ InvestigationAgent }, { AgentToolbox }, wikiModule] = await Promise.all([
-    load('investigation-agent.js'), load('agent-tools.js'), load('wiki-store.js')]);
+    load('investigation-agent.js'), load('agent-tools.js'), load('src/contexts/knowledge/infrastructure/wiki-store.js')]);
   const wiki = new wikiModule.WikiStore(path.join(tree, 'wiki'));
   const knowledgeStore = {
     agentIndex: (...args) => wiki.agentIndex(...args),

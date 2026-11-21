@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { runtimePaths } from '../../../server.js';
 import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { writeSyslogCase } from '../../../src/contexts/triage/application/correlate.js';
-import { WikiStore } from '../../../wiki-store.js';
+import { WikiStore } from '../../../src/contexts/knowledge/infrastructure/wiki-store.js';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const wikiDirectory = path.join(repository, 'wiki');

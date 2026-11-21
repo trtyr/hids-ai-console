@@ -4,7 +4,7 @@
 // 做法：替身模型 / 替身牧云，不碰真网络与真时钟；可检索标记 `SECRET_BODY_MARKER` 放进**错误原文**，
 // 断言它一个字都不落进研判记录（review.concerns / missing_evidence / trace / analysis / turns.note）。
 // P003-T050 隔离：必须抢在 server.js / investigation-agent.js 之前——它们模块加载时就把数据根算死。
-import { PromptStore } from '../../../prompt-store.js';
+import { PromptStore } from '../../../src/contexts/knowledge/infrastructure/prompt-store.js';
 import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';

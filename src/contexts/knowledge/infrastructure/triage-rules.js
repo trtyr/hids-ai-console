@@ -2,10 +2,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import path from 'node:path';
+import { repositoryRoot } from '../../../shared/data-root.js';
 import { fileURLToPath } from 'node:url';
-import { reasonForRecord } from './src/shared/redaction.js';
+import { reasonForRecord } from '../../../shared/redaction.js';
 
-const exampleFile = path.join(path.dirname(fileURLToPath(import.meta.url)), 'triage-rules.example.json');
+const exampleFile = path.join(repositoryRoot(), 'triage-rules.example.json');
 
 const fields = {
   network_audit: new Set(['source_ip', 'destination_ip', 'network_type', 'process_path', 'command_line', 'detection_reference', 'user_name']),

@@ -3,10 +3,6 @@
     "kind": "struct.file-placement",
     "file": "config-store.js"
   },
-  "struct.file-placement|{\"file\":\"fp-maintainer.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "fp-maintainer.js"
-  },
   "struct.file-placement|{\"file\":\"knowledge-store.js\"}": {
     "kind": "struct.file-placement",
     "file": "knowledge-store.js"
@@ -23,36 +19,12 @@
     "kind": "struct.file-placement",
     "file": "package-policy.js"
   },
-  "struct.file-placement|{\"file\":\"prompt-store.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "prompt-store.js"
-  },
-  "struct.file-placement|{\"file\":\"rule-store.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "rule-store.js"
-  },
   "struct.file-placement|{\"file\":\"server.js\"}": {
     "kind": "struct.file-placement",
     "file": "server.js"
   },
-  "struct.file-placement|{\"file\":\"triage-rules.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "triage-rules.js"
-  },
   "struct.file-placement|{\"file\":\"update-store.js\"}": {
     "kind": "struct.file-placement",
     "file": "update-store.js"
-  },
-  "struct.file-placement|{\"file\":\"wiki-replay.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "wiki-replay.js"
-  },
-  "struct.file-placement|{\"file\":\"wiki-store.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "wiki-store.js"
-  },
-  "struct.file-placement|{\"file\":\"wiki-workbench.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "wiki-workbench.js"
   }
 }

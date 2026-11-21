@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { FP_AUTO_VERDICT, FP_DECISION_SOURCES } from '../../../fp-maintainer.js';
+import { FP_AUTO_VERDICT, FP_DECISION_SOURCES } from '../../../src/contexts/maintenance/application/fp-maintainer.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..', '..');
 const read = file => readFile(path.join(repoRoot, file), 'utf8');
@@ -25,7 +25,7 @@ test('decision.source 三处契约与实现同一份取值表（model / fallback
   assert.match(pipeline, /\| `decision` \| `source`（[^)]*idempotent/, 'triage-pipeline 的 decision 行没补 idempotent');
 
   // 「共用这一份」得是真的：发射点引用表里解出来的常量，不许回退成字面量
-  const source = await read('fp-maintainer.js');
+  const source = await read('src/contexts/maintenance/application/fp-maintainer.js');
   assert.match(source, /const \[DECISION_MODEL, DECISION_FALLBACK, DECISION_IDEMPOTENT\] = FP_DECISION_SOURCES/,
     '取值表没有解成发射点用的常量');
   for (const literal of ["source: 'model'", "source: 'fallback'", "source: 'idempotent'"]) {

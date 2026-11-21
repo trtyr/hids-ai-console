@@ -3,7 +3,7 @@ import { createPublicKey, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { PromptStore } from './prompt-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { UpdateStore, PACKAGE_LIMIT } from './update-store.js';
 import { log } from './src/shared/logging/log.js';
 import { sendMaintenanceFailure, maintenanceCodeFor } from './src/shared/errors.js';

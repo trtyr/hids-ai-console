@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RegoRuleMaintainer } from '../../../server.js';
-import { RuleStore } from '../../../rule-store.js';
+import { RuleStore } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 

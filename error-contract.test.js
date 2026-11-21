@@ -6,7 +6,7 @@ import { createMaintenanceServer } from './maintenance-server.js';
 import { createServer } from './server.js';
 import { UpdateStore } from './update-store.js';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
-import { PromptStore } from './prompt-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 
 // 隔离自证（P003-T050 A5 的牙）。

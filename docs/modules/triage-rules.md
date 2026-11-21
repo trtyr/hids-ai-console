@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-TRIAGE-RULES
-covers: [triage-rules.js]
+covers: [src/contexts/knowledge/infrastructure/triage-rules.js]
 updated: 2026-11-20
 ---
 

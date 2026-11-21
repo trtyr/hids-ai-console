@@ -3,7 +3,7 @@
 import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PromptStore } from './prompt-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { AgentToolbox } from './src/contexts/triage/infrastructure/evidence-toolbox.js';
 import { InvestigationAgent, boundedToolArgs } from './src/contexts/triage/application/investigation-agent.js';
 import { KnowledgeStore } from './knowledge-store.js';
@@ -11,7 +11,7 @@ import { KnowledgeWorkbench, knowledgeFields } from './knowledge-workbench.js';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { RuleStore } from './rule-store.js';
+import { RuleStore } from './src/contexts/knowledge/infrastructure/rule-store.js';
 import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
 import { ChatModelClient } from './src/contexts/triage/infrastructure/model-client.js';
 import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';

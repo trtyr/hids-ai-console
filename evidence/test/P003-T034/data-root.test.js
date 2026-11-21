@@ -6,8 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dataRoot, defaultConfigFile } from '../../../config-store.js';
 import { runtimePaths } from '../../../server.js';
-import { PromptStore } from '../../../prompt-store.js';
-import { WikiStore } from '../../../wiki-store.js';
+import { PromptStore } from '../../../src/contexts/knowledge/infrastructure/prompt-store.js';
+import { WikiStore } from '../../../src/contexts/knowledge/infrastructure/wiki-store.js';
 import { UpdateStore } from '../../../update-store.js';
 
 // P003-T034：数据根迁出仓库——`HIDS_DATA_DIR` 指向机器全局位置。
@@ -88,14 +88,14 @@ test('A3 判据历史：HIDS_WIKI_DIR 换掉判据库目录时，备份跟着判
     if (previous === undefined) delete process.env.HIDS_WIKI_DIR;
     else process.env.HIDS_WIKI_DIR = previous;
   });
-  const fresh = await import(`../../../wiki-store.js?hids-wiki-dir=${Date.now()}`);
+  const fresh = await import(`../../../src/contexts/knowledge/infrastructure/wiki-store.js?hids-wiki-dir=${Date.now()}`);
   const store = new fresh.WikiStore();
   assert.equal(store.directory, wikiDirectory, 'HIDS_WIKI_DIR 没被当成缺省判据库目录');
   assert.equal(store.historyDirectory, path.join('/tmp/hids-deploy', '.data', 'wiki-history'),
     'HIDS_WIKI_DIR 注入时历史没跟判据库目录走（落数据根＝上一轮的 bug）');
   assert.notEqual(store.historyDirectory, path.join(dataRoot(), 'wiki-history'));
   // 回归钉子：判「内置」不许再拿 env 可改的 defaultDirectory 比。
-  const source = await readFile(path.join(repository, 'wiki-store.js'), 'utf8');
+  const source = await readFile(path.join(repository, 'src/contexts/knowledge/infrastructure/wiki-store.js'), 'utf8');
   assert.ok(!/directory === defaultDirectory/.test(source),
     'wiki-store.js 又拿 defaultDirectory 判「内置」——HIDS_WIKI_DIR 一设历史就会落到数据根');
 });
@@ -138,7 +138,7 @@ test('A2 两个真进程探针都注入 mktemp 出来的数据根，且不再写
 
 // ── A4：旧位不自动迁移 ───────────────────────────────────────────────────
 test('A4 四个落点定义文件里没有把落点算回仓库的代码（更不会有搬旧数据的代码）', async () => {
-  for (const name of ['config-store.js', 'prompt-store.js', 'wiki-store.js', 'server.js']) {
+  for (const name of ['config-store.js', 'src/contexts/knowledge/infrastructure/prompt-store.js', 'src/contexts/knowledge/infrastructure/wiki-store.js', 'server.js']) {
     const source = await readFile(path.join(repository, name), 'utf8');
     assert.ok(!/path\.join\(defaults,\s*'\.data'/.test(source), `${name} 里还把落点拼成 <模块目录>/.data`);
     assert.ok(!/path\.resolve\(\w+,\s*'\.\.'\)/.test(source), `${name} 里还把落点算成上一级目录`);
@@ -146,7 +146,7 @@ test('A4 四个落点定义文件里没有把落点算回仓库的代码（更�
   }
   // wiki-store 给外部注入的判据库目录保留了同级 `.data/wiki-history/`（见上一条用例），那是判据库自己的备份位置，
   // 不是仓库落点；内置 `wiki/` 的备份已改到数据根。
-  assert.ok(!(await readFile(path.join(repository, 'wiki-store.js'), 'utf8'))
+  assert.ok(!(await readFile(path.join(repository, 'src/contexts/knowledge/infrastructure/wiki-store.js'), 'utf8'))
     .includes("path.join(dataRoot(), '.data')"), 'wiki-store 又把数据根拼成 <数据根>/.data 了');
 });
 

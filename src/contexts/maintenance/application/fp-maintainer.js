@@ -16,12 +16,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { isRuleId } from './rule-store.js';
-import { traceModelCall } from './src/shared/logging/log.js';
-import { scrubCredentials } from './src/shared/redaction.js';
+import { isRuleId } from '../../knowledge/infrastructure/rule-store.js';
+import { traceModelCall } from '../../../shared/logging/log.js';
+import { scrubCredentials } from '../../../shared/redaction.js';
+import { repositoryRoot } from '../../../shared/data-root.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+// P003-T075 批 5：迁入 src 后不能再用 import.meta.url 定位仓库根——走共享叶子 repositoryRoot()。
+const here = repositoryRoot();
 const SESSION_ID = /^[0-9a-f-]{36}$/i;
 
 /** 两个可维护的库：规则库（Rego）与知识库（判据页）。 */

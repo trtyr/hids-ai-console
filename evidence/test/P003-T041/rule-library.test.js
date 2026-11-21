@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RuleSessionStore, RuleStore, ruleHistoryDirectory, ruleLibraryDirectory, ruleRevision,
-  ruleSessionsDirectory, seedLibrary } from '../../../rule-store.js';
+  ruleSessionsDirectory, seedLibrary } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
 
 // P003-T041：规则库外置（A1/A2）、版本化（A3）、维护会话（A4）的单元钉子。
 // 全部在临时目录里跑：种子的「数据根」也注入 tmp，不写真实全局根。

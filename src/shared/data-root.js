@@ -20,3 +20,12 @@ export function dataRoot({ env = process.env, home = homedir() } = {}) {
   if (configured) return path.resolve(configured);
   return path.join(home, '.local', 'share', 'hids-ai-console');
 }
+
+// 仓库根目录的唯一定义（P003-T075 批 4）：knowledge 系文件的种子源路径（wiki/、rules/、prompts/、
+// triage-rules.example.json）原来各自用 `import.meta.url` 解析——迁移后模块位置变了路径就断。
+// 摘成共享叶子：本文件在 src/shared/ 固定位置，上跳 2 级 = 仓库根，不受后续迁移影响。
+import { fileURLToPath } from 'node:url';
+
+export function repositoryRoot() {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+}

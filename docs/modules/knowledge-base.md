@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-KNOWLEDGE-BASE
-covers: [wiki-store.js, wiki-workbench.js, wiki-replay.js]
+covers: [src/contexts/knowledge/infrastructure/wiki-store.js, src/contexts/maintenance/application/wiki-workbench.js, src/contexts/maintenance/application/wiki-replay.js]
 unit: knowledge-base
 updated: 2026-11-20
 ---

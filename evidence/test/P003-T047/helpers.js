@@ -5,11 +5,11 @@
 import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { RuleStore } from '../../../rule-store.js';
-import { WikiStore } from '../../../wiki-store.js';
-import { WikiWorkbench } from '../../../wiki-workbench.js';
+import { RuleStore } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
+import { WikiStore } from '../../../src/contexts/knowledge/infrastructure/wiki-store.js';
+import { WikiWorkbench } from '../../../src/contexts/maintenance/application/wiki-workbench.js';
 import { RegoRuleMaintainer } from '../../../server.js';
-import { FalsePositiveMaintainer, FpSessionStore } from '../../../fp-maintainer.js';
+import { FalsePositiveMaintainer, FpSessionStore } from '../../../src/contexts/maintenance/application/fp-maintainer.js';
 
 export const repoRoot = path.resolve(import.meta.dirname, '..', '..', '..');
 export const CASE_ID = 'syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43';

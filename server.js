@@ -13,22 +13,22 @@ import { ApiEvidenceToolbox } from './src/contexts/triage/infrastructure/api-too
 import { applyModelValues, createModelRolesFromEnv, modelRoleSummary, modelRoleValues, MODEL_ROLES } from './src/contexts/triage/infrastructure/model-client.js';
 import { InvestigationAgent, replayInvestigation } from './src/contexts/triage/application/investigation-agent.js';
 import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
-import { PromptStore } from './prompt-store.js';
+import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 import { log, logFileOptions, pruneLogFiles, readLogEntries, queryLevels, traceModelCall, useLogFile } from './src/shared/logging/log.js';
 import { parseSyslog } from './src/contexts/ingestion/application/parsing.js';
 import { SyslogReceiver } from './src/interfaces/udp/syslog/receiver.js';
 import { eventTypeFor } from './src/contexts/ingestion/application/parsing.js';
-import { WikiStore } from './wiki-store.js';
-import { WikiWorkbench } from './wiki-workbench.js';
+import { WikiStore } from './src/contexts/knowledge/infrastructure/wiki-store.js';
+import { WikiWorkbench } from './src/contexts/maintenance/application/wiki-workbench.js';
 import { TraceBoardService } from './src/contexts/trace/application/trace-service.js';
 import { BoardStore } from './src/contexts/trace/infrastructure/board-store.js';
 import { UpdateStore } from './update-store.js';
-import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
+import { TriageRuleEngine, validateRuleSet } from './src/contexts/knowledge/infrastructure/triage-rules.js';
 import { reasonForRecord, scrubCredentials } from './src/shared/redaction.js';
-import { RuleSessionStore, RuleStore, isRuleId } from './rule-store.js';
+import { RuleSessionStore, RuleStore, isRuleId } from './src/contexts/knowledge/infrastructure/rule-store.js';
 import { FalsePositiveMaintainer, FP_LIBRARIES, FpSessionStore, fpSessionDirectory,
-  maintenanceSide, maintenanceSides, wikiFeedbackTarget } from './fp-maintainer.js';
+  maintenanceSide, maintenanceSides, wikiFeedbackTarget } from './src/contexts/maintenance/application/fp-maintainer.js';
 import { createConfigStore, dataRoot } from './config-store.js';
 import { writeJson as json, callerError, configError, upstreamError, causeError, failureClasses,
   failureKindOf, failureStatusOf, sendUnauthorized, sendCloudwalkerStatusFailure, sseErrorFrame } from './src/shared/errors.js';

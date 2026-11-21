@@ -20,9 +20,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, RegoRuleMaintainer } from '../../../server.js';
 import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
-import { RuleStore } from '../../../rule-store.js';
-import { WikiStore } from '../../../wiki-store.js';
-import { WikiWorkbench } from '../../../wiki-workbench.js';
+import { RuleStore } from '../../../src/contexts/knowledge/infrastructure/rule-store.js';
+import { WikiStore } from '../../../src/contexts/knowledge/infrastructure/wiki-store.js';
+import { WikiWorkbench } from '../../../src/contexts/maintenance/application/wiki-workbench.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..', '..');
 const FP_PATH = id => `/api/agent/triage/${encodeURIComponent(id)}/false-positive`;
