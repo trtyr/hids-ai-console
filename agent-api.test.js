@@ -56,7 +56,13 @@ test('investigation API accepts one typed alert and returns the Agent result', a
   assert.equal(prompts.sections.filter(section => section.kind === 'scenario').length, 13);
   assert.equal(prompts.sections.filter(section => section.kind === 'sop').length, 14);
   assert.equal(prompts.sections.find(section => section.id === 'scenario:honeypot').name, '蜜罐诱捕');
-  assert.doesNotMatch(metadataText, /证据驱动|研判目标/);
+  // P003-T082 B06：每段带正文与是否被覆盖——正文只经 sections[].content 出，顶层内部映射（prompts/scenarios/sop）仍不暴露。
+  const triageSection = prompts.sections.find(section => section.id === 'triage');
+  assert.ok(triageSection.content.length > 1000, '核心段要带正文');
+  assert.equal(triageSection.overridden, false, '仓内原文不算被覆盖');
+  assert.ok(prompts.sections.every(section => typeof section.overridden === 'boolean'));
+  // SOP 段只读（随判据库发布）
+  assert.ok(prompts.sections.filter(section => section.kind === 'sop').every(section => section.read_only === true));
   assert.equal((await fetch(`${base}/backend/prompts/triage.md`)).status, 404);
   assert.equal((await fetch(`${base}/api/agent/prompts`, { method: 'PUT', body: '{}' })).status, 405);
   const uploadHeaders = { 'Content-Type': 'text/markdown; charset=utf-8', 'X-Prompt-Section': 'scenario:honeypot',

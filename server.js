@@ -1765,6 +1765,29 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname === '/api/agent/prompts' && req.method === 'GET') {
         return json(res, 200, await prompts.metadata());
       }
+      // P003-T084：提示词正文可写（带乐观锁）。边界：写要知识库管理员令牌；SOP 段只读（随判据库发布）。
+      // 只读模式 = 没配 HIDS_PROMPT_ADMIN_TOKEN（或令牌不对）；此时 GET 仍可读，PUT 回 403/503。
+      const promptSection = url.pathname.match(/^\/api\/agent\/prompts\/(.+)$/);
+      if (promptSection && req.method === 'PUT') {
+        if (!promptAdminToken) return configError(res, '尚未配置知识库管理员凭据');
+        if (!hasPromptAdminAccess(req, promptAdminToken)) return callerError(res, '知识库管理员凭据无效', 403);
+        let section;
+        try { section = decodeURIComponent(promptSection[1]); }
+        catch { return callerError(res, '提示词段名编码无效'); }
+        const body = await readJSON(req, 40000);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return callerError(res, '请求正文无效');
+        if (typeof body.content !== 'string') return callerError(res, '请求正文缺少提示词正文 content');
+        const expected = body.expected_revision;
+        if (!Object.hasOwn(body, 'expected_revision') || !(expected === null || /^[0-9a-f]{16}$/.test(String(expected))))
+          return callerError(res, '缺少有效的提示词版本 expected_revision');
+        try {
+          const active = await prompts.update(section, body.content, expected);
+          void auditor({ actor: actorOf({ access, tokenKind: 'prompt-admin' }), action: 'prompt.write',
+            object: { kind: 'prompt_section', section, characters: body.content.length } });
+          return json(res, 200, { version: active.version, revision: active.revision,
+            sections: (await prompts.metadata()).sections });
+        } catch (cause) { return causeError(res, cause, 'internal'); }
+      }
       if (url.pathname === '/api/agent/prompts' && req.method !== 'GET') return callerError(res, '请使用提示词文件上传入口', 405);
       if (url.pathname === '/api/agent/prompts/upload') return callerError(res, '提示词更新已迁移到独立维护端，业务端不允许上传', 410);
       if (url.pathname.startsWith('/api/wiki/')) {

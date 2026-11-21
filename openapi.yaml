@@ -1166,7 +1166,30 @@ paths:
       description: 不返回提示词正文和升级包明文。
       operationId: getUpdates
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 已装版本与更新日志
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revision, current, history, modules]
+                properties:
+                  revision: { type: string, description: 当前生效提示词版本指纹 }
+                  current: { $ref: '#/components/schemas/PublicRelease' }
+                  history:
+                    type: array
+                    description: 应用历史（新到旧），当前版标 current
+                    items: { $ref: '#/components/schemas/PublicRelease' }
+                  modules:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, version]
+                      properties:
+                        id: { type: string, enum: [triage, trace, knowledge] }
+                        name: { type: string }
+                        version: { type: string }
+                        description: { type: string }
   /api/agent/status:
     get:
       tags: [状态]
@@ -1204,11 +1227,92 @@ paths:
   /api/agent/prompts:
     get:
       tags: [状态]
-      summary: 获取提示词版本元数据
-      description: 仅元数据，不返回提示词正文。业务端不提供修改接口。
+      summary: 获取提示词版本元数据与正文
+      description: |
+        每段带正文（P003-T082 B06）与是否被覆盖。正文写入走 PUT /api/agent/prompts/{section}，
+        需要知识库管理员令牌（X-Prompt-Admin-Token）；SOP 段只读（写入 403）。
       operationId: getPromptMetadata
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 提示词元数据（P003-T082 B06 起每段带正文与是否被覆盖）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, revision, sections]
+                properties:
+                  version: { type: string }
+                  revision: { type: string, pattern: '^[0-9a-f]{16}$' }
+                  sections:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, kind, characters]
+                      properties:
+                        id: { type: string, description: '核心段键名 / scenario:<id> / sop:<id>' }
+                        name: { type: string }
+                        kind: { type: string, enum: [core, scenario, sop] }
+                        characters: { type: integer }
+                        read_only: { type: boolean, description: SOP 段只读 }
+                        content: { type: string, description: '正文（P003-T082 B06）' }
+                        overridden: { type: boolean, description: 是否被覆盖层改过 }
+  /api/agent/prompts/{section}:
+    put:
+      tags: [状态]
+      summary: 写入提示词正文（P003-T084）
+      description: |
+        覆盖某一提示词段落的正文。需要维护端配置了知识库管理员凭据，并在请求头带
+        `X-Prompt-Admin-Token`。`expected_revision` 用于乐观并发：与当前版本不一致返回 409。
+        SOP 段只读（写入 403），未知段键 404。写入成功记审计 `prompt.write`。
+      operationId: putPromptSection
+      parameters:
+        - name: section
+          in: path
+          required: true
+          description: 段落 id（核心段键名 / scenario:<id> / sop:<id>）
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, description: 新的正文 }
+                expected_revision:
+                  type: [string, 'null']
+                  description: 期望的当前版本；省略或 null 表示不做并发校验
+                  pattern: '^[0-9a-f]{16}$'
+      responses:
+        '200':
+          description: 写入成功，返回新版本与全部段落元数据
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, revision, sections]
+                properties:
+                  version: { type: string }
+                  revision: { type: string, pattern: '^[0-9a-f]{16}$' }
+                  sections:
+                    type: array
+                    items: { $ref: '#/components/schemas/PromptSection' }
+        '403':
+          description: 未带或带错管理员令牌；或写的是只读 SOP 段
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: expected_revision 与当前版本不一致
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: 维护端未配置知识库管理员凭据
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /api/agent/prompts/upload:
     post:
       tags: [状态]
@@ -1790,7 +1894,22 @@ paths:
                 config: { $ref: '#/components/schemas/RuleSet' }
                 expected_revision: { type: [string, 'null'], pattern: '^[0-9a-f]{16}$' }
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 前置规则集（含来源与版本）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [config, origin, revision, writable]
+                properties:
+                  config:
+                    type: object
+                    description: 规则集本体（schema_version / enabled / rules[]）
+                    additionalProperties: true
+                  origin: { type: string, enum: [file, example, invalid], description: 'file=数据根实文件；example=随仓示例；invalid=实文件坏了' }
+                  revision: { type: [string, 'null'], description: 内容指纹；example 来源为 null }
+                  writable: { type: boolean, description: 是否配了规则管理员令牌 }
+                  error: { type: string, description: 'origin=invalid 时的归一化原因' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
@@ -2104,7 +2223,25 @@ paths:
         - basicAuth: []
           promptAdminToken: []
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 判据库健康检查
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [checked_at, active_pages, issues]
+                properties:
+                  checked_at: { type: string }
+                  active_pages: { type: integer }
+                  issues:
+                    type: array
+                    items:
+                      type: object
+                      required: [path, kind, message]
+                      properties:
+                        path: { type: string }
+                        kind: { type: string, enum: [duplicate_id, missing_source, broken_ref, missing_evidence] }
+                        message: { type: string }
         '403': { $ref: '#/components/responses/Forbidden' }
   /api/wiki/sessions:
     get:
@@ -2146,7 +2283,17 @@ paths:
                 who: { type: string }
               description: page 或 case_id 至少提供一个
       responses:
-        '201': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 知识维护会话摘要列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/WikiSessionSummary' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
   /api/wiki/sessions/{sessionId}:
@@ -2160,7 +2307,11 @@ paths:
       parameters:
         - $ref: '#/components/parameters/SessionId'
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 会话全文（messages / proposal / audit / feedback）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WikiSession' }
         '404': { $ref: '#/components/responses/NotFound' }
   /api/wiki/sessions/{sessionId}/messages:
     post:
@@ -2182,7 +2333,11 @@ paths:
               properties:
                 content: { type: string }
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 推进后的会话（含草案）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WikiSession' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409':
           description: 上一轮知识整理仍在进行（同一会话的重入被挡）
@@ -2210,7 +2365,11 @@ paths:
       parameters:
         - $ref: '#/components/parameters/SessionId'
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 回放后的会话（proposal.replay 写入报告）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WikiSession' }
   /api/wiki/sessions/{sessionId}/publish:
     post:
       tags: [知识库]
@@ -2230,7 +2389,16 @@ paths:
               additionalProperties: true
               description: 审核结论、有效期、审核备注等；依草稿类型校验
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 发布结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, page]
+                properties:
+                  session: { $ref: '#/components/schemas/WikiSession' }
+                  page: { $ref: '#/components/schemas/WikiPage' }
         '400': { $ref: '#/components/responses/BadRequest' }
   /api/maintenance/session:
     servers: [{ url: 'http://127.0.0.1:18081', description: 独立维护服务，仅允许本机或 SSH 隧道 }]
@@ -2240,7 +2408,19 @@ paths:
       operationId: getMaintenanceSession
       security: []
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 维护登录状态
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authenticated, preview, login_enabled, user, role]
+                properties:
+                  authenticated: { type: boolean }
+                  preview: { type: boolean }
+                  login_enabled: { type: boolean }
+                  user: { type: [string, 'null'] }
+                  role: { type: [string, 'null'], enum: [updater, viewer, null] }
   /api/maintenance/login:
     servers: [{ url: 'http://127.0.0.1:18081' }]
     post:
@@ -2283,7 +2463,15 @@ paths:
       parameters:
         - $ref: '#/components/parameters/MaintenanceWrite'
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 已登出
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [logged_out]
+                properties:
+                  logged_out: { type: boolean, const: true }
         '403': { $ref: '#/components/responses/Forbidden' }
   /api/maintenance/overview:
     servers: [{ url: 'http://127.0.0.1:18081' }]
@@ -2295,7 +2483,23 @@ paths:
         - maintenanceCookie: []
         - maintenanceBasic: []
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 版本概览与升级包列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revision, current, history, modules, packages, preview, writable]
+                properties:
+                  revision: { type: string }
+                  current: { $ref: '#/components/schemas/PublicRelease' }
+                  history: { type: array, items: { $ref: '#/components/schemas/PublicRelease' } }
+                  modules: { type: array, items: { type: object, additionalProperties: true } }
+                  packages:
+                    type: array
+                    items: { $ref: '#/components/schemas/MaintenancePackage' }
+                  preview: { type: boolean }
+                  writable: { type: boolean }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/maintenance/packages:
     servers: [{ url: 'http://127.0.0.1:18081' }]
@@ -2344,7 +2548,11 @@ paths:
       parameters:
         - $ref: '#/components/parameters/PackageId'
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 包详情与兼容性
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MaintenancePackage' }
         '404': { $ref: '#/components/responses/NotFound' }
   /api/maintenance/packages/{packageId}/apply:
     servers: [{ url: 'http://127.0.0.1:18081' }]
@@ -2364,7 +2572,17 @@ paths:
           schema: { type: string }
           description: 当前运行策略的 revision
       responses:
-        '200': { $ref: '#/components/responses/JsonObject' }
+        '200':
+          description: 应用结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, version, updated_at]
+                properties:
+                  id: { type: string }
+                  version: { type: string }
+                  updated_at: { type: string }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/BadRequest' }
         '428': { $ref: '#/components/responses/BadRequest' }
@@ -3923,6 +4141,95 @@ components:
         revision: { type: string, pattern: '^[0-9a-f]{16}$', description: 正文全文 SHA-256 的前 16 位十六进制 }
         characters: { type: integer, description: 正文全文（含 frontmatter）长度，按 UTF-16 码元计：一个汉字算 1，一个基本平面外字符算 2 }
       additionalProperties: true
+    PublicRelease:
+      description: 一次提示词策略发布（已装版本或升级包公开元数据）；P003-T062 起带应用人
+      type: object
+      required: [version, title, modules, changes]
+      properties:
+        version: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        date: { type: string }
+        modules: { type: array, items: { type: string } }
+        changes:
+          type: object
+          properties:
+            features: { type: array, items: { type: string } }
+            improvements: { type: array, items: { type: string } }
+            fixes: { type: array, items: { type: string } }
+        updated_at: { type: [string, 'null'] }
+        sequence: { type: integer }
+        actor: { type: [string, 'null'], description: 应用人（P003-T062：从存储到接口全程可见） }
+        id: { type: string }
+        filename: { type: string }
+        uploaded_at: { type: [string, 'null'] }
+    MaintenancePackage:
+      allOf:
+        - $ref: '#/components/schemas/PublicRelease'
+        - type: object
+          required: [compatible, applied]
+          properties:
+            current: { type: boolean, description: 是否就是当前生效版本 }
+            applied: { type: boolean, description: 是否应用过 }
+            compatible: { type: boolean }
+            compatibility_reason: { type: string }
+    WikiSessionSummary:
+      description: 知识维护会话摘要（列表口径，不塞正文与草案）
+      type: object
+      required: [id, page, updated_at, status]
+      properties:
+        id: { type: string, format: uuid }
+        page: { type: string }
+        updated_at: { type: string }
+        status:
+          type: string
+          enum: [collecting, ready_for_review, needs_non_wiki_fix, published]
+        message_count: { type: integer }
+    WikiSession:
+      description: 知识维护会话全文（含消息、草案、审计与反馈快照）
+      type: object
+      required: [id, page, status, messages]
+      properties:
+        id: { type: string, format: uuid }
+        page: { type: string }
+        new_experience: { type: boolean }
+        page_revision: { type: [string, 'null'] }
+        status:
+          type: string
+          enum: [collecting, ready_for_review, needs_non_wiki_fix, published]
+        created_at: { type: string }
+        updated_at: { type: string }
+        messages:
+          type: array
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role: { type: string, enum: [user, assistant] }
+              content: { type: string }
+              kind: { type: string }
+              at: { type: string }
+        proposal:
+          type: [object, 'null']
+          description: 修订草案（content / changes / evidence_preview / rationale / replay）
+          additionalProperties: true
+        audit:
+          type: [object, 'null']
+          description: 发布审计（reviewer / note / at / evidence_path / replay_status）
+          additionalProperties: true
+        feedback:
+          type: [object, 'null']
+          description: 反馈快照（case_id / reason / who / expected_verdict / case_snapshot）
+          additionalProperties: true
+        diagnosis: { type: [string, 'null'] }
+        diagnosis_note: { type: [string, 'null'] }
+        published_pages:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              revision: { type: string }
     WikiPage:
       description: 单个知识库页面：元数据加全文。
       allOf:
@@ -3932,6 +4239,17 @@ components:
           properties:
             content: { type: string, description: 含 frontmatter 的完整 Markdown 正文 }
           additionalProperties: true
+    PromptSection:
+      type: object
+      required: [id, name, kind, characters]
+      properties:
+        id: { type: string, description: '核心段键名 / scenario:<id> / sop:<id>' }
+        name: { type: string }
+        kind: { type: string, enum: [core, scenario, sop] }
+        characters: { type: integer }
+        read_only: { type: boolean, description: SOP 段只读 }
+        content: { type: string, description: '正文（P003-T082 B06）' }
+        overridden: { type: boolean, description: 是否被覆盖层改过 }
     MaintenanceIdentity:
       type: object
       required: [user, role]

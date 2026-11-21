@@ -12,7 +12,7 @@ export const AUDIT_ACTIONS = Object.freeze([
   'false-positive.register', 'fp.session.write', 'rule.maintain', 'wiki.maintain', 'wiki.publish',
   // 规则库与判据库
   'rule.write', 'rule.rollback', 'triage-rules.write',
-  'wiki.page.write',
+  'wiki.page.write', 'prompt.write',
   // 研判与溯源
   'investigation.run', 'trace.start',
   // 数据运维

@@ -46,6 +46,7 @@ const ROUTES = [
   { route: 'GET /api/events', probe: "'/api/events'" },
   { route: 'GET /api/agent/status', probe: "'/api/agent/status'" },
   { route: 'GET /api/agent/prompts', probe: "'/api/agent/prompts'" },
+  { route: 'PUT /api/agent/prompts/{section}', probe: 'agent\\/prompts\\/(.+)$' },
   { route: 'GET /api/agent/tools', probe: "'/api/agent/tools'" },
   { route: 'GET /api/trace/tools', probe: "'/api/trace/tools'" },
   { route: 'POST /api/agent/prompts/upload', probe: "'/api/agent/prompts/upload'", note: '410 下线哨兵，非用例' },

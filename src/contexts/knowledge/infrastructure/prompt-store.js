@@ -94,13 +94,18 @@ export class PromptStore {
 
   async metadata() {
     const active = await this.load();
+    // P003-T082 B06 / T084：每段带正文与「是否被覆盖」——前端与运维不必再猜这段是仓内原文还是覆盖层改过的。
+    const overrides = await this.readOverrides();
     return { version: active.version, revision: active.revision,
       sections: [
-        ...Object.entries(active.prompts).map(([id, content]) => ({ id, name: coreNames[id], kind: 'core', characters: content.length })),
-        ...active.scenarios.cards.map(card => ({ id: `scenario:${card.id}`, name: card.name, kind: 'scenario', characters: card.prompt.length })),
+        ...Object.entries(active.prompts).map(([id, content]) => ({ id, name: coreNames[id], kind: 'core',
+          characters: content.length, content, overridden: overrides[id] !== undefined })),
+        ...active.scenarios.cards.map(card => ({ id: `scenario:${card.id}`, name: card.name, kind: 'scenario',
+          characters: card.prompt.length, content: card.prompt,
+          overridden: overrides[`scenario:${card.id}`] !== undefined })),
         ...Object.entries(active.sop).map(([id, content]) => ({ id: `sop:${id}`, name: id === 'common' ? '通用 SOP' :
           active.scenarios.cards.find(card => card.id === id)?.name || id, kind: 'sop', characters: content.length,
-          read_only: true }))
+          content, overridden: false, read_only: true }))
       ] };
   }
 
@@ -108,7 +113,13 @@ export class PromptStore {
     const job = this.pending.then(async () => {
       const current = await this.load();
       const allowed = new Set([...Object.keys(coreFiles), ...current.scenarios.cards.map(card => `scenario:${card.id}`)]);
-      if (!allowed.has(section)) throw new Error('不支持的提示词章节');
+      if (!allowed.has(section)) {
+        // SOP 段随判据库发布、只读（P003-T084）：给 403 而不是当未知章节；其余未知段键 404。
+        const sop = section.startsWith('sop:') && Object.hasOwn(current.sop, section.slice(4));
+        const error = new Error(sop ? 'SOP 段只读，请随判据库发布' : '不支持的提示词章节');
+        error.status = sop ? 403 : 404;
+        throw error;
+      }
       if (typeof content !== 'string' || !content.trim() || content.length > 20000 || content.includes('\0')) throw new Error('提示词正文必须为 1 到 20000 字');
       if (expectedRevision !== current.revision) { const error = new Error('提示词已由其他操作更新，请刷新后再保存'); error.status = 409; throw error; }
       const overrides = await this.readOverrides();
