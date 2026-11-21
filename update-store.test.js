@@ -8,8 +8,8 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
-import { UpdateStore, sealPackage } from './update-store.js';
-import { createMaintenanceServer } from './maintenance-server.js';
+import { UpdateStore, sealPackage } from './src/contexts/dataops/infrastructure/update-store.js';
+import { createMaintenanceServer } from './src/interfaces/http/maintenance/server.js';
 import { createServer } from './server.js';
 
 async function setup(t) {

@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-MAINTENANCE-SERVICE
-covers: [maintenance-server.js, update-store.js, package-policy.js]
+covers: [src/interfaces/http/maintenance/server.js, src/contexts/dataops/infrastructure/update-store.js, src/interfaces/cli/package-policy.js]
 depth: detailed
 updated: 2026-11-20
 ---

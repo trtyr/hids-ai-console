@@ -4,11 +4,11 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dataRoot, defaultConfigFile } from '../../../config-store.js';
+import { dataRoot, defaultConfigFile } from '../../../src/contexts/dataops/infrastructure/config-store.js';
 import { runtimePaths } from '../../../server.js';
 import { PromptStore } from '../../../src/contexts/knowledge/infrastructure/prompt-store.js';
 import { WikiStore } from '../../../src/contexts/knowledge/infrastructure/wiki-store.js';
-import { UpdateStore } from '../../../update-store.js';
+import { UpdateStore } from '../../../src/contexts/dataops/infrastructure/update-store.js';
 
 // P003-T034：数据根迁出仓库——`HIDS_DATA_DIR` 指向机器全局位置。
 //   A1 不设 HIDS_DATA_DIR → `~/.local/share/hids-ai-console/`，九条具名路径结构不变
@@ -138,7 +138,7 @@ test('A2 两个真进程探针都注入 mktemp 出来的数据根，且不再写
 
 // ── A4：旧位不自动迁移 ───────────────────────────────────────────────────
 test('A4 四个落点定义文件里没有把落点算回仓库的代码（更不会有搬旧数据的代码）', async () => {
-  for (const name of ['config-store.js', 'src/contexts/knowledge/infrastructure/prompt-store.js', 'src/contexts/knowledge/infrastructure/wiki-store.js', 'server.js']) {
+  for (const name of ['src/contexts/dataops/infrastructure/config-store.js', 'src/contexts/knowledge/infrastructure/prompt-store.js', 'src/contexts/knowledge/infrastructure/wiki-store.js', 'server.js']) {
     const source = await readFile(path.join(repository, name), 'utf8');
     assert.ok(!/path\.join\(defaults,\s*'\.data'/.test(source), `${name} 里还把落点拼成 <模块目录>/.data`);
     assert.ok(!/path\.resolve\(\w+,\s*'\.\.'\)/.test(source), `${name} 里还把落点算成上一级目录`);

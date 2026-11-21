@@ -3,9 +3,9 @@
 import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMaintenanceServer } from './maintenance-server.js';
+import { createMaintenanceServer } from './src/interfaces/http/maintenance/server.js';
 import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
-import { UpdateStore } from './update-store.js';
+import { UpdateStore } from './src/contexts/dataops/infrastructure/update-store.js';
 
 async function listen(t,server) {
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));

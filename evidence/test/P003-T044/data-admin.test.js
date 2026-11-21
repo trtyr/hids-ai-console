@@ -13,7 +13,7 @@ import path from 'node:path';
 import { createServer, DATA_KINDS } from '../../../server.js';
 import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
-import { createConfigStore } from '../../../config-store.js';
+import { createConfigStore } from '../../../src/contexts/dataops/infrastructure/config-store.js';
 import { useJournal, createJournal } from '../../../src/shared/logging/log.js';
 
 const OLD = Date.parse('2020-01-01T00:00:00.000Z');   // 老数据

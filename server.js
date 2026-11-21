@@ -23,13 +23,13 @@ import { WikiStore } from './src/contexts/knowledge/infrastructure/wiki-store.js
 import { WikiWorkbench } from './src/contexts/maintenance/application/wiki-workbench.js';
 import { TraceBoardService } from './src/contexts/trace/application/trace-service.js';
 import { BoardStore } from './src/contexts/trace/infrastructure/board-store.js';
-import { UpdateStore } from './update-store.js';
+import { UpdateStore } from './src/contexts/dataops/infrastructure/update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './src/contexts/knowledge/infrastructure/triage-rules.js';
 import { reasonForRecord, scrubCredentials } from './src/shared/redaction.js';
 import { RuleSessionStore, RuleStore, isRuleId } from './src/contexts/knowledge/infrastructure/rule-store.js';
 import { FalsePositiveMaintainer, FP_LIBRARIES, FpSessionStore, fpSessionDirectory,
   maintenanceSide, maintenanceSides, wikiFeedbackTarget } from './src/contexts/maintenance/application/fp-maintainer.js';
-import { createConfigStore, dataRoot } from './config-store.js';
+import { createConfigStore, dataRoot } from './src/contexts/dataops/infrastructure/config-store.js';
 import { writeJson as json, callerError, configError, upstreamError, causeError, failureClasses,
   failureKindOf, failureStatusOf, sendUnauthorized, sendCloudwalkerStatusFailure, sseErrorFrame } from './src/shared/errors.js';
 import { runWithRequestContext, currentRequestContext } from './src/shared/logging/log.js';

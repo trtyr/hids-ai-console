@@ -7,8 +7,8 @@ import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
-import { initKeys, main } from '../../../package-policy.js';
-import { logListening } from '../../../maintenance-server.js';
+import { initKeys, main } from '../../../src/interfaces/cli/package-policy.js';
+import { logListening } from '../../../src/interfaces/http/maintenance/server.js';
 import { parseSyslog } from '../../../src/contexts/ingestion/application/parsing.js';
 import { matchSyslogEvent } from '../../../src/contexts/triage/application/correlate.js';
 
@@ -28,7 +28,7 @@ const honeypot = fields => parseSyslog(prefix + 'cloudwalker-honeypot ' + fields
 const fields = 'host_ip="10.0.0.5" host_id=1 event_create_time="2026-11-11 08:00:00" source_ip="192.0.2.2"';
 
 test('A1：三个文件里不再有 console 调用，打印一律走 log.js（P003-T075 批 2 后路径随迁移）', async () => {
-  for (const file of ['maintenance-server.js', 'package-policy.js', 'src/contexts/triage/application/correlate.js']) {
+  for (const file of ['src/interfaces/http/maintenance/server.js', 'src/interfaces/cli/package-policy.js', 'src/contexts/triage/application/correlate.js']) {
     const source = await readFile(path.join(root, file), 'utf8');
     assert.deepEqual(source.match(/\bconsole\s*\.\s*(log|info|warn|error|debug|trace)\b/g), null, `${file} 仍有 console 调用`);
   }

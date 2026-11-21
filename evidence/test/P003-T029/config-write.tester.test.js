@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { chmod, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createConfigStore } from '../../../config-store.js';
+import { createConfigStore } from '../../../src/contexts/dataops/infrastructure/config-store.js';
 import { createServer } from '../../../server.js';
 
 // 每一项形状合法（URL 前缀、Token ≥6 位）但都不是真凭据，方便断言「原文不出现」。

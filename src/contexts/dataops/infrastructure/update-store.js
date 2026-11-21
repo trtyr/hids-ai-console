@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, sign, verify } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { recordFailure } from './src/shared/redaction.js';
+import { recordFailure } from '../../../shared/redaction.js';
 
 export const PACKAGE_LIMIT = 2 * 1024 * 1024;
 const FORMAT = 'hids-prompts/v1';

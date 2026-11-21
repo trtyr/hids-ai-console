@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
-import { dataRoot } from '../../../config-store.js';
+import { dataRoot } from '../../../src/contexts/dataops/infrastructure/config-store.js';
 
 const configured = typeof process.env.HIDS_DATA_DIR === 'string' ? process.env.HIDS_DATA_DIR.trim() : '';
 

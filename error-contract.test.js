@@ -2,9 +2,9 @@
 import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMaintenanceServer } from './maintenance-server.js';
+import { createMaintenanceServer } from './src/interfaces/http/maintenance/server.js';
 import { createServer } from './server.js';
-import { UpdateStore } from './update-store.js';
+import { UpdateStore } from './src/contexts/dataops/infrastructure/update-store.js';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { PromptStore } from './src/contexts/knowledge/infrastructure/prompt-store.js';
 import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';

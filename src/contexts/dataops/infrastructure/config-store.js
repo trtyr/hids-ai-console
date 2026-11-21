@@ -12,9 +12,9 @@
 import { readFileSync } from 'node:fs';
 import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { log } from './src/shared/logging/log.js';
-import { RpcClient } from './src/contexts/ingestion/infrastructure/rpc-client.js';
-import { ChatModelClient, MODEL_GROUP_KEYS, MODEL_ROLE_GROUPS, MODEL_ROLES, modelGroupValues, modelRoleValues } from './src/contexts/triage/infrastructure/model-client.js';
+import { log } from '../../../shared/logging/log.js';
+import { RpcClient } from '../../ingestion/infrastructure/rpc-client.js';
+import { ChatModelClient, MODEL_GROUP_KEYS, MODEL_ROLE_GROUPS, MODEL_ROLES, modelGroupValues, modelRoleValues } from '../../triage/infrastructure/model-client.js';
 
 // 能写的只有这十一项：牧云三项 + 模型的三个组（主判 / 复核 / 轻量，P003-T042 加后两组六键）。表外的键一律 400：
 // HIDS_HOST/HIDS_PORT/HIDS_TRIAGE_INPUT_MODE 改起来必须重启进程；Basic 口令与两个 admin 令牌是鉴权凭据本身，写进来等于自己给自己开门。
@@ -26,7 +26,7 @@ export const WRITABLE_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_URL', 'CLOUDWALK
 // 运行态数据根的唯一定义（P003-T034）已摘成零依赖叶子 `src/shared/data-root.js`（T075 批 0，
 // D034 §8.4 #1：原来这个纯路径函数让三个 store 的依赖图挂上 RpcClient/ChatModelClient）。
 // 这里 import + re-export 保持旧 import 路径稳定（本文件内部 defaultConfigFile 也用它）；批 6 迁 config-store 时收掉。
-import { dataRoot } from './src/shared/data-root.js';
+import { dataRoot } from '../../../shared/data-root.js';
 export { dataRoot };
 
 export function defaultConfigFile(root = dataRoot()) {

@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createConfigStore, WRITABLE_CONFIG_KEYS } from '../../../config-store.js';
+import { createConfigStore, WRITABLE_CONFIG_KEYS } from '../../../src/contexts/dataops/infrastructure/config-store.js';
 import { createServer, applyLiveConfig, configSummary } from '../../../server.js';
 
 // 每一项都是假值：形状合法（URL 前缀、Token ≥6 位）以便装配处的构造器放行，但一点都不像真凭据。

@@ -196,7 +196,7 @@ test('A1 真进程不设 HIDS_DATA_DIR：覆盖层落 <HOME>/.local/share/hids-a
 
 test('A1 八条具名路径的结构与文档表一致，且默认根不在仓库内', async () => {
   const { runtimePaths } = await import(pathToFileURL(path.join(repository, 'server.js')).href);
-  const { dataRoot } = await import(pathToFileURL(path.join(repository, 'config-store.js')).href);
+  const { dataRoot } = await import(pathToFileURL(path.join(repository, 'src/contexts/dataops/infrastructure/config-store.js')).href);
 
   const root = '/tmp/hids-doc-root';
   const expected = {

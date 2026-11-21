@@ -15,7 +15,7 @@ import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/eviden
 import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 import { PromptStore } from '../../../src/contexts/knowledge/infrastructure/prompt-store.js';
 import { TriageRuleEngine } from '../../../src/contexts/knowledge/infrastructure/triage-rules.js';
-import { UpdateStore, openPackage, sealPackage } from '../../../update-store.js';
+import { UpdateStore, openPackage, sealPackage } from '../../../src/contexts/dataops/infrastructure/update-store.js';
 
 const MARKER = 'SECRET_BODY_MARKER';
 const GATED = /^(上游调用失败|调用超时|模型回包不是合法 JSON)，原文 \d+ 字未落盘$/;

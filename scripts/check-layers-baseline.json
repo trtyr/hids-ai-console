@@ -1,8 +1,4 @@
 {
-  "struct.file-placement|{\"file\":\"config-store.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "config-store.js"
-  },
   "struct.file-placement|{\"file\":\"knowledge-store.js\"}": {
     "kind": "struct.file-placement",
     "file": "knowledge-store.js"
@@ -11,20 +7,32 @@
     "kind": "struct.file-placement",
     "file": "knowledge-workbench.js"
   },
-  "struct.file-placement|{\"file\":\"maintenance-server.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "maintenance-server.js"
-  },
-  "struct.file-placement|{\"file\":\"package-policy.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "package-policy.js"
-  },
   "struct.file-placement|{\"file\":\"server.js\"}": {
     "kind": "struct.file-placement",
     "file": "server.js"
   },
-  "struct.file-placement|{\"file\":\"update-store.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "update-store.js"
+  "struct.app-new-adapter|{\"file\":\"src/interfaces/cli/package-policy.js\",\"line\":33,\"name\":\"PromptStore\"}": {
+    "kind": "struct.app-new-adapter",
+    "file": "src/interfaces/cli/package-policy.js",
+    "line": 33,
+    "name": "PromptStore"
+  },
+  "struct.app-new-adapter|{\"file\":\"src/interfaces/http/maintenance/server.js\",\"line\":48,\"name\":\"AuditStore\"}": {
+    "kind": "struct.app-new-adapter",
+    "file": "src/interfaces/http/maintenance/server.js",
+    "line": 48,
+    "name": "AuditStore"
+  },
+  "struct.app-new-adapter|{\"file\":\"src/interfaces/http/maintenance/server.js\",\"line\":176,\"name\":\"PromptStore\"}": {
+    "kind": "struct.app-new-adapter",
+    "file": "src/interfaces/http/maintenance/server.js",
+    "line": 176,
+    "name": "PromptStore"
+  },
+  "struct.app-new-adapter|{\"file\":\"src/interfaces/http/maintenance/server.js\",\"line\":186,\"name\":\"UpdateStore\"}": {
+    "kind": "struct.app-new-adapter",
+    "file": "src/interfaces/http/maintenance/server.js",
+    "line": 186,
+    "name": "UpdateStore"
   }
 }

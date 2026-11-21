@@ -14,7 +14,7 @@ test('maintenance CLI starts when the deployment current path is a symlink',asyn
   t.after(()=>rm(directory,{recursive:true,force:true}));
   const root=path.dirname(fileURLToPath(import.meta.url));
   await symlink(root,path.join(directory,'current'),'dir');
-  const child=spawn(process.execPath,[path.join(directory,'current/maintenance-server.js'),'--preview'],{
+  const child=spawn(process.execPath,[path.join(directory,'current/src/interfaces/http/maintenance/server.js'),'--preview'],{
     env:{PATH:process.env.PATH,HOME:directory,HIDS_MAINTENANCE_PORT:'0'},stdio:['ignore','pipe','pipe']
   });
   const exited=new Promise(resolve=>child.once('exit',resolve));

@@ -29,7 +29,7 @@ const urlOf = name => `file://${path.join(repository, name)}`;
 // 首启/二次启动只做「按缺省装配读两本库」：`new WikiStore()` / `new RuleStore()` 的缺省目录就是数据根，
 // 首次读会从仓内 `wiki/`、`rules/` 整目录种子一次（`wiki-store.js` 的 ensureWikiLibrary / `rule-store.js` 的 ready）。
 const SEED_SCRIPT = `
-const { dataRoot } = await import(${JSON.stringify(urlOf('config-store.js'))});
+const { dataRoot } = await import(${JSON.stringify(urlOf('src/contexts/dataops/infrastructure/config-store.js'))});
 const { WikiStore } = await import(${JSON.stringify(urlOf('src/contexts/knowledge/infrastructure/wiki-store.js'))});
 const { RuleStore } = await import(${JSON.stringify(urlOf('src/contexts/knowledge/infrastructure/rule-store.js'))});
 const pages = await new WikiStore().list();

@@ -18,7 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
 import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
-import { createConfigStore } from '../../../config-store.js';
+import { createConfigStore } from '../../../src/contexts/dataops/infrastructure/config-store.js';
 import { createModelRolesFromEnv, MODEL_ROLES } from '../../../src/contexts/triage/infrastructure/model-client.js';
 import { createServer } from '../../../server.js';
 

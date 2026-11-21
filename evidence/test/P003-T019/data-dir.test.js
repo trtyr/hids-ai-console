@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runtimePaths } from '../../../server.js';
-import { dataRoot } from '../../../config-store.js';
+import { dataRoot } from '../../../src/contexts/dataops/infrastructure/config-store.js';
 
 // P003-T019 立、P003-T034 改口径：运行态（案卷 / 研判记录 / 基线 / 规则集 / 白板）不再落仓库内 `.data/`，
 // 一律落在**数据根**下（`HIDS_DATA_DIR` 或 `~/.local/share/hids-ai-console`）。
