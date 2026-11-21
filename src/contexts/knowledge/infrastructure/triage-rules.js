@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, stat as statFile, writeFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import path from 'node:path';
 import { repositoryRoot } from '../../../shared/data-root.js';
@@ -219,8 +219,20 @@ function conditionMatches(condition, value) {
   return typeof value === 'number' ? value === Number(condition.value) : value === condition.value;
 }
 
+// 历史落点：与规则集文件同级的 `<文件名>.history/`（P003-T086 A3，对齐 Rego 的 rules-history）。
+// 每版正文 `<rev>.json` + 备注 sidecar `<rev>.meta.json`（note / saved_at / replaced_by）。
+export function triageRuleHistoryDirectory(filename) {
+  const dir = path.dirname(path.resolve(filename));
+  const base = path.basename(filename, path.extname(filename));
+  return path.join(dir, `${base}.history`);
+}
+
 export class TriageRuleEngine {
-  constructor(filename) { this.filename = filename; this.pending = Promise.resolve(); }
+  constructor(filename, { historyDirectory = triageRuleHistoryDirectory(filename) } = {}) {
+    this.filename = filename;
+    this.historyDirectory = historyDirectory;
+    this.pending = Promise.resolve();
+  }
 
   async readConfig() {
     let source, origin = 'file';
@@ -241,22 +253,78 @@ export class TriageRuleEngine {
     }
   }
 
-  saveConfig(config, expectedRevision) {
+  saveConfig(config, expectedRevision, { note = '' } = {}) {
     const job = this.pending.catch(() => {}).then(async () => {
       validateRuleSet(config);
       const current = await this.readConfig();
-      if (current.revision !== expectedRevision) {
+      // 归档要用前一版原文：readConfig 只回解析结果，这里单独读一次盘（文件可能不存在）。
+      let currentSource = null;
+      try { currentSource = await readFile(this.filename, 'utf8'); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      // undefined＝调用方不做并发校验（回滚）；null＝要求当前不存在；字符串＝必须相等。
+      if (expectedRevision !== undefined && current.revision !== expectedRevision) {
         const error = new Error('规则配置已变化，请刷新后重试'); error.status = 409; throw error;
       }
       const source = `${JSON.stringify(config, null, 2)}\n`;
+      // T086 A3：旧版进历史（与 Rego 侧同口径：正文副本 + 备注 sidecar）。当前版存在才归档。
+      const nextRev = createHash('sha256').update(source).digest('hex').slice(0, 16);
+      if (current.revision) await this.#archive(current.revision, currentSource, { note, replacedBy: nextRev });
       await mkdir(path.dirname(this.filename), { recursive: true, mode: 0o700 });
       const temporary = `${this.filename}.${randomUUID()}.tmp`;
       await writeFile(temporary, source, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
       await rename(temporary, this.filename);
-      return { config, origin: 'file', revision: createHash('sha256').update(source).digest('hex').slice(0, 16) };
+      return { config, origin: 'file', revision: nextRev };
     });
     this.pending = job.catch(() => {});
     return job;
+  }
+
+  // 旧版归档：正文副本 `<rev>.json` + `<rev>.meta.json`。同版重复归档保留第一次的备注。
+  async #archive(rev, source, { note = '', replacedBy = null } = {}) {
+    await mkdir(this.historyDirectory, { recursive: true, mode: 0o700 });
+    const copy = path.join(this.historyDirectory, `${rev}.json`);
+    try { await writeFile(copy, source, { encoding: 'utf8', mode: 0o600, flag: 'wx' }); }
+    catch (cause) { if (cause.code === 'EEXIST') return; throw cause; }
+    await writeFile(path.join(this.historyDirectory, `${rev}.meta.json`),
+      JSON.stringify({ rev, note: String(note || ''), saved_at: new Date().toISOString(), replaced_by: replacedBy }),
+      { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+      .catch(cause => { if (cause.code !== 'EEXIST') throw cause; });
+  }
+
+  /** 列历史版本：`[{rev, bytes, saved_at, note, replaced_by}]`，按写入时间升序。 */
+  async history() {
+    let names;
+    try { names = await readdir(this.historyDirectory); }
+    catch (cause) { if (cause.code === 'ENOENT') return []; throw cause; }
+    const rows = [];
+    for (const name of names.filter(item => /^[0-9a-f]{16}\.json$/.test(item))) {
+      const rev = name.slice(0, -'.json'.length);
+      const full = path.join(this.historyDirectory, name);
+      let info, meta = null;
+      try { info = await statFile(full); } catch (cause) { if (cause.code === 'ENOENT') continue; throw cause; }
+      try { meta = JSON.parse(await readFile(path.join(this.historyDirectory, `${rev}.meta.json`), 'utf8')); }
+      catch { /* 备注缺失不算错 */ }
+      rows.push({ rev, bytes: info.size, saved_at: new Date(info.mtimeMs).toISOString(),
+        note: meta?.note || null, replaced_by: meta?.replaced_by || null, at: info.mtimeMs });
+    }
+    return rows.sort((a, b) => a.at - b.at).map(({ at, ...row }) => row);
+  }
+
+  /** 读某一版正文：`{rev, config, source}`；不存在返回 null。 */
+  async readRevision(rev) {
+    if (!/^[0-9a-f]{16}$/.test(String(rev || ''))) return null;
+    try {
+      const source = await readFile(path.join(this.historyDirectory, `${rev}.json`), 'utf8');
+      return { rev, source, config: validateRuleSet(JSON.parse(source)) };
+    } catch (cause) { if (cause.code === 'ENOENT') return null; throw cause; }
+  }
+
+  /** 回滚：把某一版当新版再写一次（与 Rego 侧同口径，回滚本身可再回滚）。 */
+  async rollback(rev, { note = '', expectedRevision = undefined } = {}) {
+    const previous = await this.readRevision(rev);
+    if (!previous) throw Object.assign(new Error(`规则集历史版本不存在：${rev}`), { status: 404 });
+    const saved = await this.saveConfig(previous.config, expectedRevision, { note });
+    return { ...saved, action: 'rollback', rolled_back_to: rev };
   }
 
   async evaluate({ alertId, parsed = null, toolbox, match = null }) {

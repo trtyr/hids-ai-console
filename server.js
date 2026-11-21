@@ -858,7 +858,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   ruleAdminToken = process.env.HIDS_RULE_ADMIN_TOKEN, ruleStore = regoRuleStore,
   ruleMaintainer = regoMaintainer, config = configStore, ruleSessions = defaultRuleSessions,
   logFile = logOptions ? logOptions.file : null, fpSessions = defaultFpSessions, fpDecision = fpDecisionModel,
-  fpMaintainer = null) {
+  fpMaintainer = null, triageRules = triageRuleEngine) {
   // 注入的 TraceBoardService 没有取数器时，用本次的 monitor / history 现接一条：
   // 测试与部署走同一套接线，不再靠测试里手塞假 analysis。
   if (boardService instanceof TraceBoardService && !boardService.analysis)
@@ -1298,7 +1298,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         return json(res, 200, monitor.summary({ since }));
       }
       if (url.pathname === '/api/triage/rules' && req.method === 'GET') {
-        try { return json(res, 200, { ...await (monitor?.ruleEngine || triageRuleEngine).readConfig(),
+        try { return json(res, 200, { ...await (monitor?.ruleEngine || triageRules).readConfig(),
           writable: Boolean(ruleAdminToken) }); }
         catch (cause) { return upstreamError(res, `规则配置读取失败：${cause.message}`); }
       }
@@ -1324,12 +1324,56 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           if (!body || !Object.hasOwn(body, 'expected_revision') ||
             !(body.expected_revision === null || /^[0-9a-f]{16}$/.test(body.expected_revision)))
             return callerError(res, '缺少有效的规则配置版本');
-          const saved = await (monitor?.ruleEngine || triageRuleEngine)
+          const saved = await (monitor?.ruleEngine || triageRules)
             .saveConfig(body.config, body.expected_revision);
           void auditor({ actor: actorOf({ access, tokenKind: 'rule-admin' }), action: 'triage-rules.write',
             object: { kind: 'triage_rules' } });
           return json(res, 200, saved);
         } catch (cause) { return causeError(res, cause, 'internal'); }
+      }
+      // ── JSON 前置规则集历史与回滚（P003-T086 A3）────────────────────────────
+      if (url.pathname === '/api/triage/rules/history' && req.method === 'GET') {
+        try { return json(res, 200, { history: await triageRules.history() }); }
+        catch (cause) { return upstreamError(res, `规则集历史读取失败：${cause.message}`); }
+      }
+      const triageRuleRevision = url.pathname.match(/^\/api\/triage\/rules\/history\/([0-9a-f]{16})$/);
+      if (triageRuleRevision && req.method === 'GET') {
+        try {
+          const revision = await triageRules.readRevision(triageRuleRevision[1]);
+          return revision ? json(res, 200, revision) : callerError(res, '规则集历史版本不存在', 404);
+        } catch (cause) { return upstreamError(res, `规则集历史读取失败：${cause.message}`); }
+      }
+      if (url.pathname === '/api/triage/rules/rollback' && req.method === 'POST') {
+        if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');
+        if (!hasRuleAdminAccess(req, ruleAdminToken)) return callerError(res, '规则管理员令牌无效', 403);
+        const body = await readJSON(req);
+        const rev = typeof body?.rev === 'string' ? body.rev.trim() : '';
+        if (!/^[0-9a-f]{16}$/.test(rev)) return callerError(res, '缺少有效的目标版本 rev');
+        const who = String(body.who ?? access?.user ?? 'operator').trim().replace(/\s+/g, ' ').slice(0, 100);
+        try {
+          const rolled = await triageRules.rollback(rev, { note: `人工回滚（${who}）` });
+          void auditor({ actor: actorOf({ access, tokenKind: 'rule-admin' }), action: 'triage-rules.write',
+            object: { kind: 'triage_rules', action: 'rollback', rev } });
+          return json(res, 200, rolled);
+        } catch (cause) { return causeError(res, cause, 'internal'); }
+      }
+      // ── 规则命中统计（P003-T086 A4）：按规则 id 汇总命中过的告警与次数 ─────────
+      if (url.pathname === '/api/rules/hits' && req.method === 'GET') {
+        if (!monitor) return configError(res, '自动研判尚未配置');
+        const byRule = {};
+        for (const record of monitor.records.values()) {
+          const ruleId = record.rule_id;
+          if (!ruleId) continue;
+          const entry = byRule[ruleId] || { rule_id: ruleId, hits: 0, alerts: [], first_at: null, last_at: null };
+          entry.hits += 1;
+          if (entry.alerts.length < 20) entry.alerts.push(record.alert_id);
+          const at = record.created_at || null;
+          if (at && (!entry.first_at || at < entry.first_at)) entry.first_at = at;
+          if (at && (!entry.last_at || at > entry.last_at)) entry.last_at = at;
+          byRule[ruleId] = entry;
+        }
+        const rules = Object.values(byRule).sort((a, b) => b.hits - a.hits);
+        return json(res, 200, { total_rules: rules.length, rules });
       }
       if (url.pathname === '/api/rules' && req.method === 'GET') {
         try { return json(res, 200, await ruleStore.list()); }

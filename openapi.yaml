@@ -648,6 +648,116 @@ paths:
                   items: { type: array, items: { $ref: '#/components/schemas/TriageCase' } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/triage/rules/history:
+    get:
+      tags: [规则]
+      summary: JSON 前置规则集的历史版本
+      operationId: listTriageRuleHistory
+      description: P003-T086 A3。与 Rego 侧对齐：改一版旧版进历史，含备注与被替换指向。
+      responses:
+        '200':
+          description: 历史列表（按写入时间升序）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [history]
+                properties:
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      required: [rev, bytes, saved_at]
+                      properties:
+                        rev: { type: string, pattern: '^[0-9a-f]{16}$' }
+                        bytes: { type: integer }
+                        saved_at: { type: string }
+                        note: { type: [string, 'null'] }
+                        replaced_by: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/triage/rules/history/{rev}:
+    get:
+      tags: [规则]
+      summary: 读某一版 JSON 规则集正文
+      operationId: readTriageRuleRevision
+      parameters:
+        - { name: rev, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]{16}$' } }
+      responses:
+        '200':
+          description: 该版正文与解析结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rev, source]
+                properties:
+                  rev: { type: string }
+                  source: { type: string }
+                  config: { type: object, additionalProperties: true }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/triage/rules/rollback:
+    post:
+      tags: [规则]
+      summary: 回滚 JSON 规则集到某一版（需要规则管理员令牌）
+      operationId: rollbackTriageRules
+      description: P003-T086 A3。把历史某版当新版再写一次（内容寻址，回滚本身可再回滚）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rev]
+              properties:
+                rev: { type: string, pattern: '^[0-9a-f]{16}$' }
+                who: { type: string, maxLength: 100 }
+      responses:
+        '200':
+          description: 回滚结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revision, action, rolled_back_to]
+                properties:
+                  revision: { type: string }
+                  action: { type: string, enum: [rollback] }
+                  rolled_back_to: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/rules/hits:
+    get:
+      tags: [Rego 规则]
+      summary: 规则命中统计（按 rule_id 汇总）
+      operationId: listRuleHits
+      description: P003-T086 A4。按 rule_id 汇总命中次数、告警列表（前 20 条）与首末命中时刻。
+      responses:
+        '200':
+          description: 命中统计
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total_rules, rules]
+                properties:
+                  total_rules: { type: integer }
+                  rules:
+                    type: array
+                    items:
+                      type: object
+                      required: [rule_id, hits, alerts]
+                      properties:
+                        rule_id: { type: string }
+                        hits: { type: integer }
+                        alerts: { type: array, items: { type: string } }
+                        first_at: { type: [string, 'null'] }
+                        last_at: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/audit:
     get:
       tags: [审计]

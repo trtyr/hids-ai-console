@@ -81,6 +81,10 @@ const ROUTES = [
   { route: 'POST /api/trace/boards', probe: "'/api/trace/boards'" },
   { route: 'GET /api/trace/boards/{target}', probe: "'/api/trace/boards/'" },
   // 前置规则集（JSON）
+  { route: 'GET /api/triage/rules/history', probe: "'/api/triage/rules/history'" },
+  { route: 'GET /api/triage/rules/history/{rev}', probe: 'triage\\/rules\\/history\\/' },
+  { route: 'POST /api/triage/rules/rollback', probe: "'/api/triage/rules/rollback'" },
+  { route: 'GET /api/rules/hits', probe: "'/api/rules/hits'" },
   { route: 'GET /api/triage/rules', probe: "'/api/triage/rules'" },
   { route: 'POST /api/triage/rules/validate', probe: "'/api/triage/rules/validate'" },
   { route: 'PUT /api/triage/rules', probe: "'/api/triage/rules'" },
