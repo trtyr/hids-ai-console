@@ -473,6 +473,40 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/wiki/pages/{pagePath}:
+    put:
+      tags: [知识库]
+      summary: 改写一页判据（乐观锁）
+      operationId: updateWikiPage
+      description: |
+        通过控制台直接编辑判据页。乐观锁：`expected_revision` 必须与当前版本一致，不一致回 409。
+        写入后旧版进 `wiki-history/`、`log.md` 记账。页面 ID 必须保持一致，状态须为 active、draft 或 deprecated。
+        需要判据来源（evidence 或 source）。正文 1 到 30000 字。
+      parameters:
+        - { name: pagePath, in: path, required: true, schema: { type: string, description: '判据页路径（如 honeypot/HP-01.md），URL 编码' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content, expected_revision]
+              properties:
+                content: { type: string, description: 页面正文（含 frontmatter），1 到 30000 字 }
+                expected_revision: { type: string, pattern: '^[0-9a-f]{16}$', description: 当前版本指纹（sha256 前 16 位） }
+      responses:
+        '200':
+          description: 更新后的页面元数据
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WikiPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '409':
+          description: 页面版本已变（`code=caller_error`），请刷新后重试
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /api/audit:
     get:
       tags: [审计]
@@ -3485,7 +3519,7 @@ components:
       properties:
         error:
           type: string
-          description: 失败原因原话；上游失败时是上游那句摘要（已做凭据擦除），本程序失败时恒为「服务器内部错误」
+          description: 失败原因原话；上游失败时是上游那句摘要（已做凭据擦除），本程序失败时恒为「服务器内部错误」。规则库错误额外在 error 里含 rules/<file>:<行> 定位（P003-T067 B10）
         code:
           type: string
           enum: [caller_error, not_configured, upstream_error, internal_error]
