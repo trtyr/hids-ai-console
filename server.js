@@ -1014,6 +1014,117 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           triage_statuses: TRIAGE_STATUSES
         });
       }
+
+  const recordTypeLocal = record => {
+  if (record.input?.parsed?.msgid) return eventTypeFor(record.input.parsed.msgid) || '';
+  const text = String(record.alert_id || '');
+  const at = text.indexOf(':');
+  return at > 0 ? text.slice(0, at) : '';
+};
+
+// ── 聚合统计（P003-T064 A05）：存储侧全量计算，绕过 /api/alerts 的 500 条扫描上限 ──
+  // 误报率分母 = 有结论的 done 案件（review 不算——还没研判完）；分子 = false_positive。
+  // MTTR = done 案件 created_at→saved_at 的中位数（不入库的时间戳对，秒级精度，无结论案件不计）。
+  if (url.pathname === '/api/stats/trend' && req.method === 'GET') {
+    if (!monitor) return configError(res, '自动研判尚未配置');
+    const bucket = url.searchParams.get('bucket') || 'day';
+    if (!['hour', 'day'].includes(bucket)) return callerError(res, 'bucket 只能是 hour 或 day');
+    const days = Number(url.searchParams.get('days') || 7);
+    if (!Number.isSafeInteger(days) || days < 1 || days > 90) return callerError(res, 'days 必须是 1 到 90');
+    const since = Date.now() - days * 86400000;
+    const buckets = {};
+    for (const record of monitor.records.values()) {
+      const at = Date.parse(record.created_at || '');
+      if (!Number.isFinite(at) || at < since) continue;
+      const d = new Date(at);
+      const key = bucket === 'hour'
+        ? `${d.toISOString().slice(0, 13)}:00:00Z` : d.toISOString().slice(0, 10);
+      buckets[key] = (buckets[key] || 0) + 1;
+    }
+    return json(res, 200, { bucket, days, buckets: Object.fromEntries(Object.entries(buckets).sort()) });
+  }
+  if (url.pathname === '/api/stats/top' && req.method === 'GET') {
+    if (!monitor) return configError(res, '自动研判尚未配置');
+    const dimension = url.searchParams.get('dimension') || 'host_ip';
+    const limit = Number(url.searchParams.get('limit') || 10);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) return callerError(res, 'limit 必须是 1 到 100');
+    const counts = {};
+    for (const record of monitor.records.values()) {
+      let value = null;
+      if (dimension === 'host_ip') value = record.input?.parsed?.payload?.host_ip || null;
+      else if (dimension === 'source_ip') value = record.input?.parsed?.payload?.source_ip || record.input?.parsed?.payload?.login_ip || null;
+      else if (dimension === 'event_type') value = recordTypeLocal(record) || null;
+      else if (dimension === 'user') value = record.input?.parsed?.payload?.user_name || record.input?.parsed?.payload?.login_username || null;
+      else return callerError(res, 'dimension 只能是 host_ip、source_ip、event_type、user');
+      if (!value) continue;
+      counts[value] = (counts[value] || 0) + 1;
+    }
+    const top = Object.entries(counts).map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count).slice(0, limit);
+    return json(res, 200, { dimension, limit, top });
+  }
+  if (url.pathname === '/api/stats/summary' && req.method === 'GET') {
+    if (!monitor) return configError(res, '自动研判尚未配置');
+    let concluded = 0, falsePositives = 0;
+    const durations = [];
+    for (const record of monitor.records.values()) {
+      if (record.status !== 'done' || !record.verdict) continue;
+      concluded += 1;
+      if (record.verdict === 'false_positive') falsePositives += 1;
+      const from = Date.parse(record.created_at || '');
+      const to = Date.parse(record.saved_at || '');
+      if (Number.isFinite(from) && Number.isFinite(to) && to >= from) durations.push(to - from);
+    }
+    durations.sort((a, b) => a - b);
+    const median = durations.length ? durations[Math.floor(durations.length / 2)] : null;
+    return json(res, 200, {
+      concluded_total: concluded,
+      false_positive_total: falsePositives,
+      false_positive_rate: concluded ? falsePositives / concluded : null,
+      mttr_ms_median: median,
+      mttr_samples: durations.length
+    });
+  }
+
+  // ── 导出（P003-T065 A06）：CSV/JSON 附件下载，只读不写 ──────────────────────
+  const exportMatch = url.pathname.match(/^\/api\/export\/([a-z_]+)$/);
+  if (exportMatch && req.method === 'GET') {
+    const dataset = exportMatch[1];
+    const format = url.searchParams.get('format') || 'csv';
+    if (!['alerts', 'cases', 'logs', 'boards'].includes(dataset)) return callerError(res, 'dataset 只能是 alerts、cases、logs、boards');
+    if (!['csv', 'json'].includes(format)) return callerError(res, 'format 只能是 csv 或 json');
+    let rows;
+    if (dataset === 'alerts') {
+      if (!service) return configError(res, '未配置 CLOUDWALKER_URL 和 CLOUDWALKER_API_TOKEN');
+      rows = (await viaCloudwalker('alerts', null, () => service.alerts({ count: 50, offset: 0 }))).alerts;
+    } else if (dataset === 'cases') {
+      if (!monitor) return configError(res, '自动研判尚未配置');
+      rows = monitor.cases({ count: 50 }).cases;
+    } else if (dataset === 'logs') {
+      if (!logFile) return configError(res, '日志未落盘：未配置 HIDS_LOG_FILE');
+      rows = readLogEntries({ file: logFile, count: 1000 }).logs;
+    } else {
+      if (!boardService) return configError(res, '深度溯源模型或牧云 MCP 尚未配置');
+      rows = await boardService.list(50);
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (format === 'json') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="hids-${dataset}-${stamp}.json"`, 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(rows, null, 2));
+      return;
+    }
+    // CSV：统一取并集表头（行间字段可能不同），BOM 让 Excel 识别 UTF-8
+    const headers = [...new Set(rows.flatMap(row => Object.keys(row)))];
+    const cell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+    const csv = String.fromCharCode(0xFEFF) + headers.join(',') + '\n' +
+      rows.map(row => headers.map(header => cell(row[header])).join(',')).join('\n');
+    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="hids-${dataset}-${stamp}.csv"`, 'Cache-Control': 'no-store' });
+    res.end(csv);
+    return;
+  }
+
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
         try { return json(res, 200, { configured: true, ...(await viaCloudwalker('status', null, () => service.status())) }); }
@@ -1121,6 +1232,14 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         try { return json(res, 200, { sessions: await ruleSessions.list() }); }
         catch (cause) { return upstreamError(res, `规则维护会话读取失败：${cause.message}`); }
       }
+      // T070 A11：规则维护会话详情——rationale/validation/result/error 全文（列表只有摘要）。
+      const ruleSession = url.pathname.match(/^\/api\/rules\/sessions\/([0-9a-f-]{36})$/i);
+      if (ruleSession && req.method === 'GET') {
+        try {
+          const session = await ruleSessions.get(ruleSession[1]);
+          return session ? json(res, 200, session) : callerError(res, '规则维护会话不存在', 404);
+        } catch (cause) { return upstreamError(res, `规则维护会话读取失败：${cause.message}`); }
+      }
       // 误报维护会话（P003-T047 A1）：一个案件一份多轮会话，落数据根下的 `fp-sessions/`。
       // 读开放（与 `/api/rules/sessions` 同口径）；写只有误报入口一条路，这里只提供查询。
       if (url.pathname === '/api/false-positive/sessions' && req.method === 'GET') {
@@ -1154,6 +1273,15 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         if (ruleMaintenance[2] === 'history' && req.method === 'GET') {
           try { return json(res, 200, { id, history: await ruleStore.history(id) }); }
           catch (cause) { return upstreamError(res, `规则历史读取失败：${cause.message}`); }
+        }
+        if (ruleMaintenance[2] === 'history' && req.method === 'GET') {
+          // T070 A12：历史某版正文——历史已经落盘（rules-history/<id>-<rev>.rego），补读的路由。
+          const rev = url.searchParams.get('rev');
+          if (!rev || !/^[0-9a-f]{16}$/.test(rev)) return callerError(res, '缺少有效的目标版本 rev');
+          try {
+            const revision = await ruleStore.readRevision(id, rev);
+            return revision ? json(res, 200, revision) : callerError(res, `规则历史版本不存在：${id}-${rev}`, 404);
+          } catch (cause) { return upstreamError(res, `规则历史读取失败：${cause.message}`); }
         }
         if (ruleMaintenance[2] === 'rollback' && req.method === 'POST') {
           if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');

@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-EVIDENCE-TOOLS
-covers: [mcp-client.js, agent-tools.js, api-tools.js]
+covers: [src/contexts/ingestion/infrastructure/mcp-client.js, agent-tools.js, api-tools.js]
 unit: evidence-tools
 updated: 2026-11-20
 ---

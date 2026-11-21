@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-EVENT-GATEWAY
-covers: [cloudwalker.js, rpc-client.js]
+covers: [src/contexts/ingestion/infrastructure/gateway.js, src/contexts/ingestion/infrastructure/rpc-client.js, src/shared/vocabulary.js, src/shared/alert-shape.js]
 unit: event-gateway
 updated: 2026-11-20
 ---
