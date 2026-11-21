@@ -454,6 +454,37 @@ export function boundedToolArgs(name, rawArgs, catalog) {
   return args;
 }
 
+
+// ── 成本与一致性（P003-T085）────────────────────────────────────────────────
+// 成本：把逐轮快照（turns）汇成一次研判的用量——轮次数、工具调用、字符量、总耗时。
+// 不含 token 数（模型回包不保证给 usage，字符量是可复算的稳定口径）。
+function costOf(transcript, startedAt) {
+  const rows = Array.isArray(transcript) ? transcript : [];
+  return {
+    turns: rows.filter(row => row.phase === 'investigate').length,
+    model_calls: rows.length,
+    tool_calls: rows.reduce((sum, row) => sum + (Array.isArray(row.tools) ? row.tools.length : 0), 0),
+    input_chars: rows.reduce((sum, row) => sum + (row.input_chars || 0), 0),
+    output_chars: rows.reduce((sum, row) => sum + (row.reply_chars || 0), 0),
+    duration_ms: Date.now() - startedAt
+  };
+}
+
+// 一致性（T085 A3）：verdict.claims[].citations 的每个 evidence_id 必须存在于本次 investigation 的
+// evidence[]——这是「结论不能引用没取过的证据」的最后一道闸，独立于 verifyClaims（后者还核字段值）。
+// 返回缺失清单；空数组＝一致。
+function danglingCitations(verdict, evidence) {
+  const known = new Set((Array.isArray(evidence) ? evidence : []).map(item => item.evidence_id));
+  const missing = [];
+  for (const [index, claim] of (Array.isArray(verdict?.claims) ? verdict.claims : []).entries()) {
+    for (const cite of claim?.citations || []) {
+      if (cite?.evidence_id && !known.has(cite.evidence_id))
+        missing.push(`claims[${index}] 引用了本次未取到的证据 ${cite.evidence_id}`);
+    }
+  }
+  return [...new Set(missing)];
+}
+
 export class InvestigationAgent {
   // 第 6 参 reviewModel（P003-T042）：独立复核那一轮用的实例。不传就沿用研判模型（分层前的行为）。
   // R-STRUCT+（批 3）：promptStore / ruleStore 由装配注入；缺省用纯对象替身（不是 new 适配器）。
@@ -483,6 +514,7 @@ export class InvestigationAgent {
   }
 
   async run(alertId, { mode = 'deep', onProgress = () => {}, streamContext = null, ruleEvaluation = null } = {}) {
+    const startedAt = Date.now();
     const match = String(alertId || '').match(/^([a-z_]+):([1-9][0-9]*)$/);
     if (!match || !Object.hasOwn(eventTypes, match[1]) || !Number.isSafeInteger(Number(match[2]))) throw new Error('告警 ID 无效');
     if (!['deep', 'triage'].includes(mode)) throw new Error('研判模式无效');
@@ -964,6 +996,9 @@ export class InvestigationAgent {
       }
     }
     verdict = normalizeVerdict(verdict);
+    // T085 A3：在引用校验的过滤循环之前先记下「模型原本引用了哪些本次没取到的证据」——
+    // 后面的 verifyClaims 会把这些 claim 过滤掉，但审计要知道模型试过什么。
+    const draftDangling = danglingCitations(verdict, persistedEvidence(session.records));
     // A2：独立复核不可用时 threat 一律降存疑，不分告警类型；复核要求修订但修订请求失败也降级。
     // highRisk 只保留在「复核要求修订」这一档：非高危类型被要求修订、且修订成功时不强行降级。
     const revisionFailure = revisionFailed ? `独立复核要求修订，修订请求失败：${revisionFailed}` : null;
@@ -1080,10 +1115,19 @@ export class InvestigationAgent {
     onProgress('完成研判', '正在保存研判记录');
     const systemDigest = createHash('sha256').update(system).digest('hex').slice(0, 12);
     await persistRequiredEvidence();
+    const evidence = persistedEvidence(session.records);
+    // T085 A3：结论引用必须落在本次 evidence[] 里——不一致就标 validation 不通过并列出缺失项。
+    const dangling = [...new Set([...draftDangling, ...danglingCitations(verdict, evidence)])];
+    if (dangling.length) {
+      validation = { ...validation, ok: false,
+        errors: [...new Set([...(validation.errors || []), ...dangling])], dangling_citations: dangling };
+      verdict.missing_evidence = [...new Set([...(verdict.missing_evidence || []),
+        '结论引用了本次未取到的证据，需重新核对'])];
+    }
     return { alert_id: alertId, mode, model: this.model.model,
       prompt_version: `${prompts.version}+${prompts.revision}+${systemDigest}`, scenario_ids: cards.map(card => card.id),
       verdict, review, validation, trace, turns: transcript, required_evidence: requiredChecks,
-      evidence: persistedEvidence(session.records), auto_action: false };
+      evidence, cost: costOf(transcript, startedAt), auto_action: false };
   }
 
   async runUnmatchedSyslog(input, matchResult, caseInfo, onProgress = () => {}) {
