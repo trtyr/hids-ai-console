@@ -1,4 +1,4 @@
-import { eventTypes, rpcMethods } from './cloudwalker.js';
+import { eventTypes, rpcMethods } from './src/shared/vocabulary.js';
 import { EvidenceSession } from './agent-tools.js';
 
 const eventNames = Object.keys(eventTypes);

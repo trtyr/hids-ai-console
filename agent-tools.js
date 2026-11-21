@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { CloudwalkerMcpClient } from './mcp-client.js';
-import { eventTypes } from './cloudwalker.js';
+import { CloudwalkerMcpClient } from './src/contexts/ingestion/infrastructure/mcp-client.js';
+import { eventTypes } from './src/shared/vocabulary.js';
 import { boundEvidenceView, projectEvidence } from './evidence-view.js';
 
 // 只将明确选择的查询工具交给研判智能体。牧云 MCP 另有 whitelist_* 写入工具。

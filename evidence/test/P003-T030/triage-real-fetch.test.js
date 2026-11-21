@@ -26,9 +26,9 @@ import { TriageMonitor } from '../../../triage-monitor.js';
 import { InvestigationStore } from '../../../investigation-store.js';
 import { createServer } from '../../../server.js';
 import { InvestigationAgent } from '../../../investigation-agent.js';
-import { RpcClient } from '../../../rpc-client.js';
+import { RpcClient } from '../../../src/contexts/ingestion/infrastructure/rpc-client.js';
 import { ApiEvidenceToolbox } from '../../../api-tools.js';
-import { CloudwalkerMcpClient } from '../../../mcp-client.js';
+import { CloudwalkerMcpClient } from '../../../src/contexts/ingestion/infrastructure/mcp-client.js';
 import { AgentToolbox, TriageEvidenceToolbox } from '../../../agent-tools.js';
 
 const TID = 'webshell:9001';

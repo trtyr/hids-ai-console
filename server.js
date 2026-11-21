@@ -5,8 +5,9 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from '
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { RpcClient } from './rpc-client.js';
-import { CloudwalkerGateway, eventTypes, parseInstant } from './cloudwalker.js';
+import { RpcClient } from './src/contexts/ingestion/infrastructure/rpc-client.js';
+import { CloudwalkerGateway } from './src/contexts/ingestion/infrastructure/gateway.js';
+import { eventTypes, parseInstant } from './src/shared/vocabulary.js';
 import { createAgentToolboxFromEnv, TriageEvidenceToolbox } from './agent-tools.js';
 import { ApiEvidenceToolbox } from './api-tools.js';
 import { applyModelValues, createModelRolesFromEnv, modelRoleSummary, modelRoleValues, MODEL_ROLES } from './model-client.js';
@@ -15,8 +16,9 @@ import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
 import { TriageMonitor } from './triage-monitor.js';
 import { log, logFileOptions, pruneLogFiles, readLogEntries, queryLevels, traceModelCall, useLogFile } from './src/shared/logging/log.js';
-import { SyslogReceiver, parseSyslog } from './syslog-input.js';
-import { eventTypeFor } from './syslog-input.js';
+import { parseSyslog } from './src/contexts/ingestion/application/parsing.js';
+import { SyslogReceiver } from './src/interfaces/udp/syslog/receiver.js';
+import { eventTypeFor } from './src/contexts/ingestion/application/parsing.js';
 import { WikiStore } from './wiki-store.js';
 import { WikiWorkbench } from './wiki-workbench.js';
 import { TraceBoardService } from './src/contexts/trace/application/trace-service.js';
@@ -34,7 +36,7 @@ import { runWithRequestContext, currentRequestContext } from './src/shared/loggi
 import { AuditStore } from './src/contexts/audit/infrastructure/audit-store.js';
 import { createAuditor, actorOf, configAuditValues } from './src/contexts/audit/application/audit-service.js';
 import { VERDICT_KEYS, TRIAGE_STATUSES, VERDICT_LABELS } from './src/contexts/triage/domain/triage-case.js';
-import { CASE_FILE_WHITELIST, CASE_FILE_CONTENT_TYPES } from './syslog-case.js';
+import { CASE_FILE_WHITELIST, CASE_FILE_CONTENT_TYPES } from './src/contexts/triage/application/correlate.js';
 import { levelNames } from './src/shared/vocabulary.js';
 
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()

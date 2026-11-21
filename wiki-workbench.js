@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { eventTypes } from './cloudwalker.js';
+import { eventTypes } from './src/shared/vocabulary.js';
 import { replayProposalHash, runWikiReplay } from './wiki-replay.js';
 import { traceModelCall } from './src/shared/logging/log.js';
 

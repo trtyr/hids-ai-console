@@ -7,10 +7,6 @@
     "kind": "struct.file-placement",
     "file": "api-tools.js"
   },
-  "struct.file-placement|{\"file\":\"cloudwalker.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "cloudwalker.js"
-  },
   "struct.file-placement|{\"file\":\"config-store.js\"}": {
     "kind": "struct.file-placement",
     "file": "config-store.js"
@@ -43,10 +39,6 @@
     "kind": "struct.file-placement",
     "file": "maintenance-server.js"
   },
-  "struct.file-placement|{\"file\":\"mcp-client.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "mcp-client.js"
-  },
   "struct.file-placement|{\"file\":\"model-client.js\"}": {
     "kind": "struct.file-placement",
     "file": "model-client.js"
@@ -63,10 +55,6 @@
     "kind": "struct.file-placement",
     "file": "required-evidence.js"
   },
-  "struct.file-placement|{\"file\":\"rpc-client.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "rpc-client.js"
-  },
   "struct.file-placement|{\"file\":\"rule-store.js\"}": {
     "kind": "struct.file-placement",
     "file": "rule-store.js"
@@ -74,14 +62,6 @@
   "struct.file-placement|{\"file\":\"server.js\"}": {
     "kind": "struct.file-placement",
     "file": "server.js"
-  },
-  "struct.file-placement|{\"file\":\"syslog-case.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "syslog-case.js"
-  },
-  "struct.file-placement|{\"file\":\"syslog-input.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "syslog-input.js"
   },
   "struct.file-placement|{\"file\":\"triage-monitor.js\"}": {
     "kind": "struct.file-placement",

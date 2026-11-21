@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import { runtimePaths } from '../../../server.js';
 import { TriageMonitor } from '../../../triage-monitor.js';
-import { writeSyslogCase } from '../../../syslog-case.js';
+import { writeSyslogCase } from '../../../src/contexts/triage/application/correlate.js';
 import { WikiStore } from '../../../wiki-store.js';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');

@@ -5,10 +5,11 @@ import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { RpcClient } from './rpc-client.js';
+import { RpcClient } from './src/contexts/ingestion/infrastructure/rpc-client.js';
 import { TriageMonitor } from './triage-monitor.js';
-import { CloudwalkerGateway, rpcMethods } from './cloudwalker.js';
-import { normalizeAlert } from './cloudwalker.js';
+import { CloudwalkerGateway } from './src/contexts/ingestion/infrastructure/gateway.js';
+import { rpcMethods } from './src/shared/vocabulary.js';
+import { normalizeAlert } from './src/shared/alert-shape.js';;
 import { createServer } from './server.js';
 
 test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());

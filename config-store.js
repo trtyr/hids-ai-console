@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { log } from './src/shared/logging/log.js';
-import { RpcClient } from './rpc-client.js';
+import { RpcClient } from './src/contexts/ingestion/infrastructure/rpc-client.js';
 import { ChatModelClient, MODEL_GROUP_KEYS, MODEL_ROLE_GROUPS, MODEL_ROLES, modelGroupValues, modelRoleValues } from './model-client.js';
 
 // 能写的只有这十一项：牧云三项 + 模型的三个组（主判 / 复核 / 轻量，P003-T042 加后两组六键）。表外的键一律 400：

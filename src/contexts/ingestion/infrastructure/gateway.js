@@ -1,11 +1,8 @@
 // 牧云网关（ingestion 上下文，P003-T075 批 2 归位前的根文件）。
 // 词表与 Alert 形状已抽成共享内核（src/shared/vocabulary.js、src/shared/alert-shape.js，批 2）——
 // 这里 re-export 保持全部旧 import 路径稳定；批 2 结束时旧 import 全部改指 shared 后删除 re-export。
-import { eventTypes, rpcMethods, levelRanks } from './src/shared/vocabulary.js';
-import { normalizeAlert, detailEvidence, first } from './src/shared/alert-shape.js';
-
-export { eventTypes, rpcMethods, parseInstant, levelRanks, levelNames, levelNameOf } from './src/shared/vocabulary.js';
-export { normalizeAlert, detailEvidence } from './src/shared/alert-shape.js';
+import { eventTypes, rpcMethods, levelRanks } from '../../../shared/vocabulary.js';
+import { normalizeAlert, detailEvidence, first } from '../../../shared/alert-shape.js';
 
 // 蜜罐列表方法为 List，其余为 GetEventList；直接请求 /rpc。
 // 列表动词：蜜罐是 List，其余 10 类是 GetEventList（见 src/shared/vocabulary.js 的事件表注释）。

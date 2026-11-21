@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from './syslog-input.js';
-import { eventTypes } from './cloudwalker.js';
-import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './syslog-case.js';
+import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from './src/contexts/ingestion/application/parsing.js';
+import { eventTypes } from './src/shared/vocabulary.js';
+import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './src/contexts/triage/application/correlate.js';
 import { log } from './src/shared/logging/log.js';
 import { recordFailure, reasonForRecord } from './src/shared/redaction.js';
 

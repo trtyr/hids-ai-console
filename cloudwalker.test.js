@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CloudwalkerGateway, defaultTtls, rpcMethods } from './cloudwalker.js';
+import { CloudwalkerGateway, defaultTtls } from './src/contexts/ingestion/infrastructure/gateway.js';
+import { rpcMethods } from './src/shared/vocabulary.js';;
 
 // 一个按方法计数的 RPC 替身：返回什么由 handler 决定，调用次数由 calls 记录。
 function stubRpc(handler) {

@@ -1,6 +1,5 @@
-import dgram from 'node:dgram';
 import { createHash } from 'node:crypto';
-import { log } from './src/shared/logging/log.js';
+import { log } from '../../../shared/logging/log.js';
 
 // 牧云 SysLog 数据格式 2.0：RFC5424 行首，正文有结构化数据、JSON、键值对三种形态。
 const pair = /([^\s=]+)="(.*?)"(?=\s+[^\s=]+=|\s*$)/gs;
@@ -101,23 +100,3 @@ export function fingerprint(parsed) {
     ...selected.map(value => String(value || ''))])).digest('hex').slice(0, 16);
 }
 
-export class SyslogReceiver {
-  constructor({ host = '127.0.0.1', port = 15514, onLine }) {
-    this.host = host; this.port = port; this.onLine = onLine; this.socket = null;
-  }
-
-  async start() {
-    const socket = dgram.createSocket('udp4');
-    socket.on('message', data => void Promise.resolve(this.onLine(data.toString('utf8'))).catch(error =>
-      log('syslog.handler_failed', { error: error.message }, 'error')));
-    socket.on('error', error => log('syslog.receiver_error', { error: error.message }, 'error'));
-    await new Promise((resolve, reject) => {
-      socket.once('error', reject);
-      socket.bind(this.port, this.host, () => { socket.off('error', reject); resolve(); });
-    });
-    this.socket = socket;
-    return socket.address();
-  }
-
-  stop() { this.socket?.close(); this.socket = null; }
-}

@@ -15,7 +15,7 @@ import { AgentToolbox } from '../../../agent-tools.js';
 import { InvestigationAgent, persistedEvidenceViewMax } from '../../../investigation-agent.js';
 import { boundSyslogView, compactEvidenceView, projectEvidence, syslogOmittedFieldsLimit } from '../../../evidence-view.js';
 import { InvestigationStore } from '../../../investigation-store.js';
-import { requiredEvidenceFile, requiredEvidenceMaxChars, readRequiredEvidence, writeRequiredEvidence } from '../../../syslog-case.js';
+import { requiredEvidenceFile, requiredEvidenceMaxChars, readRequiredEvidence, writeRequiredEvidence } from '../../../src/contexts/triage/application/correlate.js';
 import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';
 import { findingsRowLimit, findingsRowsMaxChars } from '../../../src/contexts/trace/domain/board.js';
 import { queueArgValueMaxChars, queueEvidenceItem } from '../../../triage-monitor.js';

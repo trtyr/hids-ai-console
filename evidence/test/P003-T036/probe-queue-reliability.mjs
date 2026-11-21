@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import dgram from 'node:dgram';
 import { TriageMonitor } from '../../../triage-monitor.js';
-import { SyslogReceiver } from '../../../syslog-input.js';
+import { SyslogReceiver } from '../../../src/contexts/ingestion/application/parsing.js';
 import { InvestigationStore } from '../../../investigation-store.js';
 import { createServer } from '../../../server.js';
 

@@ -1,6 +1,6 @@
 // P003-T037 tester probe: A8 / A9 / A10 三类取数缓存（event-gateway §8.4）
 // 黑盒：`new CloudwalkerGateway({ call })` 是 docs/modules/event-gateway.md §16 的公开用法
-import { CloudwalkerGateway } from '../../../cloudwalker.js';
+import { CloudwalkerGateway } from '../../../src/contexts/ingestion/infrastructure/gateway.js';
 
 let pass = 0; const fails = [];
 const ok = (cond, label, detail = '') => {

@@ -1,4 +1,4 @@
-import { eventTypes } from './cloudwalker.js';
+import { eventTypes } from './src/shared/vocabulary.js';
 import { recordFailure } from './src/shared/redaction.js';
 
 export const knowledgeFields = Object.freeze([

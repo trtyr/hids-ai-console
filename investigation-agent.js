@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { eventTypes } from './cloudwalker.js';
+import { eventTypes } from './src/shared/vocabulary.js';
 import { recordFailure, reasonForRecord } from './src/shared/redaction.js';
 import { traceModelCall } from './src/shared/logging/log.js';
 import { RuleStore } from './rule-store.js';
-import { eventTypeFor } from './syslog-input.js';
+import { eventTypeFor } from './src/contexts/ingestion/application/parsing.js';
 import { PromptStore } from './prompt-store.js';
 import { boundEvidenceView, boundSyslogView, compactEvidenceView, projectEvidence } from './evidence-view.js';
 import { pageExcerpts, pageSummary } from './wiki-store.js';
-import { readCaseFile, writeRequiredEvidence } from './syslog-case.js';
+import { readCaseFile, writeRequiredEvidence } from './src/contexts/triage/application/correlate.js';
 import { finalizeTriageOutput } from './triage-output.js';
 import { appendEvidenceReport, collectRequiredEvidence, requiredEvidenceGaps, requiredEvidencePlan } from './required-evidence.js';
 // 判定词表唯一真源（P003-T075 批 3 种子）：原来这里 17 行自抄 verdictMap/verdictLabels，

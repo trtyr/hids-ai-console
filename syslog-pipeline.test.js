@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { eventSeconds, parseSyslog } from './syslog-input.js';
-import { matchSyslogEvent } from './syslog-case.js';
+import { eventSeconds, parseSyslog } from './src/contexts/ingestion/application/parsing.js';
+import { matchSyslogEvent } from './src/contexts/triage/application/correlate.js';
 import { TriageMonitor } from './triage-monitor.js';
 import { InvestigationStore } from './investigation-store.js';
 

@@ -9,7 +9,7 @@ import { createServer } from './server.js';
 import { InvestigationStore } from './investigation-store.js';
 import { eventTypes, levelNames } from './src/shared/vocabulary.js';
 import { VERDICT_KEYS, VERDICT_LABELS, TRIAGE_STATUSES } from './src/contexts/triage/domain/triage-case.js';
-import { CASE_FILE_WHITELIST, CASE_FILE_CONTENT_TYPES } from './syslog-case.js';
+import { CASE_FILE_WHITELIST, CASE_FILE_CONTENT_TYPES } from './src/contexts/triage/application/correlate.js';
 
 test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
