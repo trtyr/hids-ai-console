@@ -121,7 +121,6 @@ probeSession(credentials, options?) → Promise<{ authenticated: true, user: str
 | --- | --- | --- | --- | --- |
 | `#/overview` | 总览 | 总览 | `pages/overview.js` | 已接真接口（P002-T002，见第 9 节） |
 | `#/alerts` | 告警 | 告警 | `pages/alerts.js` | **研判记录主列表**（P003-T015 换源，见第 10 节） |
-| `#/alerts-demo` | 牧云现查（演示） | 牧云现查（演示） | `pages/alerts-demo.js` | 牧云现查的单独入口，标成演示（D020，见第 10.9 节）；牧云没配时只有这一页不可用 |
 | `#/alert-detail/<alertId>` | —（不在侧栏） | 告警详情 | `pages/alert-detail.js` | 已接真接口（P002-T004，见第 11 节）；参数从第二段起原样传，页面自己 `decodeURIComponent` |
 | `#/trace` | 深度溯源 | 深度溯源 | `pages/trace.js` | **溯源列表**（P003-T016 / D015：进去先是列表，见第 12 节） |
 | `#/trace-board/<alertId>` | —（不在侧栏） | 深度溯源 | `pages/trace-board.js` | 这一条的白板（P003-T016 / D016，见第 12 节）；参数是告警 ID，页面自己 `decodeURIComponent` |
@@ -198,8 +197,8 @@ web/
   index.html            单页入口（登录 / 壳都渲染进 #root）
   serve.js              静态服务 + /api 反代
   assets/               theme.css / theme.js / fonts/ / app.css
-  pages/                一页一个文件：overview / alerts（研判记录主列表）/ alerts-demo（牧云现查·演示）/
-                        alert-detail / trace / trace-board / rules / knowledge
+  pages/                一页一个文件：overview / alerts（研判记录主列表 + 牧云拉取）/ alert-detail /
+                        trace / trace-board / rules / knowledge
   src/
     app.js              组装：登录 ↔ 壳、hash 路由、退出
     session.js          会话 adapter（唯一 HTTP 处）
@@ -326,7 +325,7 @@ formatDateTime(iso|null) → 'YYYY-MM-DD HH:mm:ss'  // 空给 '—'，解析不�
 
 稿：`design/alerts.html` + `alerts-notes.md`。**P003-T015 起这一页不是牧云告警列表**，而是 D020 的
 「推送进来的研判记录」：一行就是一条研判记录（`GET /api/agent/triage/cases`），同一主机同窗口的重复投递合成一行，
-重复次数沿用记录上的 `repeat_count`（D008/D012）。牧云现查整份保留在单独入口 `#/alerts-demo`（见 10.9）。
+重复次数沿用记录上的 `repeat_count`（D008/D012）。牧云现查不再是单独入口（P003-T026 / D025）：拉取是本页上的一个动作，见 10.9。
 
 ### 10.1 数据来源：形态 B（六个 operation）
 
@@ -428,18 +427,20 @@ setQueueEnabled(enabled, options?) → Promise<同上形态>        // PUT，正
 - 误报失败 → 表单留在原地、理由不丢、提交按钮恢复可点；409 / 404 / 网络各自一句人话。
 - JS 未加载 / 路由未命中 → 回到总览（壳的行为，见第 4 节）。
 
-### 10.9 牧云现查（演示）：`pages/alerts-demo.js` + `src/alerts.js`
+### 10.9 牧云拉取：告警页上的动作（P003-T026 / D025）
 
-原来的告警列表整份保留（P002-T003 + P003-T007 的行为一字未改：`GET /api/alerts` 的筛选/排序/分页/抽屉/批量），
-只换路由 id 与侧栏文案：`#/alerts-demo`，侧栏「牧云现查（演示）」，顶栏标题同名；内容区第一行固定一条说明：
+牧云现查**不再是单独页面**：侧栏没有「牧云现查（演示）」，`pages/alerts-demo.js` 已删除；
+旧书签 `#/alerts-demo` 由 `src/router.js` 的 `ROUTE_ALIASES` 回落到 `#/alerts`，不再是产品入口。
 
-> 演示入口：本页直连牧云现查（`GET /api/alerts`），不来自研判记录。告警主列表在「告警」页；
-> 牧云没配时这一页显示不可用，主列表不受影响。
+告警页工具栏的「从牧云拉取」打开本页内的拉取面板（`GET /api/alerts`，只读，默认 10 条/页）：
+- 拉到的是牧云此刻库里的告警，与主列表（研判记录）分区显示，不混行；
+- **拉取本身不入队**——不整批、不自动，只有点某一行「送研判」才 `POST /api/agent/triage/{alertId}`；
+  已在队列/研判中的行显示状态并禁用按钮；
+- 牧云没配时 `/api/alerts` 回 503，只有拉取块显示「牧云尚未配置，拉取不可用」，主列表与总览都不请求它，不受影响；
+- 拉取数据复用：收起面板再打开不重复请求，翻页才取下一页。
 
-D020 的落法：**牧云现查仍在，但是单独入口并标成演示**；`/api/alerts` 503 只打这一页（页面显示
-「告警接口不可用 / 服务端尚未配置牧云接口，取不到告警」），主列表与总览都不请求它，所以都不会 503。
-`src/alerts.js` 仍是这一页的 adapter（`listAlerts` / `fetchTriageSummary` / `setTriageEnabled` / `enqueueTriage`），
-与新主列表的 `src/cases.js` 各管一个领域；队列状态的两份归一代码是**有意重复**的（两个域各自可独立演进）。
+`src/alerts.js` 仍是拉取动作的 adapter（`listAlerts` / `enqueueTriage`；`fetchTriageSummary` / `setTriageEnabled`
+保留给旧调用），与主列表的 `src/cases.js` 各管一个领域。
 
 ## 11. 告警详情页（`pages/alert-detail.js`，P002-T004）
 

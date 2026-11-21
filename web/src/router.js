@@ -9,7 +9,6 @@
 
 import { page as alertDetail } from '../pages/alert-detail.js';
 import { page as alerts } from '../pages/alerts.js';
-import { page as alertsDemo } from '../pages/alerts-demo.js';
 import { page as knowledge } from '../pages/knowledge.js';
 import { page as overview } from '../pages/overview.js';
 import { page as rules } from '../pages/rules.js';
@@ -19,17 +18,20 @@ import { page as traceBoard } from '../pages/trace-board.js';
 
 /**
  * 全部页面。顺序即侧栏顺序（navLabel 为空的不进侧栏）。
- * `alerts-demo` 是牧云现查的单独入口（D020：标成演示）；主列表是 `alerts`（研判记录）。
+ * 牧云现查不再是单独入口（P003-T026 / D025）：拉取动作在 `alerts` 页上；旧 hash `#/alerts-demo` 走别名回落到 `alerts`。
  * `trace` 是溯源**列表**（D015：进去先是列表），`trace-board` 是这一条的白板（D016，`#/trace-board/<告警 ID>`）。
  * `rules` 是 Rego 规则**列表**（D017：进去先是表），`#/rules/<id>` 是这条规则的原文（`render` 按 params 分发）；
  * `rules-gate` 是旧程序门禁编辑页（P003-T017 搬到不进侧栏的隐藏路由，不进侧栏）。
  */
-export const PAGES = [overview, alerts, alertsDemo, alertDetail, trace, traceBoard, rules, rulesGate, knowledge];
+export const PAGES = [overview, alerts, alertDetail, trace, traceBoard, rules, rulesGate, knowledge];
 
-/** 侧栏上的入口：总览 / 告警 / 牧云现查（演示） / 深度溯源 / 规则 / 知识库 */
+/** 侧栏上的入口：总览 / 告警 / 深度溯源 / 规则 / 知识库 */
 export const NAV_PAGES = PAGES.filter(page => page.navLabel);
 
 export const DEFAULT_ROUTE = 'overview';
+
+// 旧入口兼容（P003-T026）：`#/alerts-demo` 不再是产品入口，但老书签不 404，直接落到告警页。
+export const ROUTE_ALIASES = Object.freeze({ 'alerts-demo': 'alerts' });
 
 /**
  * @param {string} id 页面 id
@@ -50,7 +52,10 @@ export function routeFromHash(hash) {
     .split('/')
     .map(segment => segment.trim())
     .filter(Boolean);
-  const [id, ...params] = segments;
+  const [rawId, ...rawParams] = segments;
+  const alias = ROUTE_ALIASES[rawId];
+  const id = alias ?? rawId;
   const page = PAGES.find(candidate => candidate.id === id) ?? PAGES.find(candidate => candidate.id === DEFAULT_ROUTE);
-  return { page, params: page.id === id ? params : [] };
+  // 别名只落到页面本身，不带旧入口的参数；未知 id 回缺省页，参数同样丢弃。
+  return { page, params: !alias && page.id === id ? rawParams : [] };
 }

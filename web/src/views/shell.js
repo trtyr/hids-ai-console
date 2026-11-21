@@ -21,10 +21,6 @@ const ICONS = {
   alerts: `<path d="M10 2.9 18 16.6H2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
     <path d="M10 7.6v3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
     <circle cx="10" cy="13.9" r=".9" fill="currentColor" />`,
-  // 牧云现查（演示）沿用告警的图标：侧栏文案已经写明「演示」，不另造一枚看不懂的图标
-  'alerts-demo': `<path d="M10 2.9 18 16.6H2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-    <path d="M10 7.6v3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-    <circle cx="10" cy="13.9" r=".9" fill="currentColor" />`,
   trace: `<circle cx="5" cy="5.4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4" />
     <circle cx="15" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4" />
     <circle cx="8" cy="15" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4" />

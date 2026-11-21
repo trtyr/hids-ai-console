@@ -1,0 +1,190 @@
+{
+ "base": "http://127.0.0.1:4174/",
+ "generated_at": "2026-11-21T06:01:12.685Z",
+ "page_errors": [],
+ "console_errors": [
+  "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+  "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+  "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+  "Failed to load resource: the server responded with a status of 404 (Not Found)"
+ ],
+ "pages": [
+  {
+   "name": "01-overview",
+   "hash": "#/overview",
+   "interaction": "选择「近 7 天」时间窗",
+   "calls": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/agent/triage/status?since=2026-11-14T06%3A00%3A51.693Z",
+     "status": 200,
+     "bytes": 974
+    },
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/status",
+     "status": 502,
+     "bytes": 108
+    },
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/agent/tools",
+     "status": 200,
+     "bytes": 7021
+    },
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/agent/status",
+     "status": 200,
+     "bytes": 111
+    },
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/triage/rules",
+     "status": 200,
+     "bytes": 893
+    },
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/updates",
+     "status": 200,
+     "bytes": 1066
+    }
+   ],
+   "excerpt": "HIDS AI 研判平台 总览 告警 深度溯源 规则 知识库 退出登录 总览 14:00:51 更新 统计范围 全部时间 近 24 小时 近 7 天 近 30 天 刷新 真实威胁 0 存疑 3 误报 1 待研判 0 类型构成 恶意程序 3 · 网站后门 1 事件类型 2 类 · 合计 4 按事件类型统计的告警数量与占比 类型 数量 占比 分布 恶意程序 3 75% 网站后门 1 25% 自动研判 暂停 状态 运行中 输入方式 Syslog 推入 最后推送 2026-11-19 12:09:10 Syslog 接收 在听 udp://127.0.0.1:15999 待研判 0 研判中 0 已完成 4 失败 0 最近错误 无 运行状态 3b876a0a1b49768d 牧云连接 未连接 研判模型 已就绪 规则版本 — 取证工具 23 个 提示词版本 merged-three-state-2026-11-06+3b876a0a1b49768d 研判进度 窗口内共 4 个任务 · 完成率 100% 已完成 4 100% 待研判 0 0% 研判中 0 0% 失败 0 0% 已更新，时间 14:00:51",
+   "api_ok": 5
+  },
+  {
+   "name": "02-alerts",
+   "hash": "#/alerts",
+   "interaction": null,
+   "calls": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/agent/triage/cases?count=20&offset=0&sort=time",
+     "status": 200,
+     "bytes": 16178
+    },
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/agent/triage/status",
+     "status": 200,
+     "bytes": 952
+    }
+   ],
+   "excerpt": "HIDS AI 研判平台 总览 告警 深度溯源 规则 知识库 退出登录 告警 共 4 条 14:00:54 更新 刷新 从牧云拉取 自动研判 运行中 输入 Syslog 推入 排队 0 研判中 0 完成 4 失败 0 暂停 全部类型 网站后门 蜜罐 可疑操作 异常登录 暴力破解 反弹 Shell 恶意程序 提权进程 网络审计 全部结论 真实威胁 存疑 误报 待研判 全部时间 近 24 小时 近 7 天 近 30 天 研判记录列表，最新在前；点「详情」看这条研判，点「溯源」进深度溯源。 结论 类型 主机 时间 ↓ 重复 命中规则 维护 状态 操作 存疑 恶意程序 192.168.24.21 2026-11-19 12:09:09 ×1 没有套上 — 完成 详情溯源标为误报 存疑 恶意程序 192.168.24.21 2026-11-19 12:09:09 ×1 没有套上 — 完成 详情溯源标为误报 存疑 恶意程序 192.168.24.21 2026-11-19 12:09:09 ×1 没有套上 — 完成 详情溯源标为误报 误报 网站后门 10.9.9.9 2026-11-19 12:10:00 ×1 没有套上 — 完成 详情溯源已误报 1–4 / 4 条 · 共 1 页 上一页 1 下一页 每页 20 50 已载入 4 条，共 4 条研判记录",
+   "api_ok": 2
+  },
+  {
+   "name": "03-alert-detail",
+   "hash": "#/alert-detail/syslog%3Amalware%3A8b7250f74ee2d100%3A1795090149%3A4729aed1-a707-42b3-a628-8458a0841269",
+   "interaction": "点击详情 #/alert-detail/syslog%3Amalware%3A8b7250f74ee2d100%3A1795090149%3A4729aed1-a707-42b3-a628-8458a0841269",
+   "calls": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/agent/triage/syslog%3Amalware%3A8b7250f74ee2d100%3A1795090149%3A4729aed1-a707-42b3-a628-8458a0841269",
+     "status": 200,
+     "bytes": 5590
+    },
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/agent/investigations/syslog%3Amalware%3A8b7250f74ee2d100%3A1795090149%3A4729aed1-a707-42b3-a628-8458a0841269?mode=triage",
+     "status": 200,
+     "bytes": 10919
+    }
+   ],
+   "excerpt": "HIDS AI 研判平台 总览 告警 深度溯源 规则 知识库 退出登录 告警详情 ← 告警列表 syslog:malware:8b7250f74ee2d100:1795090149:4729aed1-a707-42b3-a628-8458a0841269 复制告警 ID 刷新 牧云事件没有读到（告警 ID 无效。），下面按研判记录显示。 — — 已完成 重新研判 深度溯源 （无标题） — syslog:malware:8b7250f74ee2d100:1795090149:4729aed1-a707-42b3-a628-8458a0841269 已验证事实 5 证据来源 1 依据通过 5 证据缺口 7 任务状态 已完成 研判模式 常规研判 研判结论 存疑 2026-11-19 12:09 在 192.168.24.21 检测到文件 /tmp/hids-live-test.jsp（jsp_webshell 类型），其落地命令行表现为构造 JSP 木马并检查 cloudwalker-agent 进程，疑似自测或演练行为；但牧云 API 事件详情读取失败，缺少资产与授权工单佐证，结论存疑。 建议判定为存疑。2026-11-19 12:09 在 192.168.24.21 检测到文件 /tmp/hids-live-test.jsp（jsp_webshell 类型），其落地命令行表现为构造 JSP 木马并检查 cloudwalker-agent 进程，疑似自测或演练行为；。已核实：syslog msg_type=cloudwalker-malware；syslog host_name=ubuntu。仍需核查：牧云事件 ID 详情读取失败：fetch failed。 命中的规则 没有套上 用过的知识库 牧云事件未匹配，本轮是降级结论，没有工具循环，未采纳判据页 结论依据 5 条 01 syslog msg_type=cloudwalker-malware 引用 1 处证据 syslog:1 02 syslog host_name=ubuntu 引用 1 处证据 syslog:1 03 syslog host_ip=192.168.24.21 引用 1 处证据 syslog:1 04 syslog business_group_name=根分组 引用 1 处证据 syslog:1 05 syslog event_name=恶意文件 引用 1 处证据 syslog:1 缺失证据 牧云事件 ID 详情读取失败：fetch failed 牧云事件 event_id=3 的详情（接口 fetch failed，未能读取） 主机 192.168.24.21 的资产角色、负责人、环境（生产/测试/开发/安全测试机）及对外暴露情况 进程 PID 1828777 的父进程链与会话来源（是否来自 sshd/本地会话/计划任务） 是否存在授权测试计划、变更工单或白名单登记 /tmp/hids-live-test.jsp 当前是否仍存在、是否被执行/访问，进程是否仍在运行及有无网络连接 告警前后 24 小时同主机及同 IOC 的关联告警、登录记录与来源 IP 研判步骤 准备研判 正在读取牧云工具与提示词 12:13:08 读取告警 正在获取原始事件详情 12:13:08 注入规则 本次没有套上的 Rego 规则 12:13:09 收集研判事实 正在查询同主机关联事件 12:13:09 收集研判事实 正在查询同主机命令会话 12:13:11 AI 分析 第 1 轮分析，已查询 0 项证据 12:13:11 查询证据 正在查询 get_malware_event（第 2 项） 12:13:22 AI 分析 第 2 轮分析，已查询 2 项证据 12:13:24 查询证据 正在查询 l",
+   "api_ok": 2
+  },
+  {
+   "name": "04-trace-list",
+   "hash": "#/trace",
+   "interaction": null,
+   "calls": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/trace/boards?count=20&offset=0",
+     "status": 200,
+     "bytes": 431
+    }
+   ],
+   "excerpt": "HIDS AI 研判平台 总览 告警 深度溯源 规则 知识库 退出登录 深度溯源 共 1 条 刷新 全部状态 进行中 已完成 失败 中断 全部类型 WebShell 恶意文件 反弹 Shell 内存马 暴力破解 异常登录 提权进程 网络审计 可疑操作 蜜罐 内存安全 全部时间 近 24 小时 近 7 天 近 30 天 溯源列表，最近的在后；点一行看这一条是怎么触发的。 告警 主机 告警时间 状态 链长 断点 更新时间 WebShell syslog:websh…01323a57 10.9.9.9 2026-11-19 12:10:00 已完成 1 跳 有 2026-11-19 12:10:13 1–1 / 1 条 · 共 1 页 上一页 1 下一页 每页 20 50 溯源列表已更新，共 1 条",
+   "api_ok": 1
+  },
+  {
+   "name": "05-trace-board",
+   "hash": "#/trace-board/syslog%3Awebshell%3A7ce07d639c2aaeb0%3A1795061400%3A13fba231-e05e-430a-8f26-dda501323a57",
+   "interaction": "点击白板 #/trace-board/syslog%3Awebshell%3A7ce07d639c2aaeb0%3A1795061400%3A13fba231-e05e-430a-8f26-dda501323a57",
+   "calls": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/trace/boards/syslog%3Awebshell%3A7ce07d639c2aaeb0%3A1795061400%3A13fba231-e05e-430a-8f26-dda501323a57",
+     "status": 200,
+     "bytes": 6665
+    }
+   ],
+   "excerpt": "HIDS AI 研判平台 总览 告警 深度溯源 规则 知识库 退出登录 深度溯源 ← 溯源列表 syslog:webshell:7ce07d639c2aaeb0:1795061400:13fba231-e05e-430a-8f26-dda501323a57 刷新 WebShell 已完成 链长 1 跳 断点 6 处 1 / 1 跳 · 0 / 0 条线 · 第 1 / 1 步 重放 继续 跳到最新 跟随 − 120% + 适应 上一步没有了 · 告警原始 syslog 正文缺失：仅有 /payload/host_ip 字段，缺少请求路径/URL、HTTP 方法、User-Agent、状态码、响应体特征等 webshell 判定要素 上一步没有了 · 10.9.9.9 的资产档案为空：无操作系统、业务角色、归属人、开放端口基线，无法判断该主机是否可能为 Web 服务器 上一步没有了 · 72 小时窗口内该主机无跨类事件返回（进程、文件、登录、网络连接均缺），无法还原 webshell 写文件路径与执行进程链 上一步没有了 · 无 IP 节点可查：无法确认与 10.9.9.9 通信的对端地址（上传端、C2、跳板），因此上游来源与下游横向均未查 上一步没有了 · 未取得 Web 中间件日志（access/error log）与站点目录文件完整性基线，无法核实是否真有脚本文件落地 上一步没有了 · 若后续可获得对端 IP，需再查其触达的多台资产以区分外部批量扫描与真实内网横向；当前无此证据 10.9.9.9 10.9.9.9 检查器 白板概览 已完成 从告警 syslog:webshell:...（来源记录 syslog:1）出发，白板仅给出 1 个节点 asset:10.9.9.9，其唯一出处是 /payload/host_ip。对该资产的调查返回空结果：profile 为空、findings 为空、touched_hosts 为空、candidates 为空。尝试以 ip:10.9.9.9 节点查询时，白板中不存在该节点，工具明确拒绝，因此无法从 IP 视角扩展邻居。结论：本条 webshell 告警在现有数据中【无法确认】——既不能证实 10.9.9.9 上存在真实 webshell 落地、可疑进程链或对外/对内连接，也没有任何可核实的上下游主机，故未建立任何 AI 实线关系（白板 edges 为空是正确的：没有原始字段可覆盖关系两端）。注意：工具返回空结果反映的是覆盖与数据范围限制，不等于该主机无风险；告警本身仍需人工按 webshell 流程复核。 断点 · 6 上一步没有了 · 告警原始 syslog 正文缺失：仅有 /payload/host_ip 字段，缺少请求路径/URL、HTTP 方法、User-Agent、状态码、响应体特征等 webshell 判定要素 上一步没有了 · 10.9.9.9 的资产档案为空：无操作系统、业务角色、归属人、开放端口基线，无法判断该主机是否可能为 Web 服务器 上一步没有了 · 72 小时窗口内该主机无跨类事件返回（进程、文件、登录、网络连接均缺），无法还原 webshell 写文件路径与执行进程链 上一步没有了 · 无 IP 节点可查：无法确认与 10.9.9.9 通信的对端地址（上传端、C2、跳板），因此上游来源与下游横向均未查 上一步没有了 · 未取得 Web 中间件日志（access/error log）与站点目录文件完整性基线，无法核实是否真有脚本文件落地 上一步没有了 · 若后续可获得对端 IP，需再查其触达的多台资产以区分外部批量扫描与真实内网横向；当前无此证据 重放结束",
+   "api_ok": 1
+  },
+  {
+   "name": "06-rules",
+   "hash": "#/rules",
+   "interaction": null,
+   "calls": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/rules",
+     "status": 200,
+     "bytes": 569
+    }
+   ],
+   "excerpt": "HIDS AI 研判平台 总览 告警 深度溯源 规则 知识库 退出登录 规则 共 3 条 刷新 规则库；点一条规则的名字看它的 Rego 原文。 名字 一句话 效果 开没开 从哪来 蜜罐探测（root 用户） 蜜罐类型告警，对端与来源 IP 都非空、用户为 root 的探测 放行 开 未标注 SSH 暴力破解来源 登录类告警里来源 IP 非空、命令含 ssh 的，列为需要人工复核的候选 放行 开 未标注 WebShell 落地脚本 webshell 告警落在 /tmp 下、路径以 .jsp 结尾，且主机非空 放行 开 未标注 效果、开没开、从哪来三列是展示默认：接口只给名字和一句话，这三项还没有数据。 规则库已更新，共 3 条",
+   "api_ok": 1
+  },
+  {
+   "name": "07-rule-detail",
+   "hash": "#/rules/honeypot_probe",
+   "interaction": "点击规则 #/rules/honeypot_probe",
+   "calls": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/rules/honeypot_probe",
+     "status": 200,
+     "bytes": 541
+    }
+   ],
+   "excerpt": "HIDS AI 研判平台 总览 告警 深度溯源 规则 知识库 退出登录 规则 ← 规则列表 刷新 蜜罐探测（root 用户） 蜜罐类型告警，对端与来源 IP 都非空、用户为 root 的探测 honeypot_probe · honeypot_probe.rego package hids.rules.honeypot_probe # name: 蜜罐探测（root 用户） # description: 蜜罐类型告警，对端与来源 IP 都非空、用户为 root 的探测 default match := false match if { input.type == \"honeypot\" input.peer != \"\" input.source_ip != \"\" input.user == \"root\" } 已读到规则 蜜罐探测（root 用户） 的 Rego 原文",
+   "api_ok": 1
+  },
+  {
+   "name": "08-knowledge-list",
+   "hash": "#/knowledge",
+   "interaction": null,
+   "calls": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/wiki/pages",
+     "status": 200,
+     "bytes": 36018
+    }
+   ],
+   "excerpt": "HIDS AI 研判平台 总览 告警 深度溯源 规则 知识库 退出登录 知识库 共 189 条 14:01:08 更新 刷新 目录已更新，共 189 条 搜索条目 按分类筛选 全部分类 _evidence（17） abnormal-login（14） bruteforce（12） cmdaudit（10） common（13） concepts（3） customer-experience（4） elevation（12） honeypot（12） malware（11） memwebshell（10） net（11） rasp（11） revshell（11） suspicious-command（18） webshell（16） 189 / 189 条 知识库条目目录 条目 分类 编号 状态 HIDS 研判知识库 · 2026-11-09 重建版 — index active 判据库使用与维护规则 — rules active 知识库维护手册 · 来源核查与三态研判 — schema active MITRE ATT&CK《Finding Cyber Threats with ATT&CK-Based Analytics》(16-3713) common GEN-01 deprecated 研判结论只有三态 common GEN-02 deprecated 「缺信息」要明说，不要用猜的填 common GEN-03 deprecated IP 归属地只能加权，不能定罪 common GEN-04 deprecated 云厂商 IP ≠ 良性（OWASP Credential Stuffing Prevention Cheat Sheet） common GEN-05 deprecated 降噪的真正来源是「历史」，不是「白名单」 common GEN-06 deprecated 时间窗关联的边界 common GEN-07 deprecated 什么才叫「该丢弃」 common GEN-08 deprecated 攻击者也会用扫描器段 common GEN-09 deprecated 输出必须能被人复核 common GEN-10 deprecated 三态判定程序（按顺序走，第一个命中就停） common GEN-11 deprecated 研判通则 · 事实、行为、结果与授权分开核对 common GEN-12 active 通用判定 · 判据目录 common index:common active 蜜罐 GET / 根路径探测 · 待审核经验 customer-experience EX-01 draft 蜜罐 OPTIONS / 与 /svn 探测 · 攻击尝试未成功 customer-experience EX-02 active 新建误报经验 customer-experience EX-03 draft 新建误报经验 customer-experience EX-04 draft 判据夹缝 concepts concept:判据夹缝 deprecated 数据不全不等于不合格 concepts concept:数据不全不等于不合格 deprecated 硬证据与弱信号 concepts concept:硬证据与弱信号 deprecated 这一类告警在说什么 abnormal-login AL-01 deprecated 「来源可信」是最强的一个维度，但它只管一半 abnormal-login AL-02 deprecated 时段单独**不能**定罪 abnormal-login AL-03 deprecated 频次是「运维习惯」的证据，**不是**「良性」的证据 abnormal-login AL-04 deprec",
+   "api_ok": 1
+  },
+  {
+   "name": "09-knowledge-entry",
+   "hash": "#/knowledge",
+   "interaction": "点击第一条知识条目（页内进入条目视图）",
+   "calls": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:4174/api/wiki/pages/index.md",
+     "status": 200,
+     "bytes": 2361
+    }
+   ],
+   "excerpt": "HIDS AI 研判平台 总览 告警 深度溯源 规则 知识库 退出登录 知识库 共 189 条 14:01:08 更新 刷新 已打开 HIDS 研判知识库 · 2026-11-09 重建版 知识库 / index — active index 条目 编辑 复制路径 HIDS 研判知识库 · 2026-11-09 重建版 index.md 1 节 1102 字 最后修改 2026-11-09 正文来源：服务器正文 摘要 HIDS 研判知识库 这份库按仓库 sops/*/SOP.md 的调查流程组织，依据可定位的原文重新整理。先读 GEN-12 研判通则，再选本类判定页。 旧判据保留编号和正文供追溯，已退出 Agent 的自动判据目录。 场景 当前判定页 首要问题 通用 GEN-12 事实、行为、结果与授权如何分开核对 WebShell WS-13 文件是否为可执行后门，是否被调用 异常登录 AL-11 登录是否获授权，后续行为如何 可疑命令 SC-15 命令实际执行了什么 蜜罐诱捕 HP-10 触碰、利用尝试与真实资产后果如何区分 暴力破解 BF-10 是否成功认证，成功者是谁 本地提权 LP-10 权限是否改变，是否获授权 命令记录 CA-08 同一会话的命令链是否可信 恶意文件 MA-09 文件是否运行，造成何种影响 网络异常 NA-09 进程、目标与时间序列是否异常 内存后门 MW-08 是否有真实注入和调用证据 内存安全 RP-09 尝试、拦截与执行结果分别是什么 反弹 Shell RS-09 是否建立可远程执行的通道 目录 1 节 01 来源与边界 来源与边界 编辑 MITRE 技术原文核查 Wazuh、Talos DNS 原文核查 仓库原引用的核查边界 证据目录 · 维护手册 · 修订日志 每个场景目录保留原判据供审计；customer-experience/ 的四条客户记录仍按各自审核状态独立管理，复用时须逐项核对当前告警和有效期。 分类 尚未分类 条目信息 编号 index 路径 index.md 状态 active 分类 — 分节 1 节 字数 1102 字 修订 4c96e709a10615d1 最后修改 2026-11-09 相关条目 按分类 根文档没有同分类的条目 接口字段 GET /api/wiki/pages 返回项",
+   "api_ok": 1
+  }
+ ]
+}

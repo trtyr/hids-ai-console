@@ -2,8 +2,9 @@
 //
 // 主列表**不是牧云现查**：一行就是一条研判记录（`GET /api/agent/triage/cases`），
 // 同一主机同窗口的重复投递合成一行、计数沿用记录上的 `repeat_count`（D008/D012）。
-// 牧云现查仍在，但在单独入口 `#/alerts-demo`（`pages/alerts-demo.js`），标成演示——
-// 主列表这条路不碰 `/api/alerts`，所以牧云没配时主列表照常工作（A4）。
+// 牧云现查不再是单独入口（P003-T026 / D025）：拉取是本页上的一个动作，拉到的行与研判记录分区显示，
+// 拉取只读、不自动入队；要分析某一条，点该行的「送研判」显式送。主列表首屏不碰 `/api/alerts`，
+// 所以牧云没配时主列表照常工作（A4）。
 //
 // 视觉沿用设计稿 `design/alerts.html` 的表格语言（表头吸顶、单行单元格、固定列宽、分页）。
 // 稿画的是牧云告警列表（等级/告警 ID/资产/IP/研判状态/结论），D020 把主列表换成了研判记录，
@@ -24,6 +25,8 @@
 import {
   CasesError, fetchQueueStatus, listCases, reportFalsePositive, setQueueEnabled,
 } from '../src/cases.js';
+// P003-T026：牧云现查不再是单独页面，而是本页上的「拉取」动作——只读拉取 + 逐条显式送研判。
+import { AlertsError, enqueueTriage, listAlerts } from '../src/alerts.js';
 
 const STYLE_HREF = 'assets/pages/alerts.css';
 const COLUMN_COUNT = 9;
@@ -73,6 +76,11 @@ const ICON_REFRESH = `
     <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
     <path d="M13.4 2.6v2.9h-2.9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
   </svg>`;
+const ICON_PULL = `
+  <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 2.4v6.2M5.6 6.2 8 8.6l2.4-2.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M3.2 10.2v2.2c0 .7.5 1.2 1.2 1.2h7.2c.7 0 1.2-.5 1.2-1.2v-2.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+  </svg>`;
 const ICON_SEARCH = `
   <svg class="od-icon" viewBox="0 0 16 16" aria-hidden="true">
     <circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4" />
@@ -88,6 +96,10 @@ const TEMPLATE = `
       ${ICON_REFRESH}
       刷新
     </button>
+    <button type="button" class="textbtn" data-role="pull-open" aria-expanded="false" aria-controls="pull-panel">
+      ${ICON_PULL}
+      从牧云拉取
+    </button>
   </div>
 
   <div class="queuestrip" data-role="queue" role="group" aria-label="自动研判队列">
@@ -102,6 +114,21 @@ const TEMPLATE = `
     <span class="qmeta" data-role="qerror" hidden></span>
     <button type="button" class="textbtn" data-role="queue-toggle">暂停</button>
   </div>
+
+  <section class="pull-panel" data-role="pull" id="pull-panel" hidden aria-label="牧云现存告警（拉取）">
+    <div class="pull-head">
+      <span class="pull-title">牧云现存告警 <span class="pull-tag">拉取</span></span>
+      <span class="pull-meta" data-role="pull-meta"></span>
+      <span class="pull-message" data-role="pull-message" role="status" aria-live="polite"></span>
+      <button type="button" class="textbtn" data-role="pull-close">收起</button>
+    </div>
+    <div class="pull-body" data-role="pull-body"></div>
+    <div class="pull-pager">
+      <button type="button" class="page-btn" data-role="pull-prev">上一页</button>
+      <span class="pager-info" data-role="pull-page">—</span>
+      <button type="button" class="page-btn" data-role="pull-next">下一页</button>
+    </div>
+  </section>
 
   <div class="filters" role="group" aria-label="筛选与排序">
     <div class="search">
@@ -288,6 +315,9 @@ export function mountAlertsPage(options = {}) {
     summaryError: null,
     updatedAt: null,
     fpIndex: -1, // 正在填误报理由的行；-1 = 没有
+    // P003-T026：拉取面板与主列表互不影响；拉取失败只让这一块报错，主列表照常。
+    pull: { open: false, phase: 'idle', alerts: [], total: 0, offset: 0, count: 10,
+      error: null, message: null, sending: new Set() },
   };
 
   const request = { fetchImpl: options.fetchImpl, baseUrl: options.baseUrl };
@@ -597,6 +627,166 @@ export function mountAlertsPage(options = {}) {
     for (const size of PAGE_SIZES) $(`size-${size}`).setAttribute('aria-pressed', String(size === state.count));
   }
 
+  /* ---------- 牧云拉取（P003-T026 / D025）：只读拉取 + 逐条显式送研判 ---------- */
+
+  // 拉取行与主列表分区：主列表是研判记录；这里显示牧云此刻库里的告警，拉取本身不入队。
+  const PULL_STATUS_LABEL = { not_queued: '未研判', queued: '排队中', running: '研判中', done: '已完成', failed: '失败' };
+
+  function pullStatusOf(alert) {
+    const status = alert?.triage?.status;
+    return Object.hasOwn(PULL_STATUS_LABEL, status) ? status : 'not_queued';
+  }
+
+  function pullNotice(textValue, action) {
+    const wrap = el(document, 'div', { class: 'pull-empty' }, [document.createTextNode(textValue)]);
+    if (action) {
+      const button = el(document, 'button', { type: 'button', class: 'textbtn', text: action.label });
+      button.addEventListener('click', action.onClick);
+      wrap.append(button);
+    }
+    return wrap;
+  }
+
+  function pullRow(alert) {
+    const id = String(alert?.id ?? '');
+    const status = pullStatusOf(alert);
+    const sending = state.pull.sending.has(id);
+    const statusText = alert?.triage?.verdict_label || PULL_STATUS_LABEL[status];
+    const send = el(document, 'button', { type: 'button', class: 'textbtn ops-link',
+      text: sending ? '送入中…' : status === 'not_queued' ? '送研判' : '已入队' });
+    send.disabled = sending || status !== 'not_queued';
+    if (status !== 'not_queued') send.title = '这条已在研判队列里';
+    send.addEventListener('click', () => { void sendPulled(alert); });
+    const hostText = alert?.assetIp || alert?.asset || '—';
+    const hostTitle = [alert?.asset, alert?.assetIp, alert?.source ? `来源 ${alert.source}` : null]
+      .filter(Boolean).join(' · ');
+    return el(document, 'tr', { dataset: { pullId: id } }, [
+      el(document, 'td', { class: 'col-type', text: TYPE_LABELS[alert?.eventType] ?? alert?.eventType ?? '—' }),
+      el(document, 'td', { class: 'col-ip' }, [el(document, 'span', {
+        class: 'cell-ip mono od-truncate', text: hostText, title: hostTitle })],
+      ),
+      el(document, 'td', { class: 'col-time' }, [el(document, 'span', {
+        class: 'cell-time', text: formatEventTime(alert?.createdAt), title: String(alert?.createdAt ?? '') })]),
+      el(document, 'td', { class: 'col-verdict' }, [el(document, 'span', {
+        class: `triage ${TRIAGE_CLASS[status] ?? ''}`.trim(), text: statusText })]),
+      el(document, 'td', { class: 'col-ops' }, [send]),
+    ]);
+  }
+
+  function renderPull() {
+    const panel = $('pull');
+    const pull = state.pull;
+    panel.hidden = !pull.open;
+    $('pull-open').setAttribute('aria-expanded', String(pull.open));
+    if (!pull.open) return;
+
+    const meta = $('pull-meta');
+    const pageInfo = $('pull-page');
+    const body = $('pull-body');
+    $('pull-message').textContent = pull.message ?? '';
+    const loading = pull.phase === 'loading' || pull.phase === 'idle';
+    $('pull-prev').disabled = loading || pull.offset === 0;
+    $('pull-next').disabled = loading || pull.offset + pull.count >= pull.total;
+
+    if (loading) {
+      meta.textContent = '正在拉取…';
+      pageInfo.textContent = '—';
+      body.replaceChildren(pullNotice('正在从牧云读取现存告警……'));
+      return;
+    }
+    if (pull.phase === 'unavailable') {
+      meta.textContent = '不可用';
+      pageInfo.textContent = '—';
+      body.replaceChildren(pullNotice('牧云尚未配置，拉取不可用。主列表不受影响。'));
+      return;
+    }
+    if (pull.phase === 'error') {
+      meta.textContent = '读取失败';
+      pageInfo.textContent = '—';
+      body.replaceChildren(pullNotice(`拉取失败：${pull.error?.message ?? '未知错误'}`, {
+        label: '重试', onClick: () => { void loadPull(pull.offset); },
+      }));
+      return;
+    }
+
+    meta.textContent = `共 ${pull.total} 条 · 拉取只读，不会自动入队`;
+    pageInfo.textContent = `${pull.offset + (pull.alerts.length ? 1 : 0)}–${pull.offset + pull.alerts.length} / ${pull.total} 条`;
+    if (!pull.alerts.length) {
+      body.replaceChildren(pullNotice('牧云当前没有告警。'));
+      return;
+    }
+    const head = el(document, 'thead', {}, [el(document, 'tr', {}, [
+      el(document, 'th', { scope: 'col', class: 'col-type', text: '类型' }),
+      el(document, 'th', { scope: 'col', class: 'col-ip', text: '主机' }),
+      el(document, 'th', { scope: 'col', class: 'col-time', text: '时间' }),
+      el(document, 'th', { scope: 'col', class: 'col-verdict', text: '研判' }),
+      el(document, 'th', { scope: 'col', class: 'col-ops', text: '操作' }),
+    ])]);
+    const rows = el(document, 'tbody', {}, pull.alerts.map(pullRow));
+    body.replaceChildren(el(document, 'table', { class: 'alerts pull-table' }, [head, rows]));
+  }
+
+  let pullSeq = 0;
+  async function loadPull(offset = state.pull.offset) {
+    const seq = ++pullSeq;
+    state.pull.offset = Math.max(0, offset);
+    state.pull.phase = 'loading';
+    state.pull.error = null;
+    state.pull.message = null;
+    renderPull();
+    try {
+      const page = await listAlerts({ count: state.pull.count, offset: state.pull.offset, sort: 'time' }, request);
+      if (seq !== pullSeq) return;
+      state.pull.alerts = page.alerts;
+      state.pull.total = page.total;
+      state.pull.phase = 'ready';
+      state.pull.error = null;
+      announce(`已从牧云拉取 ${page.alerts.length} 条，共 ${page.total} 条`);
+    } catch (error) {
+      if (seq !== pullSeq) return;
+      state.pull.alerts = [];
+      state.pull.total = 0;
+      state.pull.error = error;
+      // 503 = 牧云/自动研判没配：这一块说「不可用」，主列表照常（D020 A4）
+      state.pull.phase = error instanceof AlertsError && error.kind === 'unavailable' ? 'unavailable' : 'error';
+    }
+    renderPull();
+  }
+
+  async function sendPulled(alert) {
+    const id = String(alert?.id ?? '');
+    if (!id || state.pull.sending.has(id)) return;
+    state.pull.sending.add(id);
+    state.pull.message = null;
+    renderPull();
+    try {
+      // 显式送：只有点这一下才入队；拉取本身从不整批入队（D025）。
+      const record = await enqueueTriage(id, request);
+      alert.triage = { ...(alert.triage ?? {}), ...record };
+      state.pull.message = `已把 ${id} 送进研判队列`;
+      announce(`已把 ${id} 送进研判队列`);
+      void load(true, true); // 主列表静默刷新，不闪骨架
+    } catch (error) {
+      state.pull.message = `送研判失败：${error instanceof AlertsError && error.kind === 'unavailable'
+        ? '自动研判未配置' : error?.message ?? '未知错误'}`;
+    } finally {
+      state.pull.sending.delete(id);
+      renderPull();
+    }
+  }
+
+  function openPull() {
+    state.pull.open = true;
+    renderPull();
+    if (state.pull.phase === 'idle') void loadPull(0);
+  }
+
+  function closePull() {
+    state.pull.open = false;
+    renderPull();
+    announce('已收起牧云拉取');
+  }
+
   function paint() {
     paintToolbar();
     paintFilters();
@@ -604,6 +794,7 @@ export function mountAlertsPage(options = {}) {
     paintQueue();
     paintTable();
     paintPager();
+    renderPull();
   }
 
   function describeError(error) {
@@ -737,6 +928,21 @@ export function mountAlertsPage(options = {}) {
   // ---------- 事件 ----------
 
   $('refresh').addEventListener('click', () => { void load(); });
+
+  // P003-T026：拉取面板开关与翻页（拉取只读；送研判在每一行的按钮上，不在这里批量入队）
+  $('pull-open').addEventListener('click', () => {
+    if (state.pull.open) closePull(); else openPull();
+  });
+  $('pull-close').addEventListener('click', closePull);
+  $('pull-prev').addEventListener('click', () => {
+    if (!state.pull.open || state.pull.offset === 0) return;
+    void loadPull(Math.max(0, state.pull.offset - state.pull.count));
+  });
+  $('pull-next').addEventListener('click', () => {
+    if (!state.pull.open) return;
+    if (state.pull.offset + state.pull.count < state.pull.total)
+      void loadPull(state.pull.offset + state.pull.count);
+  });
 
   // 主机 IP：值一变就重取（§10.5），逐键取数。input / change / search 三道共用一个闸——
   // 值没变就不发，所以一次回车（浏览器会连发 search 与 change）只会有一轮相同请求。

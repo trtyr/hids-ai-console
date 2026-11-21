@@ -4,14 +4,14 @@ import assert from 'node:assert/strict';
 
 import { DEFAULT_ROUTE, NAV_PAGES, PAGES, hashFor, routeFromHash } from '../src/router.js';
 
-test('侧栏六个入口，顺序与文案照设计稿 + P003-T015 的演示入口（牧云现查标成演示）', () => {
-  assert.deepEqual(NAV_PAGES.map(page => page.navLabel), ['总览', '告警', '牧云现查（演示）', '深度溯源', '规则', '知识库']);
-  assert.deepEqual(NAV_PAGES.map(page => page.id), ['overview', 'alerts', 'alerts-demo', 'trace', 'rules', 'knowledge']);
+test('侧栏五个入口（P003-T026 起不再有「牧云现查（演示）」）', () => {
+  assert.deepEqual(NAV_PAGES.map(page => page.navLabel), ['总览', '告警', '深度溯源', '规则', '知识库']);
+  assert.deepEqual(NAV_PAGES.map(page => page.id), ['overview', 'alerts', 'trace', 'rules', 'knowledge']);
 });
 
-test('九张页面各有一个模块文件，告警详情 / 溯源白板 / 程序门禁不在侧栏但可路由', () => {
+test('八张页面各有一个模块文件，告警详情 / 溯源白板 / 程序门禁不在侧栏但可路由', () => {
   assert.deepEqual(PAGES.map(page => page.id),
-    ['overview', 'alerts', 'alerts-demo', 'alert-detail', 'trace', 'trace-board', 'rules', 'rules-gate', 'knowledge']);
+    ['overview', 'alerts', 'alert-detail', 'trace', 'trace-board', 'rules', 'rules-gate', 'knowledge']);
   for (const id of ['alert-detail', 'trace-board', 'rules-gate']) {
     const hidden = PAGES.find(page => page.id === id);
     assert.equal(hidden.navLabel, null, `${id} 不该进侧栏`);
@@ -55,6 +55,14 @@ test('空 hash / 只有 #/ → 总览', () => {
   assert.equal(routeFromHash('').page.id, DEFAULT_ROUTE);
   assert.equal(routeFromHash('#').page.id, DEFAULT_ROUTE);
   assert.equal(routeFromHash('#/').page.id, DEFAULT_ROUTE);
+});
+
+test('P003-T026：旧入口 #/alerts-demo 不再是产品入口，但老书签回落到告警页', () => {
+  const legacy = routeFromHash('#/alerts-demo');
+  assert.equal(legacy.page.id, 'alerts');
+  assert.deepEqual(legacy.params, []);
+  assert.equal(PAGES.some(page => page.id === 'alerts-demo'), false);
+  assert.equal(NAV_PAGES.some(page => page.id === 'alerts-demo'), false);
 });
 
 test('未知 hash → 回落到总览，不抛错、不空白', () => {

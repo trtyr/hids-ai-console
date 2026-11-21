@@ -476,3 +476,102 @@ test('纯函数：事件时间、类型名、重复次数、维护文案都不�
     '规则 已更新 · 知识库 失败');
   assert.equal(maintenanceText({}), '—');
 });
+
+/* ---------- P003-T026：牧云拉取在告警页上（D025） ---------- */
+
+/** 牧云告警归一后的形状（normalizeAlert，src/shared/alert-shape.js） */
+function pulledAlert(overrides = {}) {
+  return {
+    id: 'honeypot:7',
+    eventType: 'honeypot',
+    eventId: 7,
+    title: '蜜罐诱捕',
+    level: '高',
+    levelKey: 'high',
+    asset: 'web-05',
+    assetIp: '10.0.0.5',
+    source: '192.0.2.7',
+    target: '10.0.0.5',
+    createdAt: '2026-11-18T09:00:00.000Z',
+    ...overrides,
+  };
+}
+
+test('P003-T026 拉取只读：点按钮才请求 /api/alerts，拉取本身不送研判；逐条点「送研判」才 POST', async () => {
+  const { host, calls } = mount({
+    handler: async url => {
+      if (url.startsWith('/api/alerts')) {
+        return respond({ alerts: [pulledAlert()], total: 1, totals: {}, errors: {}, partial: false, truncated: false });
+      }
+      if (url.startsWith('/api/agent/triage/honeypot%3A7')) {
+        return respond({ alert_id: 'honeypot:7', status: 'queued', stage: '等待研判' }, 202);
+      }
+      return null;
+    },
+  });
+  await flush();
+  // 首屏只读研判记录，不拉牧云（主列表 A4 不因此 503）
+  assert.equal(calls.some(call => call.url.startsWith('/api/alerts')), false);
+
+  const open = host.querySelector('[data-role="pull-open"]');
+  assert.equal(open.getAttribute('aria-expanded'), 'false');
+  open.click();
+  await flush();
+
+  const pullCalls = calls.filter(call => call.url.startsWith('/api/alerts'));
+  assert.equal(pullCalls.length, 1, '一次点击只拉一次');
+  assert.match(pullCalls[0].url, /count=10/);
+  assert.equal(host.querySelector('[data-role="pull"]').hidden, false);
+  assert.equal(text(host.querySelector('[data-role="pull-meta"]')), '共 1 条 · 拉取只读，不会自动入队');
+  // 拉取行在拉取面板里，主列表行仍是一条研判记录
+  assert.equal(host.querySelectorAll('[data-role="pull-body"] tbody tr').length, 1);
+  assert.equal(rows(host).length, 1);
+  // 只拉取、不入队：没有任何 POST
+  assert.equal(calls.some(call => call.init?.method === 'POST'), false, '拉取不许整批送进研判队列');
+
+  // 逐条显式送：只有这一下才 POST /api/agent/triage/{alertId}
+  const send = host.querySelector('[data-role="pull-body"] tbody button');
+  assert.equal(text(send), '送研判');
+  send.click();
+  await flush();
+  const posts = calls.filter(call => call.init?.method === 'POST');
+  assert.equal(posts.length, 1);
+  assert.match(posts[0].url, /\/api\/agent\/triage\/honeypot%3A7$/);
+  assert.equal(text(host.querySelector('[data-role="pull-body"] tbody button')), '已入队');
+  assert.equal(host.querySelector('[data-role="pull-body"] tbody button').disabled, true);
+  assert.match(text(host.querySelector('[data-role="pull-message"]')), /已把 honeypot:7 送进研判队列/);
+});
+
+test('P003-T026 牧云没配：拉取块说「不可用」，主列表照常（不 503、不被清空）', async () => {
+  const { host } = mount({
+    handler: async url => (url.startsWith('/api/alerts')
+      ? respond({ error: '牧云尚未配置', code: 'not_configured' }, 503) : null),
+  });
+  await flush();
+  assert.equal(rows(host).length, 1);
+  host.querySelector('[data-role="pull-open"]').click();
+  await flush();
+  assert.equal(text(host.querySelector('[data-role="pull-meta"]')), '不可用');
+  assert.match(text(host.querySelector('[data-role="pull-body"]')), /牧云尚未配置，拉取不可用。主列表不受影响/);
+  assert.equal(rows(host).length, 1, '拉取失败不改主列表');
+  assert.equal(text(rows(host)[0].querySelector('.col-verdict')), '真实威胁');
+});
+
+test('P003-T026 收起面板：主列表与已拉到的数据都不丢，再点开不重复拉', async () => {
+  const { host, calls } = mount({
+    handler: async url => (url.startsWith('/api/alerts')
+      ? respond({ alerts: [pulledAlert()], total: 1, totals: {}, errors: {}, partial: false }) : null),
+  });
+  await flush();
+  host.querySelector('[data-role="pull-open"]').click();
+  await flush();
+  assert.equal(calls.filter(call => call.url.startsWith('/api/alerts')).length, 1);
+  host.querySelector('[data-role="pull-close"]').click();
+  await flush();
+  assert.equal(host.querySelector('[data-role="pull"]').hidden, true);
+  assert.equal(rows(host).length, 1);
+  host.querySelector('[data-role="pull-open"]').click();
+  await flush();
+  assert.equal(calls.filter(call => call.url.startsWith('/api/alerts')).length, 1, '已拉到的数据复用，不重复请求');
+  assert.equal(host.querySelectorAll('[data-role="pull-body"] tbody tr').length, 1);
+});

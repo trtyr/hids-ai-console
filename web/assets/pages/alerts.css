@@ -672,3 +672,68 @@
 
 /* 演示入口的说明条（牧云现查：单独入口，标成演示） */
 .notice.demo-note { margin-bottom: 4px; }
+
+/* ---------- 牧云拉取面板（P003-T026 / D025）----------
+ * 拉取是告警页上的动作，不是另一页：面板与主列表分区，只读拉取、逐条「送研判」。
+ * 视觉沿用本页表格语言（同 .alerts 的表头/行距），不另造一套。
+ */
+.pull-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg-soft, var(--bg-input));
+}
+.pull-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.pull-title { font-size: 12px; font-weight: 600; color: var(--text); }
+.pull-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.pull-meta { font-size: 11px; color: var(--text-3); }
+.pull-message { font-size: 11px; color: var(--accent); }
+.pull-head [data-role="pull-close"] { margin-left: auto; }
+.pull-body { padding: 0 12px; }
+.pull-body .pull-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.pull-table { width: 100%; border-collapse: collapse; }
+.pull-table th {
+  padding: 7px 0;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.pull-table td {
+  padding: 7px 0;
+  font-size: 12px;
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+}
+.pull-table tr:last-child td { border-bottom: 0; }
+.pull-table .col-ops { text-align: right; }
+.pull-pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--line);
+}
+.pull-pager .pager-info { color: var(--text-3); }
