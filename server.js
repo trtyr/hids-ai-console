@@ -1690,6 +1690,60 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           try { return json(res, 200, await wiki.get(pagePath.filename)); }
           catch (cause) { return causeError(res, cause, 'internal'); }
         }
+        // ── 判据页历史 / 取版 / 回滚 / 引用图 / 研判闭环（P003-T087）──────────
+        if (url.pathname === '/api/wiki/pages-history' && req.method === 'GET') {
+          const page = url.searchParams.get('path')?.trim() || null;
+          try { return json(res, 200, { history: await wiki.history(page) }); }
+          catch (cause) { return upstreamError(res, `判据历史读取失败：${cause.message}`); }
+        }
+        if (url.pathname === '/api/wiki/revisions' && req.method === 'GET') {
+          const id = url.searchParams.get('id')?.trim();
+          const rev = url.searchParams.get('rev')?.trim();
+          if (!id || !rev) return callerError(res, '需要 id 与 rev 两个参数');
+          try {
+            const revision = await wiki.readRevision(id, rev);
+            return revision ? json(res, 200, revision) : callerError(res, '判据历史版本不存在', 404);
+          } catch (cause) { return upstreamError(res, `判据历史读取失败：${cause.message}`); }
+        }
+        if (url.pathname === '/api/wiki/rollback' && req.method === 'POST') {
+          const body = await readJSON(req, 12000);
+          const page = typeof body?.path === 'string' ? body.path.trim() : '';
+          const rev = typeof body?.rev === 'string' ? body.rev.trim() : '';
+          if (!page || !/^[0-9a-f]{16}$/.test(rev)) return callerError(res, '需要 path 与有效的 rev');
+          try {
+            const rolled = await wiki.rollbackTo(page, rev, { note: `人工回滚（${access?.user || 'admin'}）` });
+            void auditor({ actor: actorOf({ access }), action: 'wiki.page.write',
+              object: { kind: 'wiki_page', path: page, action: 'rollback', rev } });
+            return json(res, 200, rolled);
+          } catch (cause) { return causeError(res, cause, 'internal'); }
+        }
+        if (url.pathname === '/api/wiki/reference-graph' && req.method === 'GET') {
+          try { return json(res, 200, await wiki.referenceGraph()); }
+          catch (cause) { return upstreamError(res, `判据引用图读取失败：${cause.message}`); }
+        }
+        // 研判闭环（P003-T087 A4）：判据页可反查「哪些研判用过我、结论分布」。
+        // 数据源是落盘研判记录的 trace（wiki 动作）与 verdict。
+        if (url.pathname === '/api/wiki/usage' && req.method === 'GET') {
+          const id = url.searchParams.get('id')?.trim();
+          if (!id) return callerError(res, '需要判据编号 id');
+          let names;
+          try { names = await readdir(history.directory); }
+          catch (cause) { if (cause.code === 'ENOENT') return json(res, 200, { id, investigations: [], verdicts: {} }); throw cause; }
+          const used = [];
+          const verdicts = {};
+          for (const name of names.filter(item => item.endsWith('.json'))) {
+            let saved;
+            try { saved = JSON.parse(await readFile(path.join(history.directory, name), 'utf8')); } catch { continue; }
+            const cited = (saved?.trace || []).some(item => item.kind === 'wiki' && item.id === id);
+            const consulted = (saved?.verdict?.wiki?.consulted || []).includes(id);
+            if (!cited && !consulted) continue;
+            const verdict = saved?.verdict?.verdict || null;
+            used.push({ alert_id: saved?.alert_id ?? null, mode: saved?.mode ?? null, verdict, saved_at: saved?.saved_at ?? null });
+            verdicts[verdict ?? 'review'] = (verdicts[verdict ?? 'review'] || 0) + 1;
+          }
+          used.sort((a, b) => String(b.saved_at || '').localeCompare(String(a.saved_at || '')));
+          return json(res, 200, { id, total: used.length, verdicts, investigations: used.slice(0, 20) });
+        }
         if (pagePath && req.method === 'PUT') {
           const body = await readJSON(req, 120000);
           if (!body || !Object.hasOwn(body, 'expected_revision') || !/^[0-9a-f]{16}$/.test(String(body.expected_revision)))

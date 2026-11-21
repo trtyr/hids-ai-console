@@ -210,6 +210,62 @@ export class WikiStore {
     return { checked_at: new Date().toISOString(), active_pages: active.length, issues };
   }
 
+  /** 历史版本列表（P003-T087 A1）：`[{path, id, rev, bytes, saved_at}]`，按写入时间升序。
+   *  文件名形制 `<id>-<rev>.md`（由 update/publishBundle 写入 wiki-history/）。 */
+  async history(pagePath = null) {
+    let names;
+    try { names = await readdir(this.historyDirectory); }
+    catch (cause) { if (cause.code === 'ENOENT') return []; throw cause; }
+    const rows = [];
+    for (const name of names.filter(item => /\.md$/.test(item))) {
+      const match = name.match(/^(.+)-([0-9a-f]{16})\.md$/);
+      if (!match) continue;
+      const [, id, rev] = match;
+      // 按页筛：id 相同即可（一个 id 对应一个页面路径）
+      if (pagePath && !String(pagePath).includes(id)) continue;
+      const full = path.join(this.historyDirectory, name);
+      let info;
+      try { info = await statFile(full); } catch (cause) { if (cause.code === 'ENOENT') continue; throw cause; }
+      rows.push({ id, rev, file: name, bytes: info.size,
+        saved_at: new Date(info.mtimeMs).toISOString(), at: info.mtimeMs });
+    }
+    return rows.sort((a, b) => a.at - b.at).map(({ at, ...row }) => row);
+  }
+
+  /** 读某一版历史正文（P003-T087 A1）：`{id, rev, content}`；不存在返回 null。 */
+  async readRevision(id, rev) {
+    if (!id || !/^[0-9a-f]{16}$/.test(String(rev || ''))) return null;
+    try { return { id, rev, content: await readFile(path.join(this.historyDirectory, `${id}-${rev}.md`), 'utf8') }; }
+    catch (cause) { if (cause.code === 'ENOENT') return null; throw cause; }
+  }
+
+  /** 回滚到某版（P003-T087 A1）：把旧版当新版写一次，走与 update 相同的闸（乐观锁 + 备份 + log.md）。
+   *  revision 是内容指纹，回滚后页面 revision 回到旧版的值。 */
+  async rollbackTo(pagePath, rev, { note = '人工回滚' } = {}) {
+    const previous = await this.readRevision(path.basename(pagePath, '.md'), rev);
+    if (!previous) throw Object.assign(new Error(`判据页历史版本不存在：${rev}`), { status: 404 });
+    const current = await this.get(pagePath);
+    return this.update(pagePath, previous.content, current.revision, note);
+  }
+
+  /** 引用图（P003-T087 A2）：正反向。每条边 `{from, to, kind:'refs'|'evidence'}`。 */
+  async referenceGraph() {
+    const pages = await this.list();
+    const edges = [];
+    for (const page of pages) {
+      let source;
+      try { source = (await this.get(page.path)).content; } catch { continue; }
+      for (const ref of source.match(/^refs:\s*\[([^\]]*)\]/m)?.[1]?.match(/[A-Z]{2,3}-\d+[a-z]?/g) || [])
+        edges.push({ from: page.id, to: ref, kind: 'refs' });
+      for (const ref of source.match(/^evidence:\s*\[([^\]]*)\]/m)?.[1]?.split(',').map(item => item.trim()).filter(Boolean) || [])
+        edges.push({ from: page.id, to: ref, kind: 'evidence' });
+    }
+    // 反向索引：被谁引用
+    const inbound = {};
+    for (const edge of edges) (inbound[edge.to] ||= []).push(edge.from);
+    return { nodes: pages.map(page => ({ id: page.id, path: page.path, title: page.title })), edges, inbound };
+  }
+
   update(filename, content, expectedRevision, note = '通过知识库工作台更新') {
     const job = this.pending.then(async () => {
       await this.ready();

@@ -758,6 +758,151 @@ paths:
                         last_at: { type: [string, 'null'] }
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/wiki/pages-history:
+    get:
+      tags: [知识库]
+      summary: 判据页历史版本列表（可选按页筛）
+      operationId: listWikiPageHistory
+      description: P003-T087 A1。历史落 wiki-history/，文件名形制 `<id>-<rev>.md`。
+      parameters:
+        - { name: path, in: query, description: 按页面路径筛（含页面 id 即命中）, schema: { type: string } }
+      responses:
+        '200':
+          description: 历史版本列表（写入时间升序）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [history]
+                properties:
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, rev, bytes, saved_at]
+                      properties:
+                        id: { type: string }
+                        rev: { type: string, pattern: '^[0-9a-f]{16}$' }
+                        file: { type: string }
+                        bytes: { type: integer }
+                        saved_at: { type: string }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/wiki/revisions:
+    get:
+      tags: [知识库]
+      summary: 读判据页某一版正文
+      operationId: readWikiRevision
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string } }
+        - { name: rev, in: query, required: true, schema: { type: string, pattern: '^[0-9a-f]{16}$' } }
+      responses:
+        '200':
+          description: 该版正文
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, rev, content]
+                properties:
+                  id: { type: string }
+                  rev: { type: string }
+                  content: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/wiki/rollback:
+    post:
+      tags: [知识库]
+      summary: 判据页回滚到某一版（旧版当新版写一次）
+      operationId: rollbackWikiPage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path, rev]
+              properties:
+                path: { type: string }
+                rev: { type: string, pattern: '^[0-9a-f]{16}$' }
+      responses:
+        '200':
+          description: 回滚后的页面元数据（revision 回到旧值）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WikiPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/wiki/reference-graph:
+    get:
+      tags: [知识库]
+      summary: 判据引用图（节点 + 正反向边）
+      operationId: getWikiReferenceGraph
+      description: P003-T087 A2。边分 refs（判据引用判据）与 evidence（判据引用证据页）两类，inbound 是反向索引。
+      responses:
+        '200':
+          description: 引用图
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [nodes, edges, inbound]
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        path: { type: string }
+                        title: { type: string }
+                  edges:
+                    type: array
+                    items:
+                      type: object
+                      required: [from, to, kind]
+                      properties:
+                        from: { type: string }
+                        to: { type: string }
+                        kind: { type: string, enum: [refs, evidence] }
+                  inbound:
+                    type: object
+                    additionalProperties: { type: array, items: { type: string } }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/wiki/usage:
+    get:
+      tags: [知识库]
+      summary: 判据页研判闭环——哪些研判用过它、结论分布
+      operationId: getWikiPageUsage
+      description: P003-T087 A4。从落盘研判记录的 trace（wiki 动作）与 verdict.wiki.consulted 反查。
+      parameters:
+        - { name: id, in: query, required: true, description: 判据编号（如 HP-01）, schema: { type: string } }
+      responses:
+        '200':
+          description: 使用情况
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, total]
+                properties:
+                  id: { type: string }
+                  total: { type: integer }
+                  verdicts:
+                    type: object
+                    additionalProperties: { type: integer }
+                  investigations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        alert_id: { type: [string, 'null'] }
+                        mode: { type: [string, 'null'] }
+                        verdict: { type: [string, 'null'] }
+                        saved_at: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
   /api/audit:
     get:
       tags: [审计]

@@ -100,6 +100,11 @@ const ROUTES = [
   { route: 'GET /api/false-positive/sessions', probe: "'/api/false-positive/sessions'" },
   { route: 'GET /api/false-positive/sessions/{id}', probe: "'/api/false-positive/sessions/'" },
   // 判据库与知识维护会话
+  { route: 'GET /api/wiki/pages-history', probe: "'/api/wiki/pages-history'" },
+  { route: 'GET /api/wiki/revisions', probe: "'/api/wiki/revisions'" },
+  { route: 'POST /api/wiki/rollback', probe: "'/api/wiki/rollback'" },
+  { route: 'GET /api/wiki/reference-graph', probe: "'/api/wiki/reference-graph'" },
+  { route: 'GET /api/wiki/usage', probe: "'/api/wiki/usage'" },
   { route: 'GET /api/wiki/pages', probe: "'/api/wiki/pages'" },
   { route: 'GET /api/wiki/pages/{pagePath}', probe: "'/api/wiki/pages/'" },
   { route: 'PUT /api/wiki/pages/{pagePath}', probe: "'/api/wiki/pages/'", note: '实现有、契约没有（R-API 已知欠账 #1）' },
