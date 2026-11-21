@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-EXPERIENCE-DRAFT
-covers: [knowledge-store.js, knowledge-workbench.js]
+covers: [src/contexts/maintenance/infrastructure/knowledge-store.js, src/contexts/maintenance/application/knowledge-workbench.js]
 updated: 2026-11-20
 ---
 
