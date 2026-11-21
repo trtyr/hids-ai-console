@@ -903,6 +903,39 @@ paths:
                         saved_at: { type: [string, 'null'] }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/events:
+    get:
+      tags: [状态]
+      summary: 统一进度推送（一条 SSE 看四类进度）
+      operationId: streamEvents
+      description: |
+        P003-T089：一条连接承载四类进度，替代「各 Agent 各自轮询」。
+        事件格式恒为 `{type, topic, at, ...}`：
+        `type` ∈ `snapshot`（订阅时的当前态）/ `progress`（变化）/ `error`；
+        `topic` ∈ `triage`（队列与案件）/ `board`（白板）/ `investigation`（深度研判）/ `fp`（误报维护）。
+        `/api/agent/investigations?stream=1` 是「一次请求一路流」，本接口是「一条连接看全部」，两者并存。
+        每 15 秒一条 `: heartbeat` 注释。
+      parameters:
+        - name: topics
+          in: query
+          description: 逗号分隔的 topic 列表，缺省全部四个
+          schema: { type: string, default: 'triage,board,investigation,fp' }
+        - name: interval_ms
+          in: query
+          description: 变化检测间隔（500 到 60000，缺省 2000）
+          schema: { type: integer, minimum: 500, maximum: 60000, default: 2000 }
+      responses:
+        '200':
+          description: SSE 流
+          content:
+            text/event-stream:
+              schema: { type: string, description: 'data: {type, topic, at, ...}；: heartbeat 注释' }
+        '400':
+          description: topic 不认识或 interval_ms 越界（`code=caller_error`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
   /api/audit:
     get:
       tags: [审计]

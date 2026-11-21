@@ -43,6 +43,7 @@ const ROUTES = [
   { route: 'POST /api/config', probe: "'/api/config'" },
   // 状态与工具目录
   { route: 'GET /api/status', probe: "'/api/status'" },
+  { route: 'GET /api/events', probe: "'/api/events'" },
   { route: 'GET /api/agent/status', probe: "'/api/agent/status'" },
   { route: 'GET /api/agent/prompts', probe: "'/api/agent/prompts'" },
   { route: 'GET /api/agent/tools', probe: "'/api/agent/tools'" },

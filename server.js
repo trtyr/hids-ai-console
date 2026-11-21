@@ -1022,6 +1022,89 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   return at > 0 ? text.slice(0, at) : '';
 };
 
+
+  // ── 统一进度推送（P003-T089）：一条 SSE 通道承载四类进度 ──────────────────
+  // 事件格式恒为 `{type, topic, at, ...}`：type ∈ snapshot|progress|result|error；
+  // topic ∈ triage（队列/案件）| board（白板）| investigation（深度研判）| fp（误报维护）。
+  // 与 `/api/agent/investigations?stream=1` 的区别：那条是「一次请求一路流」，这条是「一条连接看全部」。
+  if (url.pathname === '/api/events' && req.method === 'GET') {
+    const topics = (url.searchParams.get('topics') || 'triage,board,investigation,fp').split(',')
+      .map(item => item.trim()).filter(Boolean);
+    const known = new Set(['triage', 'board', 'investigation', 'fp']);
+    const unknownTopic = topics.find(topic => !known.has(topic));
+    if (unknownTopic) return callerError(res, `不认识的 topic：${unknownTopic}`);
+    const intervalMs = Number(url.searchParams.get('interval_ms') || 2000);
+    if (!Number.isSafeInteger(intervalMs) || intervalMs < 500 || intervalMs > 60000)
+      return callerError(res, 'interval_ms 必须是 500 到 60000 的整数');
+    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store',
+      Connection: 'keep-alive', 'X-Content-Type-Options': 'nosniff' });
+    let closed = false;
+    const send = payload => {
+      if (closed || res.destroyed || res.writableEnded) return;
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+    // 快照：先把「此刻怎么样」推一遍，前端不用等下一次变化。
+    const snapshot = () => {
+      if (topics.includes('triage')) {
+        const summary = monitor ? monitor.summary() : null;
+        send({ type: 'snapshot', topic: 'triage', at: new Date().toISOString(),
+          configured: Boolean(monitor),
+          ...(summary ? { enabled: summary.enabled, counts: summary.counts, queue: summary.queue,
+            verdict_counts: summary.verdict_counts, dead_letters: summary.retry.dead_letters } : {}) });
+      }
+      if (topics.includes('board') && boardService) {
+        const running = boardService.running ? boardService.running.size : 0;
+        send({ type: 'snapshot', topic: 'board', at: new Date().toISOString(), running });
+      }
+      if (topics.includes('investigation')) {
+        send({ type: 'snapshot', topic: 'investigation', at: new Date().toISOString(),
+          configured: Boolean(investigator) });
+      }
+      if (topics.includes('fp')) {
+        send({ type: 'snapshot', topic: 'fp', at: new Date().toISOString(), running: runningMaintenance.size });
+      }
+    };
+    snapshot();
+    // 增量：只推变化（与上一次快照比），没有变化就只发心跳注释。
+    const currentOf = () => ({
+      triage: monitor ? { counts: monitor.summary().counts, running: monitor.active } : null,
+      board: boardService?.running ? boardService.running.size : null,
+      fp: runningMaintenance.size
+    });
+    // 基线＝快照那一刻的状态：之后第一个 tick 就能对比出变化（不记基线会漏掉第一次变化）。
+    let last = JSON.stringify(currentOf());
+    const tick = async () => {
+      if (closed) return;
+      try {
+        const current = currentOf();
+        const fingerprint = JSON.stringify(current);
+        if (last !== null && fingerprint !== last) {
+          if (topics.includes('triage') && current.triage)
+            send({ type: 'progress', topic: 'triage', at: new Date().toISOString(), ...current.triage });
+          if (topics.includes('board') && current.board != null)
+            send({ type: 'progress', topic: 'board', at: new Date().toISOString(), running: current.board });
+          if (topics.includes('fp') && current.fp != null)
+            send({ type: 'progress', topic: 'fp', at: new Date().toISOString(), running: current.fp });
+        }
+        last = fingerprint;
+      } catch (cause) {
+        send({ type: 'error', topic: 'triage', at: new Date().toISOString(),
+          error: scrubCredentials(cause?.message || cause).slice(0, 200), code: 'internal_error' });
+      }
+    };
+    const timer = setInterval(() => { void tick(); }, intervalMs);
+    const heartbeat = setInterval(() => {
+      if (!closed && !res.destroyed && !res.writableEnded) res.write(': heartbeat\n\n');
+    }, 15000);
+    const close = () => {
+      closed = true;
+      clearInterval(timer); clearInterval(heartbeat);
+    };
+    res.on('close', close);
+    res.on('error', close);
+    return;
+  }
+
   // ── 批量操作（P003-T069 A07）：部分失败如实汇总，不整体回滚 ──────────────────
   const batchMatch = url.pathname.match(/^\/api\/batch\/(enqueue|false-positive|dispose)$/);
   if (batchMatch && req.method === 'POST') {
