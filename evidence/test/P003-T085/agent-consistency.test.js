@@ -3,7 +3,7 @@ import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
-import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
+import { InvestigationAgent, verdictBranches } from '../../../src/contexts/triage/application/investigation-agent.js';
 import { PromptStore } from '../../../src/contexts/knowledge/infrastructure/prompt-store.js';
 
 test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
@@ -102,17 +102,20 @@ test('T085 A4 多结论分支：一条告警可出多条结论，单条时长度
   const agent = rig({ conclusion: { ...primary, conclusions: [primary, branch] } });
   const result = await agent.run('honeypot:7', { mode: 'deep' });
   assert.equal(result.conclusions.length, 2);
-  assert.equal(result.conclusions[0], result.verdict, '数组第一条就是主结论（同一个对象）');
+  assert.equal(result.conclusions[0].verdict, result.verdict.verdict, '数组第一条就是主结论');
+  assert.equal(result.conclusions[0].summary, result.verdict.summary);
+  assert.equal(result.conclusions[0].primary, true);
   assert.equal(result.conclusions[1].verdict, 'uncertain');
   assert.equal(result.conclusions[1].summary, '本地提权尚缺进程关联');
   assert.equal(result.conclusions[1].validation.ok, true);
   assert.equal(result.validation.ok, true);
 
-  // 单条结论：结构兼容，数组长度 1
+  // 单条结论：旧形状不变（不落 conclusions 字段），统一读取口径仍是长度 1
   const single = rig({ conclusion: { verdict: '存疑', confidence: '低', summary: '证据不足', claims: [] } });
   const one = await single.run('honeypot:7', { mode: 'deep' });
-  assert.equal(one.conclusions.length, 1);
-  assert.equal(one.conclusions[0], one.verdict);
+  assert.equal(one.conclusions, undefined);
+  assert.equal(verdictBranches(one).length, 1);
+  assert.equal(verdictBranches(one)[0], one.verdict);
 });
 
 test('T085 A4 分支引用伪造证据同样被抓：validation 点名 conclusions[1]，该分支 ok=false', async () => {

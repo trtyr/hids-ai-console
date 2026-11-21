@@ -94,7 +94,9 @@ function makeLlmStub() {
         const marker = ['PATH-BOTH', 'PATH-WIKI', 'PATH-FAIL'].find((m) => user.includes(m)) || 'PATH-RULE';
         const attempt = (attemptsByMarker.get(marker) || 0) + 1;
         attemptsByMarker.set(marker, attempt);
-        const widen = marker === 'PATH-FAIL' && attempt === 1;
+        // P003-T086 A2：规则维护最多 N 轮（缺省 3）。PATH-FAIL 前三轮都交放宽版 → 这一轮失败；
+        // 补跑（第 4 次起）交收紧版 → 收敛。
+        const widen = marker === 'PATH-FAIL' && attempt <= 3;
         const diskRule = readFileSync(`${DATA}/rules/${RULE_ID}.rego`, 'utf8');
         const tighten = (text, line) => (text.includes(line) ? text : text.replace(/\n\}\s*$/, `\n  ${line}\n}\n`));
         const rego = widen ? WIDE_RULE
@@ -559,8 +561,8 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       const widen = await call(base, 'POST', fpPath(alerts.fail), { body: { reason: '规则改宽试试（PATH-FAIL）', who: '何东阳' } });
       assert.equal(widen.status, 202);
       const bad = await waitTerminal(base, alerts.fail);
-      // 决策说只动规则 → 规则维护 1 次（这一轮失败）、知识维护 0 次
-      expectCalls(before, { decision: 1, rule: 1, wiki: 0 }, '失败那一轮（决策只给规则侧）');
+      // 决策说只动规则 → 规则维护跑满 3 轮（每轮都被「放宽」校验打回，这一轮失败）、知识维护 0 次
+      expectCalls(before, { decision: 1, rule: 3, wiki: 0 }, '失败那一轮（决策只给规则侧，规则维护 3 轮未收敛）');
       assert.equal(bad.maintenance.status, 'failed');
       assert.equal(bad.maintenance.rule.state, 'failed');
       assert.match(bad.maintenance.rule.error, /放宽/);
@@ -575,7 +577,7 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       const retry = await call(base, 'POST', fpPath(alerts.fail), { body: { reason: '补跑规则侧（PATH-FAIL）', libraries: ['rule'] } });
       assert.equal(retry.status, 202);
       const ok = await waitTerminal(base, alerts.fail);
-      // A6 补跑不重发：只请求规则侧 → 规则维护 1 次，知识维护 0 次（未请求侧不许发调用）
+      // A6 补跑不重发：只请求规则侧 → 规则维护 1 次（第 4 次尝试交收紧版，一轮收敛），知识维护 0 次
       expectCalls(b2, { decision: 1, rule: 1, wiki: 0 }, '失败侧单腿补跑');
       assert.equal(ok.maintenance.status, 'updated');
       assert.equal(ok.maintenance.rule.state, 'updated');

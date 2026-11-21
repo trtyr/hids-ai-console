@@ -302,8 +302,8 @@ test('A4 .env.example 列全新六键、注释写明逐键回退，老键一个�
   for (const key of NEW_KEYS) assert.ok(listed.has(key), `.env.example 少了 ${key}`);
   for (const key of Object.keys(PRIMARY)) assert.ok(listed.has(key), `.env.example 丢了老键名 ${key}`);
   // P003-T045 加日志落盘三键、P003-T072 加总量上限一键后全集 48；再加键时这里跟 .env.example 头注一起改。
-  assert.equal(listed.size, 53, `.env.example 的键数应与代码读的键数一致，实测 ${listed.size}`);
-  assert.match(example, /53 个键/, '头部键数说明要跟上');
+  assert.equal(listed.size, 54, `.env.example 的键数应与代码读的键数一致，实测 ${listed.size}`);
+  assert.match(example, /54 个键/, '头部键数说明要跟上');
 
   const comments = example.split('\n').filter(line => line.startsWith('#')).join('\n');
   for (const prefix of ['LLM_REVIEW_', 'LLM_LIGHT_']) assert.ok(comments.includes(prefix), `注释里该点名 ${prefix}* 这一组`);

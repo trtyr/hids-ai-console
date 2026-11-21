@@ -475,7 +475,7 @@ function costOf(transcript, startedAt) {
 // 旧的单结论客户端只读 verdict，不受影响。每条分支都过与主结论相同的两道引用闸：
 //   ① session.verifyClaims（字段值对得上）→ 不通过的 claim 移除；
 //   ② danglingCitations（evidence_id 必须在本次 evidence[]）→ 写进该分支 validation 并计入总 validation。
-function branchConclusions(primary, raw, session, evidence) {
+function branchConclusions(primary, raw, session, evidence, primaryValidation = null) {
   const extras = [];
   // 契约要求 conclusions 第一条就是主结论；按「与主结论同 verdict+summary」去重，避免数组里出现两份主结论。
   const isPrimary = item => item && verdictMap[item.verdict] === primary.verdict && item.summary === primary.summary;
@@ -494,9 +494,14 @@ function branchConclusions(primary, raw, session, evidence) {
     branch.validation = { ok: errors.length === 0, errors };
     if (errors.length) branch.missing_evidence = [...(branch.missing_evidence || []),
       '结论引用了本次未取到的证据，需重新核对'];
-    extras.push(branch);
+    extras.push({ ...branch, primary: false });
   }
-  return [primary, ...extras];
+  // 主结论用同一套键的紧凑视图（不把 analysis/report/wiki/rego 等整份结论再抄一遍，记录体积有界）；
+  // 分支是完整结论对象。所有条目同形：verdict / verdict_label / confidence / summary / claims / missing_evidence / validation / primary。
+  const primaryView = { verdict: primary.verdict, verdict_label: primary.verdict_label, confidence: primary.confidence,
+    summary: primary.summary, claims: primary.claims, missing_evidence: primary.missing_evidence,
+    validation: primaryValidation, primary: true };
+  return [primaryView, ...extras];
 }
 
 // 一致性（T085 A3）：verdict.claims[].citations 的每个 evidence_id 必须存在于本次 investigation 的
@@ -521,7 +526,9 @@ export class InvestigationAgent {
   constructor(toolbox, model, promptStore = null, knowledgeStore = null, ruleStore = null, reviewModel = null) {
     this.toolbox = toolbox; this.model = model;
     this.promptStore = promptStore || { load: async () => ({ version: 'test', revision: 'test',
-      prompts: { triage: '', deep: '', knowledge: '', rule: '', trace: '', knowledge_reuse: '', cross: '' },
+      // review 段与生产 prompts/review.md 同一条口径（T085 A2）；替身只服务不依赖提示词的测试。
+      prompts: { triage: '', review: '你是独立质疑者。只审查证据与已提交结论，输出 concerns / missing_evidence / assessment JSON。',
+        deep: '', knowledge: '', rule: '', trace: '', knowledge_reuse: '', cross: '' },
       scenarios: { cards: [] }, sop: {} }) };
     this.knowledgeStore = knowledgeStore;
     this.ruleStore = ruleStore;
@@ -1149,9 +1156,12 @@ export class InvestigationAgent {
     const systemDigest = createHash('sha256').update(system).digest('hex').slice(0, 12);
     await persistRequiredEvidence();
     const evidence = persistedEvidence(session.records);
-    // T085 A4：多结论分支（additive）。主结论仍是 verdict；conclusions 是完整数组，单条时长度 1。
-    const conclusions = branchConclusions(verdict, verdict.conclusions ?? draft?.conclusions, session, evidence);
-    const branchDangling = conclusions.slice(1).flatMap((item, index) =>
+    // T085 A4：多结论分支（additive）。主结论仍是 verdict；只有模型真的给了 conclusions 数组才落这个字段
+    // （单条结论时数组长度 1，旧记录/不用的模型保持原形状不变——记录体积不因新功能膨胀）。
+    const rawConclusions = verdict.conclusions ?? draft?.conclusions;
+    const conclusions = rawConclusions === undefined ? null
+      : branchConclusions(verdict, rawConclusions, session, evidence, validation);
+    const branchDangling = (conclusions || []).slice(1).flatMap((item, index) =>
       item.validation.errors.map(error => `conclusions[${index + 1}]：${error}`));
     // T085 A3：结论引用必须落在本次 evidence[] 里——不一致就标 validation 不通过并列出缺失项。
     const dangling = [...new Set([...draftDangling, ...danglingCitations(verdict, evidence), ...branchDangling])];
@@ -1163,8 +1173,8 @@ export class InvestigationAgent {
     }
     return { alert_id: alertId, mode, model: this.model.model,
       prompt_version: `${prompts.version}+${prompts.revision}+${systemDigest}`, scenario_ids: cards.map(card => card.id),
-      verdict, conclusions, review, validation, trace, turns: transcript, required_evidence: requiredChecks,
-      evidence, cost: costOf(transcript, startedAt), auto_action: false };
+      verdict, ...(conclusions ? { conclusions } : {}), review, validation, trace, turns: transcript,
+      required_evidence: requiredChecks, evidence, cost: costOf(transcript, startedAt), auto_action: false };
   }
 
   async runUnmatchedSyslog(input, matchResult, caseInfo, onProgress = () => {}) {
@@ -1217,7 +1227,7 @@ export class InvestigationAgent {
     verdict.wiki = { consulted: [], adopted: [], reason: '牧云事件未匹配，本轮是降级结论，没有工具循环，未采纳判据页' };
     return { alert_id: unmatchedAlertId,
       mode: 'triage', model: this.model.model, prompt_version: `${prompts.version}+${prompts.revision}`,
-      scenario_ids: [type], verdict, conclusions: [verdict], turns,
+      scenario_ids: [type], verdict, turns,
       review: { assessment: 'unavailable', concerns: ['对应牧云事件未匹配，无法独立复核完整事件详情'], missing_evidence: [reasonForRecord(matchResult.reason)] },
       validation: { ok: facts.length > 0, errors: facts.length ? [] : ['syslog 缺少可引用字段'] },
       trace: [{ kind: 'rego', status: rego.status, rule_ids: rego.rules.map(rule => rule.id) },
@@ -1252,6 +1262,11 @@ function replayToolCall(item, index) {
   if (Array.isArray(item.matches)) row.matches = item.matches.length;
   return row;
 }
+
+// 多结论的统一读取口径（T085 A4）：有 conclusions 用数组，没有就退回单结论 `[verdict]`。
+// 单条结论因此恒为长度 1，调用方不需要自己判字段存在性。
+export const verdictBranches = result => Array.isArray(result?.conclusions) ? result.conclusions
+  : result?.verdict ? [result.verdict] : [];
 
 export function replayInvestigation(record) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
