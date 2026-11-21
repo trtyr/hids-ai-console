@@ -412,7 +412,7 @@ test('A6 .env.example 列出三个新键，头部「N 个键」与实际键数�
   const source = await readFile(path.join(ROOT, 'src/shared/logging/log.js'), 'utf8');
   for (const key of ['HIDS_LOG_FILE', 'HIDS_LOG_MAX_BYTES', 'HIDS_LOG_KEEP', 'HIDS_LOG_TOTAL_MAX_BYTES'])
     assert.ok(source.includes(key), `log.js 应真读 ${key}`);
-  const claimed = example.match(/（P003-T025 立[^）]*?(\d+) 个键/);
+  const claimed = example.match(/(\d+) 个键/);
   assert.ok(claimed, '头部注释应写着键数（T025 A4 口径）');
   assert.equal(Number(claimed[1]), listed.size, `头部注释写着 ${claimed?.[1]} 个键，实际 ${listed.size} 个`);
 });

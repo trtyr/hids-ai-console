@@ -1,7 +1,7 @@
 // P003-T029 tester 集成验收（黑盒：只按 docs/modules/http-api.md §3.5/§3.6 与 openapi.yaml `writeConfig` 断言）
 //
 // 补齐写者单测没覆盖的验收三样：
-//   1) schema 符合性——200 正文逐键逐类型对 openapi（updated 数组 + config 八键、机密只布尔、头三条）；
+//   1) schema 符合性——200 正文逐键逐类型对 openapi（updated 数组 + config 九键（含 sources）、机密只布尔、头三条）；
 //   2) 边界——空正文/非对象正文/正文超长/表外键逐个/非字符串值/空串与空白串/各键值形状下界；
 //   3) 错误码——400（六类原话）/ 401（纯文本四条头）/ 500（落盘失败，正文不含异常原文）；
 // 另加：被拒的写「什么都不变」（GET 仍是旧值、覆盖层不落盘）。每条请求都带 AbortSignal.timeout(5000)：请求卡住要在 5s 内变红，不许把门禁无限挂起。
@@ -70,7 +70,7 @@ function assertJsonError(response, status, pattern) {
   });
 }
 
-test('schema：200 正文逐键逐类型对 openapi writeConfig（updated + config 八键、机密只布尔）', async t => {
+test('schema：200 正文逐键逐类型对 openapi writeConfig（updated + config 九键（含 sources）、机密只布尔）', async t => {
   const dir = await tempDir(t);
   const file = path.join(dir, 'config-overrides.json');
   const events = [];
@@ -98,8 +98,8 @@ test('schema：200 正文逐键逐类型对 openapi writeConfig（updated + conf
 
   const config = body.config;
   assert.deepEqual(Object.keys(config).sort(),
-    ['auth', 'cloudwalker', 'host', 'missing_required', 'model', 'port', 'secrets', 'triage_input_mode'],
-    'config 与 GET /api/config 同形状：八键恒在');
+    ['auth', 'cloudwalker', 'host', 'missing_required', 'model', 'port', 'secrets', 'sources', 'triage_input_mode'],
+    'config 与 GET /api/config 同形状：九键恒在（P003-T084 增 sources）');
   assert.equal(typeof config.host, 'string');
   assert.ok(Number.isInteger(config.port));
   assert.ok(['syslog', 'poll'].includes(config.triage_input_mode));

@@ -11,7 +11,8 @@ function unavailableReply(body) {
 }
 
 export class ChatModelClient {
-  constructor({ baseUrl, apiKey, model, timeoutMs = 90000, fetcher = fetch }) {
+  // P003-T084：temperature / maxTokens 可配；缺省与现状逐字一致（temperature=0、不传 max_tokens）。
+  constructor({ baseUrl, apiKey, model, timeoutMs = 90000, temperature = 0, maxTokens = null, fetcher = fetch }) {
     if (!/^https?:\/\//.test(baseUrl || '')) throw new Error('LLM_BASE_URL 必须是 HTTP(S) 地址');
     if (!apiKey) throw new Error('缺少 LLM_API_KEY');
     if (!model) throw new Error('缺少 LLM_MODEL');
@@ -20,11 +21,14 @@ export class ChatModelClient {
     this.apiKey = apiKey;
     this.model = model;
     this.timeoutMs = timeoutMs;
+    this.temperature = Number.isFinite(Number(temperature)) ? Number(temperature) : 0;
+    this.maxTokens = Number.isSafeInteger(Number(maxTokens)) && Number(maxTokens) > 0 ? Number(maxTokens) : null;
     this.fetcher = fetcher;
   }
 
   async complete(messages, tools = [], toolChoice = 'auto') {
-    const payload = { model: this.model, messages, temperature: 0, stream: false };
+    const payload = { model: this.model, messages, temperature: this.temperature, stream: false };
+    if (this.maxTokens) payload.max_tokens = this.maxTokens;
     if (tools.length) { payload.tools = tools; payload.tool_choice = toolChoice; }
     else payload.response_format = { type: 'json_object' };
     const response = await this.fetcher(this.url, {

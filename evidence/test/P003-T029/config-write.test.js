@@ -238,12 +238,14 @@ test('写接口的拒绝面：表外的键、空值、非对象正文、空正�
   assert.match(wrongMethod.headers.get('allow'), /GET, POST/);
 });
 
-test('可写键表钉死十一项：多一项少一项都算契约被改', () => {
+test('可写键表钉死十七项：多一项少一项都算契约被改（P003-T084 扩六项）', () => {
   // P003-T042 把模型分层六键（复核组 / 轻量组）加进同一张表：覆盖层机制没变，只是能写的键多了六项。
   assert.deepEqual([...WRITABLE_CONFIG_KEYS], ['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN',
     'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL',
     'LLM_REVIEW_BASE_URL', 'LLM_REVIEW_API_KEY', 'LLM_REVIEW_MODEL',
-    'LLM_LIGHT_BASE_URL', 'LLM_LIGHT_API_KEY', 'LLM_LIGHT_MODEL']);
+    'LLM_LIGHT_BASE_URL', 'LLM_LIGHT_API_KEY', 'LLM_LIGHT_MODEL',
+    'LLM_TEMPERATURE', 'LLM_MAX_TOKENS', 'LLM_TIMEOUT_MS',
+    'HIDS_AGENT_MAX_TURNS', 'HIDS_AGENT_MAX_TOOL_CALLS', 'HIDS_AGENT_CONCLUSION_RETRIES']);
 });
 
 // 写盘失败的清理（复审 nit）：目标路径被目录占住 → rename 必失败，失败后同目录不许留 `<file>.<pid>.tmp`。

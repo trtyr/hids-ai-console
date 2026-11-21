@@ -288,8 +288,12 @@ test('A5 POST /api/config 可写新六键：落盘、GET 立刻反映、坏值�
   const outside = await post(base, { HIDS_PORT: '9090' });
   assert.equal(outside.status, 400);
   assert.match((await outside.json()).error, /配置项不可写：HIDS_PORT/);
+  // P003-T084：能力参数与预算六键进表 → 十七项（只增不改）。
   assert.deepEqual([...WRITABLE_CONFIG_KEYS], ['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN',
-    'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL', ...NEW_KEYS], '可写表就是这十一项');
+    'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL', ...NEW_KEYS,
+    'LLM_TEMPERATURE', 'LLM_MAX_TOKENS', 'LLM_TIMEOUT_MS',
+    'HIDS_AGENT_MAX_TURNS', 'HIDS_AGENT_MAX_TOOL_CALLS', 'HIDS_AGENT_CONCLUSION_RETRIES'],
+  '可写表就是这十七项');
 });
 
 test('A4 .env.example 列全新六键、注释写明逐键回退，老键一个不丢', async () => {
@@ -298,8 +302,8 @@ test('A4 .env.example 列全新六键、注释写明逐键回退，老键一个�
   for (const key of NEW_KEYS) assert.ok(listed.has(key), `.env.example 少了 ${key}`);
   for (const key of Object.keys(PRIMARY)) assert.ok(listed.has(key), `.env.example 丢了老键名 ${key}`);
   // P003-T045 加日志落盘三键、P003-T072 加总量上限一键后全集 48；再加键时这里跟 .env.example 头注一起改。
-  assert.equal(listed.size, 48, `.env.example 的键数应与代码读的键数一致，实测 ${listed.size}`);
-  assert.match(example, /48 个键/, '头部键数说明要跟上');
+  assert.equal(listed.size, 53, `.env.example 的键数应与代码读的键数一致，实测 ${listed.size}`);
+  assert.match(example, /53 个键/, '头部键数说明要跟上');
 
   const comments = example.split('\n').filter(line => line.startsWith('#')).join('\n');
   for (const prefix of ['LLM_REVIEW_', 'LLM_LIGHT_']) assert.ok(comments.includes(prefix), `注释里该点名 ${prefix}* 这一组`);

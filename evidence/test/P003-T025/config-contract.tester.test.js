@@ -34,7 +34,8 @@ const REQUIRED = ['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN', 'LLM_BASE_URL', 'L
 const SECRETS = ['CLOUDWALKER_API_TOKEN', 'LLM_API_KEY', 'HIDS_BASIC_AUTH_PASSWORD',
   'HIDS_PROMPT_ADMIN_TOKEN', 'HIDS_RULE_ADMIN_TOKEN'];
 // openapi.yaml getConfig 的 required 八个键（http-api.md §3.5：「JSON 正文八键恒在」）
-const BODY_KEYS = ['host', 'port', 'triage_input_mode', 'cloudwalker', 'model', 'auth', 'secrets', 'missing_required'];
+// P003-T084：新增 sources（每项来源可见），八键→九键（只增不改）。
+const BODY_KEYS = ['host', 'port', 'triage_input_mode', 'cloudwalker', 'model', 'auth', 'secrets', 'missing_required', 'sources'];
 // 每一项都是假值：形状合法到能过装配，但一点都不像真凭据——本文件不出现任何真 Token / 真密码。
 // 五个机密全给假值（P003-T025 复审：先前只给三个，两个 admin 令牌从没配过值，等于没测）。
 const SECRET_VALUES = {

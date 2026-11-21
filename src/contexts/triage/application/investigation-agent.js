@@ -33,9 +33,15 @@ const failureTextLimit = 240;
 
 // 调查循环的三个上限：轮数、单次调查的工具调用数、结论引用校验的退回次数。
 // trace 里写的是这几个常量，文档与测试引用的也是它们——不要在两处各写一遍字面量。
-const maxTurns = 6;
-const maxToolCalls = 8;
-const conclusionRetries = 2;
+// P003-T084：预算从环境读（HIDS_AGENT_MAX_TURNS / HIDS_AGENT_MAX_TOOL_CALLS /
+// HIDS_AGENT_CONCLUSION_RETRIES），缺省与硬编码时代逐字一致（6/8/2）。非法值回落缺省。
+const budgetOf = (name, fallback) => {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+};
+const maxTurns = budgetOf('HIDS_AGENT_MAX_TURNS', 6);
+const maxToolCalls = budgetOf('HIDS_AGENT_MAX_TOOL_CALLS', 8);
+const conclusionRetries = budgetOf('HIDS_AGENT_CONCLUSION_RETRIES', 2);
 
 function flatten(text, limit) {
   const flat = String(text ?? '').replace(/\s+/g, ' ').trim();

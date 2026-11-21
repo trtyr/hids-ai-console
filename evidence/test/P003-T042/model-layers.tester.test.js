@@ -1,7 +1,7 @@
 // P003-T042 测试席（何东阳）黑盒验收：模型分层。
 // 依据只有契约文本，不从实现里读答案：
 //   openapi.yaml getConfig / writeConfig / ModelRoleResolved
-//   docs/modules/http-api.md §3.5（model.roles 表 + 来源三态 + 机密口径）、§3.6（十一可写键 + 坏值点组内键名）
+//   docs/modules/http-api.md §3.5（model.roles 表 + 来源三态 + 机密口径）、§3.6（十七可写键 + 坏值点组内键名；P003-T084 扩六项）
 //   .env.example 的 LLM_REVIEW_* / LLM_LIGHT_* 注释（逐键回退、六个新键）
 // 做法：真 HTTP（进程内 createServer + 假上游只当 socket 对端，不是被测逻辑）+ 真研判一轮；每条请求 5s 超时。
 // 断言的是「契约说的行为」，不是「当前实现长什么样」：200 正文一律过 openapi 的 schema 校验（含 $ref 展开）。
@@ -387,9 +387,12 @@ test('A4 .env.example 六键双向扫描：新六键在、老五键在、键名�
   assert.match(comments, /研判只用上面主判三项/, '注释要写清研判只用主判三项');
 });
 
-test('A4 openapi 契约：writeConfig 可写表十一项、getConfig roles 五键、ModelRoleResolved 约束与 API 对表', async t => {
-  const writable = ['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN', 'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL', ...NEW_KEYS];
-  assert.deepEqual(WRITABLE, writable, 'openapi writeConfig 的可写表就是这十一项（顺序也照表）');
+test('A4 openapi 契约：writeConfig 可写表十七项、getConfig roles 五键、ModelRoleResolved 约束与 API 对表', async t => {
+  // P003-T084：能力参数与预算六键进表（顺序照 openapi 表尾）。
+  const writable = ['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN', 'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL', ...NEW_KEYS,
+    'LLM_TEMPERATURE', 'LLM_MAX_TOKENS', 'LLM_TIMEOUT_MS',
+    'HIDS_AGENT_MAX_TURNS', 'HIDS_AGENT_MAX_TOOL_CALLS', 'HIDS_AGENT_CONCLUSION_RETRIES'];
+  assert.deepEqual(WRITABLE, writable, 'openapi writeConfig 的可写表就是这十七项（顺序也照表）');
   assert.equal(WRITE_SCHEMA.minProperties, 1, '空正文在 openapi 里就是非法的（minProperties: 1）');
   assert.equal(WRITE_SCHEMA.additionalProperties, false, '表外键在 openapi 里就是非法的');
   const resolved = deref(OPENAPI.components.schemas.ModelRoleResolved);
@@ -404,7 +407,8 @@ test('A4 openapi 契约：writeConfig 可写表十一项、getConfig roles 五�
   const probe = { LLM_BASE_URL: 'http://probe.example/v1', LLM_REVIEW_BASE_URL: 'http://probe.example/v1',
     LLM_LIGHT_BASE_URL: 'http://probe.example/v1', LLM_API_KEY: 'probe-key-abcdef', LLM_REVIEW_API_KEY: 'probe-key-abcdef',
     LLM_LIGHT_API_KEY: 'probe-key-abcdef', LLM_MODEL: 'probe-model', LLM_REVIEW_MODEL: 'probe-model',
-    LLM_LIGHT_MODEL: 'probe-model', LLM_TIMEOUT_MS: '1234' };
+    LLM_LIGHT_MODEL: 'probe-model', LLM_TIMEOUT_MS: '1234',
+    LLM_TEMPERATURE: '0.1', LLM_MAX_TOKENS: '2048' };
   for (const key of llmKeys) {
     assert.ok(key in probe, `本用例没有 ${key} 的探针值，先补探针再扫`);
     const response = await post(base, { [key]: probe[key] });
@@ -422,15 +426,17 @@ test('A4 openapi 契约：writeConfig 可写表十一项、getConfig roles 五�
 });
 
 // ================================================================================================
-// A5 十一可写键 + 坏值点组内键名（HTTP）
+// A5 十七可写键 + 坏值点组内键名（HTTP）
 // ================================================================================================
-test('A5 十一可写键逐个写成功：200 + updated 顺序＝正文顺序 + 落盘 + 重启读回 + GET 立刻反映', async t => {
+test('A5 十七可写键逐个写成功：200 + updated 顺序＝正文顺序 + 落盘 + 重启读回 + GET 立刻反映', async t => {
   const { base, store, file } = await serve(t, { ...PRIMARY, CLOUDWALKER_URL: 'http://cw.example:9100',
     CLOUDWALKER_API_TOKEN: 'cw-token-abcdef' });
   const values = {
     CLOUDWALKER_URL: 'http://cw.example:9100', CLOUDWALKER_API_TOKEN: 'cw-token-abcdef',
     LLM_BASE_URL: 'http://main.example/v1', LLM_API_KEY: 'main-key-abcdef', LLM_MODEL: 'main-model',
-    ...REVIEW, ...LIGHT
+    ...REVIEW, ...LIGHT,
+    LLM_TEMPERATURE: '0.2', LLM_MAX_TOKENS: '4096', LLM_TIMEOUT_MS: '60000',
+    HIDS_AGENT_MAX_TURNS: '8', HIDS_AGENT_MAX_TOOL_CALLS: '10', HIDS_AGENT_CONCLUSION_RETRIES: '3'
   };
   // 逐个写：每个键单独一次 200，updated 只报它。
   for (const key of WRITABLE) {
@@ -439,15 +445,15 @@ test('A5 十一可写键逐个写成功：200 + updated 顺序＝正文顺序 + 
     assert.equal(response.status, 200, `${key} 写成功应 200：${text.slice(0, 200)}`);
     assert.deepEqual(JSON.parse(text).updated, [key], `${key}：updated 只报它`);
   }
-  // 一次写全 11 个：updated 顺序＝正文顺序（openapi writeConfig 200 契约）。
+  // 一次写全 17 个：updated 顺序＝正文顺序（openapi writeConfig 200 契约）。
   const reverse = Object.fromEntries([...WRITABLE].reverse().map(key => [key, values[key]]));
   const all = await post(base, reverse);
   assert.equal(all.status, 200);
   const allBody = await all.json();
   assert.deepEqual(allBody.updated, [...WRITABLE].reverse(), 'updated 顺序＝正文顺序');
-  assertConfigShape(allBody.config, '一次写十一键的 config 快照');
+  assertConfigShape(allBody.config, '一次写十七键的 config 快照');
 
-  // 覆盖层落盘 11 键；重启（新 store 读同一个文件）仍生效。
+  // 覆盖层落盘 17 键；重启（新 store 读同一个文件）仍生效。
   const onDisk = JSON.parse(await readFile(file, 'utf8'));
   assert.deepEqual(Object.keys(onDisk).sort(), [...WRITABLE].sort(), `覆盖层应存这十一项，实测 ${Object.keys(onDisk)}`);
   assert.deepEqual(Object.keys(store.overrides()).sort(), [...WRITABLE].sort(), 'store.overrides() 与盘上一致');

@@ -1917,7 +1917,7 @@ export function invalidConfigValues(env = process.env) {
 
 // env 可注入：单测直接传一个字面量对象，不碰真实 process.env。
 // 缺省值与装配处逐条对齐——HIDS_HOST/HIDS_PORT 见 server.js:29-30、研判输入模式见 triageInputModeOf()。
-export function configSummary(env = process.env) {
+export function configSummary(env = process.env, overrides = null) {
   return {
     host: env.HIDS_HOST || '127.0.0.1',
     port: Number(env.HIDS_PORT || 8080),
@@ -1931,6 +1931,11 @@ export function configSummary(env = process.env) {
     // 不配 Basic 口令 = 不启用鉴权（hasAccess 见 server.js:413），这是合法部署，不是缺配置。
     auth: { basic_auth_enabled: Boolean(env.HIDS_BASIC_AUTH_PASSWORD) },
     secrets: Object.fromEntries(SECRET_CONFIG_KEYS.map(name => [name, Boolean(env[name])])),
+    // P003-T084 B05：每项来源可见——override（覆盖文件）/ env（环境变量）/ default（未配）。
+    sources: Object.fromEntries(REQUIRED_CONFIG_KEYS.concat(['HIDS_BASIC_AUTH_PASSWORD',
+      'HIDS_PROMPT_ADMIN_TOKEN', 'HIDS_RULE_ADMIN_TOKEN']).map(name => [name,
+      (overrides ?? configStore.overrides())[name] !== undefined ? 'override'
+        : env[name] ? 'env' : 'default'])),
     missing_required: REQUIRED_CONFIG_KEYS.filter(name => !env[name])
   };
 }

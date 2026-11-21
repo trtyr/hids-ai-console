@@ -83,7 +83,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [host, port, triage_input_mode, cloudwalker, model, auth, secrets, missing_required]
+                required: [host, port, triage_input_mode, cloudwalker, model, auth, secrets, sources, missing_required]
                 properties:
                   host: { type: string, description: 监听地址，缺省 127.0.0.1 }
                   port: { type: integer, description: 监听端口，缺省 8080 }
@@ -131,6 +131,12 @@ paths:
                       HIDS_BASIC_AUTH_PASSWORD: { type: boolean }
                       HIDS_PROMPT_ADMIN_TOKEN: { type: boolean }
                       HIDS_RULE_ADMIN_TOKEN: { type: boolean }
+                  sources:
+                    type: object
+                    description: |
+                      P003-T084 B05：每项生效配置的来源三态——`override`（覆盖文件里的可写键）/
+                      `env`（环境变量）/ `default`（都没配，用缺省）。
+                    additionalProperties: { type: string, enum: [override, env, default] }
                   missing_required:
                     type: array
                     description: 缺哪几项必填；正常起着的进程是空数组
@@ -182,6 +188,12 @@ paths:
                 LLM_LIGHT_BASE_URL: { type: string, description: 轻量组：两个维护者与溯源白板用的地址，必须以 http(s):// 开头；空则回退 LLM_BASE_URL }
                 LLM_LIGHT_API_KEY: { type: string, description: 轻量组：密钥，非空；空则回退 LLM_API_KEY }
                 LLM_LIGHT_MODEL: { type: string, description: 轻量组：模型名，非空；空则回退 LLM_MODEL }
+                LLM_TEMPERATURE: { type: string, description: 'P003-T084：采样温度 0 到 2（缺省 0）' }
+                LLM_MAX_TOKENS: { type: string, description: 'P003-T084：最大输出 token 1 到 200000（缺省不传）' }
+                LLM_TIMEOUT_MS: { type: string, description: 'P003-T084：模型调用超时毫秒 1000 到 600000（缺省 90000）' }
+                HIDS_AGENT_MAX_TURNS: { type: string, description: 'P003-T084：研判调查轮次上限 1 到 50（缺省 6）' }
+                HIDS_AGENT_MAX_TOOL_CALLS: { type: string, description: 'P003-T084：单次调查工具调用上限 1 到 100（缺省 8）' }
+                HIDS_AGENT_CONCLUSION_RETRIES: { type: string, description: 'P003-T084：结论引用校验退回次数 0 到 10（缺省 2）' }
             examples:
               changeModel:
                 summary: 只换模型名（部分更新，其余四项不动）

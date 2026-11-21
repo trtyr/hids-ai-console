@@ -18,10 +18,23 @@ import { ChatModelClient, MODEL_GROUP_KEYS, MODEL_ROLE_GROUPS, MODEL_ROLES, mode
 
 // 能写的只有这十一项：牧云三项 + 模型的三个组（主判 / 复核 / 轻量，P003-T042 加后两组六键）。表外的键一律 400：
 // HIDS_HOST/HIDS_PORT/HIDS_TRIAGE_INPUT_MODE 改起来必须重启进程；Basic 口令与两个 admin 令牌是鉴权凭据本身，写进来等于自己给自己开门。
+// P003-T084：在模型三项 × 3 组之外，放开能力参数（温度/最大 token/超时）与 Agent 预算。
+// 这些键不参与构造器校验（不是 URL/密钥），只做取值域校验。
 export const WRITABLE_CONFIG_KEYS = Object.freeze(['CLOUDWALKER_URL', 'CLOUDWALKER_API_TOKEN',
   'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL',
   'LLM_REVIEW_BASE_URL', 'LLM_REVIEW_API_KEY', 'LLM_REVIEW_MODEL',
-  'LLM_LIGHT_BASE_URL', 'LLM_LIGHT_API_KEY', 'LLM_LIGHT_MODEL']);
+  'LLM_LIGHT_BASE_URL', 'LLM_LIGHT_API_KEY', 'LLM_LIGHT_MODEL',
+  'LLM_TEMPERATURE', 'LLM_MAX_TOKENS', 'LLM_TIMEOUT_MS',
+  'HIDS_AGENT_MAX_TURNS', 'HIDS_AGENT_MAX_TOOL_CALLS', 'HIDS_AGENT_CONCLUSION_RETRIES']);
+// 能力/预算键的取值域（缺省值＝现状行为）——越界一律 400，不静默套用。
+export const NUMERIC_CONFIG_KEYS = Object.freeze({
+  LLM_TEMPERATURE: { min: 0, max: 2, integer: false },
+  LLM_MAX_TOKENS: { min: 1, max: 200000, integer: true },
+  LLM_TIMEOUT_MS: { min: 1000, max: 600000, integer: true },
+  HIDS_AGENT_MAX_TURNS: { min: 1, max: 50, integer: true },
+  HIDS_AGENT_MAX_TOOL_CALLS: { min: 1, max: 100, integer: true },
+  HIDS_AGENT_CONCLUSION_RETRIES: { min: 0, max: 10, integer: true }
+});
 
 // 运行态数据根的唯一定义（P003-T034）已摘成零依赖叶子 `src/shared/data-root.js`（T075 批 0，
 // D034 §8.4 #1：原来这个纯路径函数让三个 store 的依赖图挂上 RpcClient/ChatModelClient）。
@@ -121,11 +134,20 @@ export function createConfigStore({ file = defaultConfigFile(), env = process.en
       if (!keys.length) throw callerError('请求正文没有可写的配置项');
       const unknown = keys.filter(key => !WRITABLE_CONFIG_KEYS.includes(key));
       if (unknown.length) throw callerError(`配置项不可写：${unknown.join('、')}`);
-      for (const key of keys)
+      for (const key of keys) {
         if (typeof patch[key] !== 'string' || !patch[key].trim())
           throw callerError(`配置项取值必须是非空字符串：${key}`);
+        const range = NUMERIC_CONFIG_KEYS[key];
+        if (range) {
+          const value = Number(patch[key]);
+          if (!Number.isFinite(value) || (range.integer && !Number.isInteger(value)) ||
+              value < range.min || value > range.max)
+            throw callerError(`配置项 ${key} 取值必须在 ${range.min} 到 ${range.max} 之间${range.integer ? '（整数）' : ''}`);
+        }
+      }
       // 值不合法是调用方传错：构造器抛的原话原样回给调用方（只点键名，不带值），补 status 让外层分类成 400 而不是 500。
-      try { validateConfigValues({ ...env, ...patch }); }
+      const clientPatch = Object.fromEntries(Object.entries(patch).filter(([key]) => !NUMERIC_CONFIG_KEYS[key]));
+      try { validateConfigValues({ ...env, ...clientPatch }); }
       catch (cause) { throw callerError(cause?.message || '配置值不合法'); }
       const next = { ...overrides, ...patch };
       await writeOverrides(file, next);
