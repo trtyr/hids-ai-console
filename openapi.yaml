@@ -3856,6 +3856,27 @@ components:
               description: 证据缺口，纯字符串数组；常规研判会把必查项缺口去重后并进来。
               items: { type: string }
           additionalProperties: true
+        conclusions:
+          type: array
+          description: |
+            P003-T085 A4 多结论分支：主结论恒为第一条（与 verdict 同一份内容），单条结论时长度 1。
+            每条与 verdict 同形，另带 validation（该分支的引用校验结果）；分支的引用缺失也会汇总进顶层 validation。
+          items:
+            type: object
+            required: [verdict, verdict_label, validation]
+            properties:
+              verdict: { type: string, enum: [threat, uncertain, false_positive] }
+              verdict_label: { type: string, enum: [真实威胁, 存疑, 误报] }
+              confidence: { type: [string, 'number'] }
+              summary: { type: string }
+              claims:
+                type: array
+                items: { $ref: '#/components/schemas/Claim' }
+              missing_evidence:
+                type: array
+                items: { type: string }
+              validation: { $ref: '#/components/schemas/Validation' }
+            additionalProperties: true
         review: { $ref: '#/components/schemas/Review' }
         validation: { $ref: '#/components/schemas/Validation' }
         evidence:

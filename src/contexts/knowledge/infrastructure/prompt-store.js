@@ -20,8 +20,8 @@ const wikiSop = {
   abnormal_login: 'abnormal-login/AL-11.md', network_audit: 'net/NA-09.md'
 };
 const defaultOverrideFile = process.env.HIDS_PROMPT_STORE_FILE || path.join(dataRoot(), 'prompt-overrides.json'); // 数据根，见文件末尾
-const coreFiles = { triage: 'triage.md', deep: 'deep-investigation.md', trace: 'trace-board.md', knowledge: 'knowledge-maintenance.md', knowledge_reuse: 'knowledge-reuse.md', cross: 'cross-scenario.md', rule: 'rule-maintenance.md' };
-const coreNames = { triage: '通用系统提示词', deep: '单告警深查', trace: '溯源白板', knowledge: '知识库维护', knowledge_reuse: '知识经验复用', cross: '跨场景关联', rule: 'Rego 规则维护' };
+const coreFiles = { triage: 'triage.md', review: 'review.md', deep: 'deep-investigation.md', trace: 'trace-board.md', knowledge: 'knowledge-maintenance.md', knowledge_reuse: 'knowledge-reuse.md', cross: 'cross-scenario.md', rule: 'rule-maintenance.md' };
+const coreNames = { triage: '通用系统提示词', review: '独立复核', deep: '单告警深查', trace: '溯源白板', knowledge: '知识库维护', knowledge_reuse: '知识经验复用', cross: '跨场景关联', rule: 'Rego 规则维护' };
 
 function revisionOf(prompts) {
   return createHash('sha256').update(JSON.stringify(prompts)).digest('hex').slice(0, 16);
@@ -72,15 +72,21 @@ export class PromptStore {
       if (current.revision !== expectedRevision) throw Object.assign(new Error('当前版本已变化，请刷新后重新确认替换'), { status: 409 });
       if (snapshot.knowledge_revision !== knowledgeRevision) throw Object.assign(new Error('升级包与当前知识库版本不兼容'), { status: 409 });
       const keys = Object.keys(snapshot.sections);
-      if (!sections || Object.keys(sections).length !== keys.length || keys.some(key =>
-        typeof sections[key] !== 'string' || !sections[key].trim() || sections[key].length > 20000 || sections[key].includes('\0')))
+      // P003-T085 A2：review 是后加章节，老升级包（21 段）允许缺它——沿用当前正文，不静默丢复核提示词。
+      const supplied = sections && typeof sections === 'object' && !Array.isArray(sections) ? Object.keys(sections) : [];
+      if (!sections || supplied.some(key => !keys.includes(key)) ||
+        keys.some(key => key !== 'review' && !supplied.includes(key)) ||
+        supplied.some(key => typeof sections[key] !== 'string' || !sections[key].trim() ||
+          sections[key].length > 20000 || sections[key].includes('\0')))
         throw Object.assign(new Error('升级包缺少必需章节或正文格式不正确'), { status: 400 });
+      const merged = { ...sections };
+      if (!merged.review) merged.review = current.prompts.review;
       const old = await this.readOverrides();
       if (release.sequence <= (old._release?.sequence || 0))
         throw Object.assign(new Error('不允许重复应用或降级到旧版本'), { status: 409 });
       const initial = { version: current.version, title: '初始研判策略', summary: '随当前应用安装的研判策略',
         date: '2026-11-06', modules: ['告警研判', '深度溯源', '知识经验'], changes: {}, updated_at: null };
-      const updated = { ...sections, _release: release,
+      const updated = { ...merged, _release: release,
         _history: [...(old._history?.length ? old._history : [initial]), release] };
       await mkdir(path.dirname(this.filename), { recursive: true, mode: 0o700 });
       const temporary = `${this.filename}.${randomUUID()}.tmp`;

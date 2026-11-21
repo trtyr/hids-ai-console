@@ -163,7 +163,7 @@ function requiredStatus(checks) {
 }
 
 const outputContract = `# 当前系统的输出适配
-沿用上述三种中文 verdict（真实威胁 / 存疑 / 误报）、中文 confidence、risk_level、summary、analysis、evidence_facts、false_positive_reason、missing_data、attack_chain、injection_detected、recommended_actions、tuning_suggestion。“攻击尝试未成功”写入 summary/analysis 描述攻击结果，不作为 verdict。额外输出 claims 数组，每项含 text 和 citations；每条 citation 必须是 {"evidence_id":"cw:1","pointer":"/原始字段路径","value":原始值}。evidence_facts 中的每条已查证事实也要附 citations，source_tool 与 query 仅用于说明，不代替引用。工具视图里的 value 和 pointer 是原始字段的值与 JSON Pointer。所有已查证事实必须能从 claims.citations 核验；未查到的分析写到 missing_data。只输出一个 JSON 对象。误报必须有与场景判据相符的正向良性事实及独立复核支持；当前若缺工单、原始登录日志或文件内容等工具，就如实写缺口。`;
+沿用上述三种中文 verdict（真实威胁 / 存疑 / 误报）、中文 confidence、risk_level、summary、analysis、evidence_facts、false_positive_reason、missing_data、attack_chain、injection_detected、recommended_actions、tuning_suggestion。“攻击尝试未成功”写入 summary/analysis 描述攻击结果，不作为 verdict。额外输出 claims 数组，每项含 text 和 citations；每条 citation 必须是 {"evidence_id":"cw:1","pointer":"/原始字段路径","value":原始值}。evidence_facts 中的每条已查证事实也要附 citations，source_tool 与 query 仅用于说明，不代替引用。工具视图里的 value 和 pointer 是原始字段的值与 JSON Pointer。所有已查证事实必须能从 claims.citations 核验；未查到的分析写到 missing_data。只输出一个 JSON 对象。误报必须有与场景判据相符的正向良性事实及独立复核支持；当前若缺工单、原始登录日志或文件内容等工具，就如实写缺口。若一条告警确实包含两条以上相互独立、各有证据支持的结论（例如「WebShell 落地」与「本地提权」），在主结论之外额外给 conclusions 数组（最多 3 条），每项与主结论同形（verdict / summary / confidence / claims / missing_data / false_positive_reason）；主 verdict 必须等于 conclusions 的第一条，单条结论时省略该数组。`;
 const triageReportContract = `# 给客户看的判断与建议
 额外输出 report 字符串，作为客户直接阅读的判断，最多 300 个字符（含中文、数字和标点），只写一段自然语言。说明哪台资产发生什么、建议判为真实威胁/存疑/误报、关键依据与尚未核实的边界；不得将探测等同于入侵，也不得把缺少反证当成良性。不要输出标题、表格、内部判据编号、英文字段名或机器口吻。分析细节留在 analysis，证据编号与原始字段留在 claims.citations，研判工作流由系统记录。recommended_actions 另列给客户可采纳的具体建议，按优先级排序，写清要核对或处置的对象、条件及目的，以“建议”开头；与三态结论一致，不暗示系统已执行隔离、封禁、关闭或加白。`;
 const honeypotBoundary = `# 蜜罐结论边界
@@ -468,6 +468,35 @@ function costOf(transcript, startedAt) {
     output_chars: rows.reduce((sum, row) => sum + (row.reply_chars || 0), 0),
     duration_ms: Date.now() - startedAt
   };
+}
+
+// 多结论分支（T085 A4）：模型在白板主结论之外可用 conclusions 数组给多条独立结论。
+// 落盘字段 `conclusions` 是完整数组（主结论恒为第一条，单条时长度 1），`verdict` 原样保留主结论——
+// 旧的单结论客户端只读 verdict，不受影响。每条分支都过与主结论相同的两道引用闸：
+//   ① session.verifyClaims（字段值对得上）→ 不通过的 claim 移除；
+//   ② danglingCitations（evidence_id 必须在本次 evidence[]）→ 写进该分支 validation 并计入总 validation。
+function branchConclusions(primary, raw, session, evidence) {
+  const extras = [];
+  // 契约要求 conclusions 第一条就是主结论；按「与主结论同 verdict+summary」去重，避免数组里出现两份主结论。
+  const isPrimary = item => item && verdictMap[item.verdict] === primary.verdict && item.summary === primary.summary;
+  for (const item of Array.isArray(raw) ? raw.slice(0, 4) : []) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    if (isPrimary(item)) continue;
+    // 认不出三态的条目直接跳过（normalizeVerdict 会把未知值归为存疑，这里不制造假分支）。
+    if (!Object.hasOwn(verdictMap, item.verdict)) continue;
+    if (typeof item.summary !== 'string' || !item.summary.trim()) continue;
+    if (extras.length >= 3) break;
+    const branch = normalizeVerdict({ ...item });
+    if (!['高', '中', '低'].includes(branch.confidence) &&
+      !(Number.isFinite(branch.confidence) && branch.confidence >= 0 && branch.confidence <= 1)) branch.confidence = '低';
+    const errors = danglingCitations(branch, evidence);
+    branch.claims = (branch.claims || []).filter(claim => session.verifyClaims([claim]).ok);
+    branch.validation = { ok: errors.length === 0, errors };
+    if (errors.length) branch.missing_evidence = [...(branch.missing_evidence || []),
+      '结论引用了本次未取到的证据，需重新核对'];
+    extras.push(branch);
+  }
+  return [primary, ...extras];
 }
 
 // 一致性（T085 A3）：verdict.claims[].citations 的每个 evidence_id 必须存在于本次 investigation 的
@@ -953,7 +982,11 @@ export class InvestigationAgent {
         missing_evidence: [reason] };
     } else {
       onProgress('独立复核', '正在核对结论、反证与数据缺口');
-      const reviewPrompt = `你是独立质疑者。只审查下面的告警证据精简视图、调查工具结果和已提交结论，不继承调查员私有推理。检查引用是否支持事实、是否误把空查询当良性、声称合法运维或授权扫描时是否有相应依据、是否忽略反证。检查给客户看的 report 是否与 verdict、已核实事实和证据缺口一致；recommended_actions 是否具体、可采纳、符合结论且未暗示系统已执行处置。不要把平台只读取证工具的调用授权误当作告警行为的授权证据要求。特别核查：同主机不同时刻的两条告警不能凭共现推断同一攻击链；127.0.0.1 是本机回环，不能当作外部或另一台内网攻击源；蜜罐 timeline 是否已经提供请求载荷。若这些因素影响结论，assessment 必须为 needs_revision。输出 JSON：{"concerns":[字符串],"missing_evidence":[字符串],"assessment":"supported|needs_revision"}。不要调用工具。\n\n${mode === 'triage' ? prompts.sop?.[match[1]] || '' : ''}`;
+      // T085 A2：复核提示词独立成段——读 review.md（core 段 `review`），不再复用 triage 段与内联质疑者指令。
+      // SOP 只作为场景判据附在后面；复核模型实例本就独立（reviewModel）。
+      const reviewSystem = [prompts.prompts.review, mode === 'triage' ? prompts.sop?.[match[1]] || '' : '']
+        .filter(Boolean).join('\n\n');
+      const reviewPrompt = `${reviewSystem}\n\n# 本次复核输出\n只输出 JSON：{"concerns":[字符串],"missing_evidence":[字符串],"assessment":"supported|needs_revision"}。不要调用工具。`;
       // A2：复核轮证据与结论轮同一裁剪口径（compactEvidenceView + boundEvidenceView 4000），不再把 12000 未裁视图整批发过去。
       // A4：判据页同样只给摘要，正文按需读。
       const reviewInput = JSON.stringify({ alert_id: alertId, draft, rule_candidate: ruleContext,
@@ -1116,8 +1149,12 @@ export class InvestigationAgent {
     const systemDigest = createHash('sha256').update(system).digest('hex').slice(0, 12);
     await persistRequiredEvidence();
     const evidence = persistedEvidence(session.records);
+    // T085 A4：多结论分支（additive）。主结论仍是 verdict；conclusions 是完整数组，单条时长度 1。
+    const conclusions = branchConclusions(verdict, verdict.conclusions ?? draft?.conclusions, session, evidence);
+    const branchDangling = conclusions.slice(1).flatMap((item, index) =>
+      item.validation.errors.map(error => `conclusions[${index + 1}]：${error}`));
     // T085 A3：结论引用必须落在本次 evidence[] 里——不一致就标 validation 不通过并列出缺失项。
-    const dangling = [...new Set([...draftDangling, ...danglingCitations(verdict, evidence)])];
+    const dangling = [...new Set([...draftDangling, ...danglingCitations(verdict, evidence), ...branchDangling])];
     if (dangling.length) {
       validation = { ...validation, ok: false,
         errors: [...new Set([...(validation.errors || []), ...dangling])], dangling_citations: dangling };
@@ -1126,7 +1163,7 @@ export class InvestigationAgent {
     }
     return { alert_id: alertId, mode, model: this.model.model,
       prompt_version: `${prompts.version}+${prompts.revision}+${systemDigest}`, scenario_ids: cards.map(card => card.id),
-      verdict, review, validation, trace, turns: transcript, required_evidence: requiredChecks,
+      verdict, conclusions, review, validation, trace, turns: transcript, required_evidence: requiredChecks,
       evidence, cost: costOf(transcript, startedAt), auto_action: false };
   }
 
@@ -1180,7 +1217,7 @@ export class InvestigationAgent {
     verdict.wiki = { consulted: [], adopted: [], reason: '牧云事件未匹配，本轮是降级结论，没有工具循环，未采纳判据页' };
     return { alert_id: unmatchedAlertId,
       mode: 'triage', model: this.model.model, prompt_version: `${prompts.version}+${prompts.revision}`,
-      scenario_ids: [type], verdict, turns,
+      scenario_ids: [type], verdict, conclusions: [verdict], turns,
       review: { assessment: 'unavailable', concerns: ['对应牧云事件未匹配，无法独立复核完整事件详情'], missing_evidence: [reasonForRecord(matchResult.reason)] },
       validation: { ok: facts.length > 0, errors: facts.length ? [] : ['syslog 缺少可引用字段'] },
       trace: [{ kind: 'rego', status: rego.status, rule_ids: rego.rules.map(rule => rule.id) },

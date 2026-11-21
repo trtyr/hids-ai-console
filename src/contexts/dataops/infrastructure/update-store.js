@@ -89,8 +89,11 @@ export class UpdateStore {
       throw fail('升级包更新日志格式不正确');
     const snapshot = await this.prompts.snapshot();
     const keys = Object.keys(snapshot.sections);
-    if (!object(payload.sections) || Object.keys(payload.sections).length !== keys.length ||
-      keys.some(key => !textValue(payload.sections[key], 20000)))
+    // P003-T085 A2：review 是后加章节，老升级包允许缺它（应用时沿用当前正文）；其余章节必须齐全、不许夹带未知键。
+    const supplied = object(payload.sections) ? Object.keys(payload.sections) : [];
+    if (!object(payload.sections) || supplied.some(key => !keys.includes(key)) ||
+      keys.some(key => key !== 'review' && !supplied.includes(key)) ||
+      supplied.some(key => !textValue(payload.sections[key], 20000)))
       throw fail('升级包缺少完整提示词章节或章节格式不正确');
     if (payload.knowledge_revision !== snapshot.knowledge_revision)
       throw fail('升级包与当前知识库版本不兼容', 409);
