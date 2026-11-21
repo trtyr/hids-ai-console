@@ -93,7 +93,7 @@ scripts/check-api.mjs       R-API 三方对账（基线→清零）
 | `mcp-client.js` | `src/contexts/ingestion/infrastructure/mcp-client.js` | 2 |
 | `syslog-input.js` | 拆：解析与指纹 `parseSyslog/eventTypeFor/eventSeconds/sessionKey/fingerprint → src/contexts/ingestion/application/parsing.js`；`SyslogReceiver（dgram）→ src/interfaces/udp/syslog/receiver.js` | 2 |
 | `syslog-case.js` | 拆：`matchSyslogEvent → src/contexts/triage/application/correlate.js`；案卷**内容**生成（domain 产物）`→ src/contexts/triage/domain/case-file.js`；案卷**原子写**与读取 `writeSyslogCase/writeSyslogResult/updateSyslogDeliveryCount/readCaseFile/readRequiredEvidence/writeRequiredEvidence → src/contexts/triage/infrastructure/case-store.js` | 2 |
-| `triage-monitor.js` | 拆五栏（见 §4 批 3）：`src/contexts/triage/domain/triage-case.js`（状态/排序/记录形状）+ `application/triage-monitor.js`（门面与生命周期）+ `application/queue.js` + `application/retry-scheduler.js` + `application/projection.js` + `infrastructure/queue-persistence.js` | 3 |
+| `triage-monitor.js` | 拆五栏（见 §4 批 3）：`src/contexts/triage/domain/triage-case.js`（状态/排序/记录形状）+ `application/triage-monitor.js`（门面与生命周期）+ `application/queue.js` + `application/retry-scheduler.js` + `application/projection.js` + `infrastructure/queue-persistence.js`。**2026-11-21 已落地**，归属表见 docs/modules/triage-pipeline.md §0 与 P003-T077 报告 | 3 |
 | `investigation-agent.js` | `src/contexts/triage/application/investigation-agent.js`（+ 回放 `replayInvestigation`、`agentConfigured` 同文件导出）；`verdictMap/verdictLabels → src/contexts/triage/domain/verdict.js` | 3 |
 | `triage-output.js` | `src/contexts/triage/domain/report.js`（标签改读 domain/verdict） | 3 |
 | `investigation-store.js` | `src/contexts/triage/infrastructure/investigation-store.js` | 3 |

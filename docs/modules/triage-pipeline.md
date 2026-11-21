@@ -1,14 +1,37 @@
 ---
 type: module
 id: MOD-TRIAGE-PIPELINE
-covers: [src/contexts/triage/application/triage-monitor.js, src/contexts/ingestion/application/parsing.js, src/contexts/triage/application/correlate.js]
-updated: 2026-11-20
+covers: [src/contexts/triage/application/triage-monitor.js, src/contexts/triage/application/queue.js, src/contexts/triage/application/retry-scheduler.js, src/contexts/triage/application/projection.js, src/contexts/triage/infrastructure/queue-persistence.js, src/contexts/ingestion/application/parsing.js, src/contexts/triage/application/correlate.js]
+updated: 2026-11-21
 depth: complete
 ---
 
 # 研判流水线 · triage-pipeline
 
-模块名 `triage-pipeline`。实现文件三个：`triage-monitor.js`、`syslog-input.js`、`syslog-case.js`。
+模块名 `triage-pipeline`。实现文件：`triage-monitor.js`（门面与生命周期）、`queue.js`（队列）、`retry-scheduler.js`（重试调度）、`projection.js`（投影）、`queue-persistence.js`（持久化）、`syslog-input.js`、`syslog-case.js`。
+
+## 0 P003-T077 批 3：五栏拆分（2026-11-21）
+
+`TriageMonitor` 从一份 1115 行的类拆成「门面 + 四栏 mixin」；**方法体逐字未改**，public API、调用顺序与响应形状不变。
+本页其余章节的行号锚点仍是拆栏前基线（2026-11-20，`triage-monitor.js` 1093 行）——读旧锚点时按下表换到新文件：
+
+| 拆前位置（`triage-monitor.js`） | 新归属 | 方法 |
+|---|---|---|
+| 190–330 持久化段 | `src/contexts/triage/infrastructure/queue-persistence.js` | `load` `latestInvestigation` `markDirty` `persist` `writeChain`(getter) `flushedTo` `flush` `writeSnapshot` `flushPendingCounts` `saveDeliveryCount` `archiveDone` |
+| 332–368 生命周期段 | `triage-monitor.js`（门面） | `start` `_schedule` `stop` |
+| 372–423 重试段 | `src/contexts/triage/application/retry-scheduler.js` | `scheduleRetry` `clearRetry` `resumeRetries` |
+| 426–430 记录生命周期 | `triage-monitor.js`（门面，状态机） | `dropRecord` |
+| 454–513 数据管理段 | `src/contexts/triage/application/projection.js` | `cleanCandidates` `clean` `blockedCaseDirs` |
+| 515–527 状态机 | `triage-monitor.js`（门面） | `cancel` |
+| 529–573 投影段 | `src/contexts/triage/application/projection.js` | `status` `cases` |
+| 575–586 生命周期 | `triage-monitor.js`（门面） | `attachSyslog` |
+| 590–644 投影段 | `src/contexts/triage/application/projection.js` | `summary` |
+| 646–674 状态机 | `triage-monitor.js`（门面） | `setEnabled` |
+| 677–1006 队列段 | `src/contexts/triage/application/queue.js` | `_queueFull` `_countDropped` `enqueue` `poll` `acceptSyslog` `_acceptSyslog` `contextFor` `rememberWindow` `drain` `cloudwalkerCall` `observedToolbox` |
+| 1008–1114 研判编排 | `triage-monitor.js`（门面，生命周期） | `run` |
+
+记录形状与判定词表在 `src/contexts/triage/domain/triage-case.js`（`humanFalsePositive` / `queueEvidenceItem` / `evidenceItems` / `evidenceSummary` 也归这里）。
+方法归属的自证用例：`evidence/test/P003-T077/five-columns.test.js`（四栏方法清单逐一挂到原型、`writeChain` 仍是 getter、入队→投影→取消→落盘行为不变）。
 
 这份文档回答一个问题：**一条牧云告警从进来，到变成一份可读的案件材料，中间发生了什么。**
 

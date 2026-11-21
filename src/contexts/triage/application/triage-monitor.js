@@ -1,30 +1,26 @@
-import { randomUUID } from 'node:crypto';
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from '../../ingestion/application/parsing.js';
-import { eventTypes } from '../../../shared/vocabulary.js';
-import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './correlate.js';
+// triage 上下文 · 应用层门面与生命周期（P003-T077 批 3 五栏拆分）。
+//
+// 队列栏      → application/queue.js（enqueue / poll / acceptSyslog / drain / 优先级）
+// 重试调度栏  → application/retry-scheduler.js（scheduleRetry / clearRetry / resumeRetries）
+// 投影栏      → application/projection.js（status / cases / summary / cleanCandidates）
+// 持久化栏    → infrastructure/queue-persistence.js（load / persist / flush / archiveDone）
+// 状态机      → 本文件（start/stop/dropRecord/cancel/setEnabled/run）+ domain/triage-case.js 的状态词表
+//
+// 五栏以 mixin 挂到同一个 TriageMonitor 原型上：**方法体逐字未改**（迁移只搬代码，不改行为），
+// 所以 public API、调用顺序与响应形状与拆栏前完全一致。拆栏的目的是让「队列/状态机/持久化/投影/生命周期」
+// 各自可单独阅读与测试，不再是一份 1100 行的类。
+import { matchSyslogEvent, writeSyslogCase, writeSyslogResult } from './correlate.js';
 import { log } from '../../../shared/logging/log.js';
 import { recordFailure, reasonForRecord } from '../../../shared/redaction.js';
+import { evidenceItems, evidenceSummary, humanFalsePositive } from '../domain/triage-case.js';
+import { queueColumn } from './queue.js';
+import { retryColumn } from './retry-scheduler.js';
+import { projectionColumn } from './projection.js';
+import { persistenceColumn } from '../infrastructure/queue-persistence.js';
 
-// parseSyslog 自己写死的三条判定语（syslog-input.js:46/52/56）：不是上游原文，照原样留。
-const syslogParseFailures = ['不是合法的 RFC5424 syslog 行', 'syslog JSON 正文不是对象', 'syslog 正文解析后为空'];
-
-// 结论排序的档位：threat 在前，其余同档保持时间倒序；没有结论的记录排最后。
-const verdictRanks = Object.freeze({ threat: 0, uncertain: 1, false_positive: 2 });
-
-// 轮询的一轮一页：一页 50 条（与 cloudwalker 的页上限一致），最多 20 页。
-const POLL_PAGE_SIZE = 50;
-const MAX_POLL_PAGES = 20;
-
-// A4：告警类型风险档位。数值越大越先研判；表外/未知类型按 0 排最后。
-// 档位按「处置时限」排：内存马/WebShell/反弹 Shell/恶意文件是可直接利用的入口，接着是内存安全与蜜罐，
-// 再往下是提权、暴力破解、异常登录、可疑操作、网络审计。改档位就是改优先级，文档里逐类列了值。
-export const typeRisk = Object.freeze({
-  memory_webshell: 11, webshell: 10, revshell: 10, malware: 10, memory_security: 9,
-  honeypot: 8, elevation_process: 8, brute_force: 7, abnormal_login: 6,
-  suspicious_operation: 5, network_audit: 4
-});
+// 旧调用点的 import 路径不变（拆栏前这些符号从 triage-monitor.js 导出）。
+export { comparePriority, typeRisk } from './queue.js';
+export { queueArgsMaxChars, queueArgValueMaxChars, queueEvidenceItem } from '../domain/triage-case.js';
 
 // 正整数的配置值：非法（0、负数、小数、空串、非数）回落到默认，不把队列卡死。
 const positiveInteger = (value, fallback) => {
@@ -37,70 +33,6 @@ const envQueueLimit = () => positiveInteger(process.env.HIDS_TRIAGE_QUEUE_MAX, 1
 // - 构造参数显式传数字 0：不起 worker，只排队——测试与停机维护需要「入队但不跑」；
 // - 其余非法值（负数 / 小数 / 非数 / 空串 / 字符串 '0'）与 env 里的 0 一律回落 env → 缺省 2，不把队列卡死。
 const concurrencyLimit = value => (value === 0 ? 0 : positiveInteger(value, envConcurrency()));
-
-// 记录的告警类型：syslog 记录从 MsgId 推，轮询记录从 `type:id` 取。
-function recordType(record) {
-  if (record.input?.parsed?.msgid) return eventTypeFor(record.input.parsed.msgid) || '';
-  const text = String(record.alert_id || '');
-  const at = text.indexOf(':');
-  return at > 0 ? text.slice(0, at) : '';
-}
-
-// A4 优先级：（类型风险 desc，occurrence_count desc，created_at asc）。
-export function comparePriority(left, right) {
-  const risk = (typeRisk[recordType(right)] ?? 0) - (typeRisk[recordType(left)] ?? 0);
-  if (risk) return risk;
-  const occurrences = (right.occurrence_count || 1) - (left.occurrence_count || 1);
-  if (occurrences) return occurrences;
-  return String(left.created_at || '').localeCompare(String(right.created_at || ''));
-}
-
-// A2：详情取数的缓存键——只缓存 `get_<type>_event` 且带正整数 id 的调用，其它调用直通。
-function detailKey(name, args) {
-  const id = Number(args?.id);
-  return /^get_[a-z_]+_event$/.test(String(name)) && Number.isSafeInteger(id) && id > 0
-    ? `${name}:${id}` : null;
-}
-
-// 人工登记的误报（误报入口写的就是 verdict=false_positive + decision_source=human）：重跑不覆盖结论区。
-// AI 自己判出的 false_positive 不算——那种重跑仍旧按这次研判覆盖。
-const humanFalsePositive = record => record.verdict === 'false_positive' && record.decision_source === 'human';
-
-// A6：队列里的证据条目只外露可复算的最小集合。工具入参要留——RPC 路径的 args 就是 {id} / {count,offset}，
-// 剥掉之后看不出「这条证据查的是哪个范围」。只有含原文（长字符串/大对象）的 args 才剥，并标 args_omitted。
-export const queueArgsMaxChars = 200;
-export const queueArgValueMaxChars = 80;
-function argsHaveRawText(args) {
-  return Object.values(args).some(value => typeof value === 'string'
-    ? value.length > queueArgValueMaxChars
-    : value && typeof value === 'object' && JSON.stringify(value).length > queueArgValueMaxChars);
-}
-export function queueEvidenceItem({ evidence_id, tool, args, fetched_at, sha256 }) {
-  const item = { evidence_id, tool, fetched_at, sha256 };
-  if (args === undefined) return item;
-  if (!argsHaveRawText(args) && JSON.stringify(args).length <= queueArgsMaxChars) item.args = args;
-  else item.args_omitted = true;
-  return item;
-}
-const evidenceItems = entries => (Array.isArray(entries) ? entries : []).map(queueEvidenceItem);
-
-function evidenceSummary(result) {
-  const claims = result?.validation?.ok || result?.validation?.removed_unverified_facts
-    ? (result.verdict?.claims || []).filter(claim => Array.isArray(claim.citations) && claim.citations.length) : [];
-  return { verified_facts: claims.length,
-    evidence_sources: new Set(claims.flatMap(claim => claim.citations.map(citation => citation.evidence_id).filter(Boolean))).size };
-}
-
-// B03（P003-T060）：命令行字段四键回退，真序与 `cloudwalker.js:60` 一致（cmdline → command →
-// shell_cmdline → process_cmdline）；syslog 载荷沿用至今的旧键 process_command_line 作兼容位插在末位。
-// 三条真实记录实测旧键 undefined、真键 process_cmdline 有值——全仓只有 cases() 这一处没做兼容。
-function commandOf(payload) {
-  for (const key of ['cmdline', 'command', 'shell_cmdline', 'process_cmdline', 'process_command_line']) {
-    const value = payload?.[key];
-    if (typeof value === 'string' ? value.trim() : value != null) return value;
-  }
-  return null;
-}
 
 // syslog 逐条触发常规研判；兼容轮询入口。状态落盘，重启后续跑未完成任务。
 export class TriageMonitor {
@@ -187,148 +119,6 @@ export class TriageMonitor {
     this.syslog = { listening: false, bind: null, error: null };
   }
 
-  async load() {
-    try {
-      const data = JSON.parse(await readFile(this.file, 'utf8'));
-      this.watermark = data.watermark || null;
-      this.watermarkIds = new Set(data.watermark_ids || []);
-      this.initialized = !!data.initialized;
-      this.enabled = data.enabled !== false;
-      this.lastReceivedAt = data.last_received_at || null;
-      this.archivedCount = Number.isInteger(data.archived_count) ? data.archived_count : 0;
-      const paused = data.paused || {};
-      this.pausedBuffer = Array.isArray(paused.buffer) ? paused.buffer.map(String) : [];
-      this.pausedReceived = Number.isInteger(paused.received) ? paused.received : 0;
-      this.pausedDropped = Number.isInteger(paused.dropped) ? paused.dropped : 0;
-      this.pausedReplayed = Number.isInteger(paused.replayed) ? paused.replayed : 0;
-      this.pausedSince = paused.since || null;
-      this.records = new Map((data.records || []).map(record => [record.alert_id,
-        record.status === 'running' ? { ...record, status: 'queued', stage: '等待重试' } : record]));
-      this.dedupe = new Map(data.dedupe || []);
-      this.windows = new Map(data.windows || []);
-      // A1 旧队列里的失败记录也归队：attempts 到上限的判死信，其余留给 start() 的 resumeRetries() 重排。
-      for (const record of this.records.values()) {
-        if (record.status !== 'failed') continue;
-        if ((record.attempts || 0) >= this.retryMaxAttempts) record.dead_letter = true;
-      }
-      for (const record of this.records.values()) {
-        if (record.status !== 'done') continue;
-        const needsCounts = !Number.isInteger(record.verified_facts);
-        const needsEvidence = !Array.isArray(record.evidence);
-        if (!needsCounts && !needsEvidence) continue;
-        const result = await this.latestInvestigation(record);
-        if (!result) continue;
-        if (needsCounts) Object.assign(record, evidenceSummary(result));
-        // 旧队列里没有 evidence[]：从研判记录就地补，不写单独迁移脚本。
-        if (needsEvidence) record.evidence = evidenceItems(result.evidence);
-      }
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  }
-
-  // A7：队列键（syslog 记录是 syslog:<类型>:<指纹>:<秒>:<uuid>）与研判文件键（牧云事件 ID / 研判结果 ID）
-  // 不是一回事。回补依次试 result_alert_id → matched_alert_id → 队列键，第一个读到的就是回补源。
-  async latestInvestigation(record) {
-    const keys = [...new Set([record.result_alert_id, record.matched_alert_id, record.alert_id].filter(Boolean))];
-    for (const key of keys) {
-      let saved = null;
-      try { saved = await this.history.latest(key, 'triage'); }
-      catch (error) {
-        log('triage.backfill_failed', { alert_id: record.alert_id, key, error: String(error?.message || error) }, 'warn');
-        continue;
-      }
-      if (saved) return saved;
-    }
-    return null;
-  }
-
-  // A4：热路径（每条报文、每个研判步骤）只标脏——写盘由合并写窗口决定，峰值 ≤ 1 次 / persistIntervalMs。
-  // 已经有合并写在飞或已排定就把这次改动合并进那一次，不另开一轮。
-  markDirty() {
-    this.dirtyGen += 1;
-    if (this.flushing || this.flushTimer) return;
-    const wait = Math.max(0, this.persistIntervalMs - (Date.now() - this.lastWriteAt));
-    this.flushTimer = setTimeout(() => { this.flushTimer = null; void this.flush(); }, wait);
-    this.flushTimer.unref?.();
-  }
-
-  // 关键点用（入队 / 轮询推进 / 研判收尾）：等到自己这一代状态真的落盘再返回。
-  persist() {
-    this.dirtyGen += 1;
-    return this.flushedTo(this.dirtyGen);
-  }
-
-  // 旧 writeChain 的语义（测试与调用方拿它当「等落盘」的同步点）：等价于 flush()。
-  get writeChain() { return this.persist(); }
-
-  async flushedTo(gen) {
-    while (this.writtenGen < gen) {
-      await this.flush().catch(() => {});
-      if (this.writtenGen >= gen) return;
-      // 写盘失败路径也把 writtenGen 推到 target，这里让出一次事件循环防止空转。
-      await new Promise(resolve => setImmediate(resolve));
-    }
-  }
-
-  // 单飞：已有一次写在飞就复用它，不并发写同一个文件。
-  // 没有新脏东西时不写空快照；在飞期间标的脏由 finally 补排下一次写，不然没人落盘。
-  flush() {
-    if (!this.flushing && this.writtenGen >= this.dirtyGen) return Promise.resolve();
-    if (!this.flushing) {
-      this.flushing = true;
-      const target = this.dirtyGen;
-      this.flushDone = this.writeSnapshot()
-        .then(async () => {
-          this.writtenGen = Math.max(this.writtenGen, target);
-          this.lastWriteAt = Date.now();
-          await this.flushPendingCounts();
-        })
-        .catch(error => {
-          // 写盘失败只记日志、不打断服务（与改前一致）；等的人不能永远挂着。
-          log('triage.persist_failed', { file: this.file, error: String(error?.message || error) }, 'error');
-          this.writtenGen = Math.max(this.writtenGen, target);
-        })
-        .finally(() => { this.flushing = false; this.flushDone = null; if (this.writtenGen < this.dirtyGen) this.markDirty(); });
-    }
-    return this.flushDone;
-  }
-
-  async writeSnapshot() {
-    const snapshot = JSON.stringify({ initialized: this.initialized, enabled: this.enabled, watermark: this.watermark,
-      watermark_ids: [...this.watermarkIds], last_received_at: this.lastReceivedAt,
-      archived_count: this.archivedCount,
-      paused: { since: this.pausedSince, received: this.pausedReceived, dropped: this.pausedDropped,
-        replayed: this.pausedReplayed, buffer: this.pausedBuffer },
-      records: [...this.records.values()], dedupe: [...this.dedupe], windows: [...this.windows] });
-    await mkdir(path.dirname(this.file), { recursive: true, mode: 0o700 });
-    const temporary = `${this.file}.${randomUUID()}.tmp`;
-    await writeFile(temporary, snapshot, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    await rename(temporary, this.file);
-  }
-
-  // A4：重复投递的计数不再每条重存一遍研判记录，攒到合并写里一次落盘（最多 1 次 / 窗口）。
-  async flushPendingCounts() {
-    if (!this.pendingCounts.size) return;
-    const pending = new Map(this.pendingCounts);
-    this.pendingCounts.clear();
-    for (const [alertId, count] of pending) await this.saveDeliveryCount(alertId, count);
-  }
-
-  // 把重复投递次数写回研判记录与案卷（研判记录是整份 JSON，所以只按窗口写，不按条写）。
-  async saveDeliveryCount(alertId, count) {
-    const record = this.records.get(alertId);
-    if (!record) return;
-    try {
-      if (record.result_alert_id) {
-        const saved = await this.history.latest(record.result_alert_id, 'triage');
-        if (saved) await this.history.save({ ...saved, repeat_count: count,
-          syslog: saved.syslog ? { ...saved.syslog, repeat_count: count } : undefined });
-      }
-      if (record.status === 'done') await updateSyslogDeliveryCount(record.case_dir, count);
-    } catch (error) {
-      log('triage.delivery_count_failed', { alert_id: alertId, error: String(error?.message || error) }, 'error');
-    }
-  }
-
   async start() {
     await this.load();
     this.started = true;
@@ -339,16 +129,16 @@ export class TriageMonitor {
     if (this.inputMode === 'syslog') { this.initialized = true; if (this.enabled) this.drain(); return; }
     if (this.enabled) { await this.poll(); this.drain(); }
     this.timerActive = true;
-    this.#schedule();
+    this._schedule();
   }
 
   // A1：退避靠 setTimeout 链而不是 setInterval——每轮跑完才排下一轮，延迟用这一轮算出的 backoffMs。
-  #schedule() {
+  _schedule() {
     if (!this.timerActive) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.poll().finally(() => this.#schedule());
+      void this.poll().finally(() => this._schedule());
     }, this.backoffMs);
     this.timer.unref?.();
   }
@@ -367,148 +157,11 @@ export class TriageMonitor {
     this.retryTimers.clear();
   }
 
-  // A1：失败记录排重试。第 n 次失败后等 min(retryBaseMs * 2^(n-1), retryMaxMs)；
-  // attempts 到 retryMaxAttempts 判死信（status 仍是 failed，另带 dead_letter:true），不再自动跑。
-  scheduleRetry(record, delayMs = null) {
-    this.clearRetry(record.alert_id);
-    const attempts = record.attempts || 1;
-    if (attempts >= this.retryMaxAttempts) {
-      record.dead_letter = true;
-      record.next_attempt_at = null;
-      log('triage.dead_letter', { alert_id: record.alert_id, attempts,
-        reason: record.failure?.reason || record.detail || null }, 'error');
-      return;
-    }
-    const delay = delayMs ?? Math.min(this.retryBaseMs * 2 ** (attempts - 1), this.retryMaxMs);
-    record.dead_letter = false;
-    record.next_attempt_at = new Date(Date.now() + delay).toISOString();
-    // load() 之后由 start() 的 resumeRetries() 统一排：进程内外各排一份会双跑。
-    if (!this.started) return;
-    const timer = setTimeout(() => {
-      this.retryTimers.delete(record.alert_id);
-      if (this.records.get(record.alert_id) !== record || record.dead_letter) return;
-      // 暂停中不自动重跑：记录保持 failed，恢复时 resumeRetries() 补上逾期的那次。
-      if (!this.enabled || record.status !== 'failed') return;
-      record.status = 'queued'; record.stage = '等待重试'; record.next_attempt_at = null;
-      record.updated_at = new Date().toISOString();
-      this.markDirty();
-      this.drain();
-    }, delay);
-    timer.unref?.();
-    this.retryTimers.set(record.alert_id, timer);
-  }
-
-  clearRetry(alertId) {
-    const timer = this.retryTimers.get(alertId);
-    if (!timer) return;
-    clearTimeout(timer);
-    this.retryTimers.delete(alertId);
-  }
-
-  // 启动 / 恢复时把该重排的失败记录排上：逾期的立刻回队，没到点的按原定时刻。
-  resumeRetries() {
-    if (!this.enabled) return;
-    for (const record of this.records.values()) {
-      if (record.status !== 'failed') continue;
-      if ((record.attempts || 0) >= this.retryMaxAttempts) { record.dead_letter = true; continue; }
-      if (record.dead_letter) continue;
-      const due = Date.parse(record.next_attempt_at || '');
-      if (!Number.isFinite(due) || due <= Date.now()) {
-        this.clearRetry(record.alert_id);
-        record.status = 'queued'; record.stage = '等待重试'; record.next_attempt_at = null;
-        record.updated_at = new Date().toISOString();
-      } else this.scheduleRetry(record, due - Date.now());
-    }
-    this.markDirty();
-  }
-
   // A3：删记录同时失效指向它的 dedupe 条目与重试 timer，不留悬空引用。
   dropRecord(alertId) {
     this.records.delete(alertId);
     this.clearRetry(alertId);
     for (const [fp, entry] of this.dedupe) if (entry.record_id === alertId) this.dedupe.delete(fp);
-  }
-
-  // A5：done 记录过 TTL 就归档出内存 Map（追加到 <队列文件>.archive.jsonl），全表扫不再随告警量线性变慢。
-  // 归档后的记录 status() 返回 null（与「没有记录」同一口径），要翻旧案直接读归档文件。
-  async archiveDone({ now = Date.now() } = {}) {
-    const stamp = record => Date.parse(record.updated_at || record.saved_at || '');
-    const expired = [...this.records.values()].filter(record => record.status === 'done' &&
-      Number.isFinite(stamp(record)) && stamp(record) < now - this.doneTtlMs);
-    if (!expired.length) return { archived: 0, remaining: this.records.size };
-    const file = `${this.file}.archive.jsonl`;
-    const lines = expired.map(record => `${JSON.stringify({ ...record, archived_at: new Date(now).toISOString() })}\n`).join('');
-    await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-    await appendFile(file, lines, { encoding: 'utf8', mode: 0o600 });
-    for (const record of expired) this.dropRecord(record.alert_id);
-    this.archivedCount += expired.length;
-    await this.persist();
-    log('triage.archived', { count: expired.length, total: this.archivedCount, file });
-    return { archived: expired.length, remaining: this.records.size };
-  }
-
-  // ── 数据管理（P003-T044）：队列侧的候选挑选与清理 ──────────────────────────
-  // 时间戳取 updated_at → saved_at → created_at 第一个能解析的；排序用它们，按「最新在前」排。
-  // 候选集是两条阈值的并集：早于 olderThan 的，与按时间倒序排在第 keep 条之后的（keep = 保留最新多少条）。
-  // 非 done 的记录（queued / running / failed）不在这里挡，交给 clean() 判 409——候选可以列出来，但不许动。
-  cleanCandidates({ olderThan = null, keep = null } = {}) {
-    const stamp = record => {
-      for (const key of ['updated_at', 'saved_at', 'created_at']) {
-        const parsed = Date.parse(record[key] || '');
-        if (Number.isFinite(parsed)) return parsed;
-      }
-      return null;
-    };
-    const all = [...this.records.values()];
-    const ranked = all.slice().sort((a, b) => (stamp(b) ?? 0) - (stamp(a) ?? 0));
-    const selected = new Map();
-    if (Number.isInteger(keep) && keep >= 0) for (const record of ranked.slice(keep)) selected.set(record.alert_id, record);
-    if (Number.isFinite(olderThan)) for (const record of all) {
-      const at = stamp(record);
-      if (at != null && at < olderThan) selected.set(record.alert_id, record);
-    }
-    const records = [...selected.values()].sort((a, b) => (stamp(b) ?? 0) - (stamp(a) ?? 0));
-    // 原始报文（input）是队列内部状态：候选清单只给 ID / 状态 / 时刻 / 估算字节，不往外带报文。
-    const items = records.map(record => ({ name: record.alert_id, status: record.status,
-      at: record.updated_at || record.saved_at || record.created_at || null,
-      bytes: Buffer.byteLength(JSON.stringify(record)) }));
-    return { records, items, bytes: items.reduce((sum, item) => sum + item.bytes, 0) };
-  }
-
-  // 真清：候选里只要有一条不是 done（还在排/在跑/可重排）就整体拒绝 409，盘上一动不动。
-  // archive 追加到 <队列文件>.archive.jsonl（与 archiveDone 同格式、带 archived_at）再移出内存；delete 直接移出。
-  // 两条路都走 dropRecord()：records 之外的 dedupe 悬空引用必须一起失效（R-TRIAGE-13）。
-  async clean({ action = 'archive', execute = false, olderThan = null, keep = null, now = Date.now() } = {}) {
-    const { records, items, bytes } = this.cleanCandidates({ olderThan, keep });
-    const blocked = records.filter(record => record.status !== 'done');
-    if (blocked.length) {
-      const statuses = [...new Set(blocked.map(record => record.status))].join('、');
-      const error = new Error(`${blocked.length} 条记录状态不是 done（${statuses}），已完结的案件才可清理`);
-      error.status = 409;
-      throw error;
-    }
-    if (!execute || !records.length) return { count: records.length, bytes, items };
-    if (action === 'archive') {
-      const file = `${this.file}.archive.jsonl`;
-      const lines = records.map(record => `${JSON.stringify({ ...record, archived_at: new Date(now).toISOString() })}\n`).join('');
-      await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-      await appendFile(file, lines, { encoding: 'utf8', mode: 0o600 });
-      this.archivedCount += records.length;
-    }
-    for (const record of records) {
-      this.dropRecord(record.alert_id);
-      this.pendingCounts.delete(record.alert_id);
-    }
-    await this.persist();
-    return { count: records.length, bytes, items };
-  }
-
-  // 案卷清理的 409 判据：目录上挂着非 done 记录（还在排 / 在跑 / 等重排）的，一个都不许清。
-  blockedCaseDirs() {
-    const blocked = new Set();
-    for (const record of this.records.values())
-      if (record.case_dir && record.status !== 'done') blocked.add(path.resolve(record.case_dir));
-    return blocked;
   }
 
   // A9：取消排队中的案件。只允许取消还没在研判的记录（queued / failed）；取消即删记录并失效 dedupe（A3）。
@@ -526,52 +179,6 @@ export class TriageMonitor {
     return { alert_id: alertId, status: 'not_queued', cancelled: true };
   }
 
-  status(alertId) {
-    const record = this.records.get(alertId) || [...this.records.values()].reverse().find(item => item.matched_alert_id === alertId);
-    if (!record) return null;
-    const { input, ...visible } = record;
-    // TriageCase.evidence[] 恒为数组：排队/失败/未入队的记录也不能缺键。
-    return { ...visible, evidence: visible.evidence || [], steps: [...(record.steps || [])] };
-  }
-
-  // 列表口径：先按结论 / 事件类型 / 主机 / 事件时间筛，再倒序切页；total 是过滤后的条数。
-  // from / to 是 Unix 秒（含端点），与 eventSeconds 同一个时间源，部署端偏移一并生效。
-  // 待判定①（P003-T060，用户判 bug）：poll 模式入队的记录没有 input，旧版整条从列表消失。
-  // 现在全部列出——缺 input 的派生字段（msgid / 事件时间 / 主机 / 来源 / 命令）如实回 null，不报错、不丢条。
-  cases({ count = 20, offset = 0, verdicts = [], type = null, host = null, from = null, to = null, sort = 'time' } = {}) {
-    let records = [...this.records.values()];
-    if (verdicts.length) records = records.filter(record => verdicts.includes(record.verdict || 'review'));
-    if (type) records = records.filter(record => record.input && eventTypeFor(record.input.parsed.msgid) === type);
-    if (host) records = records.filter(record => record.input && record.input.parsed.payload.host_ip === host);
-    if (from != null || to != null) records = records.filter(record => {
-      if (!record.input) return false;
-      const seconds = eventSeconds(record.input.parsed);
-      return seconds != null && (from == null || seconds >= from) && (to == null || seconds <= to);
-    });
-    records.reverse();
-    // Array#sort 是稳定排序：同档结论之间保留上面那个时间倒序。
-    if (sort === 'verdict') records.sort((left, right) => (verdictRanks[left.verdict] ?? 3) - (verdictRanks[right.verdict] ?? 3));
-    return { total: records.length, cases: records.slice(offset, offset + count).map(record => ({
-        alert_id: record.alert_id, matched_alert_id: record.matched_alert_id || null,
-        result_alert_id: record.result_alert_id || null, status: record.status,
-        stage: record.stage, detail: record.detail, created_at: record.created_at,
-        updated_at: record.updated_at, saved_at: record.saved_at || null,
-        case_dir: record.case_dir || null, repeat_count: record.repeat_count || 1,
-        verdict: record.verdict || null, verdict_label: record.verdict_label || null,
-        summary: record.summary || null, report: record.report || null,
-        missing_evidence: record.missing_evidence || [], next_actions: record.next_actions || [],
-        evidence_refs: record.evidence_refs || [], evidence: record.evidence || [],
-        verified_facts: record.verified_facts || 0,
-        evidence_sources: record.evidence_sources || 0,
-        msgid: record.input?.parsed?.msgid ?? null,
-        decision_source: record.decision_source || 'ai', rule_id: record.rule_id || null,
-        event_time: record.input ? (record.input.parsed.payload.event_create_time || record.input.parsed.ts) : null,
-        host_ip: record.input?.parsed.payload.host_ip ?? null,
-        source_ip: record.input ? (record.input.parsed.payload.source_ip || record.input.parsed.payload.login_ip) ?? null : null,
-        command: record.input ? commandOf(record.input.parsed.payload) : null
-      })) };
-  }
-
   async attachSyslog(receiver) {
     try {
       const address = await receiver.start();
@@ -583,64 +190,6 @@ export class TriageMonitor {
       log('syslog.bind_failed', { error: this.syslog.error }, 'error');
     }
     return this.syslog;
-  }
-
-  // 总览聚合：三个分布共用一份记录集，带 since 时只算 created_at（进入队列的时刻）不早于它的记录。
-  // 结论四键恒在（没有结论算 review，与 cases({verdicts}) 同一口径）；类型只列出现过的键，映射不出的算 unknown。
-  summary({ since = null } = {}) {
-    const sinceAt = since ? new Date(since) : null;
-    const sinceMs = sinceAt && !Number.isNaN(sinceAt.getTime()) ? sinceAt.getTime() : null;
-    const counts = { queued: 0, running: 0, done: 0, failed: 0 };
-    const verdict_counts = { threat: 0, uncertain: 0, false_positive: 0, review: 0 };
-    const type_counts = {};
-    for (const record of this.records.values()) {
-      if (sinceMs != null && !(Date.parse(record.created_at) >= sinceMs)) continue;
-      counts[record.status] = (counts[record.status] || 0) + 1;
-      verdict_counts[Object.hasOwn(verdict_counts, record.verdict) ? record.verdict : 'review'] += 1;
-      // eventTypeFor 用普通对象查表：MsgId 是 toString / constructor / __proto__ 时会取到原型上的函数或对象。
-      // 只认 eventTypes 里真有的类型名，别的一律算 unknown——否则 type_counts 的键会变成函数源码。
-      const type = eventTypeFor(record.input?.parsed?.msgid);
-      const typeKey = typeof type === 'string' && Object.hasOwn(eventTypes, type) ? type : 'unknown';
-      type_counts[typeKey] = (type_counts[typeKey] || 0) + 1;
-    }
-    // A6：队列深度、最老等待时长、失败原因分布。这三项不跟 since 走（它们是「此刻队列怎么样」，不是时间窗聚合）。
-    const queue = { depth: 0, running: counts.running, oldest_wait_ms: null, oldest_alert_id: null, retry_waiting: 0 };
-    const failureReasons = {};
-    let deadLetters = 0;
-    const nowMs = Date.now();
-    for (const record of this.records.values()) {
-      if (record.status === 'queued') {
-        queue.depth += 1;
-        const since = Date.parse(record.updated_at || record.created_at || '');
-        if (Number.isFinite(since)) {
-          const wait = Math.max(0, nowMs - since);
-          if (queue.oldest_wait_ms == null || wait > queue.oldest_wait_ms) {
-            queue.oldest_wait_ms = wait; queue.oldest_alert_id = record.alert_id;
-          }
-        }
-      }
-      if (record.status !== 'failed') continue;
-      if (record.dead_letter) deadLetters += 1; else queue.retry_waiting += 1;
-      const reason = String(record.failure?.reason || record.detail || '未知').slice(0, 120);
-      failureReasons[reason] = (failureReasons[reason] || 0) + 1;
-    }
-    return { initialized: this.initialized, enabled: this.enabled, input_mode: this.inputMode,
-      since: sinceMs == null ? null : new Date(sinceMs).toISOString(),
-      last_poll_at: this.lastPollAt, last_error: this.lastError, counts, verdict_counts, type_counts,
-      backoff_ms: this.backoffMs, empty_polls: this.emptyPolls,
-      concurrency: this.concurrency, queue_limit: this.queueLimit, dropped: this.dropped,
-      queue, failure_reasons: failureReasons,
-      // A1 重试上限可查：运维不必猜「还能自动跑几次」。
-      retry: { base_ms: this.retryBaseMs, max_ms: this.retryMaxMs, max_attempts: this.retryMaxAttempts,
-        dead_letters: deadLetters },
-      // A2 暂停期间收到多少、多少进了缓冲、多少丢在溢出上、恢复后回灌了多少。
-      paused: { active: !this.enabled, since: this.pausedSince, received: this.pausedReceived,
-        buffered: this.pausedBuffer.length, dropped: this.pausedDropped, replayed: this.pausedReplayed },
-      archived: { count: this.archivedCount, ttl_ms: this.doneTtlMs },
-      persist: { interval_ms: this.persistIntervalMs, unflushed: this.dirtyGen > this.writtenGen },
-      // A8 收包计数单独一块：syslog 是「能不能收到」（绑定状态，契约不能改形状），syslog_stats 是「收了多少 / 丢了多少」。
-      ...(this.inputMode === 'poll' ? { interval_ms: this.intervalMs }
-        : { syslog: { ...this.syslog }, syslog_stats: { ...this.syslogStats }, last_received_at: this.lastReceivedAt }) };
   }
 
   async setEnabled(enabled) {
@@ -671,338 +220,6 @@ export class TriageMonitor {
     if (this.inputMode === 'poll') await this.poll();
     this.drain();
     return this.summary();
-  }
-
-  // A5：队列深度只看「排队 + 在跑」，已完结的记录不占配额。
-  #queueFull() {
-    let depth = 0;
-    for (const record of this.records.values())
-      if (record.status === 'queued' || record.status === 'running') depth += 1;
-    return depth >= this.queueLimit;
-  }
-
-  #countDropped(count, reason) {
-    this.dropped += count;
-    log('triage.dropped', { reason, count, dropped: this.dropped, queue_limit: this.queueLimit }, 'warn');
-  }
-
-  async enqueue(alertId, { retry = false } = {}) {
-    const existing = this.records.get(alertId);
-    if (String(alertId).startsWith('syslog:') && !existing?.input) {
-      const error = new Error('该 syslog 告警的原始报文不存在，无法重试');
-      error.status = 404;
-      throw error;
-    }
-    if (existing && !retry) return this.status(alertId);
-    if (existing?.status === 'running') return this.status(alertId);
-    if (this.#queueFull()) {
-      this.#countDropped(1, 'manual');
-      const error = new Error(`研判队列已满（上限 ${this.queueLimit}），稍后再试`);
-      error.status = 429;
-      throw error;
-    }
-    const now = new Date().toISOString();
-    // 人工登记的误报结论（verdict / verdict_label / summary）跟着记录走进新一轮：run() 收尾靠它认出这条不该被覆盖。
-    // 不带上来的话，重排这一下就把误报标记抹掉了，后面根本认不出「已标误报」。
-    const keepVerdict = !!existing && humanFalsePositive(existing);
-    // 人工重跑优先于自动重排：旧的重试 timer 与死信标记都清掉，这一轮从头跑（attempts 留着做记录）。
-    this.clearRetry(alertId);
-    this.records.set(alertId, { alert_id: alertId,
-      ...(existing?.input ? { input: existing.input, occurrence_count: existing.occurrence_count,
-        session_key: existing.session_key, repeat_count: existing.repeat_count } : {}),
-      ...(keepVerdict ? { verdict: existing.verdict, verdict_label: existing.verdict_label,
-        summary: existing.summary, decision_source: existing.decision_source, feedback: existing.feedback } : {}),
-      status: 'queued', stage: '等待研判', detail: '已进入自动研判队列', dead_letter: false, next_attempt_at: null,
-      created_at: existing?.created_at || now, updated_at: now, steps: existing?.steps || [], attempts: existing?.attempts || 0 });
-    // 入队是研判链的起点：谁把这条排进来的（人工手动 / 人工重试）跟着告警 ID 一起记。
-    log('triage.enqueued', { alert_id: alertId, source: existing ? 'retry' : 'manual' });
-    await this.persist();
-    this.drain();
-    return this.status(alertId);
-  }
-
-  // A1：增量轮询。游标只由 `from`（上一轮最大 createdAt，含端点）决定，不再翻页找边界；
-  // 同秒的`watermarkIds`只用来去重，不参与边界判定。返回本轮结果给 #schedule 算退避。
-  async poll() {
-    if (this.inputMode === 'syslog') return null;
-    if (this.polling || !this.enabled) return null;
-    this.polling = true;
-    const pollEpoch = this.pollEpoch;
-    let found = [];
-    let failed = false;
-    try {
-      const query = this.initialized && this.watermark ? { from: this.watermark } : {};
-      let offset = 0;
-      let newest = this.watermark;
-      const newestIds = new Set(this.watermarkIds);
-      const collected = [];
-      for (let page = 0; page < MAX_POLL_PAGES; page++) {
-        const response = await this.service.alerts({ count: POLL_PAGE_SIZE, offset, sort: 'time', ...query })
-          .catch(error => {
-            log('cloudwalker.call_failed', { op: 'alerts', alert_id: null, error: String(error?.message || error) }, 'error');
-            throw error;
-          });
-        if (response.partial) throw new Error('部分牧云事件类型读取失败，暂缓推进自动研判游标');
-        const rows = response.alerts || [];
-        if (!this.initialized) {
-          // 冷启动只定游标，不排任何告警（与改前一致）。
-          newest = rows[0]?.createdAt || new Date().toISOString();
-          for (const row of rows) if (row.createdAt === newest) newestIds.add(row.id);
-          break;
-        }
-        for (const row of rows) {
-          // from 是服务端过滤，这里是兜底：平台忽略 from 时也不会把旧告警当新增（不靠它找边界）。
-          if (!row.createdAt || (this.watermark && row.createdAt < this.watermark)) continue;
-          if (row.createdAt === this.watermark && this.watermarkIds.has(row.id)) continue;
-          if (!newest || row.createdAt > newest) { newest = row.createdAt; newestIds.clear(); }
-          if (row.createdAt === newest) newestIds.add(row.id);
-          if (!this.records.has(row.id)) collected.push(row.id);
-        }
-        // 一页取满了才继续翻页：这是「把本轮新增取完」，不是「翻页找边界」。
-        if (rows.length < POLL_PAGE_SIZE) break;
-        offset += POLL_PAGE_SIZE;
-        if (page === MAX_POLL_PAGES - 1) throw new Error('新增告警超过本轮扫描上限，请检查自动研判积压');
-      }
-      if (!this.enabled || pollEpoch !== this.pollEpoch) return null;
-      this.initialized = true;
-      this.watermark = newest;
-      this.watermarkIds = newestIds;
-      this.lastPollAt = new Date().toISOString();
-      this.lastError = null;
-      found = collected.reverse();
-      let skipped = 0;
-      for (const alertId of found) {
-        if (this.#queueFull()) { skipped += 1; continue; }
-        this.records.set(alertId, { alert_id: alertId, status: 'queued', stage: '等待研判',
-          detail: '牧云新增告警已进入队列', created_at: this.lastPollAt, updated_at: this.lastPollAt,
-          steps: [], attempts: 0 });
-        log('triage.enqueued', { alert_id: alertId, source: 'poll' });
-      }
-      if (skipped) this.#countDropped(skipped, 'poll');
-      await this.persist();
-      this.drain();
-    } catch (error) {
-      failed = true;
-      if (pollEpoch === this.pollEpoch) {
-        // 记录侧不写错误原文（P003-T052）：`lastError` 上状态接口，只留固定文案 + 字符量。
-        this.lastError = recordFailure(error);
-        log('triage.poll_failed', { error: error.message }, 'warn');
-      }
-    }
-    finally { this.polling = false; }
-    // 空轮（含失败轮）指数退避；见到新告警立刻回常态（A1）。
-    if (found.length) this.emptyPolls = 0; else this.emptyPolls += 1;
-    this.backoffMs = this.emptyPolls === 0 ? this.intervalMs
-      : Math.min(this.intervalMs * 2 ** this.emptyPolls, this.maxBackoffMs);
-    return { found: found.length, empty: found.length === 0, failed };
-  }
-
-  acceptSyslog(line) {
-    this.syslogStats.inbound += 1;
-    const job = this.acceptChain.catch(() => {}).then(() => this._acceptSyslog(line));
-    // 收包链上的抛错不能静默：下一条报文之前没人会知道这条丢了。
-    this.acceptChain = job.catch(error => {
-      this.syslogStats.failed += 1;
-      log('syslog.accept_failed', { error: String(error?.message || error) }, 'error');
-    });
-    return job;
-  }
-
-  async _acceptSyslog(line) {
-    if (this.inputMode !== 'syslog') throw new Error('自动研判未使用 syslog 输入');
-    if (!this.enabled) {
-      // A2：暂停不丢——报文进缓冲排队，恢复时先回灌。缓冲有上限：超出的才丢，但要计数（不静默涨内存）。
-      this.pausedSince = this.pausedSince || new Date().toISOString();
-      this.pausedReceived += 1;
-      if (this.pausedBuffer.length >= this.pausedBufferLimit) {
-        this.pausedDropped += 1;
-        this.syslogStats.dropped += 1;
-        log('syslog.skipped', { reason: 'paused_buffer_full', limit: this.pausedBufferLimit }, 'warn');
-        this.markDirty();
-        return { buffered: false, dropped: true };
-      }
-      this.pausedBuffer.push(String(line));
-      this.syslogStats.buffered += 1;
-      log('syslog.buffered', { reason: 'paused', buffered: this.pausedBuffer.length });
-      this.markDirty();
-      return { buffered: true, buffered_count: this.pausedBuffer.length };
-    }
-    let parsed;
-    try { parsed = parseSyslog(line); }
-    catch (error) {
-      // 记录侧不写错误原文（P003-T052）：`lastError` 经 `summary().last_error` 出状态接口；
-      // 日志行仍留原文（日志侧归 P003-T046 的闸，本卡不动）。
-      this.lastError = `syslog 解析失败：${recordFailure(error, { keep: syslogParseFailures })}`;
-      this.syslogStats.rejected += 1;
-      log('syslog.parse_failed', { error: error.message, bytes: String(line || '').length }, 'warn');
-      return { error: this.lastError };
-    }
-    const type = eventTypeFor(parsed.msgid);
-    if (!type) {
-      this.syslogStats.rejected += 1;
-      log('syslog.skipped', { reason: 'no_agent_for_msgid', msgid: parsed.msgid }, 'warn');
-      return { skipped: 'no_agent_for_msgid', msgid: parsed.msgid };
-    }
-    const seconds = eventSeconds(parsed);
-    const fp = fingerprint(parsed);
-    const previous = this.dedupe.get(fp);
-    const sameSecond = seconds != null && previous?.last_delivery_second === seconds;
-    if (sameSecond) {
-      previous.delivery_count++;
-      previous.event_delivery_count++;
-      // 重复投递也是一条到达：最后到达时间跟上，和记录上的 updated_at 走同一个时刻。
-      this.lastReceivedAt = new Date().toISOString();
-      const record = this.records.get(previous.record_id);
-      if (record) {
-        record.repeat_count = previous.event_delivery_count;
-        record.updated_at = this.lastReceivedAt;
-        // A4：不再每条重复投递都全量重存一遍研判记录。同一条记录每个合并写窗口内最多写回一次：
-        // 窗口外的第一条立刻写（研判记录/案卷马上能看到次数），窗口内的攒到合并写里一次落盘。
-        const lastSave = record.count_saved_at || 0;
-        if (record.status === 'done' && record.result_alert_id && Date.now() - lastSave >= this.persistIntervalMs) {
-          record.count_saved_at = Date.now();
-          await this.saveDeliveryCount(record.alert_id, record.repeat_count);
-        } else this.pendingCounts.set(record.alert_id, record.repeat_count);
-      }
-      this.syslogStats.collapsed += 1;
-      this.markDirty();
-      log('syslog.collapsed', { alert_id: previous.record_id, repeat_count: previous.event_delivery_count });
-      return { collapsed: true, repeat_count: previous.event_delivery_count, alert_id: previous.record_id };
-    }
-    const occurrence = previous && seconds != null && Math.abs(seconds - previous.last_seen) <= 300
-      ? previous.occurrence_count + 1 : 1;
-    // A3：同指纹（指纹里已含 host_ip）且上一条已完结——复用结论，只累加 repeat_count，
-    // 不再排一次完整研判。人工要重新研判走 enqueue(alertId, { retry: true })。
-    const concluded = previous ? this.records.get(previous.record_id) : null;
-    if (concluded?.status === 'done' && concluded.verdict) {
-      const at = new Date().toISOString();
-      previous.delivery_count += 1;
-      previous.event_delivery_count += 1;
-      previous.last_delivery_second = seconds;
-      previous.last_seen = seconds ?? previous.last_seen;
-      previous.occurrence_count = occurrence;
-      concluded.repeat_count = previous.event_delivery_count;
-      concluded.occurrence_count = occurrence;
-      concluded.updated_at = at;
-      this.lastReceivedAt = at;
-      if (concluded.result_alert_id) {
-        const saved = await this.history.latest(concluded.result_alert_id, 'triage');
-        if (saved) await this.history.save({ ...saved, repeat_count: concluded.repeat_count,
-          syslog: saved.syslog ? { ...saved.syslog, repeat_count: concluded.repeat_count } : undefined });
-      }
-      await updateSyslogDeliveryCount(concluded.case_dir, concluded.repeat_count);
-      await this.persist();
-      log('syslog.reused_conclusion', { alert_id: concluded.alert_id, repeat_count: concluded.repeat_count, occurrence });
-      return { reused: true, repeat_count: concluded.repeat_count, alert_id: concluded.alert_id };
-    }
-    if (this.#queueFull()) {
-      this.#countDropped(1, 'syslog');
-      return { dropped: true, queue_limit: this.queueLimit };
-    }
-    const session = sessionKey(parsed);
-    const now = new Date().toISOString();
-    const alertId = `syslog:${type}:${fp}:${seconds ?? 'unknown'}:${randomUUID()}`;
-    this.lastReceivedAt = now;
-    this.records.set(alertId, { alert_id: alertId, input: { raw: String(line), parsed },
-      occurrence_count: occurrence,
-      session_key: session, status: 'queued', stage: '等待研判', detail: '已接收牧云 syslog',
-      created_at: now, updated_at: now, steps: [], attempts: 0, repeat_count: 1 });
-    this.dedupe.set(fp, { last_seen: seconds, last_delivery_second: seconds,
-      occurrence_count: occurrence, delivery_count: (previous?.delivery_count || 0) + 1,
-      event_delivery_count: 1, record_id: alertId });
-    this.syslogStats.accepted += 1;
-    log('syslog.received', { alert_id: alertId, msgid: parsed.msgid, event_type: type, occurrence });
-    // 热路径只标脏：合并写窗口内落盘（A4），下一秒内崩溃最多丢这一窗的队列状态。
-    this.markDirty();
-    this.drain();
-    return { alert_id: alertId, status: 'queued' };
-  }
-
-  async contextFor(record) {
-    const parsed = record.input.parsed;
-    const seconds = eventSeconds(parsed);
-    const session = record.session_key;
-    const sourceIp = parsed.payload.source_ip || parsed.payload.login_ip;
-    const window = (this.windows.get(session) || []).filter(item => seconds == null ||
-      item.at == null || Math.abs(seconds - item.at) <= 300).slice(-200);
-    const history = [...this.records.values()].filter(item => item.status === 'done' && item.input &&
-      (item.session_key === session || sourceIp && (item.input.parsed.payload.source_ip || item.input.parsed.payload.login_ip) === sourceIp ||
-        parsed.payload.user_name && item.input.parsed.payload.user_name === parsed.payload.user_name ||
-        parsed.payload.process_command_line && item.input.parsed.payload.process_command_line === parsed.payload.process_command_line))
-      .slice(-50).map(item => ({ at: item.updated_at, conclusion: item.verdict,
-        alert_id: item.matched_alert_id || item.alert_id }));
-    return { session_key: session, window, window_seconds: 600,
-      occurrence_count: record.occurrence_count || 1, delivery_count: record.repeat_count || 1, history };
-  }
-
-  rememberWindow(record) {
-    const parsed = record.input.parsed;
-    const seconds = eventSeconds(parsed);
-    const session = record.session_key;
-    const payload = parsed.payload;
-    const window = this.windows.get(session) || [];
-    window.push({ at: seconds, msgid: parsed.msgid, event_name: payload.event_name,
-      command: payload.process_command_line, file_path: payload.file_path, source_ip: payload.source_ip || payload.login_ip,
-      target_ip: payload.target_ip, target_port: payload.target_port, host_ip: payload.host_ip,
-      user_name: payload.user_name, session_key: session, repeat_count: record.occurrence_count || 1 });
-    this.windows.set(session, window.slice(-200));
-    if (seconds != null) for (const [key, events] of this.windows)
-      if (events.every(item => item.at != null && Math.abs(seconds - item.at) > 1200)) this.windows.delete(key);
-  }
-
-  drain() {
-    while (this.enabled && this.active < this.concurrency) {
-      // A4：按（类型风险 desc，occurrence_count desc，created_at asc）取最高优先级。
-      const next = [...this.records.values()].filter(record => record.status === 'queued')
-        .sort(comparePriority)[0];
-      if (!next) break;
-      this.clearRetry(next.alert_id);
-      this.active++;
-      next.status = 'running';
-      next.stage = '准备研判';
-      next.updated_at = new Date().toISOString();
-      next.attempts = (next.attempts || 0) + 1;
-      void this.run(next).catch(error => {
-        // 记录侧不写错误原文（P003-T052）：同 `lastError`，只留固定文案 + 字符量。
-        this.lastError = `研判状态保存失败：${recordFailure(error, { kind: '本地写入失败' })}`;
-        log('triage.persist_failed', { alert_id: next.alert_id, error: error.message }, 'error');
-      })
-        .finally(() => { this.active--; this.drain(); });
-    }
-  }
-
-  // 牧云取数调用包一层：syslog 事件匹配内部会把失败降级成 reason（syslog-case.js 不在本卡 scope），
-  // 只有套在调用点上，cloudwalker.call_failed 才留得下来。日志记完原样抛出，降级策略不变。
-  async cloudwalkerCall(op, job) {
-    try { return await job(); }
-    catch (error) {
-      log('cloudwalker.call_failed', { op, alert_id: null, error: String(error?.message || error) }, 'error');
-      throw error;
-    }
-  }
-
-  // matchSyslogEvent 只用 callTool / listEvents 两个方法：给它一个带日志的薄替身，别碰真 toolbox。
-  // 只包真有的方法——替身上凭空多个方法会让原实现的分支判断变掉。
-  // A2：detailCache 是一次研判内的详情缓存（get_<type>_event 按 id 只真拉一次），
-  // syslog 匹配与规则评估拿同一个实例；agent 用 match.event 复用（investigation-agent.js）。
-  observedToolbox(detailCache = new Map()) {
-    const toolbox = this.eventToolbox;
-    if (!toolbox) return toolbox;
-    const wrapped = {};
-    for (const [name, op] of [['callTool', 'call_tool'], ['listEvents', 'list_events']])
-      if (typeof toolbox[name] === 'function')
-        wrapped[name] = (...args) => this.cloudwalkerCall(op, () => toolbox[name](...args));
-    if (wrapped.callTool) {
-      const callTool = wrapped.callTool;
-      wrapped.callTool = async (name, args) => {
-        const key = detailKey(name, args);
-        if (key && detailCache.has(key)) return detailCache.get(key);
-        const value = await callTool(name, args);
-        if (key) detailCache.set(key, value);
-        return value;
-      };
-    }
-    return wrapped;
   }
 
   async run(record) {
@@ -1113,3 +330,7 @@ export class TriageMonitor {
     }
   }
 }
+
+// 五栏挂到同一个原型上：descriptors 保留 writeChain 这类 getter（Object.assign 会把 getter 求值后拷值）。
+for (const column of [queueColumn, retryColumn, projectionColumn, persistenceColumn])
+  Object.defineProperties(TriageMonitor.prototype, Object.getOwnPropertyDescriptors(column));
