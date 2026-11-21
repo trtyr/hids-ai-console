@@ -507,6 +507,135 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /api/batch/{action}:
+    post:
+      tags: [研判]
+      summary: 业务级批量操作（入队 / 批量误报 / 批量处置）
+      operationId: batchAction
+      description: |
+        P003-T069 A07。`action` 取 `enqueue` / `false-positive` / `dispose`。
+        单次上限 100 条；重复 ID 自动去重（按首次出现顺序执行）；**部分失败不整体回滚**——
+        返回 `accepted[]` 与 `rejected[{id, reason}]`，拒绝原因复用 caller 类错误口径。
+      parameters:
+        - { name: action, in: path, required: true, schema: { type: string, enum: [enqueue, false-positive, dispose] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [alert_ids]
+              properties:
+                alert_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { type: string }
+                reason: { type: string, description: '仅 false-positive：10 到 4000 字' }
+                who: { type: string, maxLength: 100 }
+                disposition:
+                  type: string
+                  enum: [confirmed_threat, dismissed, escalated, parked]
+                  description: '仅 dispose；缺省 dismissed'
+      responses:
+        '200':
+          description: 逐条结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [action, accepted, rejected]
+                properties:
+                  action: { type: string }
+                  accepted: { type: array, items: { type: string } }
+                  rejected:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, reason]
+                      properties:
+                        id: { type: string }
+                        reason: { type: string }
+        '400':
+          description: 参数非法（空数组 / 超上限 / 无效 ID / 无效处置位），`code=caller_error`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/agent/triage/{alertId}/raw:
+    get:
+      tags: [研判]
+      summary: 读原始报文与完整载荷（分页，凭据字段擦除）
+      operationId: getRawPayload
+      description: |
+        P003-T068 A14。返回原始 syslog 文本（≤60000 字）与载荷键值分页（count ≤200）。
+        token / password / secret / api_key / cookie / authorization 类键的值一律 `[redacted]`（过现有擦除闸）。
+        该告警没有原始报文（poll 入队）回 404。
+      parameters:
+        - { name: alertId, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/Count' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200':
+          description: 原始报文与载荷页
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alert_id, raw, payload_total, payload, truncated]
+                properties:
+                  alert_id: { type: string }
+                  raw: { type: string }
+                  msgid: { type: [string, 'null'] }
+                  payload_total: { type: integer }
+                  payload:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, value]
+                      properties:
+                        key: { type: string }
+                        value: {}
+                  truncated: { type: boolean }
+                  echo:
+                    type: object
+                    properties:
+                      count: { type: integer }
+                      offset: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '404':
+          description: 该告警没有原始报文（`code=caller_error`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/cases/related:
+    get:
+      tags: [研判]
+      summary: 按主机 / 来源 IP 查关联告警
+      operationId: listRelatedCases
+      description: |
+        P003-T068 A15。从已入队记录里按 host_ip / source_ip（含 login_ip）精确匹配，按 created_at 倒序分页。
+        至少给一个筛选条件，都不给回 400。
+      parameters:
+        - { name: host, in: query, schema: { type: string } }
+        - { name: source_ip, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Count' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses:
+        '200':
+          description: 关联告警页
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, items]
+                properties:
+                  total: { type: integer }
+                  items: { type: array, items: { $ref: '#/components/schemas/TriageCase' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
   /api/audit:
     get:
       tags: [审计]

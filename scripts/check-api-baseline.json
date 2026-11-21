@@ -1,12 +1,4 @@
 {
-  "registry-stale|GET /api/agent/triage/{alertId}/case-files/{name}": {
-    "kind": "registry-stale",
-    "item": "GET /api/agent/triage/{alertId}/case-files/{name}"
-  },
-  "impl-missing-in-contract|PUT /api/wiki/pages/{pagePath}": {
-    "kind": "impl-missing-in-contract",
-    "item": "PUT /api/wiki/pages/{pagePath}"
-  },
   "usecase-exit-needed|I08（A02）": {
     "kind": "usecase-exit-needed",
     "item": "I08（A02）"

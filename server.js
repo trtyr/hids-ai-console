@@ -1022,6 +1022,115 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
   return at > 0 ? text.slice(0, at) : '';
 };
 
+  // ── 批量操作（P003-T069 A07）：部分失败如实汇总，不整体回滚 ──────────────────
+  const batchMatch = url.pathname.match(/^\/api\/batch\/(enqueue|false-positive|dispose)$/);
+  if (batchMatch && req.method === 'POST') {
+    const action = batchMatch[1];
+    const body = await readJSON(req, 200000);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return callerError(res, '请求正文无效');
+    const ids = body.alert_ids;
+    if (!Array.isArray(ids) || !ids.length) return callerError(res, 'alert_ids 必须是非空数组');
+    if (ids.length > 100) return callerError(res, '单次批量上限 100 条');
+    if (ids.some(id => typeof id !== 'string' || !validTriageId(id))) return callerError(res, 'alert_ids 含无效告警 ID');
+    if (action === 'false-positive') {
+      const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+      if (reason.length < 10 || reason.length > 4000) return callerError(res, '误报理由必须为 10 到 4000 字');
+    }
+    if (action === 'dispose' && !['confirmed_threat', 'dismissed', 'escalated', 'parked'].includes(String(body.disposition || 'dismissed')))
+      return callerError(res, '处置位无效');
+    if (!monitor) return configError(res, '自动研判尚未配置');
+    const accepted = [], rejected = [];
+    for (const alertId of [...new Set(ids)]) {
+      try {
+        if (action === 'enqueue') {
+          await monitor.enqueue(alertId, { retry: true });
+          accepted.push(alertId);
+        } else if (action === 'false-positive') {
+          const record = monitor.records.get(alertId);
+          if (!record) throw Object.assign(new Error('找不到这条研判案件'), { status: 404 });
+          if (record.status !== 'done') throw Object.assign(new Error('研判还没结束，不能登记误报'), { status: 409 });
+          if (runningMaintenance.has(alertId)) { accepted.push(alertId); continue; }
+          const at = new Date().toISOString();
+          const reason = String(body.reason).trim();
+          const who = String(body.who ?? access?.user ?? 'operator').trim().replace(/\s+/g, ' ').slice(0, 100);
+          record.verdict = 'false_positive'; record.verdict_label = '误报'; record.decision_source = 'human';
+          record.feedback = { reason, who, recorded_at: at };
+          record.detail = `人工登记误报（${who}）：${reason}`.slice(0, 250);
+          record.maintenance = { status: 'updating', updated_at: at,
+            rule: { status: 'updating', at }, wiki: { status: 'updating', at }, libraries: FP_LIBRARIES };
+          record.updated_at = at;
+          await monitor.persist?.();
+          runningMaintenance.add(alertId);
+          void maintainFalsePositive({ monitor, record, maintainer: fpAgent, libraries: FP_LIBRARIES,
+            previous: null }).finally(() => runningMaintenance.delete(alertId));
+          void auditor({ actor: actorOf({ access }), action: 'false-positive.register',
+            object: { kind: 'case', alert_id: alertId, batch: true } });
+          accepted.push(alertId);
+        } else {
+          const record = monitor.records.get(alertId);
+          if (!record) throw Object.assign(new Error('没有这条研判记录'), { status: 404 });
+          const disposition = String(body.disposition || 'dismissed');
+          if (record.disposition && record.disposition !== 'not_disposed')
+            throw Object.assign(new Error('该案件已有处置位，不能重复处置'), { status: 409 });
+          record.disposition = disposition;
+          record.disposition_at = new Date().toISOString();
+          record.updated_at = record.disposition_at;
+          await monitor.persist?.();
+          void auditor({ actor: actorOf({ access }), action: 'case.dispose',
+            object: { kind: 'case', alert_id: alertId, disposition, batch: true } });
+          accepted.push(alertId);
+        }
+      } catch (cause) {
+        rejected.push({ id: alertId, reason: scrubCredentials(cause?.message || cause).slice(0, 200) });
+      }
+    }
+    return json(res, 200, { action, accepted, rejected });
+  }
+
+  // ── 原始载荷与关联告警（P003-T068 A14/A15）──────────────────────────────────
+  const rawPayload = url.pathname.match(/^\/api\/agent\/triage\/([^/]+)\/raw$/);
+  if (rawPayload && req.method === 'GET') {
+    if (!monitor) return configError(res, '自动研判尚未配置');
+    let alertId;
+    try { alertId = decodeURIComponent(rawPayload[1]); }
+    catch { return callerError(res, '告警 ID 编码无效'); }
+    const record = monitor.records.get(alertId);
+    if (!record?.input) return callerError(res, '该告警没有原始报文', 404);
+    const count = Number(url.searchParams.get('count') || 50);
+    const offset = Number(url.searchParams.get('offset') || 0);
+    if (!Number.isSafeInteger(count) || count < 1 || count > 200 || !Number.isSafeInteger(offset) || offset < 0)
+      return callerError(res, '分页参数无效');
+    const entries = Object.entries(record.input.parsed?.payload || {});
+    const page = entries.slice(offset, offset + count).map(([key, value]) => ({
+      key, value: /token|password|secret|api[-_]?key|cookie|authorization/i.test(key) ? '[redacted]'
+        : (typeof value === 'string' ? value.slice(0, 4000) : value) }));
+    return json(res, 200, { alert_id: alertId, raw: String(record.input.raw || '').slice(0, 60000),
+      msgid: record.input.parsed?.msgid ?? null, payload_total: entries.length, payload: page,
+      echo: { count, offset }, truncated: offset + count < entries.length });
+  }
+  if (url.pathname === '/api/cases/related' && req.method === 'GET') {
+    if (!monitor) return configError(res, '自动研判尚未配置');
+    const host = url.searchParams.get('host')?.trim() || null;
+    const sourceIp = url.searchParams.get('source_ip')?.trim() || null;
+    if (!host && !sourceIp) return callerError(res, '至少给一个筛选条件：host 或 source_ip');
+    const count = Number(url.searchParams.get('count') || 20);
+    const offset = Number(url.searchParams.get('offset') || 0);
+    if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
+      return callerError(res, '分页参数无效');
+    const matched = [];
+    for (const record of monitor.records.values()) {
+      const payload = record.input?.parsed?.payload || {};
+      if (host && payload.host_ip !== host) continue;
+      if (sourceIp && payload.source_ip !== sourceIp && payload.login_ip !== sourceIp) continue;
+      matched.push({ alert_id: record.alert_id, status: record.status, verdict: record.verdict ?? null,
+        created_at: record.created_at, host_ip: payload.host_ip ?? null,
+        source_ip: payload.source_ip ?? payload.login_ip ?? null });
+    }
+    matched.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    return json(res, 200, { filters: { host, source_ip: sourceIp }, total: matched.length,
+      items: matched.slice(offset, offset + count) });
+  }
+
 // ── 聚合统计（P003-T064 A05）：存储侧全量计算，绕过 /api/alerts 的 500 条扫描上限 ──
   // 误报率分母 = 有结论的 done 案件（review 不算——还没研判完）；分子 = false_positive。
   // MTTR = done 案件 created_at→saved_at 的中位数（不入库的时间戳对，秒级精度，无结论案件不计）。

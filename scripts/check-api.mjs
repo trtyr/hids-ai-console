@@ -66,11 +66,14 @@ const ROUTES = [
   { route: 'POST /api/agent/triage/{alertId}', probe: "'/api/agent/triage/'" },
   { route: 'DELETE /api/agent/triage/{alertId}', probe: "'/api/agent/triage/'" },
   { route: 'POST /api/agent/triage/{alertId}/false-positive', probe: '\\/false-positive$' },
+  { route: 'POST /api/batch/{action}', probe: '\\/api\\/batch\\/' },
+  { route: 'GET /api/agent/triage/{alertId}/raw', probe: '/raw$' },
+  { route: 'GET /api/cases/related', probe: "'/api/cases/related'" },
   // 深度研判
   { route: 'POST /api/agent/investigations', probe: "'/api/agent/investigations'" },
   { route: 'GET /api/agent/investigations', probe: "'/api/agent/investigations'" },
   { route: 'GET /api/agent/triage/{alertId}/case-files', probe: '/case-files$' },
-  { route: 'GET /api/agent/triage/{alertId}/case-files/{name}', probe: '/case-files/' },
+  { route: 'GET /api/agent/triage/{alertId}/case-files/{name}', probe: 'case-files\\/(.+)' },
   { route: 'GET /api/agent/investigations/{alertId}/replay', probe: '\\/replay$' },
   { route: 'GET /api/agent/investigations/{alertId}', probe: "'/api/agent/investigations/'" },
   // 溯源白板
@@ -176,7 +179,7 @@ const USE_CASES = {
 };
 
 // ── 对账 ─────────────────────────────────────────────────────────────────────
-const sources = ['server.js', 'maintenance-server.js'].map(f => readFileSync(path.join(repo, f), 'utf8'));
+const sources = ['server.js', 'src/interfaces/http/maintenance/server.js'].map(f => readFileSync(path.join(repo, f), 'utf8'));
 const joined = sources.join('\n');
 const findings = {};
 
