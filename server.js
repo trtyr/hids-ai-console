@@ -576,13 +576,20 @@ async function triageFilteredAlerts(service, monitor, query, { statuses, verdict
   return { ...envelope, alerts: collected.slice(offset, offset + count), total: collected.length, truncated };
 }
 
-// ── 数据管理（P003-T044）：盘点 / 归档 / 清理 ───────────────────────────────
-// 七类运行态的真源路径一律取自 createServer 的注入件（history / boardService / wikiAgent / monitor / config），
+// ── 数据管理（P003-T044 + T061 扩 16 类）：盘点 / 归档 / 清理 ────────────────
+// 运行态的真源路径一律取自 createServer 的注入件（history / boardService / wikiAgent / monitor / config），
 // 不另立一套路径表：测试换掉注入件里的替身目录，盘点的就是那份替身目录。
 // dataRoot 取配置覆盖层文件所在目录（缺省就是数据根，仓库外）：队列的 .archive.jsonl 与清理归档目录都落在这下面。
-export const DATA_KINDS = Object.freeze(['cases', 'investigations', 'boards', 'wiki_sessions', 'queue', 'logs', 'config_overrides']);
+// T061（C06）：七类扩成十六类——漏的九类里 fp-sessions/ 实测 27MB/3187 文件无声增长，运维此前看不见也清不掉。
+// **审计（audit/）有意不入清单**（P003-T062）：审计流 append-only 不随清理消失，与可清理的运行态性质相反。
+export const DATA_KINDS = Object.freeze(['cases', 'investigations', 'boards', 'wiki_sessions', 'fp_sessions',
+  'rule_sessions', 'queue', 'logs', 'config_overrides', 'rules', 'rules_history', 'wiki', 'wiki_history',
+  'prompt_overrides', 'triage_rules', 'update_packages']);
 const DATA_KIND_LABELS = Object.freeze({ cases: '案卷', investigations: '研判记录', boards: '溯源白板',
-  wiki_sessions: '知识库会话', queue: '研判队列', logs: '日志', config_overrides: '配置覆盖层' });
+  wiki_sessions: '知识库会话', fp_sessions: '误报维护会话', rule_sessions: '规则维护会话', queue: '研判队列',
+  logs: '日志', config_overrides: '配置覆盖层', rules: 'Rego 规则库', rules_history: '规则历史',
+  wiki: '判据库', wiki_history: '判据历史', prompt_overrides: '提示词覆盖层', triage_rules: '前置规则集',
+  update_packages: '升级包暂存' });
 const DATA_CLEAN_ACTIONS = Object.freeze(['archive', 'delete']);
 const DATA_CANDIDATE_LIMIT = 100; // dry-run 清单最多列这么多条，多出来的只给数字（truncated: true）
 
@@ -592,6 +599,7 @@ function dataAdminRoot(deps) {
 
 // 布局四种：dirs（一级子目录各算一条）/ files（匹配扩展名的文件）/ single（单文件）/ queue（队列文件，条数＝记录）。
 // logs 也走 files 布局，匹配 *.log，目录就是 dataRoot：后端自身不落日志文件（docs/architecture.md:156）。
+// T061 新增九类的落点与 rule-store/wiki-store/prompt-store/update-store 的缺省一致（runtimePaths/dataRoot 口径）。
 function dataStores(deps = {}) {
   const root = dataAdminRoot(deps);
   const store = (kind, layout, location, extension = null) => ({ kind, label: DATA_KIND_LABELS[kind], layout, path: location, extension, root });
@@ -600,9 +608,18 @@ function dataStores(deps = {}) {
     ['investigations', store('investigations', 'files', deps.history?.directory || path.join(root, 'investigations'), 'json')],
     ['boards', store('boards', 'files', deps.boardService?.directory || path.join(root, 'trace-boards'), 'json')],
     ['wiki_sessions', store('wiki_sessions', 'files', deps.wikiAgent?.directory || path.join(root, 'wiki-sessions'), 'json')],
+    ['fp_sessions', store('fp_sessions', 'files', deps.fpSessions?.directory || path.join(root, 'fp-sessions'), 'json')],
+    ['rule_sessions', store('rule_sessions', 'files', deps.ruleSessions?.directory || path.join(root, 'rule-sessions'), 'json')],
     ['queue', store('queue', 'queue', deps.monitor?.file || path.join(root, 'triage-monitor.json'))],
     ['logs', store('logs', 'files', root, 'log')],
-    ['config_overrides', store('config_overrides', 'single', deps.config?.file || path.join(root, 'config-overrides.json'))]
+    ['config_overrides', store('config_overrides', 'single', deps.config?.file || path.join(root, 'config-overrides.json'))],
+    ['rules', store('rules', 'files', deps.ruleStore?.directory || path.join(root, 'rules'), 'rego')],
+    ['rules_history', store('rules_history', 'files', deps.ruleStore?.historyDirectory || path.join(root, 'rules-history'), null)],
+    ['wiki', store('wiki', 'files', deps.wiki?.directory || path.join(root, 'wiki'), 'md')],
+    ['wiki_history', store('wiki_history', 'files', deps.wiki?.historyDirectory || path.join(root, 'wiki-history'), 'md')],
+    ['prompt_overrides', store('prompt_overrides', 'single', deps.prompts?.filename || path.join(root, 'prompt-overrides.json'))],
+    ['triage_rules', store('triage_rules', 'single', deps.monitor?.ruleEngine?.filename || path.join(root, 'triage-rules.json'))],
+    ['update_packages', store('update_packages', 'files', deps.updateStore?.directory || path.join(root, 'update-packages'), 'json')]
   ]);
 }
 
@@ -649,7 +666,7 @@ async function storeEntries(store) {
   if (!entries) return [];
   const picked = entries.filter(entry => entry.isDirectory()
     ? store.layout === 'dirs'
-    : store.layout === 'files' && entry.name.endsWith(`.${store.extension}`));
+    : store.layout === 'files' && (!store.extension || entry.name.endsWith(`.${store.extension}`)));
   const rows = [];
   for (const entry of picked) {
     const location = path.join(store.path, entry.name);
@@ -872,7 +889,9 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
     ? new FalsePositiveMaintainer({ model: fpDecision, ruleMaintainer, ruleStore, wiki, wikiAgent, sessions: fpSessions })
     : null);
   // 数据管理（P003-T044）的路径来源：全部是本次注入的构件，换替身就是换盘点对象。
-  const dataDeps = { history, monitor, boardService, wikiAgent, config };
+  const updateStore = prompts ? new UpdateStore(prompts) : null;
+  const dataDeps = { history, monitor, boardService, wikiAgent, config, fpSessions, ruleSessions, ruleStore,
+    wiki, prompts, updateStore };
   // 审计流（P003-T062）：append-only，落 `<数据根>/audit/`，独立于技术日志的轮转与清理。
   // 落点跟随注入的 config.file 所在目录（生产＝数据根，与 config-overrides.json 同根；测试注入 tmp
   // 覆盖层文件时审计跟着进 tmp——全局根零痕迹的守卫罩因此不被审计写穿）。记账点在各写路由。
@@ -904,7 +923,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           ? { authenticated: true, user: access.user || 'admin', role: 'operator' }
           : { authenticated: true, user: null, role: null });
       }
-      if (url.pathname === '/api/updates' && req.method === 'GET') return json(res, 200, await new UpdateStore(prompts).overview());
+      if (url.pathname === '/api/updates' && req.method === 'GET') return json(res, 200, await updateStore.overview());
       // 生效值一览（P003-T025）：地址、端口、研判输入模式、牧云与模型配了没有、模型名。
       // 机密只给有/没有——本路由的响应体里不出现任何 Token 与密码原文（A3）。
       // 读的是注入的 store 的 env（缺省就是 process.env）：写配置盖进的覆盖层立刻反映在这里（P003-T029 A1）。
@@ -1679,6 +1698,30 @@ export function configSummary(env = process.env) {
   };
 }
 
+
+// ── 启动自检（P003-T074）：运行态落点必须全在数据根下 ─────────────────────────
+// 逐项核对 runtimePaths 与日志/覆盖层落点；越界的落一条 data.root_outside 警告（不静默、不阻止启动）。
+export function startupDataRootAudit({ env = process.env, home, roots = null } = {}) {
+  const root = path.resolve(roots ?? runtime.data);
+  const entries = [
+    ['investigations', path.resolve(roots ?? runtime.investigations)],
+    ['cases', path.resolve(roots ?? runtime.cases)],
+    ['trace-boards', path.resolve(roots ?? runtime.traceBoards)],
+    ['wiki-sessions', path.resolve(roots ?? runtime.wikiSessions)],
+    ['fp-sessions', path.resolve(roots ?? runtime.fpSessions)],
+    ['triage-rules.json', path.resolve(roots ?? runtime.triageRules)],
+    ['triage-monitor.json', path.resolve(roots ?? runtime.triageMonitor)]
+  ];
+  const logFile = typeof env.HIDS_LOG_FILE === 'string' && env.HIDS_LOG_FILE.trim()
+    && env.HIDS_LOG_FILE.trim() !== 'none' ? path.resolve(env.HIDS_LOG_FILE.trim()) : null;
+  if (logFile) entries.push(['HIDS_LOG_FILE', logFile]);
+  const outside = entries.filter(([, target]) => !target.startsWith(root + path.sep) && target !== root)
+    .map(([name, target]) => ({ name, target }));
+  if (outside.length)
+    log('data.root_outside', { root, outside: outside.map(item => item.name), error: outside.map(item => item.target).join('、') }, 'warn');
+  return { root, outside };
+}
+
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   // 启动闸门（P003-T025）：两类配置问题都不监听——缺必填、取值非法。缺的键名与坏值逐个列到 stderr，退出码非 0。
   // 只拦这一条入口：createServer 仍可被测试与探针注入替身在进程内起来（缺能力就置空，路由 503）。
@@ -1693,6 +1736,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     process.stderr.write(`${lines.join('\n')}\n`);
     process.exitCode = 1;
   } else {
+    startupDataRootAudit();
     createServer().listen(port, host, () => log('server.started', { host, port }));
     if (triageMonitor) void triageMonitor.start().then(async () => {
       if (triageInputMode === 'syslog') {

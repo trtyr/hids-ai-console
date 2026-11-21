@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createServer } from '../../../server.js';
+import { createServer, DATA_KINDS } from '../../../server.js';
 import { TriageMonitor } from '../../../triage-monitor.js';
 import { InvestigationStore } from '../../../investigation-store.js';
 import { createConfigStore } from '../../../config-store.js';
@@ -94,7 +94,7 @@ function captureJournal(t) {
   };
 }
 
-test('A1 盘点七类存储：条数与字节逐类对得上，缺目录按 0 报', async t => {
+test('A1 盘点十六类存储：条数与字节逐类对得上，缺目录按 0 报', async t => {
   const { root, locations, deps } = await workspace(t);
   const caseA = await writeAt(path.join(locations.cases, '20260101-000000-aaaaaaaa', '01-原始告警.txt'), 'hello', OLD);
   const caseB = await writeAt(path.join(locations.cases, '20260102-000000-bbbbbbbb', '01-原始告警.txt'), 'world!!', NEW);
@@ -114,10 +114,9 @@ test('A1 盘点七类存储：条数与字节逐类对得上，缺目录按 0 �
   const inventory = await getInventory(base);
   assert.equal(inventory.data_dir, root);
 
-  assert.equal(inventory.stores.length, 7);
+  assert.equal(inventory.stores.length, 16, 'P003-T061：盘点覆盖 16 类');
   // 七类的 kind 顺序稳定，页面/测试按它渲染
-  assert.deepEqual(inventory.stores.map(store => store.kind),
-    ['cases', 'investigations', 'boards', 'wiki_sessions', 'queue', 'logs', 'config_overrides']);
+  assert.deepEqual(inventory.stores.map(store => store.kind), DATA_KINDS, 'T061：16 类与 DATA_KINDS 逐项一致');
 
   assert.equal(row(inventory, 'cases').count, 2);
   assert.equal(row(inventory, 'cases').bytes, caseA + caseB);
@@ -156,7 +155,7 @@ test('A1 盘点七类存储：条数与字节逐类对得上，缺目录按 0 �
   assert.deepEqual(inventory.total, total);
 });
 
-test('A1 空运行态：七类全 0，不报错', async t => {
+test('A1 空运行态：十六类全 0，不报错', async t => {
   const { root, deps } = await workspace(t);
   const base = await serve(t, deps);
   const inventory = await getInventory(base);
