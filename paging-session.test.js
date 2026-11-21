@@ -146,7 +146,10 @@ test('配置了 Basic 账号时 /api/session 回 user 与 operator 角色', asyn
   const base = await serve(t, { access: { user: 'ops', password: 'pw' } });
   const authorized = await fetch(`${base}/api/session`, { headers: { Authorization: basic('ops:pw') } });
   assert.equal(authorized.status, 200);
-  assert.deepEqual(await authorized.json(), { authenticated: true, user: 'ops', role: 'operator' });
+  // A19 起同响应附 permissions（单独测在 evidence/test/P003-T071）；身份字段形状不变。
+  const { permissions, ...identity } = await authorized.json();
+  assert.deepEqual(identity, { authenticated: true, user: 'ops', role: 'operator' });
+  assert.ok(permissions.actions.some(item => item.action === 'config.write'));
   const wrong = await fetch(`${base}/api/session`, { headers: { Authorization: basic('ops:nope') } });
   assert.equal(wrong.status, 401);
 });
@@ -155,12 +158,16 @@ test('配了密码没配账号名时 /api/session 与鉴权口径一致，落回
   const base = await serve(t, { access: { password: 'pw' } });
   const response = await fetch(`${base}/api/session`, { headers: { Authorization: basic('admin:pw') } });
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { authenticated: true, user: 'admin', role: 'operator' });
+  const { permissions, ...identity } = await response.json();
+  assert.deepEqual(identity, { authenticated: true, user: 'admin', role: 'operator' });
+  assert.equal(permissions.business_auth.enabled, true);
 });
 
 test('未配置 Basic 密码时 /api/session 回 authenticated 但 user / role 为 null', async t => {
   const base = await serve(t, { access: {} });
   const response = await fetch(`${base}/api/session`);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { authenticated: true, user: null, role: null });
+  const { permissions, ...identity } = await response.json();
+  assert.deepEqual(identity, { authenticated: true, user: null, role: null });
+  assert.equal(permissions.business_auth.enabled, false);
 });

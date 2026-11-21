@@ -1,7 +1,7 @@
 // trace 上下文 · 应用层：溯源白板的编排（P003-T075 批 1，试点）。
 // 依赖全部注入：toolbox / model / promptStore / analysis 是端口，落盘走 infrastructure/board-store.js；
 // 白板形状、不变量与投影在 domain/board.js。本文件不做 fs、不 import 别的上下文的 domain。
-import { assertLink, addCandidate, addGap, alertFromFacts, boundNodeFindings, discover,
+import { assertLink, addCandidate, addGap, alertFromFacts, boardRevision, boundNodeFindings, diffBoards, discover,
   MAX_ASSET_NEIGHBORS, MAX_GLOBAL_PAGES, MAX_INVESTIGATIONS, MAX_NODES, MAX_ROUNDS, MAX_TYPE_PAGES,
   olderThanWindow, PAGE_SIZE, presentBoard, privateIp, profileFrom, resultRows, reuseRecord, rowFacts,
   rowTime, short, summarizeBoard, summarizeRecord, traceBoardSeed, traceIpSeed, traceTarget, validIp,
@@ -78,15 +78,48 @@ export class TraceBoardService {
     return presentBoard(board);
   }
 
+  // A17：历史版本列表（新→旧），每条给内容版本号 + 摘要（状态/链长/断点/边数），供前端列版本。
+  async versions(boardId) {
+    return (await this.store.history(boardId)).map(snapshot => ({
+      ...summarizeBoard(snapshot.board), revision: snapshot.revision, saved_at: snapshot.saved_at,
+      edges: Array.isArray(snapshot.board.edges) ? snapshot.board.edges.length : 0,
+      gaps: Array.isArray(snapshot.board.gaps) ? snapshot.board.gaps.length : 0
+    }));
+  }
+
+  // A17：按版本号取任一版（完整投影，与当前板详情同形状）。
+  async version(boardId, revision) {
+    const snapshot = await this.store.readVersion(boardId, revision);
+    if (!snapshot) return null;
+    return { revision: snapshot.revision, saved_at: snapshot.saved_at, board: presentBoard(snapshot.board) };
+  }
+
+  // A17：两版逐项比。`to` 省略或传 current 表示对当前板比；比的是 hops / links / edges / gaps。
+  async diff(boardId, from, to = null) {
+    const before = await this.store.readVersion(boardId, from);
+    if (!before) return null;
+    let afterBoard = null;
+    let afterSaved = null;
+    if (!to || to === 'current') afterBoard = await this.read(boardId);
+    else { afterSaved = await this.store.readVersion(boardId, to); afterBoard = afterSaved?.board || null; }
+    if (!afterBoard) return null;
+    return { ...diffBoards(before.board, afterBoard), from: before.revision,
+      to: afterSaved?.revision || boardRevision(afterBoard), to_current: !afterSaved };
+  }
+
   // A1：从一条告警（或 IP）创建溯源。已有白板直接返回那条，不重查事件、不覆盖。
+  // A17：`rerun: true` 时重跑——旧板先按内容版本归档，再从头起一块新板；同一版本内容不重复归档。
   // 已知旧账：同一新目标的并发 POST 仍是 check-then-act（读盘与建板之间没有锁），两个请求可能各建一次、后写覆盖前写；
   // 单进程里 running 只挡住已经进 explore 的那一个。本轮不改（P003-T014 复审 minor）。
-  async startOrResume(target, focus = '') {
+  async startOrResume(target, focus = '', { rerun = false } = {}) {
     const spec = traceTarget(target);
     if (!spec) throw Object.assign(new Error('请输入有效告警 ID 或 IPv4 地址'), { status: 400 });
-    if (this.running.has(spec.boardId)) return { created: false, board: await this.get(spec.boardId) };
+    if (this.running.has(spec.boardId)) {
+      if (rerun) throw Object.assign(new Error('调查正在进行，请等待当前一轮结束后再重跑'), { status: 409 });
+      return { created: false, board: await this.get(spec.boardId) };
+    }
     const existing = await this.read(spec.boardId);
-    if (existing) return { created: false, board: await this.get(spec.boardId) };
+    if (existing && !rerun) return { created: false, board: await this.get(spec.boardId) };
     const session = this.toolbox.investigation(2000);
     let board;
     if (spec.kind === 'ip') board = traceIpSeed(spec.address);
@@ -115,6 +148,8 @@ export class TraceBoardService {
     }
     board.model = this.model.model;
     board.focus = short(focus, 300);
+    // 归档在覆盖旧板之前：归档失败就抛出去，宁可重跑失败也不把历史丢了。
+    if (existing) await this.store.archive(existing);
     await this.save(board);
     const work = this.explore(board, session).catch(async error => {
       board.status = 'failed'; addGap(board, null, recordFailure(error));
@@ -122,7 +157,7 @@ export class TraceBoardService {
       await this.save(board);
     }).finally(() => this.running.delete(spec.boardId));
     this.running.set(spec.boardId, work);
-    return { created: true, board: presentBoard(board) };
+    return { created: true, board: presentBoard(board), rerun: Boolean(existing) };
   }
 
   async start(target, focus = '') { return (await this.startOrResume(target, focus)).board; }

@@ -39,6 +39,7 @@ const ROUTES = [
   // 运行配置与身份
   { route: 'GET /api/session', probe: "'/api/session'" },
   { route: 'GET /api/updates', probe: "'/api/updates'" },
+  { route: 'GET /api/updates/packages', probe: "'/api/updates/packages'" },
   { route: 'GET /api/config', probe: "'/api/config'" },
   { route: 'POST /api/config', probe: "'/api/config'" },
   // 状态与工具目录
@@ -82,6 +83,9 @@ const ROUTES = [
   { route: 'GET /api/trace/boards', probe: "'/api/trace/boards'" },
   { route: 'POST /api/trace/boards', probe: "'/api/trace/boards'" },
   { route: 'GET /api/trace/boards/{target}', probe: "'/api/trace/boards/'" },
+  { route: 'GET /api/trace/boards/{target}/versions', probe: '\\/versions$' },
+  { route: 'GET /api/trace/boards/{target}/versions/{revision}', probe: '\\/versions\\/([0-9a-f]{16})$' },
+  { route: 'GET /api/trace/boards/{target}/diff', probe: '\\/diff$' },
   // 前置规则集（JSON）
   { route: 'GET /api/triage/rules/history', probe: "'/api/triage/rules/history'" },
   { route: 'GET /api/triage/rules/history/{rev}', probe: 'triage\\/rules\\/history\\/' },

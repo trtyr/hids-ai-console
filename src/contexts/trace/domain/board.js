@@ -2,7 +2,7 @@
 // 白板是聚合根：hop / link / gap / node / edge / citation 的形状、不变量与纯投影都在这里；
 // 存取（fs）在 infrastructure/board-store.js，编排（AI 探查循环）在 application/trace-service.js。
 // 依赖纪律：本文件只 import shared（vocabulary / alert-shape）与 node:crypto——不碰 fs、不碰别的上下文。
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { eventTypes } from '../../../shared/vocabulary.js';
 
 export const MAX_INVESTIGATIONS = 12;
@@ -297,4 +297,71 @@ export function assertGapsConsistent(board) {
   const hasGaps = board.has_gaps === undefined ? undefined : board.has_gaps;
   if (hasGaps !== undefined && hasGaps !== (gaps.length > 0))
     throw new Error(`白板 has_gaps=${hasGaps} 与 gaps ${gaps.length} 条不一致`);
+}
+
+// ── 版本与 diff（P003-T068 A17）────────────────────────────────────────────
+// 版本号 = 内容寻址：sha256 只看**投影后的链结构**（status/seed/alert + hops/links/gaps/discovery），
+// 也就是 diff 实际逐项比的那几层。**排除** updated_at / created_at / activity / 每轮的 window 起止时间 /
+// 节点调查时间与证据编号（这些每次重跑都会变，但链没有变）——同样链结构重跑两次是同一个版本号，
+// 落盘时按版本号去重，不会攒出一堆「内容相同、时间不同」的版本。
+// 版本文件存 `<boards>/versions/<boardId>/<revision>.json`（同目录多文件，当前板格式不变）。
+// 稳定序列化：对象键排序、undefined 跳过；数组顺序保留（发现顺序本身就是内容）。
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object')
+    return `{${Object.keys(value).sort().filter(key => value[key] !== undefined)
+      .map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
+  return JSON.stringify(value ?? null);
+}
+export function boardRevision(board) {
+  const projected = presentBoard(board || {});
+  const content = { status: board?.status ?? null, seed: board?.seed ?? null, alert: board?.alert ?? null,
+    hops: projected.hops, links: projected.links, gaps: projected.gaps, discovery: projected.discovery };
+  return createHash('sha256').update(canonical(content)).digest('hex').slice(0, 16);
+}
+
+// diff 逐项比三层（验收要求的 hops/links/edges 三栏都给出）：
+//   hops  = 节点（按 id）；共有节点给字段级 changes（label/host/occurred_at/evidence_id/kind）
+//   links = presentBoard 归一化后的「更晚→更早」关系（按 from→to）
+//   edges = 落盘的原始边（按 from→to，带 rel）
+//   gaps  = 断点（按 hop_id + reason）
+// 没变就 identical=true；调用方拿它判「重跑有没有查出新东西」。
+export function diffBoards(before, after) {
+  const left = presentBoard(before), right = presentBoard(after);
+  const addedRemoved = (oldList, newList, keyOf) => {
+    const oldKeys = new Map(oldList.map(item => [keyOf(item), item]));
+    const newKeys = new Map(newList.map(item => [keyOf(item), item]));
+    return {
+      added: newList.filter(item => !oldKeys.has(keyOf(item))),
+      removed: oldList.filter(item => !newKeys.has(keyOf(item)))
+    };
+  };
+  const hopFields = ['kind', 'label', 'host', 'occurred_at', 'evidence_id'];
+  const oldHops = new Map(left.hops.map(hop => [hop.id, hop]));
+  const newHops = new Map(right.hops.map(hop => [hop.id, hop]));
+  const hops = {
+    added: right.hops.filter(hop => !oldHops.has(hop.id)),
+    removed: left.hops.filter(hop => !newHops.has(hop.id)),
+    changed: [...oldHops.keys()].filter(id => newHops.has(id)).map(id => {
+      const changes = {};
+      for (const field of hopFields)
+        if (canonical(oldHops.get(id)[field]) !== canonical(newHops.get(id)[field]))
+          changes[field] = { from: oldHops.get(id)[field] ?? null, to: newHops.get(id)[field] ?? null };
+      return Object.keys(changes).length ? { id, changes } : null;
+    }).filter(Boolean)
+  };
+  const edgeKey = edge => `${edge.from}->${edge.to}`;
+  const linkKey = link => `${link.from}->${link.to}`;
+  const gapOf = gap => ({ hop_id: gap?.hop_id ?? null, reason: String(gap?.reason ?? '') });
+  const gapKey = gap => `${gap.hop_id ?? ''}|${gap.reason}`;
+  const edges = addedRemoved(
+    (Array.isArray(before.edges) ? before.edges : []).map(edge => ({ from: edge.from, to: edge.to, rel: edge.rel || '' })),
+    (Array.isArray(after.edges) ? after.edges : []).map(edge => ({ from: edge.from, to: edge.to, rel: edge.rel || '' })),
+    edgeKey);
+  const links = addedRemoved(left.links, right.links, linkKey);
+  const gaps = addedRemoved(left.gaps.map(gapOf), right.gaps.map(gapOf), gapKey);
+  const identical = !hops.added.length && !hops.removed.length && !hops.changed.length &&
+    !edges.added.length && !edges.removed.length && !links.added.length && !links.removed.length &&
+    !gaps.added.length && !gaps.removed.length;
+  return { from: boardRevision(before), to: boardRevision(after), identical, hops, edges, links, gaps };
 }

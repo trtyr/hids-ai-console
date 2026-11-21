@@ -50,18 +50,21 @@ paths:
         通过 Basic 认证后回账号与角色，供控制台壳显示"账号 + 角色"。
         业务侧只有一套 Basic 账号，角色固定为 `operator`（值守操作员）；管理员权限属于维护端令牌那条线，不在业务 API 内。
         未配置 `HIDS_BASIC_AUTH_PASSWORD`（Basic 认证未启用）时任何人都能访问，没有账号可报，`user` 与 `role` 都是 null。
+        P003-T071 A19 起同响应附 `permissions` 权限矩阵：每个写动作需要哪些凭据、**本次请求**能不能做
+        （判定与路由守卫共用同一份实现）；前端不再硬编码。
       responses:
         '200':
-          description: 已通过业务访问认证，或未启用 Basic 认证
+          description: 已通过业务访问认证，或未启用 Basic 认证（含权限矩阵）
           content:
             application/json:
               schema:
                 type: object
-                required: [authenticated, user, role]
+                required: [authenticated, user, role, permissions]
                 properties:
                   authenticated: { type: boolean, const: true }
                   user: { type: [string, 'null'], description: 业务 Basic 账号名；未启用 Basic 认证时为 null }
                   role: { type: [string, 'null'], enum: [operator, null], description: 固定 operator；未启用 Basic 认证时为 null }
+                  permissions: { $ref: '#/components/schemas/PermissionMatrix' }
         '401': { $ref: '#/components/responses/BusinessUnauthorized' }
   /api/config:
     get:
@@ -1190,6 +1193,29 @@ paths:
                         name: { type: string }
                         version: { type: string }
                         description: { type: string }
+  /api/updates/packages:
+    get:
+      tags: [状态]
+      summary: 列出可安装的升级包元数据（P003-T071 A18）
+      description: |
+        业务端只读：版本、标题、摘要、日期、更新日志、是否已应用/当前版、是否有更新可装。
+        数据来自入包时落下的明文侧车（`<id>.meta.json`），**不含二进制、不含提示词正文、不需要升级包密钥**；
+        升级包应用只在维护端 18081 执行，业务端不代理。维护端上传过、但还没被维护端读过详情的老包，
+        要等维护端第一次读到时才补齐侧车并出现在这里。
+      operationId: listUpdatePackages
+      responses:
+        '200':
+          description: 可安装包元数据（新到旧）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [packages, update_available]
+                properties:
+                  packages:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicPackage' }
+                  update_available: { type: boolean, description: 是否存在未应用且版本更高的包 }
   /api/agent/status:
     get:
       tags: [状态]
@@ -1811,6 +1837,8 @@ paths:
       operationId: startTraceBoard
       description: |
         已有白板直接返回那条（200），不重查事件、不覆盖；没有才创建并开始往回走（202）。
+        `rerun: true` 时重跑：旧板先按内容版本归档（见 `/api/trace/boards/{target}/versions`），
+        再从起点起一块新板并返回 202；当前一轮还在跑时回 409。
         syslog 形态的告警 ID 直接引用告警分析已经落盘的原始报文（研判记录 `case_dir` 下的 `01-原始告警.txt`，
         `origin_evidence.evidence_id` 取分析记录里的 `syslog:1`，`origin_evidence.reused = true`），不为同一份证据再查牧云；
         没有分析记录或案卷回 422。
@@ -1826,6 +1854,7 @@ paths:
                 alert_id: { type: string, description: "告警 ID；与 target 同一套校验，也收 syslog 形态" }
                 ip: { type: string, format: ipv4, description: "IPv4 地址；也接受 ip: 前缀写法（与 target 同一套校验）" }
                 focus: { type: string }
+                rerun: { type: boolean, description: 'P003-T068 A17：重跑并保留历史版本' }
       responses:
         '200':
           description: 该告警已有溯源白板，原样返回
@@ -1833,11 +1862,16 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TraceBoard' }
         '202':
-          description: 白板任务已启动（新建）
+          description: 白板任务已启动（新建或重跑）
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TraceBoard' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: 要求重跑但当前一轮还在跑
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '422':
           description: 告警没有可用于起板的资产/主机，或 syslog 告警还没有分析记录
           content:
@@ -1864,6 +1898,107 @@ paths:
               schema: { $ref: '#/components/schemas/TraceBoard' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/trace/boards/{target}/versions:
+    get:
+      tags: [深度研判]
+      summary: 列白板历史版本（P003-T068 A17）
+      description: |
+        重跑前归档的旧板版本，按归档时间倒序。版本号是内容寻址的 sha256 前 16 位
+        （只看投影后的链结构 status/seed/alert/hops/links/gaps/discovery，不看 updated_at/activity/
+        每轮窗口起止/调查时间/证据编号），链结构相同的重跑不会重复归档。
+      operationId: listTraceBoardVersions
+      parameters:
+        - name: target
+          in: path
+          required: true
+          description: 告警 ID（含 syslog 形态）或 IPv4 地址；冒号需 URL 编码
+          schema: { type: string }
+      responses:
+        '200':
+          description: 历史版本摘要（新→旧）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [target, versions]
+                properties:
+                  target: { type: string }
+                  versions:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/TraceBoardSummary'
+                        - type: object
+                          required: [revision, saved_at]
+                          properties:
+                            revision: { type: string, pattern: '^[0-9a-f]{16}$' }
+                            saved_at: { type: string, format: date-time }
+                            edges: { type: integer }
+                            gaps: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/trace/boards/{target}/versions/{revision}:
+    get:
+      tags: [深度研判]
+      summary: 按版本号取任一版白板（P003-T068 A17）
+      operationId: getTraceBoardVersion
+      parameters:
+        - name: target
+          in: path
+          required: true
+          schema: { type: string }
+        - name: revision
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9a-f]{16}$' }
+      responses:
+        '200':
+          description: 该版本的完整投影（与当前板详情同形状）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revision, saved_at, board]
+                properties:
+                  revision: { type: string, pattern: '^[0-9a-f]{16}$' }
+                  saved_at: { type: string, format: date-time }
+                  board: { $ref: '#/components/schemas/TraceBoard' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/trace/boards/{target}/diff:
+    get:
+      tags: [深度研判]
+      summary: 两版白板逐项 diff（P003-T068 A17）
+      description: |
+        `from` 必须是已归档版本号；`to` 省略或传 `current` 表示与当前板比，也可传另一个版本号。
+        逐项比 hops（节点，按 id，共有节点给字段级 changes）、links（归一化后的更晚→更早关系）、
+        edges（原始边）、gaps；没变化时 `identical: true`。
+      operationId: diffTraceBoardVersions
+      parameters:
+        - name: target
+          in: path
+          required: true
+          schema: { type: string }
+        - name: from
+          in: query
+          required: true
+          description: 起始版本号（已归档）
+          schema: { type: string, pattern: '^[0-9a-f]{16}$' }
+        - name: to
+          in: query
+          required: false
+          description: 结束版本号；省略或 current 表示当前板
+          schema: { type: string }
+      responses:
+        '200':
+          description: 逐项 diff
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TraceBoardDiff' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/triage/rules:
     get:
       tags: [规则]
@@ -3878,6 +4013,50 @@ components:
         has_gaps: { type: boolean, description: 有没有断点（gaps 非空） }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    TraceBoardDiff:
+      type: object
+      description: 两版白板逐项 diff（P003-T068 A17）。
+      required: [from, to, identical, hops, edges, links, gaps]
+      properties:
+        from: { type: string, pattern: '^[0-9a-f]{16}$', description: 起始版本号 }
+        to: { type: string, pattern: '^[0-9a-f]{16}$', description: 结束版本号（对当前板比时是当前内容版本号） }
+        to_current: { type: boolean, description: 结束端是否为当前板 }
+        identical: { type: boolean, description: 四层都没变 }
+        hops:
+          type: object
+          required: [added, removed, changed]
+          properties:
+            added: { type: array, items: { type: object, additionalProperties: true } }
+            removed: { type: array, items: { type: object, additionalProperties: true } }
+            changed:
+              type: array
+              items:
+                type: object
+                required: [id, changes]
+                properties:
+                  id: { type: string }
+                  changes:
+                    type: object
+                    description: 字段 → {from, to}；比 kind/label/host/occurred_at/evidence_id
+                    additionalProperties: { type: object, properties: { from: {}, to: {} } }
+        edges:
+          type: object
+          required: [added, removed]
+          properties:
+            added: { type: array, items: { type: object, properties: { from: { type: string }, to: { type: string }, rel: { type: string } } } }
+            removed: { type: array, items: { type: object, properties: { from: { type: string }, to: { type: string }, rel: { type: string } } } }
+        links:
+          type: object
+          required: [added, removed]
+          properties:
+            added: { type: array, items: { type: object, additionalProperties: true } }
+            removed: { type: array, items: { type: object, additionalProperties: true } }
+        gaps:
+          type: object
+          required: [added, removed]
+          properties:
+            added: { type: array, items: { type: object, properties: { hop_id: { type: [string, 'null'] }, reason: { type: string } } } }
+            removed: { type: array, items: { type: object, properties: { hop_id: { type: [string, 'null'] }, reason: { type: string } } } }
       additionalProperties: true
     TraceBoardHop:
       type: object
@@ -4141,6 +4320,50 @@ components:
         revision: { type: string, pattern: '^[0-9a-f]{16}$', description: 正文全文 SHA-256 的前 16 位十六进制 }
         characters: { type: integer, description: 正文全文（含 frontmatter）长度，按 UTF-16 码元计：一个汉字算 1，一个基本平面外字符算 2 }
       additionalProperties: true
+    PermissionMatrix:
+      type: object
+      description: 业务端权限矩阵（P003-T071 A19）；allowed 与路由守卫由同一份判定算出。
+      required: [business_auth, tokens, actions, maintenance]
+      properties:
+        business_auth:
+          type: object
+          required: [enabled, passed]
+          properties:
+            enabled: { type: boolean, description: 是否配置了 HIDS_BASIC_AUTH_PASSWORD }
+            passed: { type: boolean, description: 本次请求是否通过业务认证（未启用时恒 true） }
+        tokens:
+          type: object
+          description: 两个静态管理员令牌的配置与本次请求携带情况（不回令牌值）
+          additionalProperties:
+            type: object
+            required: [configured, supplied, valid]
+            properties:
+              configured: { type: boolean }
+              supplied: { type: boolean }
+              valid: { type: boolean }
+        actions:
+          type: array
+          items:
+            type: object
+            required: [action, method, path, requires, allowed, blocked_by]
+            properties:
+              action: { type: string, description: 稳定动作名，如 prompt.write }
+              method: { type: string }
+              path: { type: string }
+              requires:
+                type: array
+                items: { type: string }
+                description: 'business_auth 或令牌头名（X-Prompt-Admin-Token / X-Rule-Admin-Token）'
+              allowed: { type: boolean, description: 本次请求按守卫判定能不能做 }
+              blocked_by:
+                type: [string, 'null']
+                enum: [business_auth, token_not_configured, token_missing_or_invalid, null]
+        maintenance:
+          type: object
+          required: [entry_url, note]
+          properties:
+            entry_url: { type: [string, 'null'], description: HIDS_MAINTENANCE_ENTRY_URL }
+            note: { type: string, description: 维护端独立账号边界说明 }
     PublicRelease:
       description: 一次提示词策略发布（已装版本或升级包公开元数据）；P003-T062 起带应用人
       type: object
@@ -4163,6 +4386,17 @@ components:
         id: { type: string }
         filename: { type: string }
         uploaded_at: { type: [string, 'null'] }
+    PublicPackage:
+      description: |
+        业务端可见的升级包元数据（P003-T071 A18）：不含二进制、不含提示词正文，也不需要升级包密钥。
+      allOf:
+        - $ref: '#/components/schemas/PublicRelease'
+        - type: object
+          required: [applied, current, update_available]
+          properties:
+            applied: { type: boolean, description: 是否应用过（按包 id 对应用历史） }
+            current: { type: boolean, description: 包版本是否等于当前生效版本 }
+            update_available: { type: boolean, description: 未应用且版本序号高于当前生效版本 }
     MaintenancePackage:
       allOf:
         - $ref: '#/components/schemas/PublicRelease'

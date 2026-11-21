@@ -112,6 +112,37 @@ export class UpdateStore {
         version: active.version, description: ['基础策略与场景研判','单告警深查与溯源白板','客户经验核对与维护'][index] })) };
   }
 
+  // 业务端可见的升级包元数据（P003-T071 A18）：不碰密钥、不解包、不含二进制。
+  // 元数据在入包时（stage）与维护端读详情时（detail）落一份明文侧车 `<id>.meta.json`；
+  // 业务进程只读侧车，因此不需要升级包密钥——跨端也没有代理维护端接口（不变量 AR-L0 §2）。
+  async writeMeta(meta) {
+    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    try {
+      await writeFile(path.join(this.directory, `${meta.id}.meta.json`), JSON.stringify(meta),
+        { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    } catch (cause) { if (cause.code !== 'EEXIST') throw cause; }
+  }
+
+  /** 可安装包列表（只读元数据）。没侧车的老包要等维护端读一次详情才补齐。 */
+  async available() {
+    let names;
+    try { names = await readdir(this.directory); }
+    catch (cause) { if (cause.code === 'ENOENT') return []; throw cause; }
+    const metas = await Promise.all(names.filter(name => /^[0-9a-f]{64}\.meta\.json$/.test(name))
+      .map(async name => {
+        try { return JSON.parse(await readFile(path.join(this.directory, name), 'utf8')); }
+        catch { return null; }
+      }));
+    const [active, overrides] = await Promise.all([this.prompts.load(), this.prompts.readOverrides()]);
+    const appliedIds = new Set((overrides._history || []).map(item => item.id));
+    const activeSequence = overrides._release?.sequence || 0;
+    return metas.filter(meta => meta && /^[0-9a-f]{64}$/.test(String(meta.id || '')))
+      .map(meta => ({ ...meta, applied: appliedIds.has(meta.id), current: meta.version === active.version,
+        update_available: !appliedIds.has(meta.id) && meta.version !== active.version &&
+          Number(meta.sequence || 0) > activeSequence }))
+      .sort((a, b) => String(b.uploaded_at || '').localeCompare(String(a.uploaded_at || '')));
+  }
+
   async stage(buffer, filename) {
     if (!this.configured) throw fail('维护端尚未配置升级包密钥和环境标识', 503);
     if (!textValue(filename, 180) || !/^[^/\\\x00-\x1f]+\.hids-policy$/i.test(filename))
@@ -124,6 +155,7 @@ export class UpdateStore {
       JSON.stringify({ ...uploaded, envelope: buffer.toString('base64') }),
       { encoding: 'utf8', mode: 0o600, flag: 'wx' }); }
     catch (cause) { if (cause.code !== 'EEXIST') throw cause; }
+    await this.writeMeta({ ...publicRelease(payload), ...uploaded });
     return this.detail(id);
   }
 
@@ -141,6 +173,8 @@ export class UpdateStore {
     const { stored, payload } = await this.read(id);
     const overrides = await this.prompts.readOverrides();
     const applied = (overrides._history || []).some(item => item.id === id);
+    // A18：顺手补齐业务端可见的明文侧车（老包第一次被维护端读到时就补上）。
+    await this.writeMeta({ ...publicRelease(payload), id, filename: stored.filename, uploaded_at: stored.uploaded_at });
     let compatible = true, compatibilityReason = '';
     try { if (!applied) await this.validate(payload); }
     catch (cause) {

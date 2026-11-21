@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -38,6 +38,8 @@ import { createAuditor, actorOf, configAuditValues } from './src/contexts/audit/
 import { VERDICT_KEYS, TRIAGE_STATUSES, VERDICT_LABELS } from './src/contexts/triage/domain/triage-case.js';
 import { CASE_FILE_WHITELIST, CASE_FILE_CONTENT_TYPES } from './src/contexts/triage/application/correlate.js';
 import { levelNames } from './src/shared/vocabulary.js';
+import { basicAccess, promptAdminAccess, ruleAdminAccess } from './src/shared/token-auth.js';
+import { permissionMatrix } from './src/interfaces/http/business/permission-matrix.js';
 
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
 // 日志落盘（P003-T045）：配了 HIDS_LOG_FILE 才在 stdout 之外再同份写文件，不配维持 stdout-only。
@@ -383,30 +385,10 @@ function falsePositiveView(record) {
 // ── 错误响应：四类失败，一类一个稳定 code（P003-T024 → T073 单一真源）────────────────
 // json / fail 家族全部来自 `src/shared/errors.js`（业务端四类 + 401/502/SSE 特例的唯一出口）；
 // 这里只留 import 别名与身份判定。R-ERROR：任何路由不许自己构造错误响应（check-layers 强制）。
-function hasAccess(req, access) {
-  if (!access?.password) return true;
-  const header = req.headers.authorization || '';
-  if (!header.startsWith('Basic ')) return false;
-  const supplied = Buffer.from(header.slice(6), 'base64');
-  const expected = Buffer.from(`${access.user || 'admin'}:${access.password}`);
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
-}
-function hasPromptAdminAccess(req, token) {
-  if (!token) return false;
-  const supplied = req.headers['x-prompt-admin-token'];
-  if (typeof supplied !== 'string') return false;
-  const actual = Buffer.from(supplied);
-  const expected = Buffer.from(token);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-function hasRuleAdminAccess(req, token) {
-  if (!token) return false;
-  const supplied = req.headers['x-rule-admin-token'];
-  if (typeof supplied !== 'string') return false;
-  const actual = Buffer.from(supplied);
-  const expected = Buffer.from(token);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
+// 判定实现摘去 shared/token-auth.js（P003-T071 A19）：权限矩阵与路由守卫共用同一份。
+const hasAccess = (req, access) => basicAccess(req.headers, access);
+const hasPromptAdminAccess = (req, token) => promptAdminAccess(req.headers, token);
+const hasRuleAdminAccess = (req, token) => ruleAdminAccess(req.headers, token);
 async function readJSON(req, maxLength = 8192) {
   let body = '';
   for await (const chunk of req) {
@@ -826,7 +808,8 @@ function logCleanup(file, body = null) {
 // 方法不匹配统一回 405（P003-T073）：已知路径的合法方法集一张表；批 7 路由表化时它就是路由表的 method 列。
 // `POST /api/agent/prompts` 与 `/api/agent/prompts/upload` 在上面有自己的分支（405 / 410 哨兵），不进这张表。
 const routeMethods = Object.freeze({
-  '/api/session': ['GET'], '/api/updates': ['GET'], '/api/config': ['GET', 'POST'],
+  '/api/session': ['GET'], '/api/updates': ['GET'], '/api/updates/packages': ['GET'],
+  '/api/config': ['GET', 'POST'],
   '/api/data/inventory': ['GET'], '/api/data/cleanup': ['POST'],
   '/api/logs': ['GET'], '/api/logs/cleanup': ['POST'], '/api/status': ['GET'],
   '/api/agent/tools': ['GET'], '/api/trace/tools': ['GET'], '/api/agent/status': ['GET'],
@@ -956,11 +939,19 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname === '/api/session' && req.method === 'GET') {
         // B17：业务 Basic 账号是值守操作员（role 固定 operator）；管理员是维护端令牌那条线，不在这套身份里。
         // 未配置 HIDS_BASIC_AUTH_PASSWORD 时任何人可进，没有账号可报，user / role 都回 null。
-        return json(res, 200, access?.password
+        // A19（P003-T071）：附权限矩阵——写动作、需要的令牌、本次请求能不能做，全由真守卫同一份判定算出。
+        const identity = access?.password
           ? { authenticated: true, user: access.user || 'admin', role: 'operator' }
-          : { authenticated: true, user: null, role: null });
+          : { authenticated: true, user: null, role: null };
+        return json(res, 200, { ...identity, permissions: permissionMatrix({ access, headers: req.headers,
+          promptAdminToken, ruleAdminToken, maintenanceEntry }) });
       }
       if (url.pathname === '/api/updates' && req.method === 'GET') return json(res, 200, await updateStore.overview());
+      // A18（P003-T071）：业务端只读可安装包元数据——读的是入包时落下的明文侧车，不碰密钥、不含二进制。
+      if (url.pathname === '/api/updates/packages' && req.method === 'GET') {
+        const packages = updateStore?.available ? await updateStore.available() : [];
+        return json(res, 200, { packages, update_available: packages.some(item => item.update_available) });
+      }
       // 生效值一览（P003-T025）：地址、端口、研判输入模式、牧云与模型配了没有、模型名。
       // 机密只给有/没有——本路由的响应体里不出现任何 Token 与密码原文（A3）。
       // 读的是注入的 store 的 env（缺省就是 process.env）：写配置盖进的覆盖层立刻反映在这里（P003-T029 A1）。
@@ -1391,20 +1382,44 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         const body = await readJSON(req);
         const target = body?.target || body?.alert_id || body?.ip;
         if (!validTraceTarget(target)) return callerError(res, '请输入有效告警 ID 或 IPv4 地址');
+        if (body?.rerun !== undefined && typeof body.rerun !== 'boolean')
+          return callerError(res, 'rerun 必须是布尔值');
+        const rerun = body?.rerun === true;
         try {
-          // 已有白板回 200（直接打开那条），新建才回 202（任务已启动）。
-          const started = boardService.startOrResume ? await boardService.startOrResume(target, body.focus)
+          // 已有白板回 200（直接打开那条），新建/重跑才回 202（任务已启动）。
+          const started = boardService.startOrResume
+            ? await boardService.startOrResume(target, body.focus, { rerun })
             : { created: true, board: await boardService.start(target, body.focus) };
           if (started.created) void auditor({ actor: actorOf({ access }), action: 'trace.start',
-            object: { kind: 'board', target } });
+            object: { kind: 'board', target, rerun: Boolean(started.rerun) } });
           return json(res, started.created ? 202 : 200, started.board);
         } catch (cause) { return causeError(res, cause, 'upstream'); }
       }
       if (url.pathname.startsWith('/api/trace/boards/') && req.method === 'GET') {
         if (!boardService) return configError(res, '深度溯源模型或牧云 MCP 尚未配置');
-        let alertId;
-        try { alertId = decodeURIComponent(url.pathname.slice('/api/trace/boards/'.length)); }
+        let rest;
+        try { rest = decodeURIComponent(url.pathname.slice('/api/trace/boards/'.length)); }
         catch { return callerError(res, '告警 ID 编码无效'); }
+        // A17（P003-T068）：版本三路由先于详情路由解析——同一条前缀，子路径优先。
+        const versionsMatch = rest.match(/^(.*)\/versions$/);
+        const versionMatch = rest.match(/^(.*)\/versions\/([0-9a-f]{16})$/);
+        const diffMatch = rest.match(/^(.*)\/diff$/);
+        if (versionsMatch || versionMatch || diffMatch) {
+          const target = (versionsMatch || versionMatch || diffMatch)[1];
+          if (!validTraceTarget(target)) return callerError(res, '告警 ID 或 IP 无效');
+          if (versionsMatch) return json(res, 200, { target, versions: await boardService.versions(target) });
+          if (versionMatch) {
+            const saved = await boardService.version(target, versionMatch[2]);
+            return saved ? json(res, 200, saved) : callerError(res, '该白板版本不存在', 404);
+          }
+          const from = url.searchParams.get('from')?.trim();
+          const to = url.searchParams.get('to')?.trim() || null;
+          if (!from || !/^[0-9a-f]{16}$/.test(from)) return callerError(res, '缺少有效的起始版本 from');
+          if (to && to !== 'current' && !/^[0-9a-f]{16}$/.test(to)) return callerError(res, '结束版本 to 无效');
+          const diff = await boardService.diff(target, from, to);
+          return diff ? json(res, 200, diff) : callerError(res, '版本不存在或当前白板缺失', 404);
+        }
+        const alertId = rest;
         if (!validTraceTarget(alertId)) return callerError(res, '告警 ID 或 IP 无效');
         const board = await boardService.get(alertId);
         return board ? json(res, 200, board) : callerError(res, '该告警尚无溯源白板', 404);
