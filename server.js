@@ -851,6 +851,43 @@ function allowedMethods(pathname) {
   return prefix ? prefix[1] : null;
 }
 
+
+// ── 误报登记的三个用例（P003-T088：把一条 69 行的 handler 拆成可单测的三段）─────────
+// ① 校验与登记（同步事务）：只改记录，不碰后台
+function registerFalsePositive({ record, reason, who, libraries, previous }) {
+  const at = new Date().toISOString();
+  record.verdict = 'false_positive'; record.verdict_label = '误报'; record.decision_source = 'human';
+  record.feedback = { reason, who, recorded_at: at };
+  record.detail = `人工登记误报（${who}）：${reason}`.slice(0, 250);
+  record.maintenance = { status: 'updating', updated_at: at, previous_at: at,
+    ...falsePositiveSides({ libraries, previous, at }) };
+  record.updated_at = at;
+  return record;
+}
+// ② 计算两侧的初始状态（纯逻辑）：单腿补跑时未请求的一侧记 skipped，
+//    并把上一轮的 revision / 幂等键原样保留——它是「已成功的一侧不重复执行」的唯一判据载体。
+function falsePositiveSides({ libraries, previous, at }) {
+  const untouched = library => {
+    const side = previous?.[library] || {};
+    const { status, state, why, error, at: previousAt, ...kept } = side;
+    return { ...kept, status: 'updated', state: 'skipped', at,
+      why: `本次只补跑 ${libraries.join('、')}：${library} 侧未执行` };
+  };
+  return {
+    rule: libraries.includes('rule') ? { status: 'updating', at } : untouched('rule'),
+    wiki: libraries.includes('wiki') ? { status: 'updating', at } : untouched('wiki'),
+    libraries
+  };
+}
+// ③ 启动双库维护（异步作业）：失败只写 maintenance，不回滚 verdict；响应不等它。
+function startFalsePositiveMaintenance({ monitor, record, maintainer, libraries, previous, running, onSettle }) {
+  running.add(record.alert_id);
+  void maintainFalsePositive({ monitor, record, maintainer, libraries, previous }).catch(cause => {
+    record.maintenance.status = 'failed';
+    record.maintenance.error = scrubCredentials(cause?.message || cause).slice(0, 300);
+  }).finally(() => { running.delete(record.alert_id); onSettle?.(record); });
+}
+
 export function createServer(service = gateway, toolbox = apiToolbox, investigator = agent, history = investigationStore, prompts = promptStore, monitor = service === gateway ? triageMonitor : null, knowledge = null,
   access = { user: process.env.HIDS_BASIC_AUTH_USER, password: process.env.HIDS_BASIC_AUTH_PASSWORD }, boardService = service === gateway ? traceBoard : null,
   promptAdminToken = process.env.HIDS_PROMPT_ADMIN_TOKEN, wiki = wikiStore, wikiAgent = wikiWorkbench,
@@ -1634,35 +1671,15 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         // A4 的补跑判据读的是**上一轮**的 maintenance：重置之前先留一份，
         // 这样「已成功的一侧」是这一条案件自己的历史（落盘在 triage-monitor.json 里，进程重启后还在）。
         const previousMaintenance = record.maintenance || null;
-        // A1：先把结论与理由写死并落盘，再回 202——两个维护者还在排队时，这一条已经是误报。
-        const at = new Date().toISOString();
-        record.verdict = 'false_positive'; record.verdict_label = '误报'; record.decision_source = 'human';
-        record.feedback = { reason, who, recorded_at: at };
-        record.detail = `人工登记误报（${who}）：${reason}`.slice(0, 250);
-        // 单腿补跑：没请求的那一侧不许把上一轮的 revision / 幂等键洗掉——它是下一次全量登记时
-        // 「已成功的一侧不重复执行」唯一的判据载体（A4）。只换掉状态与理由，`kept` 原样保留。
-        const untouchedSide = library => {
-          const side = previousMaintenance?.[library] || {};
-          const { status, state, why, error, at: previousAt, ...kept } = side;
-          return { ...kept, status: 'updated', state: 'skipped', at,
-            why: `本次只补跑 ${libraries.join('、')}：${library} 侧未执行` };
-        };
-        record.maintenance = { status: 'updating', updated_at: at,
-          rule: libraries.includes('rule') ? { status: 'updating', at } : untouchedSide('rule'),
-          wiki: libraries.includes('wiki') ? { status: 'updating', at } : untouchedSide('wiki'),
-          libraries };
-        record.updated_at = at;
+        // 用例①（同步事务）：结论与理由先写死并落盘，再回 202——两个维护者还在排队时，这一条已经是误报。
+        registerFalsePositive({ record, reason, who, libraries, previous: previousMaintenance });
         await monitor.persist?.();
         // 审计（P003-T062）：误报登记是人工结论写入，actor 与登记人一致；理由不进审计（进案件记录）。
         void auditor({ actor: actorOf({ access }), action: 'false-positive.register',
           object: { kind: 'case', alert_id: alertId, libraries } });
-        // 后台跑两个维护者：失败只写 maintenance，不回滚 verdict；响应不等它们。
-        runningMaintenance.add(alertId);
-        void maintainFalsePositive({ monitor, record, maintainer: fpAgent, libraries,
-          previous: previousMaintenance }).catch(cause => {
-          record.maintenance.status = 'failed';
-          record.maintenance.error = scrubCredentials(cause?.message || cause).slice(0, 300);
-        }).finally(() => { runningMaintenance.delete(alertId);
+        // 用例③（异步作业）：后台跑两个维护者，失败只写 maintenance，不回滚 verdict；响应不等它们。
+        startFalsePositiveMaintenance({ monitor, record, maintainer: fpAgent, libraries,
+          previous: previousMaintenance, running: runningMaintenance, onSettle: () => {
           // 误报维护的结局只从这里出来：两侧各自的状态与原因都带上，别让人去翻数据根下的 triage-monitor.json。
           log('maintenance.result', { alert_id: alertId, status: record.maintenance.status,
             session_id: record.maintenance.session_id ?? null,
@@ -1670,7 +1687,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
             rule: record.maintenance.rule?.status ?? null, wiki: record.maintenance.wiki?.status ?? null,
             rule_state: record.maintenance.rule?.state ?? null, wiki_state: record.maintenance.wiki?.state ?? null,
             rule_error: record.maintenance.rule?.error ?? null, wiki_error: record.maintenance.wiki?.error ?? null });
-        });
+        } });
         return json(res, 202, falsePositiveView(record));
       }
       // 案卷材料清单（P003-T059 A02）：白名单文件 + 字节数 + mtime；目录里非白名单文件不列。
