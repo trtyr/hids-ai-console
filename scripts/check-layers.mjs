@@ -144,9 +144,11 @@ const walk = (dir, base = dir) => readdirSync(base, { withFileTypes: true }).fla
 });
 
 const rel = file => path.relative(repo, file).replaceAll('\\', '/');
+// 根目录白名单：进程入口按设计住在仓根（package.json 的 start 脚本指向它）。
+const ROOT_ALLOWED = new Set(['server.js']);
 const isProductJs = file => {
   const r = rel(file);
-  if (r.endsWith('.test.js') || r.startsWith('scripts/')) return false;
+  if (r.endsWith('.test.js') || r.startsWith('scripts/') || ROOT_ALLOWED.has(r)) return false;
   return true;
 };
 const inSrc = r => r.startsWith('src/');

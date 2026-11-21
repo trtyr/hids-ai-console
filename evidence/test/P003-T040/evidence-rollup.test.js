@@ -20,8 +20,8 @@ import { requiredEvidenceFile, requiredEvidenceMaxChars, readRequiredEvidence, w
 import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';
 import { findingsRowLimit, findingsRowsMaxChars } from '../../../src/contexts/trace/domain/board.js';
 import { queueArgValueMaxChars, queueEvidenceItem } from '../../../src/contexts/triage/application/triage-monitor.js';
-import { KnowledgeStore } from '../../../knowledge-store.js';
-import { knowledgeFields } from '../../../knowledge-workbench.js';
+import { KnowledgeStore } from '../../../src/contexts/maintenance/infrastructure/knowledge-store.js';
+import { knowledgeFields } from '../../../src/contexts/maintenance/application/knowledge-workbench.js';
 
 const syslogContext = (caseInfo) => ({ parsed: { msgid: 'cloudwalker-suspicious-command', ts: '2026-11-03T08:00:00Z',
   payload_format: 'keyvalue', payload: { event_id: '7', host_ip: '10.0.0.5', source_ip: '192.0.2.2',

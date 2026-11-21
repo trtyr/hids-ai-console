@@ -1,5 +1,5 @@
-import { eventTypes } from './src/shared/vocabulary.js';
-import { recordFailure } from './src/shared/redaction.js';
+import { eventTypes } from '../../../shared/vocabulary.js';
+import { recordFailure } from '../../../shared/redaction.js';
 
 export const knowledgeFields = Object.freeze([
   ['record_ref', '原始告警或处置记录', '请提供告警 ID、发生时间或可回查的处置记录编号。'],

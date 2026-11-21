@@ -17,8 +17,8 @@ import { matchSyslogEvent } from '../../../src/contexts/triage/application/corre
 import { runWikiReplay } from '../../../src/contexts/maintenance/application/wiki-replay.js';
 import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
-import { KnowledgeStore } from '../../../knowledge-store.js';
-import { KnowledgeWorkbench } from '../../../knowledge-workbench.js';
+import { KnowledgeStore } from '../../../src/contexts/maintenance/infrastructure/knowledge-store.js';
+import { KnowledgeWorkbench } from '../../../src/contexts/maintenance/application/knowledge-workbench.js';
 
 const SECRET = 'SECRET_RAW_51c0 上游报文正文';
 const secretError = () => new Error('connect ECONNREFUSED ' + SECRET);

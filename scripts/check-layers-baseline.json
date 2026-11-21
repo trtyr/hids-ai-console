@@ -1,16 +1,4 @@
 {
-  "struct.file-placement|{\"file\":\"knowledge-store.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "knowledge-store.js"
-  },
-  "struct.file-placement|{\"file\":\"knowledge-workbench.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "knowledge-workbench.js"
-  },
-  "struct.file-placement|{\"file\":\"server.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "server.js"
-  },
   "struct.app-new-adapter|{\"file\":\"src/interfaces/cli/package-policy.js\",\"line\":33,\"name\":\"PromptStore\"}": {
     "kind": "struct.app-new-adapter",
     "file": "src/interfaces/cli/package-policy.js",

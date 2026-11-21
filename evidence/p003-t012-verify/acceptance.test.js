@@ -15,8 +15,8 @@ import { RuleStore } from '../../src/contexts/knowledge/infrastructure/rule-stor
 import { WikiStore } from '../../src/contexts/knowledge/infrastructure/wiki-store.js';
 import { InvestigationStore } from '../../src/contexts/triage/infrastructure/investigation-store.js';
 import { TriageMonitor } from '../../src/contexts/triage/application/triage-monitor.js';
-import { KnowledgeStore } from '../../knowledge-store.js';
-import { KnowledgeWorkbench, knowledgeFields } from '../../knowledge-workbench.js';
+import { KnowledgeStore } from '../../src/contexts/maintenance/infrastructure/knowledge-store.js';
+import { KnowledgeWorkbench, knowledgeFields } from '../../src/contexts/maintenance/application/knowledge-workbench.js';
 
 const REVIEW_OK = { assessment: 'supported', concerns: [], missing_evidence: [] };
 
