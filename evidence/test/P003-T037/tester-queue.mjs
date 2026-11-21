@@ -1,7 +1,7 @@
 // P003-T037 tester probe: A1 增量轮询/退避、A3 结论复用、A4 优先级、A5 并发/队列上限
 // 黑盒：只用 docs/modules/triage-pipeline.md 写明的公开构造参数与方法
 import { rm } from 'node:fs/promises';
-import { TriageMonitor, typeRisk, comparePriority } from '../../../triage-monitor.js';
+import { TriageMonitor, typeRisk, comparePriority } from '../../../src/contexts/triage/application/triage-monitor.js';
 
 const ROOT = '/tmp/t37-tester-queue';
 await rm(ROOT, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { finalizeTriageOutput } from './triage-output.js';
+import { finalizeTriageOutput } from './src/contexts/triage/domain/report.js';
 
 test('customer judgment stays within 300 characters after a long model response', () => {
   const verdict = finalizeTriageOutput({ verdict: 'uncertain',

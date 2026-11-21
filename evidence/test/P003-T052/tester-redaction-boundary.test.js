@@ -15,8 +15,8 @@ import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
 import { parseSyslog } from '../../../src/contexts/ingestion/application/parsing.js';
 import { matchSyslogEvent } from '../../../src/contexts/triage/application/correlate.js';
 import { runWikiReplay } from '../../../wiki-replay.js';
-import { TriageMonitor } from '../../../triage-monitor.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 import { KnowledgeStore } from '../../../knowledge-store.js';
 import { KnowledgeWorkbench } from '../../../knowledge-workbench.js';
 

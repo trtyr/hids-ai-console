@@ -13,10 +13,10 @@ import { matchSyslogEvent, writeSyslogCase } from '../../../src/contexts/triage/
 import { runWikiReplay } from '../../../wiki-replay.js';
 import { KnowledgeStore } from '../../../knowledge-store.js';
 import { KnowledgeWorkbench } from '../../../knowledge-workbench.js';
-import { TriageMonitor } from '../../../triage-monitor.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';;
-import { InvestigationStore } from '../../../investigation-store.js';
-import { collectRequiredEvidence, requiredEvidenceGaps, requiredEvidencePlan } from '../../../required-evidence.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
+import { collectRequiredEvidence, requiredEvidenceGaps, requiredEvidencePlan } from '../../../src/contexts/triage/application/required-evidence.js';
 
 // 一条会被 V8 原样带进报错的回包（JSON.parse 的 message 里就有它）。
 const SECRET_BODY = 'SECRET_BODY_7f3a9 这是一段不许落盘的上游正文';

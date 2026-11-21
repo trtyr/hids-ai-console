@@ -1,31 +1,11 @@
 {
-  "struct.file-placement|{\"file\":\"agent-tools.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "agent-tools.js"
-  },
-  "struct.file-placement|{\"file\":\"api-tools.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "api-tools.js"
-  },
   "struct.file-placement|{\"file\":\"config-store.js\"}": {
     "kind": "struct.file-placement",
     "file": "config-store.js"
   },
-  "struct.file-placement|{\"file\":\"evidence-view.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "evidence-view.js"
-  },
   "struct.file-placement|{\"file\":\"fp-maintainer.js\"}": {
     "kind": "struct.file-placement",
     "file": "fp-maintainer.js"
-  },
-  "struct.file-placement|{\"file\":\"investigation-agent.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "investigation-agent.js"
-  },
-  "struct.file-placement|{\"file\":\"investigation-store.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "investigation-store.js"
   },
   "struct.file-placement|{\"file\":\"knowledge-store.js\"}": {
     "kind": "struct.file-placement",
@@ -39,10 +19,6 @@
     "kind": "struct.file-placement",
     "file": "maintenance-server.js"
   },
-  "struct.file-placement|{\"file\":\"model-client.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "model-client.js"
-  },
   "struct.file-placement|{\"file\":\"package-policy.js\"}": {
     "kind": "struct.file-placement",
     "file": "package-policy.js"
@@ -51,10 +27,6 @@
     "kind": "struct.file-placement",
     "file": "prompt-store.js"
   },
-  "struct.file-placement|{\"file\":\"required-evidence.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "required-evidence.js"
-  },
   "struct.file-placement|{\"file\":\"rule-store.js\"}": {
     "kind": "struct.file-placement",
     "file": "rule-store.js"
@@ -62,14 +34,6 @@
   "struct.file-placement|{\"file\":\"server.js\"}": {
     "kind": "struct.file-placement",
     "file": "server.js"
-  },
-  "struct.file-placement|{\"file\":\"triage-monitor.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "triage-monitor.js"
-  },
-  "struct.file-placement|{\"file\":\"triage-output.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "triage-output.js"
   },
   "struct.file-placement|{\"file\":\"triage-rules.js\"}": {
     "kind": "struct.file-placement",

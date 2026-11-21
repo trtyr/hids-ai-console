@@ -11,9 +11,9 @@ import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from '../../../server.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
-import { InvestigationStore } from '../../../investigation-store.js';
-import { AgentToolbox } from '../../../agent-tools.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
 import { traceModelCall } from '../../../src/shared/logging/log.js';
 
 // 检索标记：模型回包正文 / V8 报错片段 / 上游报文里的同一串。记录侧一个字都不许有。

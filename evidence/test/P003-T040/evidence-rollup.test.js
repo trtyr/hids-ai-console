@@ -3,6 +3,7 @@
 // 复算（重跑）只读盘——替身牧云的调用计数在复算前后必须不变。
 // 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
 // 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { PromptStore } from '../../../prompt-store.js';
 import { BoardStore } from '../../../src/contexts/trace/infrastructure/board-store.js';
 import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
@@ -11,14 +12,14 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent, persistedEvidenceViewMax } from '../../../investigation-agent.js';
-import { boundSyslogView, compactEvidenceView, projectEvidence, syslogOmittedFieldsLimit } from '../../../evidence-view.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent, persistedEvidenceViewMax } from '../../../src/contexts/triage/application/investigation-agent.js';
+import { boundSyslogView, compactEvidenceView, projectEvidence, syslogOmittedFieldsLimit } from '../../../src/contexts/triage/infrastructure/evidence-view.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 import { requiredEvidenceFile, requiredEvidenceMaxChars, readRequiredEvidence, writeRequiredEvidence } from '../../../src/contexts/triage/application/correlate.js';
 import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';
 import { findingsRowLimit, findingsRowsMaxChars } from '../../../src/contexts/trace/domain/board.js';
-import { queueArgValueMaxChars, queueEvidenceItem } from '../../../triage-monitor.js';
+import { queueArgValueMaxChars, queueEvidenceItem } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { KnowledgeStore } from '../../../knowledge-store.js';
 import { knowledgeFields } from '../../../knowledge-workbench.js';
 
@@ -54,7 +55,7 @@ function triageHarness({ caseDir = null, evidenceRows = rows } = {}) {
       claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }],
       missing_data: [] }
     : { assessment: 'supported', concerns: [], missing_evidence: [] }) }) };
-  return { calls, agent: new InvestigationAgent(toolbox, model) };
+  return { calls, agent: new InvestigationAgent(toolbox, model, new PromptStore()) };
 }
 
 // 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。

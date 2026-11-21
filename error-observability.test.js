@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { TriageMonitor } from './triage-monitor.js';
+import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 import { WikiStore } from './wiki-store.js';
 import { createServer } from './server.js';
 

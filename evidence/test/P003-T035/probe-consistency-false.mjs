@@ -1,6 +1,6 @@
 // 找 platform_total_consistent 什么时候是 false：换各种「总数与当前返回对不上」的坏数据。
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 
 const run = async (payload) => {
   const toolbox = new AgentToolbox({

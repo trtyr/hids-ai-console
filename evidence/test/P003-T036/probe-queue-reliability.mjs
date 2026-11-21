@@ -6,9 +6,9 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import dgram from 'node:dgram';
-import { TriageMonitor } from '../../../triage-monitor.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { SyslogReceiver } from '../../../src/contexts/ingestion/application/parsing.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 import { createServer } from '../../../server.js';
 
 const DEADLINE_MS = 30_000;   // 每个阶段的超时上界

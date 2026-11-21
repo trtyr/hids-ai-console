@@ -2,8 +2,8 @@
 // 文档说 404（openapi.yaml retryTriage 的 '404'；docs/modules/triage-pipeline.md §5.4「抛 404」），
 // 实测 502（与 docs/modules/http-api.md:353「其余回 502」一致，即文档自相矛盾）。
 import { createServer } from '../../server.js';
-import { TriageMonitor } from '../../triage-monitor.js';
-import { InvestigationStore } from '../../investigation-store.js';
+import { TriageMonitor } from '../../src/contexts/triage/application/triage-monitor.js';
+import { InvestigationStore } from '../../src/contexts/triage/infrastructure/investigation-store.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';

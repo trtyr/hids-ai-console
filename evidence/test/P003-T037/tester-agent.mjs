@@ -1,8 +1,8 @@
 // P003-T037 tester probe: A2 事件详情一次一拉（规则引擎复用 / agent 入口复用 + 两道闸）、A11 trace-board 复用路径
 // 黑盒：完全照 docs/modules/triage-rules.md §5 与 docs/modules/investigation-agent.md §5.5 的公开用法
 import { TriageRuleEngine } from '../../../triage-rules.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
-import { AgentToolbox } from '../../../agent-tools.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
 
 let pass = 0; const fails = [];
 const ok = (cond, label, detail = '') => {

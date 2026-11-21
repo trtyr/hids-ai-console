@@ -2,8 +2,8 @@
 // 在「必查项查询失败」这条路上不成立——raw 错误原文进 trace[evidence_check].reason 与 verdict.missing_evidence[0]。
 // 该口子在 recon §4 记为 O5（required-evidence.js:151，out-of-scope，另派收口卡）；这里只做文档承诺的边界取证。
 // 跑法：node evidence/test/P003-T051/probe-o5-required-evidence.mjs
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 
 const MARKER = 'SECRET_BODY_MARKER';
 const toolbox = new AgentToolbox({

@@ -8,13 +8,13 @@ import path from 'node:path';
 import { RpcClient } from './src/contexts/ingestion/infrastructure/rpc-client.js';
 import { CloudwalkerGateway } from './src/contexts/ingestion/infrastructure/gateway.js';
 import { eventTypes, parseInstant } from './src/shared/vocabulary.js';
-import { createAgentToolboxFromEnv, TriageEvidenceToolbox } from './agent-tools.js';
-import { ApiEvidenceToolbox } from './api-tools.js';
-import { applyModelValues, createModelRolesFromEnv, modelRoleSummary, modelRoleValues, MODEL_ROLES } from './model-client.js';
-import { InvestigationAgent, replayInvestigation } from './investigation-agent.js';
-import { InvestigationStore } from './investigation-store.js';
+import { createAgentToolboxFromEnv, TriageEvidenceToolbox } from './src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { ApiEvidenceToolbox } from './src/contexts/triage/infrastructure/api-toolbox.js';
+import { applyModelValues, createModelRolesFromEnv, modelRoleSummary, modelRoleValues, MODEL_ROLES } from './src/contexts/triage/infrastructure/model-client.js';
+import { InvestigationAgent, replayInvestigation } from './src/contexts/triage/application/investigation-agent.js';
+import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
 import { PromptStore } from './prompt-store.js';
-import { TriageMonitor } from './triage-monitor.js';
+import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 import { log, logFileOptions, pruneLogFiles, readLogEntries, queryLevels, traceModelCall, useLogFile } from './src/shared/logging/log.js';
 import { parseSyslog } from './src/contexts/ingestion/application/parsing.js';
 import { SyslogReceiver } from './src/interfaces/udp/syslog/receiver.js';
@@ -889,7 +889,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
     ? new FalsePositiveMaintainer({ model: fpDecision, ruleMaintainer, ruleStore, wiki, wikiAgent, sessions: fpSessions })
     : null);
   // 数据管理（P003-T044）的路径来源：全部是本次注入的构件，换替身就是换盘点对象。
-  const updateStore = prompts ? new UpdateStore(prompts) : null;
+  const updateStore = prompts?.filename ? new UpdateStore(prompts) : null;
   const dataDeps = { history, monitor, boardService, wikiAgent, config, fpSessions, ruleSessions, ruleStore,
     wiki, prompts, updateStore };
   // 审计流（P003-T062）：append-only，落 `<数据根>/audit/`，独立于技术日志的轮转与清理。

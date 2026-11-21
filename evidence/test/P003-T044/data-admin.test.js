@@ -11,8 +11,8 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from '
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, DATA_KINDS } from '../../../server.js';
-import { TriageMonitor } from '../../../triage-monitor.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 import { createConfigStore } from '../../../config-store.js';
 import { useJournal, createJournal } from '../../../src/shared/logging/log.js';
 

@@ -7,7 +7,7 @@ import { createServer } from './server.js';
 import { UpdateStore } from './update-store.js';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { PromptStore } from './prompt-store.js';
-import { TriageMonitor } from './triage-monitor.js';
+import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 
 // 隔离自证（P003-T050 A5 的牙）。
 test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());

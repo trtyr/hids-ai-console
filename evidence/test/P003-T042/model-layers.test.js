@@ -17,15 +17,15 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 import { createServer, applyLiveConfig, configSummary } from '../../../server.js';
 import { RegoRuleMaintainer } from '../../../server.js';
 import { createConfigStore, WRITABLE_CONFIG_KEYS } from '../../../config-store.js';
 import { WikiWorkbench } from '../../../wiki-workbench.js';
 import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';;
 import { createModelRolesFromEnv, modelRoleSummary, MODEL_ROLES,
-  MODEL_ROLE_GROUPS } from '../../../model-client.js';
+  MODEL_ROLE_GROUPS } from '../../../src/contexts/triage/infrastructure/model-client.js';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 

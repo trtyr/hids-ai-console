@@ -1,6 +1,6 @@
 // 复验 openapi.yaml:1432 与 docs/modules/investigation-agent.md:537 对
 // platform_total_consistent / total_reported 的描述：平台没报总数时到底是什么形态（null 还是键缺失）。
-import { collectRequiredEvidence, requiredEvidencePlan } from '../../../required-evidence.js';
+import { collectRequiredEvidence, requiredEvidencePlan } from '../../../src/contexts/triage/application/required-evidence.js';
 
 const catalog = [{ name: 'list_host_events', inputSchema: { properties: { host_id: {}, count: {} } } }];
 const plan = requiredEvidencePlan('suspicious_operation',

@@ -10,9 +10,9 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from '../../../server.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 import { PromptStore } from '../../../prompt-store.js';
 import { TriageRuleEngine } from '../../../triage-rules.js';
 import { UpdateStore, openPackage, sealPackage } from '../../../update-store.js';

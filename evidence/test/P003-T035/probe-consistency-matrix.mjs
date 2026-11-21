@@ -1,6 +1,6 @@
 // platform_total_consistent 到底跟什么比：替身牧云回 {total, events}，扫「总数 vs 当前页条数」矩阵。
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 
 const run = async (payload) => {
   const toolbox = new AgentToolbox({

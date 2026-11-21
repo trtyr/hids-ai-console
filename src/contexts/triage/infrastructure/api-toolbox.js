@@ -1,5 +1,5 @@
-import { eventTypes, rpcMethods } from './src/shared/vocabulary.js';
-import { EvidenceSession } from './agent-tools.js';
+import { eventTypes, rpcMethods } from '../../../shared/vocabulary.js';
+import { EvidenceSession } from './evidence-toolbox.js';
 
 const eventNames = Object.keys(eventTypes);
 const sourceFilters = new Set(['honeypot', 'brute_force']);

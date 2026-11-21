@@ -1,7 +1,7 @@
 // 文档 docs/modules/investigation-agent.md:215-216 说：同批多个 submit_conclusion 都被接受时取最后一个。
 // 黑盒判定：第一个交「真实威胁」，第二个交「存疑」，都通过校验（deep 模式不查知识库），看最终落哪个。
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 
 const run = async (batch) => {
   const calls = [];

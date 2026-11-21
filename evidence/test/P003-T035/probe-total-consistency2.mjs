@@ -1,4 +1,4 @@
-import { collectRequiredEvidence, requiredEvidencePlan } from '../../../required-evidence.js';
+import { collectRequiredEvidence, requiredEvidencePlan } from '../../../src/contexts/triage/application/required-evidence.js';
 const catalog = [{ name: 'list_host_events', inputSchema: { properties: { host_id: {}, count: {} } } }];
 const plan = requiredEvidencePlan('suspicious_operation', { view: { facts: { host_id: { value: 41 } } } }, catalog);
 const shapes = {

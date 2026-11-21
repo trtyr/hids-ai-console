@@ -10,9 +10,9 @@ import { createServer, createAnalysisProvider, RegoRuleMaintainer } from './serv
 import { RuleStore } from './rule-store.js';
 import { TraceBoardService } from './src/contexts/trace/application/trace-service.js';
 import { BoardStore } from './src/contexts/trace/infrastructure/board-store.js';
-import { InvestigationStore } from './investigation-store.js';
+import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
 import { PromptStore } from './prompt-store.js';
-import { TriageMonitor } from './triage-monitor.js';
+import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 
 // 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
 test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());

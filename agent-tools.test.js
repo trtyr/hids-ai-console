@@ -2,8 +2,8 @@ import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CloudwalkerMcpClient } from './src/contexts/ingestion/infrastructure/mcp-client.js';
-import { AgentToolbox, TriageEvidenceToolbox } from './agent-tools.js';
-import { ApiEvidenceToolbox } from './api-tools.js';
+import { AgentToolbox, TriageEvidenceToolbox } from './src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { ApiEvidenceToolbox } from './src/contexts/triage/infrastructure/api-toolbox.js';
 import { createServer } from './server.js';
 
 function mockMcp() {

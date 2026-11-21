@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { eventSeconds, parseSyslog } from './src/contexts/ingestion/application/parsing.js';
 import { matchSyslogEvent } from './src/contexts/triage/application/correlate.js';
-import { TriageMonitor } from './triage-monitor.js';
-import { InvestigationStore } from './investigation-store.js';
+import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
+import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
 
 const prefix = '<134>1 2026-11-03T08:00:00Z host app 1 cloudwalker-honeypot ';
 const fields = 'host_ip="10.0.0.5" event_create_time="2026-11-03 08:00:00" source_ip="192.0.2.2" target_port="80"';

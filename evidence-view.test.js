@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundEvidenceView, projectEvidence } from './evidence-view.js';
-import { EvidenceSession } from './agent-tools.js';
+import { boundEvidenceView, projectEvidence } from './src/contexts/triage/infrastructure/evidence-view.js';
+import { EvidenceSession } from './src/contexts/triage/infrastructure/evidence-toolbox.js';
 
 test('detail view uses readable facts and keeps raw JSON pointers', () => {
   const raw = { event_id: 7, source_ip: '192.0.2.7', host_view: { host_name: 'db-7', host_ip: '10.0.0.7' },

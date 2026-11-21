@@ -10,9 +10,9 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createJournal, log, useJournal } from '../../../src/shared/logging/log.js';
-import { TriageMonitor } from '../../../triage-monitor.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { createServer } from '../../../server.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 
 const AT = '2026-11-19T00:00:00.000Z';
 

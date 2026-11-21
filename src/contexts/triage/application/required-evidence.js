@@ -1,4 +1,4 @@
-import { recordFailure } from './src/shared/redaction.js';
+import { recordFailure } from '../../../shared/redaction.js';
 
 // 常规研判的最低取证清单。只按当前事件的主机或来源查询，绝不做无条件全库扫描。
 const relatedTypes = {

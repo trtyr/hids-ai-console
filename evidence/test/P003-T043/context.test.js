@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { runtimePaths } from '../../../server.js';
-import { TriageMonitor } from '../../../triage-monitor.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { writeSyslogCase } from '../../../src/contexts/triage/application/correlate.js';
 import { WikiStore } from '../../../wiki-store.js';
 

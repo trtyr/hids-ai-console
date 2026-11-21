@@ -4,14 +4,15 @@
 // 做法：替身模型 / 替身牧云，不碰真网络与真时钟；可检索标记 `SECRET_BODY_MARKER` 放进**错误原文**，
 // 断言它一个字都不落进研判记录（review.concerns / missing_evidence / trace / analysis / turns.note）。
 // P003-T050 隔离：必须抢在 server.js / investigation-agent.js 之前——它们模块加载时就把数据根算死。
+import { PromptStore } from '../../../prompt-store.js';
 import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 import { traceModelCall } from '../../../src/shared/logging/log.js';
 
 const MARKER = 'SECRET_BODY_MARKER';
@@ -48,7 +49,7 @@ test('A1 复核轮回包解不出 JSON：review.concerns / trace / turns.note �
   const prose = `${MARKER} 是一段不该落盘的回包正文`;
   let calls = 0;
   const model = { model: 'fake', complete: async () => (++calls === 1 ? { content: conclusion() } : { content: prose }) };
-  const result = await new InvestigationAgent(fakeToolbox(), model).run('suspicious_operation:7', { mode: 'triage' });
+  const result = await new InvestigationAgent(fakeToolbox(), model, new PromptStore()).run('suspicious_operation:7', { mode: 'triage' });
 
   const failure = `模型回包不是合法 JSON（SyntaxError），原文 ${v8Message(prose).length} 字未落盘`;
   assert.equal(result.review.assessment, 'unavailable');
@@ -73,7 +74,7 @@ test('A1 修订请求失败：missing_evidence 与 trace 只留固定文案与�
     if (calls === 2) return { content: JSON.stringify({ assessment: 'needs_revision', concerns: ['缺反证'], missing_evidence: [] }) };
     throw new Error(`${MARKER} 修订轮上游炸了`);
   } };
-  const result = await new InvestigationAgent(fakeToolbox(), model).run('suspicious_operation:7', { mode: 'triage' });
+  const result = await new InvestigationAgent(fakeToolbox(), model, new PromptStore()).run('suspicious_operation:7', { mode: 'triage' });
 
   const raw = `${MARKER} 修订轮上游炸了`;
   const failure = `上游调用失败，原文 ${raw.length} 字未落盘`;
@@ -95,7 +96,7 @@ test('A1 引用校验退回失败：trace[validation_error] 只留固定文案�
     if (calls === 2) return { content: JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
     throw new Error(`${MARKER} 校验轮上游炸了`);
   } };
-  const result = await new InvestigationAgent(fakeToolbox(), model).run('suspicious_operation:7', { mode: 'triage' });
+  const result = await new InvestigationAgent(fakeToolbox(), model, new PromptStore()).run('suspicious_operation:7', { mode: 'triage' });
 
   const row = result.trace.find(item => item.kind === 'validation_error');
   assert.equal(row.note, `上游调用失败，原文 ${`${MARKER} 校验轮上游炸了`.length} 字未落盘`);
@@ -106,7 +107,7 @@ test('A1 引用校验退回失败：trace[validation_error] 只留固定文案�
 test('A1 调查轮解析失败：analysis / missing_evidence / trace[parse_error] 不带 V8 报错原文', async () => {
   const prose = '我先梳理一下这条告警：主机 10.0.0.5 上执行了 id，需要核对授权与前后会话。';
   const model = { model: 'fake', complete: async () => ({ content: prose }) };
-  const result = await new InvestigationAgent(fakeToolbox(), model).run('suspicious_operation:7', { mode: 'triage' });
+  const result = await new InvestigationAgent(fakeToolbox(), model, new PromptStore()).run('suspicious_operation:7', { mode: 'triage' });
 
   const v8 = v8Message(prose);
   // 先自证这条用例有意义：V8 的报错里真的有回包片段。
@@ -175,7 +176,7 @@ test('A2 上游原文仍可达调用方：抛错原文与 cause 链不动，三�
   const model = { model: 'fake', complete: async () => {
     throw Object.assign(new Error(raw), { reply_excerpt: '回包 message 正文 0 字' });
   } };
-  await assert.rejects(() => new InvestigationAgent(fakeToolbox(), model).run('suspicious_operation:7', { mode: 'triage' }),
+  await assert.rejects(() => new InvestigationAgent(fakeToolbox(), model, new PromptStore()).run('suspicious_operation:7', { mode: 'triage' }),
     error => {
       // 原文照旧进调用方（队列侧/接口侧拿得到），只是不落盘。
       assert.match(error.message, new RegExp(raw));

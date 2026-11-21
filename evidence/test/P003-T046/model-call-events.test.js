@@ -12,8 +12,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createJournal, traceModelCall, useJournal } from '../../../src/shared/logging/log.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
-import { AgentToolbox } from '../../../agent-tools.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
 import { RegoRuleMaintainer } from '../../../server.js';
 import { RuleSessionStore, RuleStore, seedLibrary } from '../../../rule-store.js';
 import { WikiWorkbench } from '../../../wiki-workbench.js';
@@ -122,7 +122,7 @@ test('A5 研判域：调查轮 + 独立复核 + 复核要求后的修订都落�
       ? JSON.stringify({ assessment: 'needs_revision', concerns: ['缺反证'], missing_evidence: [] })
       : verdict };
   } };
-  const agent = new InvestigationAgent(fakeToolbox(), model);
+  const agent = new InvestigationAgent(fakeToolbox(), model, new PromptStore());
   const result = await agent.run('honeypot:7', { mode: 'triage' });
 
   const events = sink.events();
@@ -157,7 +157,7 @@ test('A5 超时重试在快照里留痕：turns 里 timeout 与 error 分得开�
     if (calls === 1) throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
     return { content: tools.length ? verdict : JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
   } };
-  const result = await new InvestigationAgent(fakeToolbox(), model).run('honeypot:7', { mode: 'triage' });
+  const result = await new InvestigationAgent(fakeToolbox(), model, new PromptStore()).run('honeypot:7', { mode: 'triage' });
 
   const investigate = result.turns.filter(item => item.phase === 'investigate');
   assert.equal(investigate.length, 2);

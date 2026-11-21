@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from './server.js';
-import { InvestigationStore } from './investigation-store.js';
+import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
 import { eventTypes, levelNames } from './src/shared/vocabulary.js';
 import { VERDICT_KEYS, VERDICT_LABELS, TRIAGE_STATUSES } from './src/contexts/triage/domain/triage-case.js';
 import { CASE_FILE_WHITELIST, CASE_FILE_CONTENT_TYPES } from './src/contexts/triage/application/correlate.js';

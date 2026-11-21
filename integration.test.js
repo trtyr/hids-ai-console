@@ -6,7 +6,7 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RpcClient } from './src/contexts/ingestion/infrastructure/rpc-client.js';
-import { TriageMonitor } from './triage-monitor.js';
+import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 import { CloudwalkerGateway } from './src/contexts/ingestion/infrastructure/gateway.js';
 import { rpcMethods } from './src/shared/vocabulary.js';
 import { normalizeAlert } from './src/shared/alert-shape.js';;

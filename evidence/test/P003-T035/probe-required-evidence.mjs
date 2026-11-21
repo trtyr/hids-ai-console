@@ -1,7 +1,7 @@
 // P003-T035 复验探针：黑盒跑 required-evidence.js 的五态 + 两条目录分支，
 // 把每项结果按 JSON 打到 stdout，交给 schema 校验（对 openapi RequiredEvidence）。
 import { appendEvidenceReport, collectRequiredEvidence, requiredEvidenceGaps,
-  requiredEvidencePlan } from '../../../required-evidence.js';
+  requiredEvidencePlan } from '../../../src/contexts/triage/application/required-evidence.js';
 
 const schema = properties => ({ inputSchema: { properties } });
 const facts = f => ({ view: { facts: f } });

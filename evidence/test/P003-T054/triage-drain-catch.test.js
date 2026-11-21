@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { TriageMonitor } from '../../../triage-monitor.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
 
 const MARKER = 'SECRET_BODY_MARKER';

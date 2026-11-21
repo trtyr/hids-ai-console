@@ -4,7 +4,7 @@
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { TriageMonitor } from '../../../triage-monitor.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 
 const dir = await mkdtemp(path.join(tmpdir(), 'repro-gap2-'));
 const file = path.join(dir, 'queue.json');

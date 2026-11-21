@@ -3,17 +3,18 @@
 import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AgentToolbox } from './agent-tools.js';
-import { InvestigationAgent, boundedToolArgs } from './investigation-agent.js';
+import { PromptStore } from './prompt-store.js';
+import { AgentToolbox } from './src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent, boundedToolArgs } from './src/contexts/triage/application/investigation-agent.js';
 import { KnowledgeStore } from './knowledge-store.js';
 import { KnowledgeWorkbench, knowledgeFields } from './knowledge-workbench.js';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RuleStore } from './rule-store.js';
-import { InvestigationStore } from './investigation-store.js';
-import { ChatModelClient } from './model-client.js';
-import { TriageMonitor } from './triage-monitor.js';
+import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
+import { ChatModelClient } from './src/contexts/triage/infrastructure/model-client.js';
+import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 
 // 隔离自证（P003-T050 A5 的牙）：删掉文件头那行 import，这条立刻红。
 test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
@@ -37,7 +38,7 @@ test('常规研判把必查空页与不可用来源写入结果，deep 采同一
       claims: [{ text: '已执行解析命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'getent hosts dnslog.cn' }] }],
       missing_data: [] }
     : { assessment: 'supported', concerns: [], missing_evidence: [] }) }) };
-  const agent = new InvestigationAgent(toolbox, model);
+  const agent = new InvestigationAgent(toolbox, model, new PromptStore());
   const triage = await agent.run('suspicious_operation:7', { mode: 'triage' });
   assert.deepEqual(calls.map(item => item.name), ['get_suspicious_operation_event', 'list_host_events']);
   assert.equal(triage.required_evidence[0].status, 'empty_page');
@@ -96,7 +97,7 @@ test('published customer experience avoids a full repeat investigation when curr
         { text: '执行巡检命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'systemctl status nginx' }] }
       ], unverified_conditions: [], conflicts: [] }) };
   } };
-  const result = await new InvestigationAgent(toolbox, model, undefined, store).run('suspicious_operation:7', { mode: 'triage' });
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore(), store).run('suspicious_operation:7', { mode: 'triage' });
   assert.equal(modelCalls, 1);
   assert.equal(toolCalls.length, 1);
   assert.equal(result.verdict.verdict, 'false_positive');
@@ -138,7 +139,7 @@ test('knowledge claims without a current behavior citation continue to full inve
       claims: [{ text: '来源地址', citations: [{ evidence_id: 'cw:1', pointer: '/source_ip', value: '192.0.2.7' }] }], missing_data: ['授权记录'] }) };
     return { content: JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
   } };
-  const result = await new InvestigationAgent(toolbox, model, undefined, store).run('honeypot:7', { mode: 'triage' });
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore(), store).run('honeypot:7', { mode: 'triage' });
   assert.equal(calls, 3);
   assert.equal(result.verdict.verdict, 'uncertain');
   assert.equal(result.knowledge_reuse, undefined);
@@ -181,7 +182,7 @@ test('legacy unsuccessful attack experience is preserved but presented as uncert
           value: Buffer.from('OPTIONS / HTTP/1.1\r\n\r\n').toString('base64') }] }
       ], unverified_conditions: [], conflicts: [] }) };
   } };
-  const result = await new InvestigationAgent(toolbox, model, undefined, store).run('honeypot:36689', { mode: 'triage' });
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore(), store).run('honeypot:36689', { mode: 'triage' });
   assert.equal(calls, 1);
   assert.equal(result.verdict.verdict, 'uncertain');
   assert.equal(result.verdict.verdict_label, '存疑');
@@ -226,7 +227,7 @@ test('final model timeout retries with the same collected evidence', async () =>
     }
     return { content: JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
   } };
-  const result = await new InvestigationAgent(toolbox, model).run('elevation_process:62557', {
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run('elevation_process:62557', {
     mode: 'triage', onProgress: stage => progress.push(stage)
   });
   assert.equal(calls, 4);
@@ -261,7 +262,7 @@ test('tool selection timeout retries with the same evidence and tool options', a
     }
     return { content: JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) };
   } };
-  const result = await new InvestigationAgent(toolbox, model).run('suspicious_operation:7', {
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run('suspicious_operation:7', {
     mode: 'triage', onProgress: stage => progress.push(stage)
   });
   assert.equal(calls, 3);
@@ -287,7 +288,7 @@ test('document scene prompt is routed to its alert type with three-state verdict
     if (!systemPrompt) systemPrompt = messages[0].content;
     return replies.shift();
   } };
-  const result = await new InvestigationAgent(toolbox, model).run('honeypot:7');
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run('honeypot:7');
   assert.match(systemPrompt, /蜜罐\/诱饵/);
   assert.match(systemPrompt, /同一蜜罐受到其他来源攻击，也不能证明当前来源已入侵/);
   assert.match(systemPrompt, /跨场景关联规则/);
@@ -311,7 +312,7 @@ test('high-risk confirmation is reduced when independent review times out', asyn
         { evidence_id: 'cw:1', pointer: '/source_ip', value: '192.0.2.7' }] }] }) };
     throw new Error('review timeout');
   } };
-  const result = await new InvestigationAgent(toolbox, model).run('honeypot:7');
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run('honeypot:7');
   assert.equal(calls, 2);
   assert.equal(result.review.assessment, 'unavailable');
   assert.equal(result.verdict.verdict, 'uncertain');
@@ -332,7 +333,7 @@ test('loopback honeypot probe without responses cannot confirm host compromise',
     ? { verdict: '确认威胁', confidence: '中', summary: '本机已失陷', attack_chain: '提权后横向',
       claims: [{ text: '回环来源', citations: [{ evidence_id: 'cw:1', pointer: '/source_ip', value: '127.0.0.1' }] }] }
     : { assessment: 'supported', concerns: [], missing_evidence: [] }) }) };
-  const result = await new InvestigationAgent(toolbox, model).run('honeypot:36870');
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run('honeypot:36870');
   assert.equal(result.verdict.verdict, 'uncertain');
   assert.match(result.verdict.summary, /回环地址/);
   assert.match(result.verdict.attack_chain, /尚未建立/);
@@ -350,7 +351,7 @@ test('unresolved independent review keeps a revised high-risk verdict below conf
   }] };
   const replies = [draft, { assessment: 'needs_revision', concerns: ['缺少成功攻击证据'], missing_evidence: [] }, draft];
   const model = { model: 'fake', complete: async () => ({ content: JSON.stringify(replies.shift()) }) };
-  const result = await new InvestigationAgent(toolbox, model).run('honeypot:7');
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run('honeypot:7');
   assert.equal(result.review.assessment, 'needs_revision');
   assert.equal(result.verdict.verdict, 'uncertain');
   assert.match(result.verdict.missing_evidence.join('；'), /独立复核未支持/);
@@ -393,7 +394,7 @@ test('Agent chooses a read-only tool, then cites and verifies its result', async
     if (tools.length) assert.equal(tools.some(tool => tool.function.name.startsWith('whitelist_')), false);
     return replies.shift();
   } };
-  const result = await new InvestigationAgent(toolbox, model).run('revshell:7');
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run('revshell:7');
   assert.deepEqual(calls.map(call => call.name), ['get_revshell_event', 'list_host_events']);
   assert.equal(result.verdict.verdict, 'uncertain');
   assert.equal(result.validation.ok, true);
@@ -741,7 +742,7 @@ test('A2 syslog 已取的事件详情随 match.event 进研判，入口不再拉
     ? { verdict: '存疑', confidence: '低', summary: '需核查命令后续行为',
       claims: [{ text: '执行命令', citations: [{ evidence_id: 'cw:1', pointer: '/cmdline', value: 'id' }] }], missing_data: [] }
     : { assessment: 'supported', concerns: [], missing_evidence: [] }) }) };
-  const agent = new InvestigationAgent(toolbox, model);
+  const agent = new InvestigationAgent(toolbox, model, new PromptStore());
   const context = syslogContext('id');
   context.match = { matched: true, event_id: 7, event: detail };
   const result = await agent.run('suspicious_operation:7', { mode: 'triage', streamContext: context });
@@ -775,7 +776,7 @@ test('A2 复用已取详情不豁免取证上限：次数用尽与超 2MB 照抛
   };
 
   // 次数用尽：EvidenceSession.callTool 会抛，复用分支不许绕过。
-  const exhausted = new InvestigationAgent(toolbox, model);
+  const exhausted = new InvestigationAgent(toolbox, model, new PromptStore());
   const nativeInvestigation = exhausted.toolbox.investigation.bind(exhausted.toolbox);
   exhausted.toolbox.investigation = () => { const session = nativeInvestigation(); session.started = session.maxCalls; return session; };
   await assert.rejects(exhausted.run('suspicious_operation:7', { mode: 'triage', streamContext: context() }),
@@ -783,7 +784,7 @@ test('A2 复用已取详情不豁免取证上限：次数用尽与超 2MB 照抛
   exhausted.toolbox.investigation = nativeInvestigation;
 
   // 2MB 上限：复用分支拿到的是同一条详情，超限照样抛，不悄悄收进证据表。
-  const huge = new InvestigationAgent(toolbox, model);
+  const huge = new InvestigationAgent(toolbox, model, new PromptStore());
   const hugeContext = context();
   hugeContext.match.event = { id: 7, blob: 'x'.repeat(2_000_001) };
   await assert.rejects(huge.run('suspicious_operation:7', { mode: 'triage', streamContext: hugeContext }),
@@ -887,7 +888,7 @@ test('A7 一轮多个工具调用并发执行，tool 消息按 tool_call_id 原�
       { id: 'call-b', type: 'function', function: { name: 'list_host_events', arguments: '{"host_id":41}' } }
     ] };
   } };
-  const result = await new InvestigationAgent(toolbox, model).run('suspicious_operation:7', { mode: 'triage' });
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run('suspicious_operation:7', { mode: 'triage' });
   assert.equal(batchPeak, 2);
   assert.deepEqual(batchOrder, ['list_host_events', 'list_full_commands_by_host']);
   const toolMessages = requests[1].filter(item => item.role === 'tool');
@@ -938,7 +939,7 @@ test('A1 轮数用尽时案件目录照常写出 05-研判结果.md（存疑 + �
   });
   // 模型只回正文，6 轮都不给 JSON → 降级结论。
   const model = { model: 'fake', complete: async () => ({ content: '我先梳理这条蜜罐告警。' }) };
-  const monitor = new TriageMonitor({ service: {}, investigator: new InvestigationAgent(toolbox, model),
+  const monitor = new TriageMonitor({ service: {}, investigator: new InvestigationAgent(toolbox, model, new PromptStore()),
     history: new InvestigationStore(path.join(directory, 'investigations')), inputMode: 'syslog', concurrency: 1,
     eventToolbox: { listEvents: async () => ({ total: 1, events: [
       { id: 7, started_at: Math.floor(new Date('2026-11-03T08:00:00Z').getTime() / 1000) }] }) },

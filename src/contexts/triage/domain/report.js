@@ -1,4 +1,4 @@
-import { VERDICT_LABELS as labels } from './src/contexts/triage/domain/triage-case.js';
+import { VERDICT_LABELS as labels } from './triage-case.js';
 
 const MAX_JUDGMENT_LENGTH = 300;
 

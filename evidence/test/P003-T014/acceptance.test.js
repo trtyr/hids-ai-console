@@ -22,8 +22,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, createAnalysisProvider } from '../../../server.js';
 import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';;
-import { AgentToolbox, investigationToolNames } from '../../../agent-tools.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { AgentToolbox, investigationToolNames } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 
 const SYSLOG_ID = (type, fp, sec, uuid) => `syslog:${type}:${fp}:${sec}:${uuid}`;
 

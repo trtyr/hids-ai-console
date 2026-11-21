@@ -1,23 +1,22 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { eventTypes } from './src/shared/vocabulary.js';
-import { recordFailure, reasonForRecord } from './src/shared/redaction.js';
-import { traceModelCall } from './src/shared/logging/log.js';
-import { RuleStore } from './rule-store.js';
-import { eventTypeFor } from './src/contexts/ingestion/application/parsing.js';
-import { PromptStore } from './prompt-store.js';
-import { boundEvidenceView, boundSyslogView, compactEvidenceView, projectEvidence } from './evidence-view.js';
-import { pageExcerpts, pageSummary } from './wiki-store.js';
-import { readCaseFile, writeRequiredEvidence } from './src/contexts/triage/application/correlate.js';
-import { finalizeTriageOutput } from './triage-output.js';
+import { eventTypes } from '../../../shared/vocabulary.js';
+import { recordFailure, reasonForRecord } from '../../../shared/redaction.js';
+import { traceModelCall } from '../../../shared/logging/log.js';
+import { RuleStore } from '../../../../rule-store.js';
+import { eventTypeFor } from '../../ingestion/application/parsing.js';
+import { PromptStore } from '../../../../prompt-store.js';
+import { boundEvidenceView, boundSyslogView, compactEvidenceView, projectEvidence } from '../infrastructure/evidence-view.js';
+import { pageExcerpts, pageSummary } from '../../../../wiki-store.js';
+import { readCaseFile, writeRequiredEvidence } from './correlate.js';
+import { finalizeTriageOutput } from '../domain/report.js';
 import { appendEvidenceReport, collectRequiredEvidence, requiredEvidenceGaps, requiredEvidencePlan } from './required-evidence.js';
 // 判定词表唯一真源（P003-T075 批 3 种子）：原来这里 17 行自抄 verdictMap/verdictLabels，
 // 与 triage-output / wiki-replay 各一份——现在统一 import triage 领域词表（D034 §4 #1 的根治）。
-import { VERDICT_MAP as verdictMap, VERDICT_LABELS as verdictLabels } from './src/contexts/triage/domain/triage-case.js';
+import { VERDICT_MAP as verdictMap, VERDICT_LABELS as verdictLabels } from '../domain/triage-case.js';
 // 结论正文（summary）上限；客户报告 report 另有更严的 300 字口径（MAX_JUDGMENT_LENGTH，triage-output.js:1）。
 const conclusionBodyLimit = 500;
-const defaultRulesDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rules');
 const highRisk = new Set(['memory_webshell', 'revshell', 'elevation_process', 'webshell', 'honeypot']);
 
 function parseJSON(text) {
@@ -451,9 +450,15 @@ export function boundedToolArgs(name, rawArgs, catalog) {
 
 export class InvestigationAgent {
   // 第 6 参 reviewModel（P003-T042）：独立复核那一轮用的实例。不传就沿用研判模型（分层前的行为）。
-  constructor(toolbox, model, promptStore = new PromptStore(), knowledgeStore = null, ruleStore = null, reviewModel = null) {
-    this.toolbox = toolbox; this.model = model; this.promptStore = promptStore; this.knowledgeStore = knowledgeStore;
-    this.ruleStore = ruleStore || new RuleStore(defaultRulesDirectory);
+  // R-STRUCT+（批 3）：promptStore / ruleStore 由装配注入；缺省用纯对象替身（不是 new 适配器）。
+  // 生产路径 server.js 始终传入真实例——替身只服务于不依赖提示词的测试。
+  constructor(toolbox, model, promptStore = null, knowledgeStore = null, ruleStore = null, reviewModel = null) {
+    this.toolbox = toolbox; this.model = model;
+    this.promptStore = promptStore || { load: async () => ({ version: 'test', revision: 'test',
+      prompts: { triage: '', deep: '', knowledge: '', rule: '', trace: '', knowledge_reuse: '', cross: '' },
+      scenarios: { cards: [] }, sop: {} }) };
+    this.knowledgeStore = knowledgeStore;
+    this.ruleStore = ruleStore;
     this.reviewModel = reviewModel || model;
   }
 

@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { TriageMonitor } from './triage-monitor.js';
+import { TriageMonitor } from './src/contexts/triage/application/triage-monitor.js';
 import { eventSeconds } from './src/contexts/ingestion/application/parsing.js';
-import { InvestigationStore } from './investigation-store.js';
+import { InvestigationStore } from './src/contexts/triage/infrastructure/investigation-store.js';
 
 test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 

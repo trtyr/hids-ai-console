@@ -15,11 +15,11 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from '
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TriageMonitor } from '../../../triage-monitor.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { CloudwalkerGateway, eventTypes, rpcMethods } from '../../../src/contexts/ingestion/infrastructure/gateway.js';
 import { RuleStore } from '../../../rule-store.js';
 import { WikiStore } from '../../../wiki-store.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const RUN = process.env.HIDS_DATA_DIR;

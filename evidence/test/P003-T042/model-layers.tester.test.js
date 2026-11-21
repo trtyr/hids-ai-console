@@ -16,10 +16,10 @@ import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 import { createConfigStore } from '../../../config-store.js';
-import { createModelRolesFromEnv, MODEL_ROLES } from '../../../model-client.js';
+import { createModelRolesFromEnv, MODEL_ROLES } from '../../../src/contexts/triage/infrastructure/model-client.js';
 import { createServer } from '../../../server.js';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));

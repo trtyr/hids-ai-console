@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from './src/contexts/ingestion/application/parsing.js';
-import { eventTypes } from './src/shared/vocabulary.js';
-import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './src/contexts/triage/application/correlate.js';
-import { log } from './src/shared/logging/log.js';
-import { recordFailure, reasonForRecord } from './src/shared/redaction.js';
+import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from '../../ingestion/application/parsing.js';
+import { eventTypes } from '../../../shared/vocabulary.js';
+import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './correlate.js';
+import { log } from '../../../shared/logging/log.js';
+import { recordFailure, reasonForRecord } from '../../../shared/redaction.js';
 
 // parseSyslog 自己写死的三条判定语（syslog-input.js:46/52/56）：不是上游原文，照原样留。
 const syslogParseFailures = ['不是合法的 RFC5424 syslog 行', 'syslog JSON 正文不是对象', 'syslog 正文解析后为空'];

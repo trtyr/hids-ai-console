@@ -15,9 +15,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useLogFile, useJournal, flushLogs } from '../../../src/shared/logging/log.js';
 import { createServer } from '../../../server.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
-import { InvestigationStore } from '../../../investigation-store.js';
-import { AgentToolbox } from '../../../agent-tools.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
 import { PromptStore } from '../../../prompt-store.js';
 import { RegoRuleMaintainer } from '../../../server.js';
 import { RuleSessionStore, RuleStore, seedLibrary } from '../../../rule-store.js';
@@ -112,7 +112,7 @@ const runInvestigation = async (alertId = 'revshell:7') => {
   ];
   const counter = { calls: 0 };
   const model = { model: 'fake-model', complete: async () => { counter.calls += 1; return replies.shift(); } };
-  const result = await new InvestigationAgent(toolbox, model).run(alertId);
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run(alertId);
   return { result, counter };
 };
 
@@ -263,7 +263,7 @@ test('A1/A2/A5 e2e：三域调用落进真日志文件，GET /api/logs?event=ai.
     claims: [{ text: 'CLAIM_BODY_MARKER', citations: [{ evidence_id: 'cw:1', pointer: '/event/cmdline', value: 'TOOL_BODY_MARKER' }] }], missing_data: [] });
   const model = { model: 'fake', complete: async (_messages, tools) => ({ content: tools.length ? verdict
     : JSON.stringify({ assessment: 'supported', concerns: [], missing_evidence: [] }) }) };
-  const investigation = await new InvestigationAgent(toolbox, model).run('revshell:7');
+  const investigation = await new InvestigationAgent(toolbox, model, new PromptStore()).run('revshell:7');
   const history = new InvestigationStore(path.join(directory, 'investigations'));
   await history.save(investigation);
 
@@ -333,7 +333,7 @@ test('A5 解析失败：turns.note 是固定文案、快照里搜不到回包正
     callTool: async () => ({ event: { id: 7, host_id: 1, cmdline: 'x' } })
   });
   const model = { model: 'fake', complete: async () => ({ content: 'SECRET_BODY_MARKER 不是 JSON' }) };
-  const result = await new InvestigationAgent(toolbox, model).run('revshell:7');
+  const result = await new InvestigationAgent(toolbox, model, new PromptStore()).run('revshell:7');
 
   const investigate = result.turns.filter(turn => turn.phase === 'investigate');
   assert.ok(investigate.length >= 1);

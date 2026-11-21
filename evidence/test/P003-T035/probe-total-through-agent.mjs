@@ -1,7 +1,7 @@
 // 从公开入口（InvestigationAgent.run）看 required_evidence 里的 total_reported / platform_total_consistent
 // 到底以什么形态出现：真走 projectEvidence → collectRequiredEvidence 全链路，替身牧云只回 {total, events}。
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 
 const make = (listPayload) => {
   const toolbox = new AgentToolbox({

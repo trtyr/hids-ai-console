@@ -14,7 +14,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/pr
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, RegoRuleMaintainer } from '../../../server.js';
-import { TriageMonitor } from '../../../triage-monitor.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
 import { RuleStore } from '../../../rule-store.js';
 import { WikiStore } from '../../../wiki-store.js';
 import { WikiWorkbench } from '../../../wiki-workbench.js';

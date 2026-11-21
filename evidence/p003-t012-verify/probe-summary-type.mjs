@@ -4,8 +4,8 @@
 // 期望：非字符串 summary 要么退回，要么在结果里归成字符串；实测：deep 模式原样把 number/object
 // 写进 verdict.summary，产出违反 openapi 的研判记录。本探针按 spec 断言，FAIL 即该缺口。
 // 跑法：node evidence/p003-t012-verify/probe-summary-type.mjs  （退出码非 0 = 发现成立）
-import { InvestigationAgent } from '../../investigation-agent.js';
-import { AgentToolbox } from '../../agent-tools.js';
+import { InvestigationAgent } from '../../src/contexts/triage/application/investigation-agent.js';
+import { AgentToolbox } from '../../src/contexts/triage/infrastructure/evidence-toolbox.js';
 
 const toolbox = new AgentToolbox({
   listTools: async () => [{ name: 'get_suspicious_operation_event',

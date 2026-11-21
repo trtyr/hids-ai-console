@@ -12,8 +12,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { TriageMonitor } from '../../../triage-monitor.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 import { createServer } from '../../../server.js';
 
 const EVIDENCE_ID = 'webshell:9001';

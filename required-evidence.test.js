@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { appendEvidenceReport, collectRequiredEvidence, requiredEvidenceGaps,
-  requiredEvidencePlan } from './required-evidence.js';
-import { projectEvidence } from './evidence-view.js';
+  requiredEvidencePlan } from './src/contexts/triage/application/required-evidence.js';
+import { projectEvidence } from './src/contexts/triage/infrastructure/evidence-view.js';
 
 const schema = properties => ({ inputSchema: { properties } });
 

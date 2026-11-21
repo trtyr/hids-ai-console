@@ -9,12 +9,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { InvestigationAgent } from '../../investigation-agent.js';
-import { AgentToolbox } from '../../agent-tools.js';
+import { InvestigationAgent } from '../../src/contexts/triage/application/investigation-agent.js';
+import { AgentToolbox } from '../../src/contexts/triage/infrastructure/evidence-toolbox.js';
 import { RuleStore } from '../../rule-store.js';
 import { WikiStore } from '../../wiki-store.js';
-import { InvestigationStore } from '../../investigation-store.js';
-import { TriageMonitor } from '../../triage-monitor.js';
+import { InvestigationStore } from '../../src/contexts/triage/infrastructure/investigation-store.js';
+import { TriageMonitor } from '../../src/contexts/triage/application/triage-monitor.js';
 import { KnowledgeStore } from '../../knowledge-store.js';
 import { KnowledgeWorkbench, knowledgeFields } from '../../knowledge-workbench.js';
 

@@ -13,10 +13,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 import { WikiStore, pageExcerpts, pageSummary } from '../../../wiki-store.js';
-import { boundSyslogView, compactEvidenceView, projectEvidence } from '../../../evidence-view.js';
+import { boundSyslogView, compactEvidenceView, projectEvidence } from '../../../src/contexts/triage/infrastructure/evidence-view.js';
 
 const wiki = new WikiStore(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'wiki'));
 
@@ -337,7 +337,7 @@ test('A8 triage 提示词不再重复 submit_conclusion 的字段模板', async 
 
 // 复审 BUG1：裁剪必须在有限步内收敛。同步死循环会饿死事件循环，`node:test` 的 timeout 根本不触发，
 // 所以把它扔进 worker，看门狗超时就判红——这样回归时是一条失败用例，而不是整柜测试一起挂住。
-const evidenceViewUrl = new URL('../../../evidence-view.js', import.meta.url).href;
+const evidenceViewUrl = new URL('../../../src/contexts/triage/infrastructure/evidence-view.js', import.meta.url).href;
 function boundSyslogViewInWorker(view, timeoutMs = 2000) {
   const worker = new Worker(`
     const { parentPort, workerData } = require('node:worker_threads');

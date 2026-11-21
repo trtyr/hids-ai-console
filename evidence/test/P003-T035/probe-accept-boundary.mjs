@@ -2,8 +2,8 @@
 // ① 同一批里 submit_conclusion 被接受后，同批剩余调用仍真实执行（停的是下一轮）；
 // ② 同一批两个 submit_conclusion 都通过校验时，draft 取最后一个。
 // 事件详情故意不带 host_id，让必查项只记缺标识、不发查询，排除必查项调用的干扰。
-import { AgentToolbox } from '../../../agent-tools.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
+import { AgentToolbox } from '../../../src/contexts/triage/infrastructure/evidence-toolbox.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
 
 const toolbox = calls => new AgentToolbox({
   listTools: async () => [

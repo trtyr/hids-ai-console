@@ -15,9 +15,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from '../../../server.js';
 import { TriageRuleEngine } from '../../../triage-rules.js';
-import { InvestigationAgent } from '../../../investigation-agent.js';
-import { TriageMonitor } from '../../../triage-monitor.js';
-import { InvestigationStore } from '../../../investigation-store.js';
+import { InvestigationAgent } from '../../../src/contexts/triage/application/investigation-agent.js';
+import { TriageMonitor } from '../../../src/contexts/triage/application/triage-monitor.js';
+import { InvestigationStore } from '../../../src/contexts/triage/infrastructure/investigation-store.js';
 import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
 
 const MARKER = 'RAW_ONLY_f7a3 上游细节';
