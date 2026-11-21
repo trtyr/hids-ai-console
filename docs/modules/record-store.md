@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-RECORD-STORE
-covers: [investigation-store.js]
+covers: [src/contexts/triage/infrastructure/investigation-store.js]
 updated: 2026-11-17
 depth: complete
 ---

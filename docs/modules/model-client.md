@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-MODEL-CLIENT
-covers: [model-client.js]
+covers: [src/contexts/triage/infrastructure/model-client.js]
 updated: 2026-11-20
 ---
 

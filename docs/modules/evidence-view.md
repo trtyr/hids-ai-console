@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-EVIDENCE-VIEW
-covers: [evidence-view.js]
+covers: [src/contexts/triage/infrastructure/evidence-view.js]
 unit: evidence-view
 updated: 2026-11-20
 ---

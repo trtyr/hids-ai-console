@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-TRIAGE-PIPELINE
-covers: [triage-monitor.js, src/contexts/ingestion/application/parsing.js, src/contexts/triage/application/correlate.js]
+covers: [src/contexts/triage/application/triage-monitor.js, src/contexts/ingestion/application/parsing.js, src/contexts/triage/application/correlate.js]
 updated: 2026-11-20
 depth: complete
 ---

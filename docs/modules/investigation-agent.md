@@ -1,7 +1,7 @@
 ---
 type: module
 id: MOD-INVESTIGATION-AGENT
-covers: [investigation-agent.js, required-evidence.js, triage-output.js]
+covers: [src/contexts/triage/application/investigation-agent.js, src/contexts/triage/application/required-evidence.js, src/contexts/triage/domain/report.js]
 updated: 2026-11-20
 ---
 
