@@ -2138,6 +2138,37 @@ paths:
                     items: { $ref: '#/components/schemas/RegoSessionSummary' }
                 additionalProperties: false
         '502': { $ref: '#/components/responses/RuleLibraryError' }
+  /api/rules/sessions/{id}:
+    get:
+      tags: [Rego 规则]
+      summary: 读一份规则维护会话的全文（P003-T086）
+      description: |
+        整份会话：`proposal`（模型草案 id/rego/rationale）、`rounds[]`（多轮修订的逐轮结果与失败原因）、
+        `validation`（最终校验）、`result`（写盘结果：action/file/rev/previous_rev）、`error`（失败终态原文）。
+        列表 `/api/rules/sessions` 只有摘要；这里给全文。读开放（与列表同口径）。
+      operationId: getRegoSession
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[0-9a-fA-F-]{36}$' }
+      responses:
+        '200':
+          description: 会话全文
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegoSession' }
+        '400':
+          description: 会话 ID 无效
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/RuleLibraryError' }
   /api/false-positive/sessions:
     get:
       tags: [误报维护]
@@ -4259,8 +4290,57 @@ components:
           description: 终态是 updated / no_change / failed；collecting 与 validating 是过程态（进程半路挂掉会停在这里）
         rule_id: { type: [string, 'null'], description: 模型草案改的是哪条规则 }
         validated: { type: boolean, description: 校验是否通过（`status=failed` 时为 false） }
+        rounds: { type: integer, description: 'P003-T086 A2：实际用掉的修订轮数；旧会话没有 rounds[] 时为 0' }
+        max_rounds: { type: [integer, 'null'], description: 本轮上限（缺省 3，可在构造/环境变量覆盖） }
         updated_at: { type: string, format: 'date-time' }
       additionalProperties: false
+    RegoSession:
+      type: object
+      description: 规则维护会话全文（P003-T086）。
+      required: [id, status, rounds, created_at, updated_at]
+      properties:
+        id: { type: string }
+        case_id: { type: [string, 'null'] }
+        case_dir: { type: [string, 'null'] }
+        event_type: { type: [string, 'null'] }
+        reason: { type: ['string', 'null'], description: 误报理由原文（会话文件内） }
+        who: { type: [string, 'null'] }
+        status: { type: string, enum: [collecting, validating, updated, no_change, failed] }
+        max_rounds: { type: [integer, 'null'] }
+        rounds:
+          type: array
+          description: 多轮修订的逐轮结果；失败轮带原因（本地校验原文或固定文案 + 字符量）。
+          items:
+            type: object
+            required: [round, ok, error]
+            properties:
+              round: { type: integer }
+              id: { type: [string, 'null'] }
+              ok: { type: boolean }
+              error: { type: [string, 'null'] }
+        proposal:
+          type: [object, 'null']
+          description: 最后一轮的草案（模型原文）；没有草案时为 null
+          properties:
+            id: { type: string }
+            rego: { type: string }
+            rationale: { type: string }
+          additionalProperties: true
+        validation:
+          type: [object, 'null']
+          additionalProperties: true
+        result:
+          type: [object, 'null']
+          properties:
+            action: { type: string, enum: [add, update, unchanged] }
+            file: { type: string }
+            rev: { type: string }
+            previous_rev: { type: [string, 'null'] }
+          additionalProperties: true
+        error: { type: [string, 'null'] }
+        created_at: { type: string, format: 'date-time' }
+        updated_at: { type: string, format: 'date-time' }
+      additionalProperties: true
     RegoRuleWrite:
       type: object
       description: |

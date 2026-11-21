@@ -175,7 +175,9 @@ test('A4 维护会话留痕：一份一份落盘、按 updated_at 倒序列摘�
   const listed = await sessions.list();
   assert.deepEqual(listed.map(row => row.id), [second.id, first.id]);
   assert.deepEqual(listed[0], { id: second.id, case_id: 'webshell:8', event_type: 'honeypot', who: '值守',
-    status: 'updated', rule_id: 'webshell_drop', validated: true, updated_at: '2026-11-19T01:00:00.000Z' });
+    status: 'updated', rule_id: 'webshell_drop', validated: true,
+    // P003-T086 A2：摘要补轮次数；老会话没有 rounds[] 时记 0，上限未知记 null。
+    rounds: 0, max_rounds: null, updated_at: '2026-11-19T01:00:00.000Z' });
   assert.equal(JSON.stringify(listed).includes('package hids.rules'), false, '摘要里把规则正文也带出来了');
   await assert.rejects(sessions.save({ id: '../../escape' }), /会话 ID 无效/);
   await assert.rejects(sessions.get('not-a-uuid'), /会话 ID 无效/);

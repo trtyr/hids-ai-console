@@ -474,8 +474,10 @@ export class RuleSessionStore {
     const rows = await Promise.all(names.filter(name => name.endsWith('.json') && SESSION_ID.test(name.slice(0, -5)))
       .map(name => this.get(name.slice(0, -5)).catch(() => null)));
     return rows.filter(Boolean).sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)))
-      .map(({ id, case_id, event_type, who, status, proposal, validation, updated_at }) => ({ id, case_id, event_type,
-        who, status, rule_id: proposal?.id || null, validated: validation?.ok === true, updated_at }));
+      .map(({ id, case_id, event_type, who, status, proposal, validation, updated_at, rounds, max_rounds }) => ({ id,
+        case_id, event_type, who, status, rule_id: proposal?.id || null, validated: validation?.ok === true,
+        // T086 A2：列表也给出用了多少轮、上限多少；每轮失败原因在详情路由的 rounds[] 里。
+        rounds: Array.isArray(rounds) ? rounds.length : 0, max_rounds: max_rounds ?? null, updated_at }));
   }
 }
 

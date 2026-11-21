@@ -97,6 +97,7 @@ const ROUTES = [
   // Rego 规则库
   { route: 'GET /api/rules', probe: "pathname === '/api/rules'" },
   { route: 'GET /api/rules/sessions', probe: "'/api/rules/sessions'" },
+  { route: 'GET /api/rules/sessions/{id}', probe: 'rules\\/sessions\\/([0-9a-f-]{36})' },
   { route: 'POST /api/rules/evaluate', probe: "'/api/rules/evaluate'" },
   { route: 'GET /api/rules/{id}/history', probe: '/(history|rollback)$' },
   { route: 'POST /api/rules/{id}/rollback', probe: '/(history|rollback)$' },
