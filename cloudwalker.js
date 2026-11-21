@@ -1,87 +1,14 @@
-// 事件类型和 RPC 服务名依据 cloudwalker-master/server 下各事件 API 的实现整理。
-export const eventTypes = Object.freeze({
-  webshell: 'WebShell', malware: '恶意文件', revshell: '反弹 Shell', memory_webshell: '内存马',
-  brute_force: '暴力破解', abnormal_login: '异常登录', elevation_process: '提权进程',
-  network_audit: '网络审计', suspicious_operation: '可疑操作', honeypot: '蜜罐', memory_security: '内存安全'
-});
+// 牧云网关（ingestion 上下文，P003-T075 批 2 归位前的根文件）。
+// 词表与 Alert 形状已抽成共享内核（src/shared/vocabulary.js、src/shared/alert-shape.js，批 2）——
+// 这里 re-export 保持全部旧 import 路径稳定；批 2 结束时旧 import 全部改指 shared 后删除 re-export。
+import { eventTypes, rpcMethods, levelRanks } from './src/shared/vocabulary.js';
+import { normalizeAlert, detailEvidence, first } from './src/shared/alert-shape.js';
+
+export { eventTypes, rpcMethods, parseInstant, levelRanks, levelNames, levelNameOf } from './src/shared/vocabulary.js';
+export { normalizeAlert, detailEvidence } from './src/shared/alert-shape.js';
+
 // 蜜罐列表方法为 List，其余为 GetEventList；直接请求 /rpc。
-export const rpcMethods = Object.freeze({
-  webshell: 'WebshellEventService', malware: 'MalwareEventService', revshell: 'RevshellEventService',
-  memory_webshell: 'MemoryWebshellEventService', brute_force: 'BruteForceService',
-  abnormal_login: 'AbnormalLoginEventService', elevation_process: 'ElevationProcessEventService',
-  network_audit: 'NetworkAuditEventService', suspicious_operation: 'SuspiciousOperationService',
-  honeypot: 'HoneypotService', memory_security: 'MemorySecurityEventService'
-});
-
-const string = value => typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
-const first = (...values) => values.map(string).find(Boolean) || '';
-// 时间口径：纯数字按秒/毫秒自适应，其余交给 Date 解析；解析不了返回 null。
-// 对外导出，好让 server.js 的 from/to 校验与事件时间用同一套规则。
-export const parseInstant = value => {
-  const n = Number(value);
-  const date = Number.isFinite(n) && n > 0 ? new Date(n < 1e12 ? n * 1000 : n) : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-};
-const levelNames = { 1: ['低危', 'low'], 2: ['中危', 'medium'], 3: ['高危', 'high'], 4: ['严重', 'critical'] };
-export const levelRanks = Object.freeze({ low: 1, medium: 2, high: 3, critical: 4 });
-// 单次请求最多扫描多少条原始事件（带后置筛选 / sort=level 时才需要扫窗口）。
-export const MAX_SCAN = 500;
-function compareAlerts(a, b) {
-  return (b.createdAt || '').localeCompare(a.createdAt || '') || a.id.localeCompare(b.id);
-}
-function compareByLevel(a, b) {
-  return (levelRanks[b.levelKey] || 0) - (levelRanks[a.levelKey] || 0) || compareAlerts(a, b);
-}
-function titleOf(row, type) {
-  const name = row.event_name;
-  return first(typeof name === 'object' ? name?.zh_cn || name?.name || name?.title : name, row.rule_name, row.name, eventTypes[type]);
-}
-export function normalizeAlert(type, row) {
-  const id = Number(row.id ?? row.event_id);
-  if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`牧云 ${type} 返回无效事件 ID`);
-  const host = row.host_view || row.host || {};
-  const hostIp = first(host.host_ip, host.ip);
-  const outbound = type === 'revshell' || type === 'network_audit';
-  const source = outbound
-    ? first(row.local_addr, row.src_ip, hostIp, '待核查')
-    : first(row.source_ip, row.login_ip, row.ssh_client_ip, row.src_ip, row.client_ip, '待核查');
-  const target = outbound
-    ? first(row.remote_addr, row.target, row.destination_ip, row.dst_ip, '待核查')
-    : first(row.destination_ip, row.dst_ip, row.address, hostIp, '待核查');
-  const level = levelNames[Number(row.level)] || ['未知', 'unknown'];
-  const when = parseInstant(row.created_at ?? row.detected_at ?? row.event_time);
-  return {
-    id: `${type}:${id}`, eventType: type, eventId: id, hostId: Number(row.host_id || host.id) || null,
-    createdAt: when, time: when ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(when)) : '—',
-    title: titleOf(row, type), level: level[0], levelKey: level[1],
-    asset: first(host.host_name, row.host_name, '未知主机'),
-    source, target, assetIp: hostIp || null,
-    account: first(row.username, row.login_username, row.user, row.uname, '待核查'),
-    command: first(row.cmdline, row.command, row.shell_cmdline, row.process_cmdline, '需读取事件详情'),
-    verdict: '待研判', verdictKey: 'review', coverage: null, cases: 0,
-    scenario: eventTypes[type], detail: '已从牧云读取原始事件；尚未执行 AI 研判。',
-    evidence: [`牧云 ${eventTypes[type]} 事件 #${id}`], gap: '待获取事件详情与关联证据',
-    state: row.state ?? null
-  };
-}
-
-export function detailEvidence(detail) {
-  const fields = [
-    ['命令行', 'cmdline'], ['命令行', 'shell_cmdline'], ['进程路径', 'process_path'],
-    ['执行用户', 'uname'], ['远端地址', 'remote_addr'], ['本地地址', 'local_addr'],
-    ['文件路径', 'file_path'], ['描述', 'description']
-  ];
-  const result = [];
-  for (const [label, key] of fields) {
-    const value = string(detail[key]);
-    if (value) result.push(`${label}：${value.slice(0, 500)}`);
-  }
-  if (Array.isArray(detail.process_tree)) result.push(`进程树：${detail.process_tree.length} 个节点`);
-  if (Array.isArray(detail.cmdlines)) result.push(`会话命令：${detail.cmdlines.length} 条`);
-  return result;
-}
-
-// 列表动词：蜜罐是 List，其余 10 类是 GetEventList（见文件头注释）。
+// 列表动词：蜜罐是 List，其余 10 类是 GetEventList（见 src/shared/vocabulary.js 的事件表注释）。
 const listMethod = type => `${rpcMethods[type]}.${type === 'honeypot' ? 'List' : 'GetEventList'}`;
 // 牧云可达、但这条事件读不到：HTTP 详情接口按 404 处理（server.js 认 status 字段）。
 function eventMissing(type, id) {
@@ -99,6 +26,13 @@ const ttlOf = (value, fallback) => {
 };
 // 快照表只按「类型 × 批大小 × 起点」存，条目有限；超上限先清过期项，过期项也没有才丢最早的一条。
 const MAX_SNAPSHOTS = 256;
+
+function compareAlerts(a, b) {
+  return (b.createdAt || '').localeCompare(a.createdAt || '') || a.id.localeCompare(b.id);
+}
+function compareByLevel(a, b) {
+  return (levelRanks[b.levelKey] || 0) - (levelRanks[a.levelKey] || 0) || compareAlerts(a, b);
+}
 
 // 判活缓存：`{ at, value }`，at 用注入的 now()，测试给假时钟即可过期。
 const fresh = (entry, at, ttl) => Boolean(entry) && at - entry.at >= 0 && at - entry.at < ttl;
@@ -283,3 +217,6 @@ export class CloudwalkerGateway {
     return { alert: normalized, detail };
   }
 }
+
+// 单次请求最多扫描多少条原始事件（带后置筛选 / sort=level 时才需要扫窗口）。
+export const MAX_SCAN = 500;

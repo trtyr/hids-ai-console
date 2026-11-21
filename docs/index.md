@@ -1,3 +1,8 @@
+---
+type: guide
+id: GUIDE-DOCS-INDEX
+---
+
 # HIDS 智能研判平台 · 后端文档
 
 写给第一次进这个仓的人。每篇文档只讲一件事，读之前先看下面的地图。
@@ -6,7 +11,9 @@
 
 | 页面 | 讲什么 | 适合谁 |
 | --- | --- | --- |
-| [architecture.md](architecture.md) | 后端的整体结构：进程入口、分层依赖、两条研判路径、证据校验、状态落盘、访问边界、配置项 | 所有人，先读这篇 |
+| [architecture/architecture.md](architecture/architecture.md)（`AR-L0`） | 最上层权威：边界、不变量、依赖方向、三条数据主线 | 判断「改动落在哪、破没破不变量」先读这篇 |
+| [architecture.md](architecture.md)（`AR-BACKEND`） | 模块细节与运行手册：进程入口、分层依赖、两条研判路径、证据校验、状态落盘、访问边界、配置项 | 所有人，读完 L0 后读这篇 |
+| [architecture/refactor-ddd.md](architecture/refactor-ddd.md) | DDD 迁移总纲：目标结构、53 个文件去向、七批迁移计划与门禁基线 | 做迁移、加新代码之前 |
 | [modules/](modules/) | 每个模块一页，讲一个模块的职责、对外契约、关键实现 | 改某个模块之前 |
 | [modules/_breakdown.json](modules/_breakdown.json) | 模块划分的机器可读清单（模块名、页面、实现文件、覆盖构件） | 想知道「哪个文件归哪一页」时 |
 

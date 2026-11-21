@@ -1,3 +1,4 @@
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -10,6 +11,8 @@ import { InvestigationStore } from './investigation-store.js';
 
 const prefix = '<134>1 2026-11-03T08:00:00Z host app 1 cloudwalker-honeypot ';
 const fields = 'host_ip="10.0.0.5" event_create_time="2026-11-03 08:00:00" source_ip="192.0.2.2" target_port="80"';
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('牧云的三种 syslog 载荷保留同一组字段及未转义的内层引号', () => {
   const structured = parseSyslog(prefix + `[host-info host_ip="10.0.0.5"][honeypot event_create_time="2026-11-03 08:00:00" source_ip="192.0.2.2" target_port="80" process_tree="[{"pid": 1}]" env="["PWD=/tmp"]"]`);

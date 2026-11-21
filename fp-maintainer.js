@@ -18,7 +18,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promise
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isRuleId } from './rule-store.js';
-import { traceModelCall } from './log.js';
+import { traceModelCall } from './src/shared/logging/log.js';
 import { scrubCredentials } from './src/shared/redaction.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

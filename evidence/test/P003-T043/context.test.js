@@ -42,7 +42,7 @@ test('A1 server.js 里不再出现 baselineFile/intelFile 与 runtime.baseline/r
 
 test('A1 contextFor 不读基线/情报文件，返回值里没有 baseline/intel 两段', async t => {
   const directory = await tmp();
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   // 两个坏 JSON：旧实现会 JSON.parse 抛错（ENOENT 才兜底），新实现根本不打开它们。
   // 这条断言的可失败性就在这里——把读文件加回去，本用例立刻红。
   const baselineFile = path.join(directory, 'baseline.json');
@@ -67,7 +67,7 @@ test('A1 contextFor 不读基线/情报文件，返回值里没有 baseline/inte
 // ── A2：04-上下文.md 去掉两段，保留会话窗口 / 投递次数 / 历史结论 ──────────────
 test('A2 04-上下文.md 的 JSON 只留 window/history，会话与投递次数照旧', async t => {
   const directory = await tmp();
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const info = await writeSyslogCase({ directory, raw: 'RAW-LINE',
     parsed: { msgid: 'cloudwalker-webshell', ts: '2026-11-17T10:00:00Z', payload_format: 'keyvalue',
       payload: { host_ip: '10.0.0.5', process_command_line: 'id' } },
@@ -213,7 +213,7 @@ test('A5 两个证据件的数据目录断言已经跟上七条路径', async ()
 // ── 负范围钉子：案卷目录里不再出现这两份文件（写盘面零残留） ─────────────────
 test('A1 新增代码不再产出 baseline/intel 相关文件，案卷目录只有既定材料', async t => {
   const directory = await tmp();
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const info = await writeSyslogCase({ directory, raw: 'RAW-LINE',
     parsed: { msgid: 'cloudwalker-webshell', ts: '2026-11-17T10:00:00Z', payload_format: 'keyvalue', payload: { host_ip: '10.0.0.5' } },
     context: { occurrence_count: 1, delivery_count: 1, window: [], history: [] },

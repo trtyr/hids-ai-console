@@ -6,6 +6,10 @@
 //   docs/architecture.md —— §3.5 缺配置时会怎样（闸门五项、装配处抛值的形状）/ §3.6 日志事件表 / §10.1 配置项
 // 做法：真进程（env 全隔离）+ 进程内 createServer（文档 §3.5 明确允许的唯一「缺必填」起法）+ 真 HTTP。
 // 断言不写死「当前实现长什么样」：200 正文一律按 openapi.getConfig 的 schema 逐字段验一遍。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';

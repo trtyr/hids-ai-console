@@ -18,7 +18,7 @@ import { TriageRuleEngine } from '../../../triage-rules.js';
 import { InvestigationAgent } from '../../../investigation-agent.js';
 import { TriageMonitor } from '../../../triage-monitor.js';
 import { InvestigationStore } from '../../../investigation-store.js';
-import { createJournal, useJournal } from '../../../log.js';
+import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
 
 const MARKER = 'RAW_ONLY_f7a3 上游细节';
 // 记录侧合同（investigation-agent §3.2 / triage-pipeline §6.4）：固定文案 + 原文字符量，不含原文。
@@ -82,7 +82,7 @@ test('A1-b 规则评估回 status=error：decision.reason 同样过闸（http-ap
 // ── A1-c：落到磁盘的研判记录同样干净（真 InvestigationStore，不是抓对象）──────────
 test('A1-c 研判记录落盘：磁盘文件里搜不到规则错误原文（http-api.md:55）', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t054-a1c-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const history = new InvestigationStore(directory);
   const seenModel = [];
   const base = await bootHttp(t, {
@@ -110,7 +110,7 @@ test('A1-c 研判记录落盘：磁盘文件里搜不到规则错误原文（htt
 // ── A2：未匹配 syslog 的两条记录去处（investigation-agent.md:920）──────────────
 test('A2 未匹配 syslog：上游 reason 的徽标不再保留，只留固定文案 + 字符量', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t054-a2-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   await writeFile(path.join(directory, '03-研判事实.md'), '# 研判事实\n来源 192.0.2.2\n');
   const modelFailure = `${MARKER} 说明调用炸了`;
   const agent = new InvestigationAgent(
@@ -136,7 +136,7 @@ test('A2 未匹配 syslog：上游 reason 的徽标不再保留，只留固定�
 // ── A3：readConfig().error 的闸（triage-rules.md:388）─────────────────────────
 test('A3 triage-rules：规则文件非法时 readConfig().error 是闸后文案，原文不进返回体', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t054-a3-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const file = path.join(directory, 'triage-rules.json');
   // 非法 JSON 且正文含标记：V8 的报错会把开头几个字抄进 error.message，正是这道闸要挡的形态。
   await writeFile(file, `{"config": ${MARKER}}`);
@@ -150,7 +150,7 @@ test('A3 triage-rules：规则文件非法时 readConfig().error 是闸后文案
 // ── A7：drain 收尾 catch 的 lastError（triage-pipeline.md:1033）───────────────
 test('A7 研判收尾抛错：summary().last_error 过闸，队列文件不带原文，日志行仍留原文', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t054-a7-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const lines = [];
   useJournal(createJournal({ write: line => lines.push(JSON.parse(line)) }));
   t.after(() => useJournal());

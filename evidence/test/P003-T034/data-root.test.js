@@ -152,7 +152,7 @@ test('A4 四个落点定义文件里没有把落点算回仓库的代码（更�
 
 test('A4 旧位目录里躺着数据时，数据根不被自动填充（不建目录、不拷贝）', async t => {
   const base = await mkdtemp(path.join(tmpdir(), 'hids-migrate-'));
-  t.after(() => rm(base, { recursive: true, force: true }));
+  t.after(() => rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const oldRepo = path.join(base, 'old-repo');
   await mkdir(path.join(oldRepo, '.data', 'investigations'), { recursive: true });
   await writeFile(path.join(oldRepo, '.data', 'investigations', 'old.json'), '{"from":"old"}');

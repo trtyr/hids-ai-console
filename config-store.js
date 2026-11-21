@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { log } from './log.js';
+import { log } from './src/shared/logging/log.js';
 import { RpcClient } from './rpc-client.js';
 import { ChatModelClient, MODEL_GROUP_KEYS, MODEL_ROLE_GROUPS, MODEL_ROLES, modelGroupValues, modelRoleValues } from './model-client.js';
 

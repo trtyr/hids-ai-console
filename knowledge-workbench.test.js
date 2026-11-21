@@ -1,3 +1,4 @@
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -6,6 +7,8 @@ import path from 'node:path';
 import { KnowledgeStore } from './knowledge-store.js';
 import { KnowledgeWorkbench } from './knowledge-workbench.js';
 import { createServer } from './server.js';
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('conversation keeps incomplete experience and resumes until ready for review', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-knowledge-'));

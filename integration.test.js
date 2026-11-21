@@ -1,3 +1,4 @@
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -9,6 +10,8 @@ import { TriageMonitor } from './triage-monitor.js';
 import { CloudwalkerGateway, rpcMethods } from './cloudwalker.js';
 import { normalizeAlert } from './cloudwalker.js';
 import { createServer } from './server.js';
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('RPC forwards API token in cookie and uses source method contract', async () => {
   let seen;

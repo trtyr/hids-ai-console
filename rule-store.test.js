@@ -1,3 +1,4 @@
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
@@ -28,6 +29,8 @@ async function serve(t, rules) {
 }
 
 // ---- A1：一条规则一份 Rego，有名字，能列、能按 id 读到原文 ----
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('A1 一条规则一份 Rego：能列出名字，能按 id 逐字读回原文', async t => {
   const source = rule('brute_force', ['input.type == "brute_force"'], { name: '暴力破解', description: '登录失败聚集' });

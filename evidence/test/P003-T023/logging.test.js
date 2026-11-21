@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createJournal, log, useJournal } from '../../../log.js';
+import { createJournal, log, useJournal } from '../../../src/shared/logging/log.js';
 import { TriageMonitor } from '../../../triage-monitor.js';
 import { createServer } from '../../../server.js';
 import { InvestigationStore } from '../../../investigation-store.js';
@@ -142,8 +142,11 @@ test('A2 HTTP：每条请求一条 http.request，带方法/路径/状态/耗时
   assert.equal(ok.status, 200);
 
   const requestLine = lines.find(line => line.event === 'http.request');
+  // P003-T072：http.request 行带 request_id（ALS 自动）与 user（有登录态；无登录态写 null）。
   assert.deepEqual({ ...requestLine, duration_ms: 0 }, { time: AT, level: 'info', event: 'http.request',
-    method: 'GET', path: '/api/session', status: 200, duration_ms: 0 });
+    method: 'GET', path: '/api/session', status: 200, duration_ms: 0,
+    request_id: requestLine.request_id, user: 'operator' });
+  assert.ok(requestLine.request_id, 'http.request 带 request_id');
   assert.equal(typeof requestLine.duration_ms, 'number');
 
   // 路径里的 query 不记（可能带令牌）；请求头一个字节都不记。
@@ -182,7 +185,7 @@ test('A2 syslog 收下 / 解析失败 / 跳过都在日志里，告警 ID 跟着
   const monitor = new TriageMonitor({ service: {}, investigator: {}, history: {},
     file: path.join(directory, 'queue.json'), inputMode: 'syslog' });
   // 先等队列收尾再删目录：run() 的 persist 还没写完就 rm 会撞 ENOTEMPTY。
-  t.after(async () => { await monitor.writeChain; await monitor.acceptChain; await rm(directory, { recursive: true, force: true }); });
+  t.after(async () => { await monitor.writeChain; await monitor.acceptChain; await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
   const { lines } = capture(t);
 
   const line = '<134>1 2026-11-03T08:00:00Z host app 1 cloudwalker-honeypot ' +
@@ -243,7 +246,7 @@ test('A2 研判入队 → 完成 / 失败都留痕，带告警 ID 与结论', as
 
 test('A2 误报维护结果（两侧状态与原因）留在 maintenance.result 里', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-log-maintenance-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const { lines } = capture(t);
   const monitor = { records: new Map(), persist: async () => {} };
   const alertId = 'syslog:honeypot:0123456789abcdef:1763373600:6f1b6a4e-4d3a-4b8e-9a4e-2f6f1b6a4e43';
@@ -271,7 +274,7 @@ test('A2 误报维护结果（两侧状态与原因）留在 maintenance.result 
 
 test('A2 syslog 研判时的牧云取数失败也落 cloudwalker.call_failed（不被降级吞掉）', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-log-match-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const { lines } = capture(t);
   const monitor = new TriageMonitor({ service: {}, history: { save: async result => ({ ...result, saved_at: AT }) },
     file: path.join(directory, 'queue.json'), inputMode: 'syslog', concurrency: 1,
@@ -290,7 +293,7 @@ test('A2 syslog 研判时的牧云取数失败也落 cloudwalker.call_failed（�
 
 test('A2 syslog 绑定失败与接收器错误也在日志里', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-log-bind-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const { lines } = capture(t);
   const monitor = new TriageMonitor({ service: {}, investigator: {}, history: {},
     file: path.join(directory, 'queue.json'), inputMode: 'syslog' });

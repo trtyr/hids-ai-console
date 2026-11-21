@@ -254,7 +254,7 @@ async function stack({ ruleRego = '', queued = false } = {}) {
     baseUrl, ruleCalls, queued,
     async close() {
       await new Promise(r => server.close(r));
-      await rm(base, { recursive: true, force: true });
+      await rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   };
 }

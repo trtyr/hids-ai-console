@@ -2,6 +2,10 @@
 // 依据只有两份契约文本：openapi.yaml（Error / InternalError / /api/status 502）与
 // docs/modules/http-api.md（§1 响应形状 / §3.1 前置条件 / §5 三档令牌 / §6 SSE / §7 分页 / §8.1 正文 / §8.3 四类表 / §9.2）。
 // 断言口径全部照文档原文抄，不从实现里读答案；跑的是真 HTTP（createServer 注入替身，不碰外部网络）。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -367,7 +371,7 @@ test('e2e 真进程：node server.js 配了牧云但与上游不通时，502/404
     probe.listen(0, '127.0.0.1', () => { const { port: free } = probe.address(); probe.close(() => resolve(free)); });
   });
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t024-e2e-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const child = spawn(process.execPath, ['server.js'], { cwd: ROOT,
     // HIDS_DATA_DIR 指到这条用例自己的 tmp 目录：真进程一个字节都不许写进仓库或真实全局根（P003-T034 A2）。
     env: { PATH: process.env.PATH, HIDS_DATA_DIR: directory, HIDS_HOST: '127.0.0.1', HIDS_PORT: String(port),

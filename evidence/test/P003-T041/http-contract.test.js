@@ -1,3 +1,7 @@
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -26,7 +30,8 @@ function rego(id, body, name = `规则 ${id}`, description = '测试用规则') 
 
 async function dataRoot(t) {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t041-http-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  // P003-T072：子进程默认落盘日志（异步 append），SIGKILL 后可能有在飞的写——清理加重试兜底。
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return directory;
 }
 

@@ -2,6 +2,8 @@
 // 口径见 docs/modules/http-api.md §8.3：
 //   caller_error → 4xx（400 参数 / 403 权限 / 404 不存在 / 405 方法 / 409 冲突 / 410 已下线 / 422 无法溯源）
 //   not_configured → 503 / upstream_error → 502 / internal_error → 500（固定文案「服务器内部错误」）
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from '../../../server.js';
@@ -25,6 +27,8 @@ const failureOf = async response => {
 
 // 四类的状态码与 code 是固定对照表，测试里照抄一遍：实现改了表，下面几条会一起红。
 const CLASS_TABLE = { caller_error: 400, not_configured: 503, upstream_error: 502, internal_error: 500 };
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('A1 四类各一条：调用方传错 400 / 没配置 503 / 上游失败 502 / 本程序失败 500，各自带稳定 code', async t => {
   const callerBase = await serve(t, { service: { alerts: async () => ({ alerts: [], partial: false }) } });

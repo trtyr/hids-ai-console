@@ -228,7 +228,7 @@ test('A2 模型直接吐 JSON 的兼容路径：先催一轮知识库，未调�
 
 test('A1/A2 捷径：命中已审核客户经验时 rego 与主路径同口径，wiki 写明未调用知识库工具', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t012-reuse-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const store = new KnowledgeStore(directory);
   const created = await store.create();
   await store.update(created.id, current => {
@@ -379,7 +379,7 @@ test('结果形状：run() 必备字段与枚举值符合文档', async () => {
 
 test('A4 同主机同事件秒同告警只研判一次，重复投递只累加 repeat_count', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t012-a4-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const runs = [];
   const history = new InvestigationStore(path.join(directory, 'investigations'));
   const monitor = new TriageMonitor({

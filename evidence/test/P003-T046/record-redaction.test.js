@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { AgentToolbox } from '../../../agent-tools.js';
 import { InvestigationAgent } from '../../../investigation-agent.js';
-import { traceModelCall } from '../../../log.js';
+import { traceModelCall } from '../../../src/shared/logging/log.js';
 
 const MARKER = 'SECRET_BODY_MARKER';
 const CLEAN = /SECRET_BODY_MARKER|SECRET_BOD|Unexpected token|is not valid JSON/;
@@ -144,7 +144,7 @@ test('A1 工具调用报错：trace[tool_error] 不写原文，模型会话里�
 
 test('A1 未匹配 syslog：模型说明失败与上游查询失败都只留固定文案 + 字符量（P003-T054 起不再保留徽标）', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-redact-syslog-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   await writeFile(path.join(directory, '03-研判事实.md'), '# 研判事实\n来源 192.0.2.2\n');
   const modelError = `${MARKER} 说明调用炸了`;
   const model = { model: 'fake', complete: async () => { throw new Error(modelError); } };

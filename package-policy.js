@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PromptStore } from './prompt-store.js';
-import { log } from './log.js';
+import { log } from './src/shared/logging/log.js';
 import { sealPackage } from './update-store.js';
 
 const usage = '生成密钥：node package-policy.js --init-keys <内部密钥目录>\n制作更新包：node package-policy.js <公开更新说明.json> <输出.hids-policy>\n密钥路径与环境标识通过 HIDS_UPDATE_* 环境变量提供。';

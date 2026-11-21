@@ -3,6 +3,7 @@
 // 复算（重跑）只读盘——替身牧云的调用计数在复算前后必须不变。
 // 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
 // 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { BoardStore } from '../../../src/contexts/trace/infrastructure/board-store.js';
 import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +16,8 @@ import { InvestigationAgent, persistedEvidenceViewMax } from '../../../investiga
 import { boundSyslogView, compactEvidenceView, projectEvidence, syslogOmittedFieldsLimit } from '../../../evidence-view.js';
 import { InvestigationStore } from '../../../investigation-store.js';
 import { requiredEvidenceFile, requiredEvidenceMaxChars, readRequiredEvidence, writeRequiredEvidence } from '../../../syslog-case.js';
-import { TraceBoardService, findingsRowLimit, findingsRowsMaxChars } from '../../../trace-board.js';
+import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';
+import { findingsRowLimit, findingsRowsMaxChars } from '../../../src/contexts/trace/domain/board.js';
 import { queueArgValueMaxChars, queueEvidenceItem } from '../../../triage-monitor.js';
 import { KnowledgeStore } from '../../../knowledge-store.js';
 import { knowledgeFields } from '../../../knowledge-workbench.js';
@@ -60,7 +62,7 @@ test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，�
 
 test('A1+A2+A8 一条 triage 研判走完：案卷有必查项前 5 行与计数，证据带 view 原文；复算只读盘不再发 RPC', async t => {
   const caseDir = await mkdtemp(path.join(tmpdir(), 'hids-t040-case-'));
-  t.after(() => rm(caseDir, { recursive: true, force: true }));
+  t.after(() => rm(caseDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const caseInfo = { case_dir: caseDir, files: [] };
   const { calls, agent } = triageHarness();
   const result = await agent.run('suspicious_operation:7', { mode: 'triage', streamContext: syslogContext(caseInfo) });
@@ -100,7 +102,7 @@ test('A1+A2+A8 一条 triage 研判走完：案卷有必查项前 5 行与计数
 
 test('A3 deep 模式：原始事件的投影 view 随 evidence[] 进研判记录（InvestigationStore 落盘）', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t040-deep-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const { calls, agent } = triageHarness();
   const result = await agent.run('suspicious_operation:7', { mode: 'deep' });
   assert.equal(result.mode, 'deep');
@@ -121,7 +123,7 @@ test('A3 deep 模式：原始事件的投影 view 随 evidence[] 进研判记录
 
 test('A5 必查项落盘有字节上界：超界先降级成只留计数，再放不下才记 omitted_items', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t040-bound-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const caseInfo = { case_dir: directory, files: [] };
   const fat = index => ({ id: `check-${index}`, label: `第 ${index} 项`, tool: 'list_host_events', scope: '同主机',
     status: 'records_returned', evidence_id: `cw:${index}`, returned_count: 8, total_reported: 12,
@@ -156,7 +158,7 @@ test('A5 降级回包的 omitted_fields 封顶：4KB 载荷不再吐出比上限
 
 test('A4 白板 findings 按页落完整投影（不再只留 12 行），超界只缩行并记 rows_omitted', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t040-findings-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const nowSeconds = Math.floor(Date.now() / 1000);
   const events = Array.from({ length: 30 }, (_, index) => ({ id: 200 + index, event_type: 'honeypot',
     host_view: { host_ip: '172.20.208.23' }, source_ip: '64.177.57.21',
@@ -170,7 +172,7 @@ test('A4 白板 findings 按页落完整投影（不再只留 12 行），超界
       }, verifyClaims: () => ({ ok: true }) }) };
   const actions = [{ action: 'investigate', node: 'ip:64.177.57.21', why: '查这个来源碰过哪些主机' },
     { action: 'conclude', summary: '只有触达线索', gaps: [] }];
-  const service = new TraceBoardService({ directory, toolbox,
+  const service = new TraceBoardService({ store: new BoardStore(directory), directory, toolbox,
     model: { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) },
     promptStore: { load: async () => ({ prompts: { trace: '追查目标' } }) } });
   await service.start('64.177.57.21');
@@ -244,7 +246,7 @@ test('A7 评估结论：description 与 cmdlines 纳入 agent 证据视图（含
 
 test('A1 复审 major：捷径路径写案卷失败当场抛，不被「经验核对失败」吞掉也不白跑一整轮', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t040-shortcut-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const store = new KnowledgeStore(path.join(directory, 'knowledge'));
   const created = await store.create();
   await store.update(created.id, current => {

@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { TraceBoardService } from './trace-board.js';
+import { TraceBoardService } from './src/contexts/trace/application/trace-service.js';
+import { BoardStore } from './src/contexts/trace/infrastructure/board-store.js';
 
 test('concurrent board reads always see a complete saved snapshot', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'trace-atomic-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const service = new TraceBoardService({ directory });
+  const service = new TraceBoardService({ store: new BoardStore(directory) });
   const board = { id: 'honeypot:7', status: 'done', activity: [], summary: 'A'.repeat(200000) };
   await service.save(board);
   let writes = 0;
@@ -39,7 +40,7 @@ test('incomplete model action is recorded and retried without ending the investi
   const responses = ['{"action":"look"',
     '{"action":"investigate","node":"ip:64.177.57.21","why":"核查来源地址"}',
     '{"action":"conclude","summary":"未发现其他资产","gaps":[]}'];
-  const service = new TraceBoardService({ directory, toolbox: { listTools: async () => [],
+  const service = new TraceBoardService({ store: new BoardStore(directory), directory, toolbox: { listTools: async () => [],
     investigation: () => ({ started: 0, maxCalls: 10, records: new Map() }) },
     model: { model: 'fake', complete: async () => ({ content: responses.shift() }) },
     promptStore: { load: async () => ({ prompts: { trace: '按证据调查' } }) } });
@@ -98,11 +99,11 @@ test('AI investigation grows a persisted board and rejects unsupported links', a
   ];
   const model = { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) };
   const promptStore = { load: async () => ({ prompts: { trace: '按白板行动' } }) };
-  const service = new TraceBoardService({ toolbox, model, promptStore, directory });
+  const service = new TraceBoardService({ store: new BoardStore(directory), toolbox, model, promptStore });
   const initial = await service.start('honeypot:7');
   assert.equal(initial.edges.length, 0);
   await service.running.get('honeypot:7');
-  const board = await new TraceBoardService({ toolbox, model, promptStore, directory }).get('honeypot:7');
+  const board = await new TraceBoardService({ store: new BoardStore(directory), toolbox, model, promptStore }).get('honeypot:7');
   assert.equal(board.status, 'done');
   assert.equal(board.investigations, 1);
   assert.equal(board.nodes.find(node => node.id === board.seed).profile.os, 'Ubuntu 20.04');
@@ -130,7 +131,7 @@ test('IP start discovers touched hosts as program leads without claiming an AI p
     { action: 'conclude', summary: '目前只有触达线索，尚无横向移动证据', gaps: [] }];
   const model = { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) };
   const service = new TraceBoardService({ toolbox, model,
-    promptStore: { load: async () => ({ prompts: { trace: '追查目标' } }) }, directory });
+    promptStore: { load: async () => ({ prompts: { trace: '追查目标' } }) }, store: new BoardStore(directory) });
   await service.start('64.177.57.21');
   await service.running.get('ip:64.177.57.21');
   const board = await service.get('64.177.57.21');
@@ -165,7 +166,7 @@ test('asset investigation gives newly discovered external IPs the same ids as ev
     { action: 'conclude', summary: '只发现触达线索', gaps: [] }];
   const model = { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) };
   const service = new TraceBoardService({ toolbox, model,
-    promptStore: { load: async () => ({ prompts: { trace: '追查目标' } }) }, directory });
+    promptStore: { load: async () => ({ prompts: { trace: '追查目标' } }) }, store: new BoardStore(directory) });
   await service.start('honeypot:7');
   await service.running.get('honeypot:7');
   const board = await service.get('honeypot:7');
@@ -184,7 +185,7 @@ test('A1 已有溯源直接返回那条，不再查一遍告警详情', async t 
     alert: { id: 'honeypot:7', type: 'honeypot', title: '蜜罐', host: '172.20.208.23',
       occurred_at: '2026-11-18T03:00:00.000Z' },
     created_at: '2026-11-18T03:00:00.000Z', updated_at: '2026-11-18T04:00:00.000Z' }));
-  const service = new TraceBoardService({ directory, toolbox: { investigation: () => { throw new Error('不该查牧云'); } },
+  const service = new TraceBoardService({ store: new BoardStore(directory), directory, toolbox: { investigation: () => { throw new Error('不该查牧云'); } },
     model: { model: 'fake' } });
   const resumed = await service.startOrResume('honeypot:7');
   assert.equal(resumed.created, false);
@@ -204,7 +205,7 @@ test('A1 没有溯源时从告警新建，created 为真并标出告警起点', 
   const actions = [{ action: 'look' },
     { action: 'investigate', node: 'asset:172.20.208.23', why: '先核查告警资产' },
     { action: 'conclude', summary: '只标了起点', gaps: [] }];
-  const service = new TraceBoardService({ directory, toolbox,
+  const service = new TraceBoardService({ store: new BoardStore(directory), directory, toolbox,
     model: { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) },
     promptStore: { load: async () => ({ prompts: { trace: '追查' } }) } });
   const started = await service.startOrResume('honeypot:7');
@@ -231,7 +232,7 @@ test('A2 列表给出类型/主机/告警时间/状态/链长/断点/更新时�
       nodes: Array.from({ length: hops }, (_item, index) => ({ id: `hop:${index}` })), edges: [], gaps,
       alert: { id, type, title: id, host, occurred_at: occurredAt },
       created_at: occurredAt, updated_at: updated }));
-  const service = new TraceBoardService({ directory });
+  const service = new TraceBoardService({ store: new BoardStore(directory) });
 
   const all = await service.page();
   assert.equal(all.total, 3);
@@ -276,7 +277,7 @@ test('A3 详情是 hops/links/gaps/discovery，线从更晚指向更早', async 
       citations: [{ evidence_id: 'cw:2', pointer: '/events/0/source_ip', value: '64.177.57.21' }] }],
     gaps: [{ hop_id: 'ip:64.177.57.21', reason: 'HIDS 上没有更早的记录' }],
     activity: [], created_at: '2026-11-18T03:00:00.000Z', updated_at: '2026-11-18T04:00:00.000Z' }));
-  const detail = await new TraceBoardService({ directory }).get('honeypot:7');
+  const detail = await new TraceBoardService({ store: new BoardStore(directory) }).get('honeypot:7');
 
   assert.equal(detail.chain_length, 2);
   assert.equal(detail.has_gaps, true);
@@ -304,7 +305,7 @@ test('A3 两端时间相同时按离告警的远近定方向：从告警一侧�
     ],
     edges: [{ from: 'ip:64.177.57.21', to: 'asset:172.20.208.23', rel: '触达' }],
     gaps: [], activity: [], created_at: '2026-11-18T03:00:00.000Z', updated_at: '2026-11-18T04:00:00.000Z' }));
-  const detail = await new TraceBoardService({ directory }).get('honeypot:8');
+  const detail = await new TraceBoardService({ store: new BoardStore(directory) }).get('honeypot:8');
   assert.equal(detail.links[0].from, 'asset:172.20.208.23');
   assert.equal(detail.links[0].to, 'ip:64.177.57.21');
 });
@@ -320,7 +321,7 @@ test('A4 告警分析已取到的证据直接引用，不为同一份再查一�
     { action: 'investigate', node: 'asset:172.20.208.23', why: '沿触发链往回' },
     { action: 'conclude', summary: '断在来源一侧',
       gaps: [{ hop_id: 'ip:64.177.57.21', reason: 'HIDS 上没有更早的记录' }] }];
-  const service = new TraceBoardService({ directory, toolbox,
+  const service = new TraceBoardService({ store: new BoardStore(directory), directory, toolbox,
     model: { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) },
     promptStore: { load: async () => ({ prompts: { trace: '追查' } }) },
     analysis: async alertId => alertId === SYSLOG_ALERT ? { evidence_id: 'syslog:1', tool: 'received_syslog',
@@ -343,7 +344,7 @@ test('A4 告警分析已取到的证据直接引用，不为同一份再查一�
 test('A4 syslog 告警没有分析证据时明确拒绝，不猜', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'trace-noreuse-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const service = new TraceBoardService({ directory, model: { model: 'fake' },
+  const service = new TraceBoardService({ store: new BoardStore(directory), directory, model: { model: 'fake' },
     toolbox: { investigation: () => ({ started: 0, maxCalls: 10, records: new Map() }) } });
   await assert.rejects(service.start(SYSLOG_ALERT),
     error => error.status === 422 && /分析记录/.test(error.message));

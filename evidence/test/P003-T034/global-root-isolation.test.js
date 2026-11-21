@@ -55,7 +55,7 @@ function runNode(source, { home } = {}) {
 
 async function newTemporaryHome(t) {
   const home = await mkdtemp(path.join(tmpdir(), 'hids-t050-home-'));
-  t.after(() => rm(home, { recursive: true, force: true }));
+  t.after(() => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return home;
 }
 

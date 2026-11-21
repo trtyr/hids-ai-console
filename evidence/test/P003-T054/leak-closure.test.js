@@ -24,7 +24,7 @@ test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，�
 
 async function tempDir(t) {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t054-leak-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return directory;
 }
 

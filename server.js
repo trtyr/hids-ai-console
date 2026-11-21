@@ -14,12 +14,13 @@ import { InvestigationAgent, replayInvestigation } from './investigation-agent.j
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
 import { TriageMonitor } from './triage-monitor.js';
-import { log, logFileOptions, pruneLogFiles, readLogEntries, queryLevels, traceModelCall, useLogFile } from './log.js';
+import { log, logFileOptions, pruneLogFiles, readLogEntries, queryLevels, traceModelCall, useLogFile } from './src/shared/logging/log.js';
 import { SyslogReceiver, parseSyslog } from './syslog-input.js';
 import { eventTypeFor } from './syslog-input.js';
 import { WikiStore } from './wiki-store.js';
 import { WikiWorkbench } from './wiki-workbench.js';
-import { TraceBoardService } from './trace-board.js';
+import { TraceBoardService } from './src/contexts/trace/application/trace-service.js';
+import { BoardStore } from './src/contexts/trace/infrastructure/board-store.js';
 import { UpdateStore } from './update-store.js';
 import { TriageRuleEngine, validateRuleSet } from './triage-rules.js';
 import { reasonForRecord, scrubCredentials } from './src/shared/redaction.js';
@@ -29,6 +30,12 @@ import { FalsePositiveMaintainer, FP_LIBRARIES, FpSessionStore, fpSessionDirecto
 import { createConfigStore, dataRoot } from './config-store.js';
 import { writeJson as json, callerError, configError, upstreamError, causeError, failureClasses,
   failureKindOf, failureStatusOf, sendUnauthorized, sendCloudwalkerStatusFailure, sseErrorFrame } from './src/shared/errors.js';
+import { runWithRequestContext, currentRequestContext } from './src/shared/logging/log.js';
+import { AuditStore } from './src/contexts/audit/infrastructure/audit-store.js';
+import { createAuditor, actorOf, configAuditValues } from './src/contexts/audit/application/audit-service.js';
+import { VERDICT_KEYS, TRIAGE_STATUSES, VERDICT_LABELS } from './src/contexts/triage/domain/triage-case.js';
+import { CASE_FILE_WHITELIST, CASE_FILE_CONTENT_TYPES } from './syslog-case.js';
+import { levelNames } from './src/shared/vocabulary.js';
 
 const runtime = runtimePaths(); // 根＝数据根（HIDS_DATA_DIR 或 ~/.local/share/hids-ai-console），清单与旧目录说明见文件末尾 runtimePaths()
 // 日志落盘（P003-T045）：配了 HIDS_LOG_FILE 才在 stdout 之外再同份写文件，不配维持 stdout-only。
@@ -144,7 +151,7 @@ export function createAnalysisProvider({ monitor = null, history = null } = {}) 
 }
 
 const traceBoard = agentToolbox && models ? new TraceBoardService({ toolbox: agentToolbox, model: models.trace_board, promptStore,
-  directory: runtime.traceBoards,
+  store: new BoardStore(runtime.traceBoards),
   analysis: createAnalysisProvider({ monitor: triageMonitor, history: investigationStore }) }) : null;
 
 // ── 误报维护（P003-T013）──────────────────────────────────────────────────
@@ -442,8 +449,8 @@ function validTraceTarget(value) {
 }
 // /api/alerts 的筛选词表：等级既收 levelKey 也收 1-4 序号，统一落成秩再下推。
 const levelFilters = Object.freeze({ '1': 1, low: 1, '2': 2, medium: 2, '3': 3, high: 3, '4': 4, critical: 4 });
-const triageStatusFilters = new Set(['not_queued', 'queued', 'running', 'done', 'failed']);
-const verdictFilters = new Set(['review', 'threat', 'uncertain', 'false_positive']);
+const triageStatusFilters = new Set(TRIAGE_STATUSES);
+const verdictFilters = new Set(['review', ...VERDICT_KEYS]);
 // 研判状态 / 结论要挂完 triage 才能判，只能翻页扫；单次请求最多扫这么多条。
 const TRIAGE_SCAN_LIMIT = 500;
 const paramList = (params, name) => params.getAll(name).flatMap(value => value.split(',')).map(value => value.trim()).filter(Boolean);
@@ -530,7 +537,10 @@ function logQuery(params) {
   if (from && !fromTime) return { error: `筛选起始时间无效：${from}` };
   if (to && !toTime) return { error: `筛选结束时间无效：${to}` };
   if (fromTime && toTime && fromTime > toTime) return { error: '筛选起始时间晚于结束时间' };
-  return { filters: { events, levels, from: fromTime, to: toTime } };
+  return { filters: { events, levels, from: fromTime, to: toTime,
+    q: params.get('q')?.trim() || null,
+    requestId: params.get('request_id')?.trim() || null,
+    user: params.get('user')?.trim() || null } };
 }
 
 // 研判侧筛选：逐页拉取、挂 triage 后过滤，翻到流末或扫描上限后再切页。
@@ -808,7 +818,7 @@ const routeMethods = Object.freeze({
   '/api/rules': ['GET'], '/api/rules/sessions': ['GET'], '/api/rules/evaluate': ['POST'],
   '/api/false-positive/sessions': ['GET'], '/api/wiki/pages': ['GET'],
   '/api/wiki/health': ['GET'], '/api/wiki/sessions': ['GET', 'POST'],
-  '/api/agent/investigations': ['POST'], '/api/alerts': ['GET']
+  '/api/agent/investigations': ['GET', 'POST'], '/api/alerts': ['GET']
 });
 // 动态前缀：末尾带 / 的键按前缀匹配（`/api/rules/{id}` 系）。
 const routeMethodPrefixes = Object.freeze([
@@ -861,16 +871,28 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
     : null);
   // 数据管理（P003-T044）的路径来源：全部是本次注入的构件，换替身就是换盘点对象。
   const dataDeps = { history, monitor, boardService, wikiAgent, config };
-  return http.createServer(async (req, res) => {
+  // 审计流（P003-T062）：append-only，落 `<数据根>/audit/`，独立于技术日志的轮转与清理。
+  // 落点跟随注入的 config.file 所在目录（生产＝数据根，与 config-overrides.json 同根；测试注入 tmp
+  // 覆盖层文件时审计跟着进 tmp——全局根零痕迹的守卫罩因此不被审计写穿）。记账点在各写路由。
+  const auditRoot = config?.file ? path.dirname(config.file) : dataRoot();
+  const auditStore = new AuditStore(path.join(auditRoot, 'audit'));
+  const auditor = createAuditor(auditStore, { currentRequestContext });
+  // T072：每个请求进 ALS 上下文——request_id 生成一次，处理期间所有 log() 自动带上它；
+  // http.request 行再显式带 user（无登录态写 null，不省键）。
+  return http.createServer((req, res) => runWithRequestContext({ request_id: randomUUID(), user: null },
+    () => handle(req, res)));
+  async function handle(req, res) {
     const startedAt = Date.now();
     // 只记方法与路径（query 一律不记：可能带令牌），请求头一个字段都不碰——Authorization / Cookie 不进日志（A4）。
     const route = String(req.url || '').split('?')[0];
     res.on('finish', () => log('http.request', { method: req.method, path: route, status: res.statusCode,
-      duration_ms: Date.now() - startedAt }));
+      duration_ms: Date.now() - startedAt, user: currentRequestContext()?.user ?? null }));
     if (!hasAccess(req, access)) {
       log('http.unauthorized', { method: req.method, path: route, status: 401 }, 'warn');
       return sendUnauthorized(res);
     }
+    // T072：身份进了上下文——这条请求后续所有日志行自动带 user（无登录态保持 null）。
+    if (access?.password) currentRequestContext().user = access.user || 'admin';
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     try {
       if (url.pathname === '/api/session' && req.method === 'GET') {
@@ -889,8 +911,16 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       // 顺序＝先校验、再落盘、再改 env（config.update 内部），最后原地换活着的客户端值。
       // 响应只回「改了哪几个键 + 生效摘要」：机密永远只以布尔出现（A2）。
       if (url.pathname === '/api/config' && req.method === 'POST') {
-        const updated = await config.update(await readJSON(req));
+        const patch = await readJSON(req);
+        const beforeValues = config.values();
+        const updated = await config.update(patch);
         applyLiveConfig({ gateway, models, agentToolbox }, config.values());
+        // 审计（P003-T062）：记改了哪些键 + 新旧值（机密值只记「已改」）+ 来源（覆盖文件 or 环境变量兜底）。
+        const overridden = Object.keys(configStore.overrides());
+        void auditor({ actor: actorOf({ access }), action: 'config.write',
+          object: { kind: 'config', keys: updated,
+            source: Object.fromEntries(updated.map(key => [key, overridden.includes(key) ? 'override-file' : 'env'])) },
+          ...configAuditValues(beforeValues, patch) });
         return json(res, 200, { updated, config: configSummary(config.env) });
       }
       // 数据管理（P003-T044）：盘点七类运行态的条数与字节；清理按类型与阈值归档或删除（默认 dry-run）。
@@ -898,7 +928,13 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       if (url.pathname === '/api/data/inventory' && req.method === 'GET')
         return json(res, 200, await dataInventory(dataDeps));
       if (url.pathname === '/api/data/cleanup' && req.method === 'POST') {
-        try { return json(res, 200, await dataCleanup(dataDeps, await readJSON(req))); }
+        try {
+          const outcome = await dataCleanup(dataDeps, await readJSON(req));
+          // 审计（P003-T062）：只有真执行（非 dry-run）算写；dry-run 是盘点语义，不记账。
+          if (!outcome.dry_run) void auditor({ actor: actorOf({ access }), action: 'data.cleanup',
+            object: { kind: outcome.kind, action: outcome.action, count: outcome.applied.count, bytes: outcome.applied.bytes } });
+          return json(res, 200, outcome);
+        }
         catch (cause) { return causeError(res, cause, 'internal'); }
       }
       // 日志（P003-T045）：查询读的是盘上的文件（当前活动文件 + 轮转出的历史文件），不是进程内存；
@@ -917,8 +953,45 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       }
       if (url.pathname === '/api/logs/cleanup' && req.method === 'POST') {
         if (!logFile) return configError(res, '日志未落盘：未配置 HIDS_LOG_FILE');
-        try { return json(res, 200, logCleanup(logFile, await readJSON(req))); }
+        try {
+          const body = await readJSON(req);
+          const outcome = logCleanup(logFile, body);
+          if (outcome.dry_run === false) void auditor({ actor: actorOf({ access }), action: 'logs.cleanup',
+            object: { count: outcome.applied.count, bytes: outcome.applied.bytes } });
+          return json(res, 200, outcome);
+        }
         catch (cause) { return causeError(res, cause, 'internal'); }
+      }
+      // 审计查询（P003-T062）：读 append-only 审计流；筛选与分页口径与 /api/logs 一致。
+      if (url.pathname === '/api/audit' && req.method === 'GET') {
+        const count = Number(url.searchParams.get('count') || 20);
+        const offset = Number(url.searchParams.get('offset') || 0);
+        if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
+          return callerError(res, '分页参数无效');
+        const from = url.searchParams.get('from')?.trim();
+        const to = url.searchParams.get('to')?.trim();
+        const fromTime = from ? parseInstant(from) : null;
+        const toTime = to ? parseInstant(to) : null;
+        if (from && !fromTime) return callerError(res, `筛选起始时间无效：${from}`);
+        if (to && !toTime) return callerError(res, `筛选结束时间无效：${to}`);
+        const result = url.searchParams.get('result')?.trim();
+        if (result && !['ok', 'denied', 'error'].includes(result)) return callerError(res, '筛选结果无效：result 只能是 ok、denied、error');
+        return json(res, 200, { ...await auditStore.query({ from: fromTime, to: toTime,
+          actor: url.searchParams.get('actor')?.trim() || null,
+          action: url.searchParams.get('action')?.trim() || null,
+          object: url.searchParams.get('object')?.trim() || null,
+          result: result || null, count, offset }),
+          echo: { count, offset } });
+      }
+      // 字典（P003-T059 A09）：事件类型 / 等级 / 结论 / 案件状态四张表，全部取自代码唯一真源
+      // （shared/vocabulary + triage 领域词表）——这里不做第二份对照表，前端不再硬编码。
+      if (url.pathname === '/api/dict' && req.method === 'GET') {
+        return json(res, 200, {
+          event_types: Object.entries(eventTypes).map(([key, label]) => ({ key, label })),
+          levels: Object.entries(levelNames).map(([rank, [label, key]]) => ({ key, rank: Number(rank), label })),
+          verdicts: VERDICT_KEYS.map(key => ({ key, label: VERDICT_LABELS[key] })),
+          triage_statuses: TRIAGE_STATUSES
+        });
       }
       if (url.pathname === '/api/status' && req.method === 'GET') {
         if (!service) return json(res, 200, { configured: false, connected: false, reason: '请设置牧云地址和 API Token' });
@@ -961,6 +1034,8 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           // 已有白板回 200（直接打开那条），新建才回 202（任务已启动）。
           const started = boardService.startOrResume ? await boardService.startOrResume(target, body.focus)
             : { created: true, board: await boardService.start(target, body.focus) };
+          if (started.created) void auditor({ actor: actorOf({ access }), action: 'trace.start',
+            object: { kind: 'board', target } });
           return json(res, started.created ? 202 : 200, started.board);
         } catch (cause) { return causeError(res, cause, 'upstream'); }
       }
@@ -998,14 +1073,21 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
       }
       if (url.pathname === '/api/triage/rules' && req.method === 'PUT') {
         if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');
-        if (!hasRuleAdminAccess(req, ruleAdminToken)) return callerError(res, '规则管理员令牌无效', 403);
+        if (!hasRuleAdminAccess(req, ruleAdminToken)) {
+          void auditor({ actor: actorOf({ access }), action: 'triage-rules.write',
+            object: { kind: 'triage_rules' }, result: 'denied' });
+          return callerError(res, '规则管理员令牌无效', 403);
+        }
         try {
           const body = await readJSON(req, 100000);
           if (!body || !Object.hasOwn(body, 'expected_revision') ||
             !(body.expected_revision === null || /^[0-9a-f]{16}$/.test(body.expected_revision)))
             return callerError(res, '缺少有效的规则配置版本');
-          return json(res, 200, await (monitor?.ruleEngine || triageRuleEngine)
-            .saveConfig(body.config, body.expected_revision));
+          const saved = await (monitor?.ruleEngine || triageRuleEngine)
+            .saveConfig(body.config, body.expected_revision);
+          void auditor({ actor: actorOf({ access, tokenKind: 'rule-admin' }), action: 'triage-rules.write',
+            object: { kind: 'triage_rules' } });
+          return json(res, 200, saved);
         } catch (cause) { return causeError(res, cause, 'internal'); }
       }
       if (url.pathname === '/api/rules' && req.method === 'GET') {
@@ -1054,18 +1136,30 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         }
         if (ruleMaintenance[2] === 'rollback' && req.method === 'POST') {
           if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');
-          if (!hasRuleAdminAccess(req, ruleAdminToken)) return callerError(res, '规则管理员令牌无效', 403);
+          if (!hasRuleAdminAccess(req, ruleAdminToken)) {
+            void auditor({ actor: actorOf({ access }), action: 'rule.rollback',
+              object: { kind: 'rule', id }, result: 'denied' });
+            return callerError(res, '规则管理员令牌无效', 403);
+          }
           const body = await readJSON(req, 20000);
           const rev = typeof body?.rev === 'string' ? body.rev.trim() : '';
           if (!/^[0-9a-f]{16}$/.test(rev)) return callerError(res, '缺少有效的目标版本 rev');
           const who = String(body.who ?? access?.user ?? 'operator').trim().replace(/\s+/g, ' ').slice(0, 100);
-          try { return json(res, 200, await ruleStore.rollback(id, rev, { note: `人工回滚（${who}）` })); }
-          catch (cause) { return causeError(res, cause, 'internal'); }
+          try {
+            const rolled = await ruleStore.rollback(id, rev, { note: `人工回滚（${who}）` });
+            void auditor({ actor: actorOf({ access, tokenKind: 'rule-admin' }), action: 'rule.rollback',
+              object: { kind: 'rule', id, rev } });
+            return json(res, 200, rolled);
+          } catch (cause) { return causeError(res, cause, 'internal'); }
         }
       }
       if (url.pathname.startsWith('/api/rules/') && req.method === 'PUT') {
         if (!ruleAdminToken) return configError(res, '尚未配置规则管理员令牌');
-        if (!hasRuleAdminAccess(req, ruleAdminToken)) return callerError(res, '规则管理员令牌无效', 403);
+        if (!hasRuleAdminAccess(req, ruleAdminToken)) {
+          void auditor({ actor: actorOf({ access }), action: 'rule.write',
+            object: { kind: 'rule' }, result: 'denied' });
+          return callerError(res, '规则管理员令牌无效', 403);
+        }
         let id;
         try { id = decodeURIComponent(url.pathname.slice('/api/rules/'.length)); }
         catch { return callerError(res, '规则 id 编码无效'); }
@@ -1084,7 +1178,10 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
             ? `人工维护：${body.note.trim().replace(/\s+/g, ' ').slice(0, 200)}` : '人工维护';
           // 版本比对在 `RuleStore` 的写队列里做（与 `WikiStore.update()` 同一口径）：读—比对—写不可分割，
           // 并发两个 PUT 只有一个能落盘，后到的拿 409，不会悄悄盖掉前一份。
-          return json(res, 200, await ruleStore.save(id, body.rego, { note, expectedRevision: expected }));
+          const saved = await ruleStore.save(id, body.rego, { note, expectedRevision: expected });
+          void auditor({ actor: actorOf({ access, tokenKind: 'rule-admin' }), action: 'rule.write',
+            object: { kind: 'rule', id, rev: saved.rev, action: saved.action } });
+          return json(res, 200, saved);
         } catch (cause) { return causeError(res, cause, 'internal'); }
       }
       if (url.pathname.startsWith('/api/rules/') && req.method === 'GET') {
@@ -1111,8 +1208,12 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         if (!monitor) return configError(res, '自动研判尚未配置');
         const body = await readJSON(req);
         if (!body || typeof body !== 'object' || Array.isArray(body)) return callerError(res, '请求正文无效');
-        try { return json(res, 200, await monitor.setEnabled(body.enabled)); }
-        catch (cause) { return causeError(res, cause, 'internal'); }
+        try {
+          const summary = await monitor.setEnabled(body.enabled);
+          void auditor({ actor: actorOf({ access }), action: 'triage.control',
+            object: { kind: 'triage_queue', enabled: body.enabled === true } });
+          return json(res, 200, summary);
+        } catch (cause) { return causeError(res, cause, 'internal'); }
       }
       const falsePositive = url.pathname.match(/^\/api\/agent\/triage\/(.+)\/false-positive$/);
       if (falsePositive && req.method === 'POST') {
@@ -1167,6 +1268,9 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           libraries };
         record.updated_at = at;
         await monitor.persist?.();
+        // 审计（P003-T062）：误报登记是人工结论写入，actor 与登记人一致；理由不进审计（进案件记录）。
+        void auditor({ actor: actorOf({ access }), action: 'false-positive.register',
+          object: { kind: 'case', alert_id: alertId, libraries } });
         // 后台跑两个维护者：失败只写 maintenance，不回滚 verdict；响应不等它们。
         runningMaintenance.add(alertId);
         void maintainFalsePositive({ monitor, record, maintainer: fpAgent, libraries,
@@ -1184,6 +1288,55 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         });
         return json(res, 202, falsePositiveView(record));
       }
+      // 案卷材料清单（P003-T059 A02）：白名单文件 + 字节数 + mtime；目录里非白名单文件不列。
+      // 必须排在下面 startsWith('/api/agent/triage/') 之前——那条会把它当告警 ID 吞掉（路由顺序语义，考古 §六.8）。
+      const caseFiles = url.pathname.match(/^\/api\/agent\/triage\/([^/]+)\/case-files$/);
+      if (caseFiles && req.method === 'GET') {
+        if (!monitor) return configError(res, '自动研判尚未配置');
+        let alertId;
+        try { alertId = decodeURIComponent(caseFiles[1]); }
+        catch { return callerError(res, '告警 ID 编码无效'); }
+        if (!validTriageId(alertId)) return callerError(res, '告警 ID 无效');
+        const info = monitor.status(alertId);
+        if (!info?.case_dir) return callerError(res, '该告警没有案卷目录', 404);
+        const files = [];
+        for (const name of CASE_FILE_WHITELIST) {
+          try {
+            const statInfo = await stat(path.join(info.case_dir, name));
+            files.push({ name, bytes: statInfo.size, mtime: statInfo.mtime.toISOString() });
+          } catch { /* 白名单里但案卷还没写到的那份：不列 */ }
+        }
+        return json(res, 200, { alert_id: alertId, case_dir: info.case_dir, files });
+      }
+      const caseFile = url.pathname.match(/^\/api\/agent\/triage\/([^/]+)\/case-files\/(.+)$/);
+      if (caseFile && req.method === 'GET') {
+        if (!monitor) return configError(res, '自动研判尚未配置');
+        let alertId;
+        try { alertId = decodeURIComponent(caseFile[1]); }
+        catch { return callerError(res, '告警 ID 编码无效'); }
+        let name;
+        try { name = decodeURIComponent(caseFile[2]); }
+        catch { return callerError(res, '案卷文件名编码无效'); }
+        if (!validTriageId(alertId)) return callerError(res, '告警 ID 无效');
+        // 白名单精确匹配：../、绝对路径与 URL 编码变体（%2e%2e）解码后都不可能等于白名单名 → 400。
+        if (!CASE_FILE_WHITELIST.includes(name)) return callerError(res, '案卷文件名不在白名单内');
+        const info = monitor.status(alertId);
+        if (!info?.case_dir) return callerError(res, '该告警没有案卷目录', 404);
+        const location = path.join(info.case_dir, name);
+        // 双保险：解析后必须仍在案卷目录内（防未来白名单误配）。
+        if (!path.resolve(location).startsWith(path.resolve(info.case_dir) + path.sep))
+          return callerError(res, '案卷路径越界');
+        let content;
+        try { content = await readFile(location, 'utf8'); }
+        catch (cause) {
+          if (cause.code === 'ENOENT') return callerError(res, '该案卷还没有这份材料', 404);
+          throw cause;
+        }
+        const contentType = CASE_FILE_CONTENT_TYPES[path.extname(name)] || 'application/octet-stream';
+        res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        res.end(content);
+        return;
+      }
       if (url.pathname.startsWith('/api/agent/triage/')) {
         if (!monitor) return configError(res, '自动研判尚未配置');
         let alertId;
@@ -1191,11 +1344,20 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         catch { return callerError(res, '告警 ID 编码无效'); }
         if (!validTriageId(alertId)) return callerError(res, '告警 ID 无效');
         if (req.method === 'GET') return json(res, 200, monitor.status(alertId) || { alert_id: alertId, status: 'not_queued', evidence: [] });
-        if (req.method === 'POST') return json(res, 202, await monitor.enqueue(alertId, { retry: true }));
+        if (req.method === 'POST') {
+          const record = await monitor.enqueue(alertId, { retry: true });
+          void auditor({ actor: actorOf({ access }), action: 'triage.enqueue',
+            object: { kind: 'case', alert_id: alertId } });
+          return json(res, 202, record);
+        }
         // A9（P003-T036）：取消排队中的案件。404 没有记录、409 已在研判中，都走 causeError 的 caller 类。
         if (req.method === 'DELETE') {
-          try { return json(res, 200, await monitor.cancel(alertId)); }
-          catch (cause) { return causeError(res, cause); }
+          try {
+            const cancelled = await monitor.cancel(alertId);
+            void auditor({ actor: actorOf({ access }), action: 'triage.cancel',
+              object: { kind: 'case', alert_id: alertId } });
+            return json(res, 200, cancelled);
+          } catch (cause) { return causeError(res, cause); }
         }
       }
       if (url.pathname === '/api/agent/prompts' && req.method === 'GET') {
@@ -1231,12 +1393,19 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           if (!body || !Object.hasOwn(body, 'expected_revision') || !/^[0-9a-f]{16}$/.test(String(body.expected_revision)))
             return callerError(res, '缺少有效的页面版本，请刷新后重试');
           try {
-            return json(res, 200, await wiki.update(pagePath.filename, body.content, body.expected_revision,
-              `通过控制台直接编辑（操作人 ${access?.user || 'admin'}）`));
+            const page = await wiki.update(pagePath.filename, body.content, body.expected_revision,
+              `通过控制台直接编辑（操作人 ${access?.user || 'admin'}）`);
+            void auditor({ actor: actorOf({ access }), action: 'wiki.page.write',
+              object: { kind: 'wiki_page', path: pagePath.filename } });
+            return json(res, 200, page);
           } catch (cause) { return causeError(res, cause, 'internal'); }
         }
         if (!promptAdminToken) return configError(res, '尚未配置知识库管理员凭据');
-        if (!hasPromptAdminAccess(req, promptAdminToken)) return callerError(res, '知识库管理员凭据无效', 403);
+        if (!hasPromptAdminAccess(req, promptAdminToken)) {
+          void auditor({ actor: actorOf({ access }), action: 'wiki.maintain',
+            object: { kind: 'wiki_session' }, result: 'denied' });
+          return callerError(res, '知识库管理员凭据无效', 403);
+        }
         if (url.pathname === '/api/wiki/health' && req.method === 'GET') return json(res, 200, await wiki.health());
         if (url.pathname === '/api/wiki/sessions' && req.method === 'GET') return json(res, 200, { sessions: await wikiAgent.list() });
         if (url.pathname === '/api/wiki/sessions' && req.method === 'POST') {
@@ -1249,11 +1418,17 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
               const target = await wikiFeedbackTarget(wiki, { eventType: eventTypeFor(record.input.parsed.msgid),
                 caseDir: record.case_dir, page: body.page || null });
               if (!target) return callerError(res, '当前场景缺少可维护的判据页', 409);
-              return json(res, 201, await wikiAgent.create(target.page.path, {
+              const session = await wikiAgent.create(target.page.path, {
                 case_id: body.case_id, case_dir: record.case_dir, event_type: target.eventType,
-                reason: body.reason, expected_verdict: body.expected_verdict, who: body.who }));
+                reason: body.reason, expected_verdict: body.expected_verdict, who: body.who });
+              void auditor({ actor: actorOf({ access, tokenKind: 'prompt-admin' }), action: 'wiki.maintain',
+                object: { kind: 'wiki_session', id: session.id, page: target.page.path, case_id: body.case_id } });
+              return json(res, 201, session);
             }
-            return json(res, 201, await wikiAgent.create(body.page));
+            const session = await wikiAgent.create(body.page);
+            void auditor({ actor: actorOf({ access, tokenKind: 'prompt-admin' }), action: 'wiki.maintain',
+              object: { kind: 'wiki_session', id: session.id, page: body.page } });
+            return json(res, 201, session);
           }
           catch (cause) { return causeError(res, cause, 'internal'); }
         }
@@ -1265,17 +1440,29 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           }
           if (req.method === 'POST' && sessionMatch[2] === 'messages') {
             const body = await readJSON(req, 12000);
-            try { return json(res, 200, await wikiAgent.reply(sessionMatch[1], body.content)); }
-            catch (cause) { return causeError(res, cause, 'upstream'); }
+            try {
+              const advanced = await wikiAgent.reply(sessionMatch[1], body.content);
+              void auditor({ actor: actorOf({ access, tokenKind: 'prompt-admin' }), action: 'wiki.maintain',
+                object: { kind: 'wiki_session', id: sessionMatch[1], step: 'messages' } });
+              return json(res, 200, advanced);
+            } catch (cause) { return causeError(res, cause, 'upstream'); }
           }
           if (req.method === 'POST' && sessionMatch[2] === 'replay') {
-            try { return json(res, 200, await wikiAgent.replay(sessionMatch[1])); }
-            catch (cause) { return causeError(res, cause, 'upstream'); }
+            try {
+              const replayed = await wikiAgent.replay(sessionMatch[1]);
+              void auditor({ actor: actorOf({ access, tokenKind: 'prompt-admin' }), action: 'wiki.maintain',
+                object: { kind: 'wiki_session', id: sessionMatch[1], step: 'replay' } });
+              return json(res, 200, replayed);
+            } catch (cause) { return causeError(res, cause, 'upstream'); }
           }
           if (req.method === 'POST' && sessionMatch[2] === 'publish') {
             const body = await readJSON(req, 8192);
-            try { return json(res, 200, await wikiAgent.publish(sessionMatch[1], body)); }
-            catch (cause) { return causeError(res, cause, 'upstream'); }
+            try {
+              const published = await wikiAgent.publish(sessionMatch[1], body);
+              void auditor({ actor: actorOf({ access, tokenKind: 'prompt-admin' }), action: 'wiki.publish',
+                object: { kind: 'wiki_session', id: sessionMatch[1], page: published.page?.path || null } });
+              return json(res, 200, published);
+            } catch (cause) { return causeError(res, cause, 'upstream'); }
           }
         }
         return callerError(res, '知识库接口不存在', 404);
@@ -1299,16 +1486,47 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
           try {
             const result = await investigate(executor, body.alert_id, mode,
               (stage, detail) => send({ type: 'progress', stage, detail }));
-            send({ type: 'result', result: await history.save(result) });
-          } catch (cause) { send(sseErrorFrame(cause)); }
+            const saved = await history.save(result);
+            void auditor({ actor: actorOf({ access }), action: 'investigation.run',
+              object: { kind: 'investigation', alert_id: body.alert_id, mode } });
+            send({ type: 'result', result: saved });
+          } catch (cause) {
+            void auditor({ actor: actorOf({ access }), action: 'investigation.run',
+              object: { kind: 'investigation', alert_id: body.alert_id, mode }, result: 'error' });
+            send(sseErrorFrame(cause));
+          }
           finally { clearInterval(heartbeat); if (!res.destroyed) res.end(); }
           return;
         }
         try {
           const result = await investigate(executor, body.alert_id, mode);
-          return json(res, 200, await history.save(result));
+          const saved = await history.save(result);
+          void auditor({ actor: actorOf({ access }), action: 'investigation.run',
+            object: { kind: 'investigation', alert_id: body.alert_id, mode } });
+          return json(res, 200, saved);
         }
         catch (e) { return causeError(res, e, 'upstream'); }
+      }
+      // 研判记录列表（P003-T059 A01）：文件名是 sha256 不可枚举，「浏览昨天研判了哪些」在这里补上。
+      // 必须排在下面 startsWith('/api/agent/investigations/') 之前。
+      if (url.pathname === '/api/agent/investigations' && req.method === 'GET') {
+        const count = Number(url.searchParams.get('count') || 20);
+        const offset = Number(url.searchParams.get('offset') || 0);
+        if (!Number.isSafeInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(offset) || offset < 0)
+          return callerError(res, '分页参数无效');
+        const verdicts = paramList(url.searchParams, 'verdict');
+        for (const value of verdicts) if (!verdictFilters.has(value)) return callerError(res, `筛选结论无效：${value}`);
+        const from = url.searchParams.get('from')?.trim();
+        const to = url.searchParams.get('to')?.trim();
+        const fromTime = from ? parseInstant(from) : null;
+        const toTime = to ? parseInstant(to) : null;
+        if (from && !fromTime) return callerError(res, `筛选起始时间无效：${from}`);
+        if (to && !toTime) return callerError(res, `筛选结束时间无效：${to}`);
+        if (fromTime && toTime && fromTime > toTime) return callerError(res, '筛选起始时间晚于结束时间');
+        const rows = await history.list({ verdicts, from: fromTime, to: toTime });
+        // 与案件列表的口径差一并给出：cases 只列有原始报文的入队记录，这里列全部落盘研判。
+        return json(res, 200, { total: rows.length, items: rows.slice(offset, offset + count),
+          cases_total: monitor ? monitor.cases({ count: 1 }).total : null });
       }
       // 研判会话回放（P003-T046 A3）：读已落盘的研判记录与证据，**不重放模型**。
       // 必须排在下面那条 startsWith 之前：否则 `/replay` 会被当成告警 ID 的后半段，回 400。
@@ -1383,7 +1601,7 @@ export function createServer(service = gateway, toolbox = apiToolbox, investigat
         error: e.message || '未预期的失败' }, 'error');
       causeError(res, e);
     }
-  });
+  }
 }
 
 // 运行态路径的唯一真源（P003-T019 立、P003-T034 搬到数据根）：全部落在数据根下，**仓库里一个字都不写**。

@@ -1,11 +1,12 @@
 // P003-T052：记录侧泄漏收口（T051 §4 表 O1–O8）。
 // 口径：落盘只写「固定文案 + 原文字符量」；错误对象本身、模型可见的回灌内容、日志行都照旧。
+import { BoardStore } from '../../../src/contexts/trace/infrastructure/board-store.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createJournal, useJournal } from '../../../log.js';
+import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
 import { recordFailure, reasonForRecord } from '../../../src/shared/redaction.js';
 import { parseSyslog } from '../../../syslog-input.js';
 import { matchSyslogEvent, writeSyslogCase } from '../../../syslog-case.js';
@@ -13,7 +14,7 @@ import { runWikiReplay } from '../../../wiki-replay.js';
 import { KnowledgeStore } from '../../../knowledge-store.js';
 import { KnowledgeWorkbench } from '../../../knowledge-workbench.js';
 import { TriageMonitor } from '../../../triage-monitor.js';
-import { TraceBoardService } from '../../../trace-board.js';
+import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';;
 import { InvestigationStore } from '../../../investigation-store.js';
 import { collectRequiredEvidence, requiredEvidenceGaps, requiredEvidencePlan } from '../../../required-evidence.js';
 
@@ -94,7 +95,7 @@ test('O6 未匹配 reason：返回体与案件文件过闸、日志行仍留原�
     const logLine = lines.find(line => line.event === 'syslog.match_failed');
     assert.match(logLine.reason, /牧云事件查询失败：Unexpected token 'S'/);
     const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-case-'));
-    t.after(() => rm(directory, { recursive: true, force: true }));
+    t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
     const info = await writeSyslogCase({ directory, raw: 'raw line', parsed, context: {}, match });
     const fact = await readFile(path.join(info.case_dir, '03-研判事实.md'), 'utf8');
     assert.match(fact, /匹配情况：上游调用失败，原文 \d+ 字未落盘/);
@@ -114,7 +115,7 @@ test('O8 回放报告：模型报错原文不落盘，自造判定语照留', as
       case_snapshot: { '01-原始告警.txt': 'raw alert text', '03-研判事实.md': '仅一次探测' } } };
   const prompts = { load: async () => ({ revision: 1, prompts: {} }) };
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-no-cases-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const failed = await runWikiReplay({ record, directory, prompts,
     model: { model: 'fake', complete: async () => { throw upstreamError(); } }, wiki });
   assert.equal(failed.cases[0].before.error, failed.cases[0].after.error);
@@ -134,7 +135,7 @@ test('O8 回放报告：模型报错原文不落盘，自造判定语照留', as
 // 文档（trace-board.md §5.3）说这一支只留固定文案 + 响应长度、不带错误原文；原用例只盖了另一支。
 test('O7 回包解不出动作：SyntaxError 支只留固定文案 + 响应长度，原文不落白板', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-board-syntax-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const replies = [`{"action": "investigate", "node": ${SECRET_BODY}`,
     '{"action":"investigate","node":"asset:172.20.208.23","why":"核查资产"}',
     '{"action":"conclude","summary":"未证实横向","gaps":[]}'];
@@ -142,7 +143,7 @@ test('O7 回包解不出动作：SyntaxError 支只留固定文案 + 响应长�
     complete: async () => ({ content: replies.shift() || '{}' }) });
   await service.start('honeypot:7');
   await service.running.get('honeypot:7');
-  const board = await new TraceBoardService({ directory }).get('honeypot:7');
+  const board = await new TraceBoardService({  store: new BoardStore(directory) }).get('honeypot:7');
   const parseError = board.activity.find(item => item.kind === 'model_error');
   assert.match(parseError.detail, /^模型返回的白板操作 JSON 不完整或格式错误；响应长度 \d+$/);
   assert.doesNotMatch(parseError.detail, /SECRET_BODY/);
@@ -151,7 +152,7 @@ test('O7 回包解不出动作：SyntaxError 支只留固定文案 + 响应长�
 
 async function knowledgeTurn(t, model, content = '补充一句') {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-knowledge-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const store = new KnowledgeStore(directory);
   const workbench = new KnowledgeWorkbench(store, model, { load: async () => ({ prompts: { knowledge: '整理' } }) });
   const created = await workbench.create();
@@ -187,7 +188,7 @@ async function waitFor(monitor, id, done = record => record && !['queued', 'runn
 
 test('O1 run() 抛错：detail / failure.reason 过闸，原文不进队列状态文件', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-triage-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   let thrown;
   const monitor = new TriageMonitor(queueOptions(directory, {
     investigator: { run: async () => { thrown = upstreamError(); throw thrown; } }, retryMaxAttempts: 1 }));
@@ -206,7 +207,7 @@ test('O1 run() 抛错：detail / failure.reason 过闸，原文不进队列状�
 
 test('O2 规则评估抛错：record.steps[].detail 过闸', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-rule-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const monitor = new TriageMonitor(queueOptions(directory, {
     ruleEngine: { evaluate: async () => { throw upstreamError(); } },
     investigator: { run: async alertId => ({ alert_id: alertId, mode: 'triage',
@@ -237,7 +238,7 @@ const ruleErrorVariants = () => {
 test('O2b 规则引擎任何 reason 变体都不落原文（steps / 队列文件 / 研判记录三面）', async t => {
   for (const variant of ruleErrorVariants()) {
     const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-rule-error-'));
-    t.after(() => rm(directory, { recursive: true, force: true }));
+    t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
     let seen = null;
     const monitor = new TriageMonitor(queueOptions(directory, {
       ruleEngine: { evaluate: async () => ({ status: 'error', reason: variant }) },
@@ -266,7 +267,7 @@ test('O2b 规则引擎任何 reason 变体都不落原文（steps / 队列文件
 // 不过闸——否则队列里会把「命中规则」写成「上游调用失败」，误导运维。
 test('O2c 规则命中的模板不过闸（不含上游文本）', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-rule-hit-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const monitor = new TriageMonitor(queueOptions(directory, {
     ruleEngine: { evaluate: async () => ({ status: 'candidate', rule: { id: 'R-7' }, revision: 'r1' }) },
     investigator: { run: async alertId => ({ alert_id: alertId, mode: 'triage',
@@ -279,7 +280,7 @@ test('O2c 规则命中的模板不过闸（不含上游文本）', async t => {
 
 test('O3 lastError 过闸：syslog 解析报错原文不落盘，自造判定语照留', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-lasterror-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const monitor = new TriageMonitor(queueOptions(directory, { inputMode: 'syslog', concurrency: 0 }));
   await monitor.load();
   const badJson = '<14>1 2026-11-11T08:00:00Z host cloudwalker 1 cloudwalker-honeypot {"event_id": SECRET_BODY_7f3a9}';
@@ -295,7 +296,7 @@ const seedEvent = { event: { id: 7, event_name: '蜜罐攻击', source_ip: '64.1
   host_view: { host_ip: '172.20.208.23', host_name: 'demo', host_id: 874 } } };
 const seedView = { facts: { host_ip: { value: '172.20.208.23', pointer: '/event/host_view/host_ip' },
   source_ip: { value: '64.177.57.21', pointer: '/event/source_ip' } } };
-const traceService = (directory, { complete, callTool, tools = [] }) => new TraceBoardService({ directory,
+const traceService = (directory, { complete, callTool, tools = [] }) => new TraceBoardService({ store: new BoardStore(directory), directory,
   toolbox: { listTools: async () => tools.map(name => ({ name })), investigation: () => ({
     started: 0, maxCalls: 20, records: new Map(), verifyClaims: () => ({ ok: false }),
     callTool: callTool || (async name => ({ evidenceId: 'cw:1', tool: name, result: seedEvent, view: seedView })) }) },
@@ -305,11 +306,11 @@ const persistedBoards = async directory => (await Promise.all((await readdir(dir
 
 test('O7 调查中断：白板 gaps 与 error 活动过闸，原文不落盘', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-board-fatal-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const service = traceService(directory, { complete: async () => { throw upstreamError(); } });
   await service.start('honeypot:7');
   await service.running.get('honeypot:7');
-  const board = await new TraceBoardService({ directory }).get('honeypot:7');
+  const board = await new TraceBoardService({  store: new BoardStore(directory) }).get('honeypot:7');
   assert.equal(board.status, 'failed');
   assert.match(board.gaps.at(-1).reason, /^上游调用失败，原文 \d+ 字未落盘$/);
   const interrupted = board.activity.find(item => item.kind === 'error' && item.title === '调查中断');
@@ -319,7 +320,7 @@ test('O7 调查中断：白板 gaps 与 error 活动过闸，原文不落盘', a
 
 test('O7 工具报错与动作驳回：活动详情过闸，回灌模型的错误仍是原文', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-board-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const actions = ['{"action":"investigate","node":"asset:172.20.208.23","why":"核查资产"}',
     '{"action":"fly"}',
     '{"action":"link","from":"ip:64.177.57.21","to":"asset:172.20.208.23","rel":"探测","why":"无引用",'
@@ -335,7 +336,7 @@ test('O7 工具报错与动作驳回：活动详情过闸，回灌模型的错�
     complete: async messages => { seen.push(JSON.stringify(messages)); return { content: actions.shift() }; } });
   await service.start('honeypot:7');
   await service.running.get('honeypot:7');
-  const board = await new TraceBoardService({ directory }).get('honeypot:7');
+  const board = await new TraceBoardService({  store: new BoardStore(directory) }).get('honeypot:7');
   const toolError = board.activity.find(item => item.title === 'list_host_assets 查询失败');
   assert.match(toolError.detail, /^上游调用失败，原文 \d+ 字未落盘$/);
   const rejected = board.activity.find(item => item.title === '操作未通过校验');

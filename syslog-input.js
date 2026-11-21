@@ -1,6 +1,6 @@
 import dgram from 'node:dgram';
 import { createHash } from 'node:crypto';
-import { log } from './log.js';
+import { log } from './src/shared/logging/log.js';
 
 // 牧云 SysLog 数据格式 2.0：RFC5424 行首，正文有结构化数据、JSON、键值对三种形态。
 const pair = /([^\s=]+)="(.*?)"(?=\s+[^\s=]+=|\s*$)/gs;

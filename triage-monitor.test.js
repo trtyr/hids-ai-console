@@ -1,3 +1,4 @@
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -6,6 +7,8 @@ import path from 'node:path';
 import { TriageMonitor } from './triage-monitor.js';
 import { eventSeconds } from './syslog-input.js';
 import { InvestigationStore } from './investigation-store.js';
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('new alerts enter triage once and the cursor survives restart', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-triage-'));

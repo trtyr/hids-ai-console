@@ -3,6 +3,10 @@
 //
 // 这里用真 createServer：monitor 是假的（只提供 records / persist），wiki / 规则库 / 两个维护者 / 维护会话库都是真的，
 // 决策模型不配（走 fallback，按请求的库逐个尝试——与判词探针同一套行为）。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from '../../../server.js';

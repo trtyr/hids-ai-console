@@ -3,6 +3,10 @@
 // 跑法：node --test evidence/test/P003-T030/live-alert-to-triage.test.js
 // 纪律（A3）：全部走替身——`service`（牧云网关）任何方法被调就抛，eventToolbox 只有显式注入的假货；
 // 唯一真网络是 127.0.0.1 上本次测试自己起的 server。没有固定 sleep，等状态用带超时上界的 until()。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eventSeconds, eventTypeFor, sessionKey } from './syslog-input.js';
-import { log } from './log.js';
+import { log } from './src/shared/logging/log.js';
 import { reasonForRecord } from './src/shared/redaction.js';
 
 // 匹配不上的每条分支都从这里出：日志留「哪条规则、差在哪」，返回体保持原样（只增键）。
@@ -182,6 +182,19 @@ export async function readCaseFile(caseInfo, name) {
 // 仍放不下的项不静默丢——omitted_items 计数 + truncated 标记（读的人知道少了几项）。
 export const requiredEvidenceFile = '06-必查项.json';
 export const requiredEvidenceMaxChars = 64000;
+
+// 案卷文件白名单（P003-T059 A02）：HTTP 出口只接受这些名字——路径穿越（../、绝对路径、URL 编码变体）
+// 不可能命中白名单，天然被拒。清单 = 本模块产出的全部文件名 + 必查项 JSON（`requiredEvidenceFile`，
+// 声明在上面：本表必须排在它之后，否则 const TDZ）。
+export const CASE_FILE_WHITELIST = Object.freeze([
+  '00-这是什么.md', '01-原始告警.txt', '02-告警字段.md', '03-研判事实.md', '03b-判据索引.md',
+  '04-上下文.md', '05-研判结果.md', 'result.json', requiredEvidenceFile
+]);
+export const CASE_FILE_CONTENT_TYPES = Object.freeze({
+  '.md': 'text/markdown; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.json': 'application/json; charset=utf-8'
+});
 
 function slimCheck(check) {
   const { first_rows: rows, ...rest } = check;

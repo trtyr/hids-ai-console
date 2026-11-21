@@ -6,6 +6,10 @@
 //   A2 设了就用它（含空白、相对路径边界）；HIDS_WIKI_DIR 注入时判据历史跟判据库走，内置 wiki/ 落数据根；
 //   A4 旧位有数据也不迁移；错误码：数据根不可写 → POST /api/config 500 两键，HIDS_DATA_DIR 不在可写五键 → 400。
 // 每条外部命令都有上界：fetch 带 AbortSignal.timeout、子进程带 timeout、server 关闭带 5s 强杀。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from './isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -31,7 +35,7 @@ const REQUIRED_ENV = Object.freeze({
 
 async function tempDir(t, prefix = 'hids-t034-') {
   const dir = await mkdtemp(path.join(tmpdir(), prefix));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return dir;
 }
 
@@ -380,12 +384,16 @@ test('A4 旧位（仓内 .data/ 与 backend/.data/）里躺着数据时，数据
   const { base } = await startServer(t, { cwd: tree, home, env: { HIDS_DATA_DIR: data } });
   assert.equal((await writeConfig(base, { LLM_MODEL: 'a4-written' })).status, 200);
 
-  // 数据根里只能有进程自己写的运行态：本次写配置的 config-overrides.json，以及研判监控的队列快照
-  // （P003-T036/T037：poll 模式冷启动就会落自己的 triage-monitor.json，与旧位毫无关系）。
+  // 数据根里只能有进程自己写的运行态：本次写配置的 config-overrides.json、研判监控的队列快照
+  // （P003-T036/T037：poll 模式冷启动就会落自己的 triage-monitor.json，与旧位毫无关系）、
+  // 默认落盘的日志（P003-T072：不配 HIDS_LOG_FILE 时写 <数据根>/logs/hids.log）、
+  // 以及这次写配置留下的审计事件（P003-T062：<数据根>/audit/audit-<日期>.jsonl，append-only）。
   // 旧位的东西一样都不许出现：没有 investigations/、cases/、triage-rules.json 被预建或搬过来，
   // 也没有任何一份文件与旧位内容逐字相同。
   const written = await listFiles(data);
-  assert.deepEqual(written.map(file => path.relative(data, file)).filter(rel => !['config-overrides.json', 'triage-monitor.json'].includes(rel)),
+  assert.deepEqual(written.map(file => path.relative(data, file))
+      .filter(rel => !['config-overrides.json', 'triage-monitor.json', path.join('logs', 'hids.log')].includes(rel)
+        && !rel.startsWith('audit' + path.sep)),
     [], '数据根被旧位数据填充了（预建目录或迁移）');
   for (const file of written) {
     const digest = sha256(await readFile(file, 'utf8'));
@@ -410,7 +418,7 @@ test('错误码 500：数据根不可写 → POST /api/config 回 internal_error
   const locked = await mkdtemp(path.join(tmpdir(), 'hids-t034-ro-'));
   t.after(async () => {
     await chmod(locked, 0o700).catch(() => {});
-    await rm(locked, { recursive: true, force: true });
+    await rm(locked, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
   await chmod(locked, 0o500);
   const data = path.join(locked, 'data');

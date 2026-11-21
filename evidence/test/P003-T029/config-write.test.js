@@ -6,6 +6,10 @@
 //   A3 写操作过 Basic 认证闸门；没启用鉴权（没配 HIDS_BASIC_AUTH_PASSWORD）时放行——文档写明
 //   A4 改过的值落盘、重启仍生效；没改过的键继续读环境变量；覆盖层文件坏了不影响启动
 //   A5 每次写落一条 config.updated，只带键名不带值
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
@@ -29,7 +33,7 @@ const PASS = 'gate-pass-abcdef';
 
 async function tempDir(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'hids-config-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return dir;
 }
 

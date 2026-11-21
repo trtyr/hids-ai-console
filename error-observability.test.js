@@ -1,3 +1,4 @@
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -18,6 +19,8 @@ const postJSON = (url, body) => fetch(url, { method: 'POST', headers: { 'Content
   body: typeof body === 'string' ? body : JSON.stringify(body) });
 
 // A1（B24）：页面不存在时 404 正文不得带服务器绝对路径。
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 test('知识库 404 正文只给相对路径，不带服务器目录', async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'hids-wiki-404-'));
   t.after(() => rm(root, { recursive: true, force: true }));

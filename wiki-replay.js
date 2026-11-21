@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { recordFailure } from './src/shared/redaction.js';
+import { VERDICT_LABELS as names } from './src/contexts/triage/domain/triage-case.js';
 
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const verdicts = new Set(['threat', 'uncertain', 'false_positive']);
-const names = { threat: '真实威胁', uncertain: '存疑', false_positive: '误报' };
 const normalize = value => ({ 真实威胁: 'threat', 存疑: 'uncertain', 误报: 'false_positive' })[value] || value;
 const caseMaterial = feedback => ({
   raw: String(feedback.case_snapshot?.['01-原始告警.txt'] || '').slice(0, 12000),

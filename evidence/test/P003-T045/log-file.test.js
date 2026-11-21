@@ -2,6 +2,10 @@
 // 口径只认文档：docs/modules/http-api.md §3.8（两条路由的字段与参数表）、§7（分页）、
 // docs/architecture.md §3.6（落盘与轮转口径、事件表）、.env.example（三个键）。
 // 做法：tmp 目录 + 注入时钟/写入器 + 进程内 server；只有 A1 那条真进程小样碰真 spawn（验「同份落文件」）。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -11,8 +15,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  createFileSink, createJournal, log, logFileOptions, logFiles, pruneLogFiles, readLogEntries, useJournal, useLogFile
-} from '../../../log.js';
+  createFileSink, createJournal, flushLogs, log, logFileOptions, logFiles, pruneLogFiles, readLogEntries, useJournal, useLogFile
+} from '../../../src/shared/logging/log.js';
 import { createServer } from '../../../server.js';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
@@ -66,19 +70,26 @@ const captureJournal = t => {
 };
 
 // ── A1：配了就同份落文件，不配＝stdout-only ────────────────────────────────
-test('A1 logFileOptions：空/空白算没配；三个键缺省 10MiB/5，非法值回落缺省', () => {
-  assert.equal(logFileOptions({}), null);
+test('A1 logFileOptions：空/空白算没配（测试进程默认关）；四个键缺省 10MiB/5/200MiB，非法值回落缺省（P003-T072）', () => {
+  assert.equal(logFileOptions({}), null, '测试进程（NODE_TEST_CONTEXT）默认不落盘——不污染真实数据根');
   assert.equal(logFileOptions({ HIDS_LOG_FILE: '' }), null);
   assert.equal(logFileOptions({ HIDS_LOG_FILE: '   ' }), null, '纯空白算没配（与 HIDS_DATA_DIR 同一口径）');
+  assert.equal(logFileOptions({ HIDS_LOG_FILE: 'none' }), null, '显式关闭走 none（P003-T072）');
+  assert.equal(logFileOptions({ HIDS_LOG_FILE: 'off' }), null, 'off 同义');
   assert.deepEqual(logFileOptions({ HIDS_LOG_FILE: '/var/log/hids.log' }),
-    { file: '/var/log/hids.log', maxBytes: 10 * 1024 * 1024, keep: 5 });
+    { file: '/var/log/hids.log', maxBytes: 10 * 1024 * 1024, keep: 5, totalMaxBytes: 200 * 1024 * 1024 });
   assert.equal(logFileOptions({ HIDS_LOG_FILE: 'rel/hids.log' }).file, path.resolve('rel/hids.log'), '相对路径按 cwd 绝对化');
   // 0 / 负数 / 小数 / 非数 都落回缺省：坏配置不让轮转静默关掉
   for (const bad of ['0', '-1', '1.5', 'abc', '']) {
-    const options = logFileOptions({ HIDS_LOG_FILE: 'x.log', HIDS_LOG_MAX_BYTES: bad, HIDS_LOG_KEEP: bad });
+    const options = logFileOptions({ HIDS_LOG_FILE: 'x.log', HIDS_LOG_MAX_BYTES: bad, HIDS_LOG_KEEP: bad, HIDS_LOG_TOTAL_MAX_BYTES: bad });
     assert.equal(options.maxBytes, 10 * 1024 * 1024, `HIDS_LOG_MAX_BYTES=${bad} 应回落缺省`);
     assert.equal(options.keep, 5, `HIDS_LOG_KEEP=${bad} 应回落缺省`);
+    assert.equal(options.totalMaxBytes, 200 * 1024 * 1024, `HIDS_LOG_TOTAL_MAX_BYTES=${bad} 应回落缺省`);
   }
+  // P003-T072 默认落盘：生产进程（test:false）不配路径 → <数据根>/logs/hids.log；测试进程 → null
+  const production = logFileOptions({ HIDS_DATA_DIR: '/tmp/hids-data-probe', NODE_TEST_CONTEXT: '' }, { test: false });
+  assert.equal(production.file, path.join('/tmp/hids-data-probe', 'logs', 'hids.log'));
+  assert.deepEqual(logFileOptions({ NODE_TEST_CONTEXT: 'child-v8' }, { test: true }), null);
 });
 
 test('A1 不配路径：useLogFile 原样返回现有 journal，盘上不多出文件', async t => {
@@ -99,6 +110,7 @@ test('A1 配了路径：同一行既给 stdout 又落文件（同份），先写
   useLogFile({ file, write: line => { fileAtStdout.push(readFileSync(file, 'utf8')); stdout.push(line); } });
   t.after(() => useJournal());
   log('demo.event', { n: 1 });
+  await flushLogs(); // P003-T072：落盘改异步 sink，断言前先排空队列（I/O 不在调用栈上同步发生）
   const written = await linesOf(file);
   assert.equal(written.length, 1);
   assert.deepEqual(stdout, [`${JSON.stringify(written[0])}\n`], 'stdout 那份与文件那份逐字相同');
@@ -152,6 +164,7 @@ test('A2 超限轮转：跨文件一行不少，当前这条写进轮转后的�
   const { dir, file } = await workspace(t);
   const rig = sinkRig(file, { maxBytes: 200, keep: 50 });
   for (let n = 0; n < 6; n += 1) { rig.journal('step', { n }); rig.tick(); }
+  await flushLogs();
   assert.ok((await rotated(dir)).length >= 1, '超过上限就该有轮转出来的历史文件');
   const all = [];
   for (const name of await namesIn(dir)) all.push(...await linesOf(path.join(dir, name)));
@@ -164,6 +177,7 @@ test('A2 保留份数：keep=2 时历史文件只留最新两份', async t => {
   const { dir, file } = await workspace(t);
   const rig = sinkRig(file, { maxBytes: 200, keep: 2 });
   for (let n = 0; n < 12; n += 1) { rig.journal('step', { n }); rig.tick(); }
+  await flushLogs();
   assert.equal((await rotated(dir)).length, 2, `keep=2 应只留两份历史：${(await namesIn(dir)).join(',')}`);
   assert.ok((await linesOf(file)).length >= 1);
 });
@@ -172,11 +186,13 @@ test('A2 单行就超上限时不轮转（空文件不换），内容照旧写�
   const { dir, file } = await workspace(t);
   const rig = sinkRig(file, { maxBytes: 80, keep: 5 });
   rig.journal('big', { pad: 'x'.repeat(200) });
+  await flushLogs();
   assert.deepEqual(await rotated(dir), [], '空文件没有可轮转的内容');
   assert.equal((await linesOf(file)).length, 1, '超上限的那一行仍要写进去');
   // 重启：新 sink 第一次写之前要先 stat 现有文件，已超限就先轮转，老内容进历史文件
   const restarted = sinkRig(file, { maxBytes: 80, keep: 5 });
   restarted.journal('after_restart');
+  await flushLogs();
   assert.equal((await rotated(dir)).length, 1, '重启后第一次写应把超限的老文件轮转出去');
   assert.equal((await linesOf(file)).at(-1).event, 'after_restart');
   const history = await linesOf(path.join(dir, (await rotated(dir))[0]));
@@ -194,6 +210,7 @@ test('A3 readLogEntries：event / level / 时间范围过滤 + 分页 + total �
   rig.journal('a.one', { i: 3 }, 'error');
   rig.tick();
   rig.journal('a.one', { i: 4 }, 'info');
+  await flushLogs();
 
   const all = readLogEntries({ file });
   assert.deepEqual(all.logs.map(entry => entry.i), [4, 3, 2, 1], '默认按 time 倒序');
@@ -221,6 +238,7 @@ test('A3 GET /api/logs：读盘（外部写入的行也看得见）、echo 回�
   rig.journal('http.request', { path: '/api/x', status: 200 });
   rig.tick();
   rig.journal('log.cleaned', { by: 'size' });
+  await flushLogs();
   const base = await serve(t, file);
 
   // 「读的是落盘文件」：绕过 log.js 直接往盘上追加一行，查询必须看得见
@@ -262,6 +280,7 @@ test('A4 清理：默认 dry-run 不动盘；execute 只删历史文件、当前
   const { dir, file } = await workspace(t);
   const rig = sinkRig(file, { maxBytes: 120, keep: 20 });
   for (let n = 0; n < 8; n += 1) { rig.journal('step', { n }); rig.tick(); }
+  await flushLogs();
   const before = await namesIn(dir);
   assert.ok((await rotated(dir)).length >= 3, '先得有历史文件可清');
   const base = await serve(t, file);
@@ -288,6 +307,7 @@ test('A4 清理：older_than 按文件 mtime 挑；两条阈值取并集；400 �
   const { dir, file } = await workspace(t);
   const rig = sinkRig(file, { maxBytes: 120, keep: 20 });
   for (let n = 0; n < 6; n += 1) { rig.journal('step', { n }); rig.tick(); }
+  await flushLogs();
   const base = await serve(t, file);
   // 历史文件的 mtime 是真实时钟：把「未来」当阈值 → 全部历史文件都算「早于它」
   const future = new Date(Date.now() + 3600_000).toISOString();
@@ -334,7 +354,9 @@ test('A4 留痕：真执行落一条 log.cleaned（口径/条数/字节），不
   assert.equal(trace.by, 'size');
   assert.equal(trace.count, applied.body.applied.count);
   assert.equal(trace.bytes, applied.body.applied.bytes);
-  assert.deepEqual(Object.keys(trace).sort(), ['by', 'bytes', 'count', 'event', 'level', 'time'], '不记文件名、不记内容');
+  // P003-T072：留痕行活在请求上下文里 → 自动带 request_id（可反查这次清理是哪个请求发起的）。
+  assert.ok(trace.request_id, '留痕行带 request_id');
+  assert.deepEqual(Object.keys(trace).sort(), ['by', 'bytes', 'count', 'event', 'level', 'request_id', 'time'], '不记文件名、不记内容');
 });
 
 // ── A5：密钥三道闸沿用，文件与查询结果里都没有原文 ──────────────────────────
@@ -347,6 +369,7 @@ test('A5 落盘与查询结果都不出现 Authorization / Cookie / Token 原文
     cookie: 'session=SECRET-COOKIE-abcdef',
     error: 'GET /api/v1/host/list?api_token=SECRET-URL-123456 failed, Authorization: Bearer SECRET-INLINE-abcdef'
   });
+  await flushLogs();
   const raw = await readFile(file, 'utf8');
   for (const secret of ['SECRET-BEARER-123456', 'SECRET-COOKIE-abcdef', 'SECRET-URL-123456', 'SECRET-INLINE-abcdef'])
     assert.ok(!raw.includes(secret), `文件里漏了 ${secret}`);
@@ -371,6 +394,7 @@ test('A5 请求头与 query 里的凭据不进文件，也不出现在查询结�
   const base = await serve(t, file);
   await fetch(`${base}/api/logs?token=SECRET-QUERY-123456&event=http.request`, {
     headers: { Authorization: 'Bearer SECRET-HEADER-abcdef', Cookie: 'session=SECRET-COOKIE-abcdef' } });
+  await flushLogs();
   const raw = await readFile(file, 'utf8');
   for (const secret of ['SECRET-QUERY-123456', 'SECRET-HEADER-abcdef', 'SECRET-COOKIE-abcdef'])
     assert.ok(!raw.includes(secret), `日志文件里漏了 ${secret}`);
@@ -385,8 +409,8 @@ test('A6 .env.example 列出三个新键，头部「N 个键」与实际键数�
   const listed = new Set(example.split('\n').filter(line => /^[A-Z0-9_]+=/.test(line)).map(line => line.split('=')[0]));
   for (const key of ['HIDS_LOG_FILE', 'HIDS_LOG_MAX_BYTES', 'HIDS_LOG_KEEP'])
     assert.ok(listed.has(key), `.env.example 少了本卡新增的 ${key}`);
-  const source = await readFile(path.join(ROOT, 'log.js'), 'utf8');
-  for (const key of ['HIDS_LOG_FILE', 'HIDS_LOG_MAX_BYTES', 'HIDS_LOG_KEEP'])
+  const source = await readFile(path.join(ROOT, 'src/shared/logging/log.js'), 'utf8');
+  for (const key of ['HIDS_LOG_FILE', 'HIDS_LOG_MAX_BYTES', 'HIDS_LOG_KEEP', 'HIDS_LOG_TOTAL_MAX_BYTES'])
     assert.ok(source.includes(key), `log.js 应真读 ${key}`);
   const claimed = example.match(/（P003-T025 立[^）]*?(\d+) 个键/);
   assert.ok(claimed, '头部注释应写着键数（T025 A4 口径）');
@@ -405,6 +429,7 @@ test('logFiles：同目录里别人的 .log 与本文件无关，不列表也不
   rig.journal('step', { n: 2 });
   rig.tick();
   rig.journal('step', { n: 3 });
+  await flushLogs();
   const files = logFiles({ file });
   assert.ok(files.length >= 2);
   for (const item of files) assert.ok(!item.file.endsWith('other.log') && !item.file.endsWith('hids.log.1'), item.file);

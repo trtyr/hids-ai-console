@@ -10,7 +10,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { TriageMonitor } from '../../../triage-monitor.js';
-import { createJournal, useJournal } from '../../../log.js';
+import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
 
 const MARKER = 'SECRET_BODY_MARKER';
 
@@ -18,7 +18,7 @@ test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，�
 
 test('A7 研判收尾抛错：lastError 过闸、状态接口不带原文，日志行仍留原文', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t054-drain-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const lines = [];
   useJournal(createJournal({ write: line => lines.push(JSON.parse(line)) }));
   t.after(() => useJournal());

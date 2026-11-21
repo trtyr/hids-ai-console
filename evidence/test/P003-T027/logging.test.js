@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createJournal, useJournal } from '../../../log.js';
+import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
 import { initKeys, main } from '../../../package-policy.js';
 import { logListening } from '../../../maintenance-server.js';
 import { parseSyslog } from '../../../syslog-input.js';
@@ -50,7 +50,7 @@ test('A1：维护端启动行落 maintenance.listening，旧文案留在 message
 
 test('A1：生成密钥落 policy.keys_created，输出文件仍是 700/600 且不覆盖', async t => {
   const parent = await mkdtemp(path.join(tmpdir(), 'hids-policy-keys-'));
-  t.after(() => rm(parent, { recursive: true, force: true }));
+  t.after(() => rm(parent, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const directory = path.join(parent, 'keys');
   const journal = collect();
   await initKeys(directory);
@@ -80,7 +80,7 @@ test('A1：命令行三条走法与退出码不变，用法分支落 policy.usag
 
 test('A3：生成密钥与启动行都不把密钥内容、账号口令写进日志', async t => {
   const parent = await mkdtemp(path.join(tmpdir(), 'hids-policy-secret-'));
-  t.after(() => rm(parent, { recursive: true, force: true }));
+  t.after(() => rm(parent, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const journal = collect();
   await initKeys(path.join(parent, 'keys'));
   logListening({ port: 18081, preview: false });

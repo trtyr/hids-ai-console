@@ -13,6 +13,7 @@
 //   真 InvestigationStore 存一条带 case_dir 的记录，案卷 01-原始告警.txt 放一行 syslog。
 // 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
 // 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { BoardStore } from '../../../src/contexts/trace/infrastructure/board-store.js';
 import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,7 +21,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, createAnalysisProvider } from '../../../server.js';
-import { TraceBoardService } from '../../../trace-board.js';
+import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';;
 import { AgentToolbox, investigationToolNames } from '../../../agent-tools.js';
 import { InvestigationStore } from '../../../investigation-store.js';
 
@@ -150,7 +151,7 @@ async function realStack({ withAnalysis = false } = {}) {
       cases.push(spec);
     }
   }
-  const service = new TraceBoardService({ toolbox, model, directory: boardsDir, analysis });
+  const service = new TraceBoardService({ store: new BoardStore(boardsDir), toolbox, model, directory: boardsDir, analysis });
   const server = createServer(undefined, undefined, undefined, undefined, undefined, undefined,
     undefined, undefined, service);
   const { base: url } = await listen(server);

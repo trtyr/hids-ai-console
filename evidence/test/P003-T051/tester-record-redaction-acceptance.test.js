@@ -14,7 +14,7 @@ import { createServer } from '../../../server.js';
 import { InvestigationAgent } from '../../../investigation-agent.js';
 import { InvestigationStore } from '../../../investigation-store.js';
 import { AgentToolbox } from '../../../agent-tools.js';
-import { traceModelCall } from '../../../log.js';
+import { traceModelCall } from '../../../src/shared/logging/log.js';
 
 // 检索标记：模型回包正文 / V8 报错片段 / 上游报文里的同一串。记录侧一个字都不许有。
 const MARKER = 'SECRET_BODY_MARKER';
@@ -45,7 +45,7 @@ const conclusion = () => JSON.stringify({ verdict: '存疑', confidence: '低', 
 
 const workspace = async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t051-tester-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return directory;
 };
 

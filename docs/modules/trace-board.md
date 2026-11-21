@@ -1,16 +1,16 @@
 ---
 type: module
 id: MOD-TRACE-BOARD
-covers: [trace-board.js]
+covers: [src/contexts/trace/domain/board.js, src/contexts/trace/application/trace-service.js, src/contexts/trace/infrastructure/board-store.js]
 updated: 2026-11-20
 ---
 
 # 深度溯源白板 · trace-board
 
-这篇讲一个模块：`trace-board.js`。它把「一条告警」或「一个 IP」变成一张可追溯的白板——节点是资产与 IP，边是它们之间的关系，
+这篇讲一个模块：溯源白板（P003-T075 批 1 起拆为三件——领域 `src/contexts/trace/domain/board.js`、应用 `src/contexts/trace/application/trace-service.js`、存储 `src/contexts/trace/infrastructure/board-store.js`；旧 `trace-board.js` 已删）。它把「一条告警」或「一个 IP」变成一张可追溯的白板——节点是资产与 IP，边是它们之间的关系，
 关系要带原始证据引用。
 
-- 实现文件：`trace-board.js`（模块归属见 [docs/modules/_breakdown.json](_breakdown.json) 的 `trace-board` 条目）
+- 实现文件：上述三件（模块归属见 [docs/modules/_breakdown.json](_breakdown.json) 的 `trace-board` 条目）
 - 在架构里的位置：编排层，见 [architecture.md 第 4 节](../architecture.md#4-模块分层与依赖)
 - 证据约定：本页每一处 `文件:行号` 引用都能在 [evidence/recon/P001-T011.md](../../evidence/recon/P001-T011.md) 的清单表里查到；
   清单里没有的引用不出现在本页。行号对应提交 `63f1379`；P003-T006 新增的分页入口（`page`／`summaries`）见 [evidence/recon/P003-T006.md](../../evidence/recon/P003-T006.md)。

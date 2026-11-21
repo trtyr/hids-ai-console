@@ -6,6 +6,12 @@ updated: 2026-11-20
 
 # HIDS 智能研判平台 · 后端架构
 
+> **两份架构文档的分工（P003-T081 定死）**：本页（`AR-BACKEND`）是**模块细节与运行手册**——每个件落在哪个文件、
+> 配置项、日志事件表、测试口径。边界、不变量、依赖方向与三条数据主线的**最上层权威**是
+> [architecture/architecture.md](architecture/architecture.md)（`AR-L0`）——判断「改动落在哪一块、破没破不变量」先读它。
+> 两页互指，同一事实以 `AR-L0` 为准（本页不复述它的不变量表）。DDD 迁移的目标结构与批次见
+> [architecture/refactor-ddd.md](architecture/refactor-ddd.md)。
+
 这份文档写给第一次进这个仓的人。它回答三个问题：这套后端在干什么、由哪些件组成、每个件落在哪个文件。
 关键结论都标了 `文件:行号`，行号对应当前提交 `a16e0d5`；改动代码后请重新核对。
 
@@ -189,17 +195,31 @@ updated: 2026-11-20
 
 ## 4. 模块分层与依赖
 
-按依赖方向分成下面七组。下层不 import 上层，上层可以组装下层；「存储」是并列的另一支——它不被编排层依赖，也不依赖编排层。
+按依赖方向分成下面七组，**覆盖全部 31 个产品文件**（P003-T081：此前只列 21 个，四条越层引用全部落在没列的 10 个上）。
+「去向」列是 DDD 迁移（[refactor-ddd.md](architecture/refactor-ddd.md)）定稿的目标位置——迁移完成后本表以去向为准，
+`旧文件` 列随之清空；分层约束由 `scripts/check-layers.mjs` 强制（R-STRUCT / R-STRUCT+ / R-ERROR / R-LOG，见该文件头）。
 
-| 组 | 文件 | 职责 |
-| --- | --- | --- |
-| 传输 | `rpc-client.js`、`mcp-client.js`、`model-client.js` | 跟牧云和模型服务说话。三者各自封装超时、错误翻译与响应校验，没有本地依赖 |
-| 事件网关 | `cloudwalker.js` | 11 类事件的类型表、RPC 方法名映射、原始行到统一告警结构的归一化 |
-| 取证工具 | `agent-tools.js`、`api-tools.js` | 把「一次查询」包装成模型可调用的工具，并管住可调用的工具名范围 |
-| 证据投影 | `evidence-view.js` | 把工具原始返回压成带 JSON Pointer 的精简视图，控制塞进模型上下文的体积 |
-| 编排 | `investigation-agent.js`、`triage-monitor.js`、`trace-board.js`、`wiki-workbench.js`、`triage-rules.js` | 各条业务流程的编排者 |
-| 存储 | `investigation-store.js`（记录存储）、`wiki-store.js`（判据库）、`rule-store.js`（规则库）、`prompt-store.js`（提示词）、`update-store.js`（升级包）、`knowledge-store.js`（候选经验）、`record-redaction.js`（脱敏闸） | 读写状态、判据、规则、提示词、升级包、候选经验、脱敏闸 |
-| 入口 | `server.js`、`maintenance-server.js` | HTTP 路由与鉴权，把上面的件接成进程 |
+| 组 | 文件（现状） | 去向（DDD 目标） | 职责 |
+| --- | --- | --- | --- |
+| 共享内核 | `record-redaction.js`（已迁 `src/shared/redaction.js`） | `src/shared/redaction.js` | 脱敏闸：记录侧固定文案 + 出口凭据擦除，唯一实现 |
+| 共享内核 | `log.js`（已迁 `src/shared/logging/log.js`） | `src/shared/logging/log.js` | 唯一日志落点：JSON 行、脱敏、轮转、request_id、查询与清理 |
+| 共享内核 | （批 2 新增）`src/shared/vocabulary.js` | 同左 | 事件类型 / 等级 / 时间解析的共享词表（原 `cloudwalker.js` 头部常量） |
+| 共享内核 | （批 2 新增）`src/shared/alert-shape.js` | 同左 | Alert 形状归一化（`normalizeAlert` / `detailEvidence`） |
+| 共享内核 | （批 3 种子）`src/contexts/triage/domain/triage-case.js` | 同左 | 判定（Verdict）与案件状态词表的唯一真源 |
+| 传输 | `rpc-client.js`、`mcp-client.js`、`model-client.js` | `src/contexts/ingestion/infrastructure/`（rpc/mcp）、`src/contexts/triage/infrastructure/model-client.js` | 跟牧云和模型服务说话。三者各自封装超时、错误翻译与响应校验 |
+| 事件网关（ingestion ACL） | `cloudwalker.js`、`syslog-input.js` | `src/contexts/ingestion/infrastructure/gateway.js` + `src/shared/{vocabulary,alert-shape}.js`；syslog 解析 → `ingestion/application/parsing.js`，UDP 收包 → `src/interfaces/udp/syslog/receiver.js` | 11 类事件的类型表、RPC 方法名映射、原始行到统一告警结构的归一化 |
+| 取证工具 | `agent-tools.js`、`api-tools.js` | `src/contexts/triage/infrastructure/{evidence-toolbox,api-toolbox}.js` | 把「一次查询」包装成模型可调用的工具，并管住可调用的工具名范围 |
+| 证据投影 | `evidence-view.js` | `src/contexts/triage/infrastructure/evidence-view.js` | 把工具原始返回压成带 JSON Pointer 的精简视图，控制塞进模型上下文的体积 |
+| 编排（triage） | `investigation-agent.js`、`triage-monitor.js`、`triage-output.js`、`required-evidence.js`、`syslog-case.js` | `src/contexts/triage/{application,domain,infrastructure}/`（monitor 拆五栏；syslog-case 拆 domain 内容 + infra 原子写） | 研判编排：队列、状态机、取证循环、结论产出、案卷 |
+| 编排（trace） | `trace-board.js` | `src/contexts/trace/{domain,application,infrastructure}/`（批 1 已落三件，切换待执行） | 溯源白板编排 |
+| 编排（knowledge） | `triage-rules.js`、`rule-store.js`、`wiki-store.js`、`prompt-store.js` | `src/contexts/knowledge/{domain,infrastructure}/`（Rego 子集解析拆 `domain/rule-parser.js`） | 两套规则聚合（不合并）与判据库、提示词 |
+| 编排（maintenance） | `wiki-workbench.js`、`wiki-replay.js`、`fp-maintainer.js`、`RegoRuleMaintainer`（在 `server.js` 里） | `src/contexts/maintenance/{application,infrastructure}/`；规则维护者 → `knowledge/application/rule-maintainer.js` | 三种维护会话 + 误报统一维护 Agent |
+| 存储 | `investigation-store.js`、`config-store.js`、`update-store.js`、`knowledge-store.js`（候选经验） | `investigation-store → triage/infrastructure`；`config-store/update-store → dataops/infrastructure`；`knowledge-store` 死代码待裁决（D034 §4 #2） | 读写运行态、配置、升级包 |
+| 入口 | `server.js`、`maintenance-server.js`、`package-policy.js` | `server.js` 收成启动与装配；`maintenance-server → src/interfaces/http/maintenance/`；`package-policy → src/interfaces/cli/` | HTTP 路由与鉴权，把上面的件接成进程；策略包 CLI |
+
+> 基础设施类（`log.js`、`config-store.js` 这类零业务判断的支撑件）归 `src/shared/`（跨上下文共用）或所属上下文的
+> `infrastructure/`——不设独立的「基础设施层」，理由：它们都有唯一的服务对象，放归属上下文能让依赖图更小
+> （`config-store` 的病态门面问题见 D034 §8.2，`dataRoot` 已摘成 `src/shared/data-root.js` 零依赖叶子）。
 
 **依赖方向的两个具体证据**：
 

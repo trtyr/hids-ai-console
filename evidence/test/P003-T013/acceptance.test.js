@@ -290,7 +290,7 @@ async function stack({ ruleMode = 'update', wikiMode = 'ok', seed = [], gated = 
     release: () => releaseGate && releaseGate(),
     async close() {
       await new Promise(r => server.close(r));
-      await rm(base, { recursive: true, force: true });
+      await rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   };
 }

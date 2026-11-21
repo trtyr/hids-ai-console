@@ -1,17 +1,28 @@
-// 后端唯一日志落点（P003-T023）。一行一条 JSON 到 stdout：{time, level, event, ...fields}。
-// 别在别处 console.log：事件名表与行形状见 docs/architecture.md「日志」一节。
+// 后端唯一日志落点（P003-T023 立；T072 系统化：默认落盘 + request_id 贯穿 + 非阻塞写 + 全文检索 + 总量上限）。
+// 一行一条 JSON：{time, level, event, ...fields}；处于请求上下文时自动带上 request_id（与 user）。
+// 别在别处 console.log：事件名表与行形状见 docs/architecture.md「日志」一节；R-LOG 由 check-layers 强制。
 //
 // A4：日志里不出现 Authorization / Cookie / API Token——两道闸：
 //   1) 键名命中 sensitive 的一律写成 '[redacted]'（递归进对象与数组）；
 //   2) 字符串值里 Basic / Bearer 凭据与 token=xxx 之类再擦一遍：错误信息常把请求头或 URL 拼进去。
 // 序列化失败（循环引用）不许抛：日志不能反过来搞崩业务，落一条 log.serialize_failed 了事。
 //
-// 落盘（P003-T045）：配了 `HIDS_LOG_FILE` 才在同目录再写一份同样的行（stdout 照旧），单文件超 `HIDS_LOG_MAX_BYTES`
-// 轮转成 `<stem>.<ISO 时刻><ext>`，历史文件只留最新的 `HIDS_LOG_KEEP` 份；不配＝维持只上 stdout。
-// 查询与清理读/删的都是这条路径上的真文件（`GET /api/logs`、`POST /api/logs/cleanup`，见 docs/modules/http-api.md §3.8）。
-// 读路径落盘的行已经过下面两道闸；`/api/logs` 仍按同一套规则再擦一遍——文件可能是人手改过或老版本写的。
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
+// 落盘（T045 → T072 增强）：
+//   · **默认落盘**：不配任何环境变量时写 `<数据根>/logs/hids.log`（数据根见 shared/data-root）；
+//     `HIDS_LOG_FILE` 仍可整条覆盖；显式关闭走 `HIDS_LOG_FILE=none`（不是「不配」）。
+//     测试进程（node --test 注入 NODE_TEST_CONTEXT）默认关闭——测试要文件就显式配路径，不污染真实数据根。
+//   · **非阻塞写**：journal 只把行推进内存队列（O(1)，永不 await），真正的 appendFile 由异步任务串行消化；
+//     轮转语义不变——`已有 + 这一行 > maxBytes` 且文件非空才轮转，当前这条写进轮转后的新文件，不丢。
+//     测试与关停用 `flushLogs()` 等队列排空。
+//   · 轮转三重上限：单文件 `HIDS_LOG_MAX_BYTES`（缺省 10 MiB）、份数 `HIDS_LOG_KEEP`（缺省 5）、
+//     总量 `HIDS_LOG_TOTAL_MAX_BYTES`（缺省 200 MiB，超了从最老的历史文件删起）。超限行为：删旧不丢当前行。
+//   · 查询（T045 → T072 增强）：`q` 全文搜索（对原始行做不区分大小写的子串匹配，限定尾部窗口、
+//     超窗标 truncated）、`request_id` / `user` 过滤——从一条 error 反查整条请求链就靠它。
+import { appendFile, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs';
+import { appendFile as appendFileAsync } from 'node:fs/promises';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'node:path';
+import { dataRoot } from '../data-root.js';
 
 const sensitive = /authorization|cookie|token|password|secret|api[-_]?key/i;
 const credential = /\b(basic|bearer)(\s+)[A-Za-z0-9._~+/=-]{4,}/gi;
@@ -20,6 +31,13 @@ const assignment = /((?:api[-_]?token|access[-_]?token|x-prompt-admin-token|x-ru
 const reserved = new Set(['time', 'level', 'event']);
 const maxText = 1000;
 const maxDepth = 4;
+
+// ── 请求上下文（T072）：同一 HTTP 请求产生的全部日志共享 request_id ─────────────────
+const requestStore = new AsyncLocalStorage();
+/** 在 ctx（{ request_id, user }）里跑 fn：期间所有 log() 自动带 request_id / user。 */
+export function runWithRequestContext(ctx, fn) { return requestStore.run(ctx, fn); }
+/** 当前请求上下文（无则 null）。中间件用它回填 user。 */
+export function currentRequestContext() { return requestStore.getStore() ?? null; }
 
 function scrub(raw) {
   const text = String(raw);
@@ -55,6 +73,10 @@ function payload(fields) {
 export function createJournal({ write = line => process.stdout.write(line), now = () => new Date().toISOString() } = {}) {
   return function journal(event, fields = {}, level = 'info') {
     const head = { time: now(), level, event: String(event) };
+    // T072：请求上下文里的日志自动带 request_id（有 user 也带）——同请求多行日志串成一条链。
+    const ctx = requestStore.getStore();
+    if (ctx?.request_id) head.request_id = ctx.request_id;
+    if (ctx && 'user' in ctx && ctx.user != null) head.user = String(ctx.user);
     let line;
     try { line = JSON.stringify({ ...head, ...payload(fields) }); }
     catch { line = JSON.stringify({ ...head, level: 'error', event: 'log.serialize_failed' }); }
@@ -148,13 +170,16 @@ export async function traceModelCall(meta = {}, run, { decode = null } = {}) {
   return { reply, decoded, call };
 }
 
-// ── 文件 sink 与轮转（P003-T045）─────────────────────────────────────────────
-// 缺省值：单文件 10 MiB 一换、历史留 5 份。两个键都不是必填（不配就用缺省），非法值（0 / 负数 / 小数 / 非数）
-// 同样回落缺省——与 HIDS_TRIAGE_CONCURRENCY 同一口径，坏配置不让进程起不来，也不静默把轮转关掉。
-const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
-const DEFAULT_KEEP = 5;
+// ── 文件 sink 与轮转（T045 立、T072 增强：非阻塞 + 总量上限 + 默认落盘）────────────
+// 缺省值：单文件 10 MiB 一换、历史留 5 份、总量 200 MiB。三个键都不是必填（不配就用缺省），非法值
+// （0 / 负数 / 小数 / 非数）同样回落缺省——坏配置不让进程起不来，也不静默把轮转关掉。
+export const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
+export const DEFAULT_KEEP = 5;
+export const DEFAULT_TOTAL_MAX_BYTES = 200 * 1024 * 1024;
 // 一次查询最多收多少个命中（再多的结果没人看，先按上限收、报 truncated）。
 const QUERY_SCAN_LIMIT = 20000;
+// 全文检索的尾部窗口：从最新文件往回最多读这么多行（acceptance：限定尾部窗口并在响应里标 truncated）。
+const QUERY_WINDOW_LINES = 50000;
 // 清理响应里最多列多少个候选文件名（与 /api/data/cleanup 的 100 同口径）。
 const CLEAN_LIST_LIMIT = 100;
 const queryLevels = Object.freeze(['info', 'warn', 'error']);
@@ -164,14 +189,30 @@ const positiveInt = (raw, fallback) => {
   return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 };
 
-// env→落盘参数；`HIDS_LOG_FILE` 空串/纯空白算「没配」（与 HIDS_DATA_DIR 同一口径），相对路径按当前工作目录绝对化。
-// env 可注入：单测传字面量，不碰真实 process.env。
-export function logFileOptions(env = process.env) {
+// 测试进程判定：node --test 给子进程注入 NODE_TEST_CONTEXT。可注入 env + 开关，单测两条路都能走到。
+const underTestRunner = (env = process.env) => Boolean(env.NODE_TEST_CONTEXT);
+
+/**
+ * env → 落盘参数（T072 默认落盘口径）：
+ *   · `HIDS_LOG_FILE=none|off` → 显式关闭（null）；
+ *   · 显式路径 → 用它（相对路径按 cwd 绝对化）；
+ *   · 未配 → 测试进程（NODE_TEST_CONTEXT）返回 null（默认关，不污染真实数据根）；
+ *     生产进程返回 `<数据根>/logs/hids.log`（默认开）。
+ */
+export function logFileOptions(env = process.env, { test = underTestRunner() } = {}) {
   const configured = typeof env.HIDS_LOG_FILE === 'string' ? env.HIDS_LOG_FILE.trim() : '';
-  if (!configured) return null;
+  if (configured === 'none' || configured === 'off') return null;
+  if (!configured) {
+    if (test) return null;
+    return { file: path.join(dataRoot({ env }), 'logs', 'hids.log'),
+      maxBytes: positiveInt(env.HIDS_LOG_MAX_BYTES, DEFAULT_MAX_BYTES),
+      keep: positiveInt(env.HIDS_LOG_KEEP, DEFAULT_KEEP),
+      totalMaxBytes: positiveInt(env.HIDS_LOG_TOTAL_MAX_BYTES, DEFAULT_TOTAL_MAX_BYTES) };
+  }
   return { file: path.resolve(configured),
     maxBytes: positiveInt(env.HIDS_LOG_MAX_BYTES, DEFAULT_MAX_BYTES),
-    keep: positiveInt(env.HIDS_LOG_KEEP, DEFAULT_KEEP) };
+    keep: positiveInt(env.HIDS_LOG_KEEP, DEFAULT_KEEP),
+    totalMaxBytes: positiveInt(env.HIDS_LOG_TOTAL_MAX_BYTES, DEFAULT_TOTAL_MAX_BYTES) };
 }
 
 const sizeOf = (file, stat = statSync) => { try { return stat(file).size; } catch { return 0; } };
@@ -203,41 +244,96 @@ export function logFiles({ file, stat = statSync, readdir = readdirSync } = {}) 
   return [current, ...history].sort((a, b) => b.mtime - a.mtime || a.file.localeCompare(b.file));
 }
 
-// 文件 sink：一行一次 append；内存里记字节数，`已有 + 这一行 > maxBytes` 且文件非空才轮转——
-// **当前这条写进轮转后的新文件**，不丢。轮转后按 keep 删最老的历史文件。
-// I/O 一律吞掉：落盘失败不能反过来搞崩业务（stdout 那份照旧）。目录建不出来就退化成只上 stdout。
-export function createFileSink({ file, maxBytes = DEFAULT_MAX_BYTES, keep = DEFAULT_KEEP, now = Date.now } = {}) {
+// 异步 drain 的活动 sink 注册表：flushLogs() 等所有还没写完的行落盘（测试与优雅关停用）。
+const liveSinks = new Set();
+
+// 文件 sink（T072 非阻塞版）：write() 只把行推进内存队列并排一次 drain，真正的 I/O 在异步任务里
+// 逐行消化（逐行才能保住「当前这条写进轮转后的新文件」的轮转语义）。I/O 一律吞掉：
+// 落盘失败不能反过来搞崩业务（stdout 那份照旧）。目录建不出来就退化成只上 stdout。
+// 内存里记字节数；进程重启后第一次写先 stat 现有文件，不把老内容当 0 从头上限。
+export function createFileSink({ file, maxBytes = DEFAULT_MAX_BYTES, keep = DEFAULT_KEEP,
+  totalMaxBytes = DEFAULT_TOTAL_MAX_BYTES, now = Date.now, afterWrite = null } = {}) {
   const target = path.resolve(String(file));
-  let size = -1; // -1 = 还没量过：进程重启后接着往老文件里写，不把老内容当 0 从头上限
+  let size = -1; // -1 = 还没量过
   let usable = true;
   try { mkdirSync(path.dirname(target), { recursive: true }); } catch { usable = false; }
+  const queue = [];       // 待写的行（FIFO）
+  const pendingAfter = []; // afterWrite 的逐行登记：文件落盘**之后**再逐行发（先文件后 stdout）
+  let scheduled = false;  // 已排了一个 drain（还没开跑）
+  let running = false;    // drain 正在跑（任何时刻至多一个，否则批写会乱序落盘）
   const rotate = () => {
     const stamp = new Date(now()).toISOString().replace(/[:.]/g, '-');
     renameSync(target, rotatedNameOf(target, stamp));
     size = 0;
     const history = logFiles({ file: target }).filter(item => item.file !== target);
     for (const item of history.slice(keep)) { try { unlinkSync(item.file); } catch { /* 删不掉就留到下一轮 */ } }
+    enforceTotalCap();
   };
-  return function write(line) {
-    if (!usable) return;
-    const text = String(line);
-    const bytes = Buffer.byteLength(text);
-    try {
+  // 总量上限（T072）：历史文件总字节超过 totalMaxBytes 就从最老的删起，只删历史、不碰当前文件。
+  const enforceTotalCap = () => {
+    const history = logFiles({ file: target }).filter(item => item.file !== target); // 新到旧
+    let total = history.reduce((sum, item) => sum + item.bytes, 0);
+    for (const item of history.slice().reverse()) {
+      if (total <= totalMaxBytes) break;
+      try { unlinkSync(item.file); total -= item.bytes; } catch { break; }
+    }
+  };
+  const drain = async () => {
+    // 批量攒写：到轮转边界或队列排空为止一次 appendFile——吞吐贴近同步写，热路径仍是 O(1) 入队。
+    while (queue.length) {
+      if (!usable) { queue.length = 0; pendingAfter.length = 0; return; }
       if (size < 0) size = sizeOf(target);
-      if (size > 0 && size + bytes > maxBytes) rotate();
-      appendFileSync(target, text);
-      size += bytes;
-    } catch { /* 盘满 / 权限 / rename 失败：这一行只留在 stdout，不改上抛 */ }
+      let batch = '';
+      let hitBoundary = false; // 只有真撞上单文件上限才轮转——await 期间新到的行不算边界（否则并发写一次一转）
+      while (queue.length) {
+        const bytes = Buffer.byteLength(queue[0]);
+        if (size > 0 && size + bytes > maxBytes) { hitBoundary = true; break; }
+        batch += queue.shift();
+        size += bytes;
+      }
+      if (batch) {
+        try { await appendFileAsync(target, batch, { encoding: 'utf8', mode: 0o600 }); }
+        catch { size = -1; /* 盘满 / 权限：这批只留在 stdout；size 重查盘面，不改上抛 */ }
+      }
+      if (hitBoundary) rotate(); // 当前这条写进轮转后的新文件，不丢
+    }
+    // 文件那份已经落盘（或确认放弃），stdout 那份现在逐行发——先文件后 stdout 的承诺保持。
+    if (afterWrite) for (const line of pendingAfter.splice(0)) { try { afterWrite(line); } catch { /* stdout 断了不搞崩业务 */ } }
   };
+  const start = () => {
+    scheduled = false; running = true;
+    drain().catch(() => {}).finally(() => {
+      running = false;
+      // drain 在跑的时候新来的行没赶上这批：排下一轮，保证最终不剩队列。
+      if (queue.length && !scheduled) { scheduled = true; setImmediate(start); }
+    });
+  };
+  const write = line => {
+    queue.push(String(line));
+    if (afterWrite) pendingAfter.push(line);
+    if (!scheduled && !running) { scheduled = true; setImmediate(start); }
+  };
+  const handle = line => write(line);
+  handle.flush = () => new Promise(resolve => {
+    const check = () => { if (!queue.length && !scheduled && !running) resolve(); else setImmediate(check); };
+    setImmediate(check);
+  });
+  liveSinks.add(handle);
+  return handle;
+}
+
+// 排空所有活动 sink（测试断言前 / 进程优雅关停时用）：所有队列清空后 resolve。
+export async function flushLogs() {
+  await Promise.all([...liveSinks].map(sink => sink.flush()));
 }
 
 // 配了文件路径就把 journal 换成「文件 + stdout 同份写」；不配原样返回现有 journal（A1：行为不变）。
-// 先写文件再写 stdout：sink 自己吞异常，stdout 断了（EPIPE）也不至于让文件那份丢。
-// `write` 可注入：单测收 stdout 侧原样行，不去撞真 stdout。
-export function useLogFile({ file, maxBytes, keep, write = line => process.stdout.write(line) } = {}) {
+// T072：文件那份走异步 sink（不阻塞事件循环），stdout 那份**在文件落盘之后**发（先文件后 stdout 的
+// 承诺保持；stdout 断了文件那份不丢）。`write` 可注入：单测收 stdout 侧原样行，不去撞真 stdout。
+export function useLogFile({ file, maxBytes, keep, totalMaxBytes, write = line => process.stdout.write(line) } = {}) {
   if (!file) return log;
-  const sink = createFileSink({ file, maxBytes, keep });
-  return useJournal(createJournal({ write: line => { sink(line); write(line); } }));
+  const sink = createFileSink({ file, maxBytes, keep, totalMaxBytes, afterWrite: write });
+  return useJournal(createJournal({ write: sink }));
 }
 
 // 读盘上的一行：不是 JSON 对象、没有字符串 time/event 的行（截断的半行、人手写的空行）一律跳过。
@@ -251,25 +347,35 @@ function parseLogLine(line) {
   return redact(entry); // 读路径也过一遍脱敏：盘上的文件不一定是本进程刚写的
 }
 
-// 查询：现读盘（当前文件 + 历史文件，新到旧），按 event / level / 时间范围过滤，再切页。
+// 查询：现读盘（当前文件 + 历史文件，新到旧），按 event / level / 时间 / q 全文 / request_id / user 过滤，再切页。
 // `count` / `offset` 的校验在路由里（与其他分页路由同一套 400 文案）；这里只认已经合法的整数。
-// 结果按 time 倒序（同一时刻按文件与行序），`truncated: true` 表示命中超过 limit 条只收了前 limit 条。
+// 结果按 time 倒序（同一时刻按文件与行序）。两个 truncated 口径都标进 `truncated`：
+//   命中超过 limit（先按上限收），或读行数超过 QUERY_WINDOW_LINES 的尾部窗口（T072 全文检索的窗口界）。
 export function readLogEntries({ file, events = [], levels = [], from = null, to = null,
+  q = null, requestId = null, user = null,
   count = 20, offset = 0, limit = QUERY_SCAN_LIMIT } = {}) {
   const files = logFiles({ file });
   const fromMs = from ? Date.parse(from) : null;
   const toMs = to ? Date.parse(to) : null;
+  const needle = typeof q === 'string' && q.trim() ? q.trim().toLowerCase() : null;
   const matched = [];
   let truncated = false;
+  let linesRead = 0;
   outer: for (const item of files) {
     let text;
     try { text = readFileSync(item.file, 'utf8'); } catch { continue; }
     const lines = text.split('\n');
     for (let index = lines.length - 1; index >= 0; index -= 1) {
-      const entry = parseLogLine(lines[index]);
+      linesRead += 1;
+      if (linesRead > QUERY_WINDOW_LINES) { truncated = true; break outer; }
+      const raw = lines[index];
+      const entry = parseLogLine(raw);
       if (!entry) continue;
       if (events.length && !events.includes(entry.event)) continue;
       if (levels.length && !levels.includes(entry.level)) continue;
+      if (needle && !raw.toLowerCase().includes(needle)) continue;
+      if (requestId && entry.request_id !== requestId) continue;
+      if (user && entry.user !== user) continue;
       const at = Date.parse(entry.time);
       if (fromMs != null && !(at >= fromMs)) continue;
       if (toMs != null && !(at <= toMs)) continue;

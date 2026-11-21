@@ -1,284 +1,16 @@
-import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { eventTypes, normalizeAlert } from './cloudwalker.js';
-import { PromptStore } from './prompt-store.js';
-import { recordFailure } from './src/shared/redaction.js';
+// trace 上下文 · 应用层：溯源白板的编排（P003-T075 批 1，试点）。
+// 依赖全部注入：toolbox / model / promptStore / analysis 是端口，落盘走 infrastructure/board-store.js；
+// 白板形状、不变量与投影在 domain/board.js。本文件不做 fs、不 import 别的上下文的 domain。
+import { assertLink, addCandidate, addGap, alertFromFacts, boundNodeFindings, discover,
+  MAX_ASSET_NEIGHBORS, MAX_GLOBAL_PAGES, MAX_INVESTIGATIONS, MAX_NODES, MAX_ROUNDS, MAX_TYPE_PAGES,
+  olderThanWindow, PAGE_SIZE, presentBoard, privateIp, profileFrom, resultRows, reuseRecord, rowFacts,
+  rowTime, short, summarizeBoard, summarizeRecord, traceBoardSeed, traceIpSeed, traceTarget, validIp,
+  withinWindow } from '../domain/board.js';
+import { recordFailure } from '../../../shared/redaction.js';
+import { normalizeAlert } from '../../../shared/alert-shape.js';
+import { eventTypes } from '../../../shared/vocabulary.js';
 
-const MAX_INVESTIGATIONS = 12;
-const MAX_ROUNDS = 32;
-const WINDOW_HOURS = 72;
-const PAGE_SIZE = 50;
-// A4/A5：白板 findings 按页落完整投影（一次工具调用一页，最多 PAGE_SIZE 行），不再只留 12 行。
-// 两层上界：每个工具调用 16000 字、每个节点 120000 字。超界只按「行」收缩并记 rows_omitted，
-// 证据编号与计数一律保留——少的是行，不是「这次查过什么」。
-export const findingsRowLimit = PAGE_SIZE;
-export const findingsRowsMaxChars = 16000;
-export const findingsNodeMaxChars = 120000;
-const MAX_GLOBAL_PAGES = 30;
-const MAX_TYPE_PAGES = 10;
-const MAX_NODES = 64;
-const MAX_ASSET_NEIGHBORS = 12;
-const short = (value, length = 240) => String(value ?? '').slice(0, length);
-const TRACE_STATUSES = Object.freeze(['running', 'done', 'failed', 'interrupted']);
-// syslog 形态的告警 ID：与 triage-monitor 生成的记录 ID 同一套形状。
-const SYSLOG_BOARD = /^syslog:([a-z_]+):[a-f0-9]{16}:(?:[0-9]+|unknown):[a-f0-9-]{36}$/;
-// 断点：断在哪一跳的左边，为什么断（D016）。hop_id 为空表示整条链层面的缺口。
-const addGap = (board, hopId, reason) => {
-  if (!Array.isArray(board.gaps)) board.gaps = [];
-  board.gaps.push({ hop_id: hopId || null, reason: short(reason, 400) });
-};
-// 发现顺序：实时出现就是往 discovery 后面加一跳或一条线（D016 重放口径）。
-const discover = (board, kind, id) => {
-  if (!Array.isArray(board.discovery)) board.discovery = [];
-  board.discovery.push({ step: board.discovery.length + 1, kind, id });
-};
-const fact = (item, name) => item?.facts?.[name]?.value;
-const validIp = value => typeof value === 'string' && /^(?:\d{1,3}\.){3}\d{1,3}$/.test(value) &&
-  value.split('.').every(part => Number(part) <= 255);
-const privateIp = value => /^(?:10\.|127\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(value);
-const now = () => new Date().toISOString();
-const pointer = parts => '/' + parts.map(part => String(part).replace(/~/g, '~0').replace(/\//g, '~1')).join('/');
-const timeOf = value => {
-  if (value == null || value === '') return null;
-  const number = Number(value);
-  const timestamp = Number.isFinite(number) && number > 0
-    ? (number < 1e12 ? number * 1000 : number) : Date.parse(value);
-  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
-};
-const withinWindow = (row, board) => {
-  const timestamp = timeOf(row.created_at ?? row.detected_at ?? row.event_time ?? row.last_seen_at ?? row.timestamp);
-  return timestamp == null || (timestamp >= Date.parse(board.window.since) && timestamp <= Date.parse(board.window.until));
-};
-const rowTime = row => timeOf(row.created_at ?? row.detected_at ?? row.event_time ?? row.last_seen_at ?? row.timestamp);
-// 溯源目标三种形态：告警（牧云类型:id）、syslog 告警 ID、IPv4。
-function traceTarget(target) {
-  const value = String(target ?? '');
-  const address = value.replace(/^ip:/, '');
-  if (validIp(address)) return { kind: 'ip', boardId: `ip:${address}`, address };
-  const alert = value.match(/^([a-z_]+):([1-9]\d*)$/);
-  if (alert && Object.hasOwn(eventTypes, alert[1]))
-    return { kind: 'alert', boardId: value, type: alert[1], eventId: Number(alert[2]) };
-  const syslog = value.match(SYSLOG_BOARD);
-  if (syslog && Object.hasOwn(eventTypes, syslog[1])) return { kind: 'syslog', boardId: value, type: syslog[1] };
-  return null;
-}
-// 告警分析已经取到的证据被复用时，用这批事实起板，不再查同一份事件详情。
-function alertFromFacts(spec, facts = {}) {
-  const hostIp = [facts.host_ip].find(validIp) || null;
-  return { id: spec.boardId, eventType: spec.type, eventId: spec.eventId ?? (Number(facts.event_id) || null),
-    createdAt: facts.occurred_at || null, title: facts.title || eventTypes[spec.type] || spec.type,
-    asset: facts.host_name || hostIp || '未知主机', assetIp: hostIp,
-    source: validIp(facts.source_ip) ? facts.source_ip : '待核查',
-    target: facts.destination_ip || hostIp || '待核查' };
-}
-function reuseRecord(reused, facts) {
-  const view = {};
-  for (const [name, key] of [['host_ip', 'host_ip'], ['source_ip', 'source_ip'], ['destination_address', 'destination_ip']])
-    if (facts[key]) view[name] = { value: facts[key], pointer: `/payload/${key}` };
-  return { evidenceId: reused.evidence_id, tool: reused.tool, view: { facts: view }, result: {} };
-}
-// 列表口径：一条溯源一行，链长＝hops 个数（含告警那一跳），断点＝gaps 非空。
-function summarizeBoard(board) {
-  const type = board.alert?.type || (typeof board.alert_id === 'string' ? board.alert_id.split(':')[0] : null);
-  const gaps = Array.isArray(board.gaps) ? board.gaps : [];
-  return { id: board.id || board.alert_id, alert_id: board.alert_id ?? null,
-    title: board.title || board.id || board.alert_id,
-    type: type && Object.hasOwn(eventTypes, type) ? type : null,
-    host: board.alert?.host || board.nodes?.[0]?.address || null,
-    occurred_at: board.alert?.occurred_at || null, status: board.status,
-    chain_length: Array.isArray(board.nodes) ? board.nodes.length : 0, has_gaps: gaps.length > 0,
-    created_at: board.created_at, updated_at: board.updated_at };
-}
-// 详情口径（D016）：hops / links / gaps / discovery。links 由更晚的一端指向更早的原因。
-function presentBoard(board) {
-  const nodes = Array.isArray(board.nodes) ? board.nodes : [];
-  const edges = Array.isArray(board.edges) ? board.edges : [];
-  const hops = nodes.map((node, index) => ({ id: node.id,
-    kind: node.id === board.seed && board.alert_id ? 'alert' : 'host',
-    label: node.label || node.address || node.id, host: node.address || null,
-    occurred_at: node.occurred_at || null, evidence_id: node.discovered_from?.[0]?.evidence_id || null,
-    discovered: index + 1 }));
-  const byId = new Map(hops.map(hop => [hop.id, hop]));
-  const depth = new Map();
-  if (board.seed) depth.set(board.seed, 0);
-  for (let changed = depth.size > 0; changed;) {
-    changed = false;
-    for (const edge of edges) {
-      if (typeof edge.from !== 'string' || typeof edge.to !== 'string') continue;
-      if (depth.has(edge.from) && !depth.has(edge.to)) { depth.set(edge.to, depth.get(edge.from) + 1); changed = true; }
-      if (depth.has(edge.to) && !depth.has(edge.from)) { depth.set(edge.from, depth.get(edge.to) + 1); changed = true; }
-    }
-  }
-  const links = edges.map((edge, index) => {
-    let from = edge.from, to = edge.to;
-    const fromTime = timeOf(byId.get(from)?.occurred_at), toTime = timeOf(byId.get(to)?.occurred_at);
-    if (fromTime != null && toTime != null && fromTime !== toTime) {
-      if (fromTime < toTime) [from, to] = [to, from];
-    } else {
-      const fromDepth = depth.get(from), toDepth = depth.get(to);
-      // 时间相同（或未知）时，离告警更近的一端算更晚。
-      if (fromDepth != null && toDepth != null && fromDepth > toDepth) [from, to] = [to, from];
-    }
-    return { id: `link:${index}`, from, to, rel: edge.rel || '',
-      evidence_id: edge.citations?.[0]?.evidence_id || null };
-  });
-  const gaps = (Array.isArray(board.gaps) ? board.gaps : []).map(gap => typeof gap === 'string'
-    ? { hop_id: null, reason: gap } : { hop_id: gap?.hop_id ?? null, reason: String(gap?.reason ?? '') });
-  const discovery = Array.isArray(board.discovery) && board.discovery.length ? board.discovery
-    : [...hops.map((hop, index) => ({ step: index + 1, kind: 'hop', id: hop.id })),
-      ...links.map((link, index) => ({ step: hops.length + index + 1, kind: 'link', id: link.id }))];
-  return { ...board, hops, links, gaps, discovery, chain_length: hops.length, has_gaps: gaps.length > 0,
-    alert: board.alert || null };
-}
-const olderThanWindow = (row, board) => {
-  const timestamp = timeOf(row.created_at ?? row.detected_at ?? row.event_time ?? row.last_seen_at ?? row.timestamp);
-  return timestamp != null && timestamp < Date.parse(board.window.since);
-};
-function resultRows(record) {
-  const key = ['events', 'data', 'result', 'list', 'hosts'].find(name => Array.isArray(record.result?.[name]));
-  return key ? { key, rows: record.result[key] } : { key: null, rows: [] };
-}
-function rowFacts(row, prefix) {
-  const fields = {
-    event_id: ['id', 'event_id'], event_name: ['event_name.zh_cn', 'event_name.name', 'event_name', 'rule_name'],
-    event_type: ['event_type'], observed_at: ['created_at', 'detected_at', 'event_time', 'last_seen_at'],
-    host_ip: ['host_view.host_ip', 'host_ip'], host_name: ['host_view.host_name', 'host_name'],
-    source_ip: ['source_ip', 'login_ip', 'ssh_client_ip', 'src_ip'],
-    destination_address: ['remote_addr', 'dest_addr', 'destination_ip', 'dst_ip'],
-    destination_port: ['remote_port', 'dest_port', 'port'], user_name: ['uname', 'username', 'login_username', 'user'],
-    command_line: ['cmdline', 'command', 'shell_cmdline', 'process_cmdline'],
-    process_name: ['exename', 'pname', 'process_name']
-  };
-  const facts = {};
-  for (const [name, paths] of Object.entries(fields)) for (const dotted of paths) {
-    const keys = dotted.split('.');
-    const value = keys.reduce((part, key) => part && typeof part === 'object' ? part[key] : undefined, row);
-    if (value == null || value === '' || typeof value === 'object') continue;
-    if (String(value).length > (name === 'command_line' ? 3000 : 500)) continue;
-    facts[name] = { value, pointer: pointer([...prefix, ...keys]) };
-    break;
-  }
-  return facts;
-}
-
-export function traceBoardSeed(alert, original) {
-  const hostIp = [alert.assetIp, fact(original.view, 'host_ip')].find(validIp) ||
-    (validIp(alert.target) && privateIp(alert.target) ? alert.target : null);
-  const id = hostIp ? `asset:${hostIp}` : validIp(alert.source) ? `ip:${alert.source}` : null;
-  const observedAt = timeOf(alert.createdAt) || Date.now();
-  const occurredAt = new Date(observedAt).toISOString();
-  const nodes = [{ id, label: hostIp ? (alert.asset && alert.asset !== '未知主机' ? alert.asset : hostIp) : alert.source || alert.id,
-    address: hostIp || alert.source || '', kind: hostIp ? 'asset' : 'external_ip', status: 'pending',
-    why: '告警涉及的起始资产，先核查它的档案和相关事件', profile: profileFrom(original), findings: [], finding_count: 0,
-    occurred_at: occurredAt,
-    discovered_from: [{ evidence_id: original.evidenceId, pointer: fact(original.view, 'host_ip') ? original.view.facts.host_ip.pointer : null }] }];
-  for (const [fieldName, address] of [['source_ip', alert.source], ['destination_address', alert.target]]) {
-    if (!validIp(address) || address === hostIp || nodes.some(node => node.address === address)) continue;
-    nodes.push({ id: `${privateIp(address) ? 'asset' : 'ip'}:${address}`, label: address, address,
-      kind: privateIp(address) ? 'asset' : 'external_ip', status: 'pending', why: '',
-      profile: privateIp(address) ? {} : { name: '外部 IP（未登记资产）', ip: address }, findings: [], finding_count: 0,
-      occurred_at: occurredAt,
-      discovered_from: [{ evidence_id: original.evidenceId, pointer: original.view?.facts?.[fieldName]?.pointer || null }] });
-  }
-  const until = observedAt + 48 * 3600000;
-  return { id: alert.id, alert_id: alert.id, run_id: randomUUID(), title: alert.title, seed: id, status: 'running',
-    alert: { id: alert.id, type: alert.eventType || String(alert.id).split(':')[0], title: alert.title,
-      host: hostIp || alert.source || null, occurred_at: occurredAt },
-    window: { since: new Date(observedAt - 24 * 3600000).toISOString(), until: new Date(until).toISOString(), hours: WINDOW_HOURS },
-    created_at: now(), updated_at: now(), nodes, edges: [], discovery: nodes.map((node, index) => ({ step: index + 1, kind: 'hop', id: node.id })),
-    activity: [{ at: now(), kind: 'seed', title: '以告警为起点',
-      detail: `${alert.id} · ${alert.title}。已标出告警字段中的资产与地址，尚未确认任何路径。` }],
-    summary: '', gaps: [], investigations: 0, model: null, origin_evidence: summarizeRecord(original) };
-}
-
-export function traceIpSeed(address) {
-  const id = `${privateIp(address) ? 'asset' : 'ip'}:${address}`;
-  const until = Date.now();
-  return { id: `ip:${address}`, alert_id: null, run_id: randomUUID(), title: `IP 溯源 · ${address}`,
-    alert: { id: `ip:${address}`, type: null, title: `IP 溯源 · ${address}`, host: address, occurred_at: null },
-    seed: id, status: 'running', window: { since: new Date(until - WINDOW_HOURS * 3600000).toISOString(),
-      until: new Date(until).toISOString(), hours: WINDOW_HOURS }, created_at: now(), updated_at: now(),
-    nodes: [{ id, label: address, address, kind: privateIp(address) ? 'asset' : 'external_ip',
-      status: 'pending', why: '操作员指定的溯源起点', occurred_at: null,
-      profile: privateIp(address) ? {} : { name: '外部 IP（未登记资产）', ip: address }, findings: [], finding_count: 0,
-      discovered_from: [] }], edges: [], discovery: [{ step: 1, kind: 'hop', id }],
-    activity: [{ at: now(), kind: 'seed', title: '以 IP 为起点',
-      detail: `${address}。AI 将从这个地址自主追查关联资产和事件。` }],
-    summary: '', gaps: [], investigations: 0, model: null, origin_evidence: null };
-}
-
-function addCandidate(board, address, kind, source) {
-  if (!validIp(address)) return;
-  const id = `${kind === 'external_ip' ? 'ip' : 'asset'}:${address}`;
-  if (board.nodes.some(node => node.id === id)) return;
-  if (board.nodes.length >= MAX_NODES) return;
-  board.nodes.push({ id, label: address, address, kind, status: 'pending', why: '',
-    profile: kind === 'external_ip' ? { name: '外部 IP（未登记资产）', ip: address } : {}, findings: [],
-    finding_count: 0, occurred_at: source?.occurred_at || null, discovered_from: [source] });
-  discover(board, 'hop', id);
-}
-
-function summarizeRecord(record, board) {
-  const { key, rows } = resultRows(record);
-  if (!key) {
-    const view = record.view || {};
-    return { evidence_id: record.evidenceId, tool: record.tool, total: 1, returned: 1,
-      rows: [{ facts: view.facts || {} }], truncated: Boolean(view.truncated_for_context) };
-  }
-  const matching = rows.map((row, index) => ({ row, index })).filter(({ row }) => !board || withinWindow(row, board));
-  const bounded = boundedFindingsRows(matching, key);
-  return { evidence_id: record.evidenceId, tool: record.tool, total: record.result?.total ?? null,
-    returned: matching.length, page_returned: rows.length,
-    rows: bounded.rows, rows_omitted: bounded.omitted,
-    truncated: bounded.omitted > 0 || rows.length >= PAGE_SIZE };
-}
-
-function boundedFindingsRows(matching, key) {
-  const kept = [], limit = findingsRowLimit;
-  let size = 0;
-  for (const { row, index } of matching) {
-    if (kept.length >= limit) break;
-    const facts = rowFacts(row, [key, index]);
-    const cost = JSON.stringify(facts).length;
-    if (size + cost > findingsRowsMaxChars) break;
-    kept.push({ facts });
-    size += cost;
-  }
-  return { rows: kept, omitted: matching.length - kept.length };
-}
-
-// 节点级上界：从行数最多的那一项开始逐行收缩（每次都缩短，一定收敛）。
-function boundNodeFindings(findings) {
-  const total = () => JSON.stringify(findings).length;
-  while (total() > findingsNodeMaxChars) {
-    const target = [...findings].filter(item => item.rows.length > 1)
-      .sort((left, right) => right.rows.length - left.rows.length)[0];
-    if (!target) break;
-    target.rows.pop();
-    target.rows_omitted = (target.rows_omitted || 0) + 1;
-    target.truncated = true;
-  }
-  return findings;
-}
-
-function profileFrom(record) {
-  const data = record.result?.host || record.result?.event || record.result?.data || record.result?.result || record.result?.host_info || record.result;
-  const item = Array.isArray(data) ? data[0] : Array.isArray(data?.hosts) ? data.hosts[0]
-    : Array.isArray(data?.events) ? data.events[0] : Array.isArray(data?.data) ? data.data[0] : data;
-  if (!item || typeof item !== 'object') return {};
-  const view = item.host_view || item;
-  const selected = {
-    name: view.host_name || view.name, ip: view.host_ip || view.ip,
-    os: view.host_os_name || view.os_release_name || view.host_os_type || view.os || view.os_release_version,
-    kernel: view.host_kernel_version || view.kernel_version,
-    group: view.group_name, state: view.host_state || view.state,
-    exposed_ip: view.exposed_ip, tags: view.tags, last_seen: view.host_last_seen_at || view.last_seen_at,
-    comment: view.host_comment || view.comment
-  };
-  return Object.fromEntries(Object.entries(selected).filter(([, value]) => value != null && value !== ''));
-}
-
+// ── 模型回包 → 白板动作（application 职责：解析外部输入）────────────────────────
 function parseAction(content) {
   const text = String(content || '').trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
   const action = JSON.parse(text);
@@ -287,33 +19,34 @@ function parseAction(content) {
   return action;
 }
 
+const now = () => new Date().toISOString();
+
 export class TraceBoardService {
-  constructor({ toolbox, model, promptStore = new PromptStore(), directory, analysis = null }) {
-    this.toolbox = toolbox; this.model = model; this.promptStore = promptStore; this.directory = directory;
+  // store（infrastructure/board-store.js）由装配注入（R-STRUCT+：application 不自己 new 适配器）。
+  constructor({ toolbox, model, promptStore, store, analysis = null }) {
+    if (!store) throw new Error('TraceBoardService 需要注入 board-store（store 端口）');
+    this.toolbox = toolbox;
+    this.model = model;
+    this.promptStore = promptStore;
+    this.directory = store.directory;
     // analysis(alertId) 回告警分析已经落盘的起点证据（syslog 原始报文等）；没有就回 null。
+    // 端口由装配注入（server.js 的 createAnalysisProvider）——trace 不 import triage 的实现。
     this.analysis = analysis;
+    this.store = store;
     this.running = new Map();
   }
 
-  file(boardId) { return path.join(this.directory, `${validIp(boardId) ? `ip:${boardId}` : boardId}.json`); }
-  async read(boardId) {
-    try { return JSON.parse(await readFile(this.file(boardId), 'utf8')); }
-    catch (error) { if (error.code === 'ENOENT') return null; throw error; }
-  }
+  file(boardId) { return this.store.file(boardId); }
+  async read(boardId) { return this.store.read(boardId); }
+  async save(board) { return this.store.save(board); }
+
   // 全量摘要，按更新时间倒序。list / page 共用；目录不存在等同于没有白板。
   async summaries() {
-    let names;
-    try { names = (await readdir(this.directory)).filter(name => name.endsWith('.json')); }
-    catch (error) { if (error.code === 'ENOENT') return []; throw error; }
-    const entries = await Promise.all(names.map(async name => {
-      try {
-        const board = JSON.parse(await readFile(path.join(this.directory, name), 'utf8'));
-        if (!board.id && !board.alert_id) return null;
-        return summarizeBoard(board);
-      } catch { return null; }
-    }));
-    return entries.filter(Boolean).sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+    const boards = await this.store.rawAll();
+    return boards.map(board => summarizeBoard(board))
+      .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
   }
+
   // HTTP 列表用：先按状态 / 类型 / 主机 / 告警时间筛，再切页；total 是筛后的总数。参数合法性由调用方校验。
   async page({ count = 20, offset = 0, statuses = [], type = null, host = null, from = null, to = null } = {}) {
     let boards = await this.summaries();
@@ -327,9 +60,11 @@ export class TraceBoardService {
     });
     return { boards: boards.slice(offset, offset + count), total: boards.length };
   }
+
   async list(limit = 20) {
     return (await this.page({ count: Math.max(1, Math.min(50, limit)) })).boards;
   }
+
   async get(boardId) {
     const board = await this.read(boardId);
     if (!board) return null;
@@ -342,20 +77,7 @@ export class TraceBoardService {
     }
     return presentBoard(board);
   }
-  async save(board) {
-    board.updated_at = now();
-    await mkdir(this.directory, { recursive: true });
-    const destination = this.file(board.id || board.alert_id);
-    const temporary = `${destination}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, JSON.stringify(board), { mode: 0o600 });
-      await rename(temporary, destination);
-    } catch (error) {
-      await unlink(temporary).catch(() => {});
-      throw error;
-    }
-    return board;
-  }
+
   // A1：从一条告警（或 IP）创建溯源。已有白板直接返回那条，不重查事件、不覆盖。
   // 已知旧账：同一新目标的并发 POST 仍是 check-then-act（读盘与建板之间没有锁），两个请求可能各建一次、后写覆盖前写；
   // 单进程里 running 只挡住已经进 explore 的那一个。本轮不改（P003-T014 复审 minor）。
@@ -402,6 +124,7 @@ export class TraceBoardService {
     this.running.set(spec.boardId, work);
     return { created: true, board: presentBoard(board) };
   }
+
   async start(target, focus = '') { return (await this.startOrResume(target, focus)).board; }
 
   async investigate(board, session, node, reason, catalog) {
@@ -502,11 +225,14 @@ export class TraceBoardService {
       addGap(board, entry.id, `${entry.address} 发现 ${ranked.length} 个邻接地址，本轮图中仅加入相关记录最多的 ${limit} 个`);
     for (const candidate of ranked.slice(0, limit))
       addCandidate(board, candidate.address, candidate.kind, candidate.source);
-    for (const edge of roughRelations.values()) if (board.nodes.some(node => node.id === edge.from) &&
-      board.nodes.some(node => node.id === edge.to) && !board.edges.some(existing => existing.from === edge.from &&
+    // 程序自动建的边与 AI 建的边过同一道不变量：link 两端 hop 必须真实存在（批 1 完成标志）。
+    for (const edge of roughRelations.values()) {
+      assertLink(board, edge.from, edge.to);
+      if (!board.edges.some(existing => existing.from === edge.from &&
         existing.to === edge.to && existing.by === 'program')) {
-      board.edges.push(edge);
-      discover(board, 'link', `link:${board.edges.length - 1}`);
+        board.edges.push(edge);
+        discover(board, 'link', `link:${board.edges.length - 1}`);
+      }
     }
     entry.touched_hosts = [...touched];
     entry.status = 'done'; entry.why = short(reason || 'AI 选择继续追查这个节点'); entry.investigated_at = now();
@@ -539,6 +265,7 @@ export class TraceBoardService {
   }
 
   async explore(board, session) {
+    if (!this.promptStore) throw new Error('溯源白板未配置提示词仓');
     const prompts = await this.promptStore.load();
     const catalog = await this.toolbox.listTools();
     const messages = [{ role: 'system', content: prompts.prompts.trace },
@@ -593,6 +320,8 @@ export class TraceBoardService {
             throw new Error('关系边的引用必须覆盖两端地址');
           if (board.edges.some(edge => edge.from === from.id && edge.to === to.id && edge.rel === action.rel))
             throw new Error('这条关系已存在');
+          // 领域不变量：link 两端 hop 必须真实存在（批 1 完成标志；端点校验在领域层再拦一次）。
+          assertLink(board, from.id, to.id);
           const edge = { from: from.id, to: to.id, rel: short(action.rel, 40), why: short(action.why, 400),
             strength: Math.max(0, Math.min(1, Number(action.strength) || 0.5)), citations, by: 'ai', at: now() };
           board.edges.push(edge);

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createJournal, useJournal } from '../../../log.js';
+import { createJournal, useJournal } from '../../../src/shared/logging/log.js';
 import { parseSyslog } from '../../../syslog-input.js';
 import { matchSyslogEvent } from '../../../syslog-case.js';
 import { runWikiReplay } from '../../../wiki-replay.js';
@@ -39,7 +39,7 @@ async function waitFor(monitor, id) {
 // ── A2 复核补漏点：轮询失败 lastError（T051 §4 没点到、写者用例也没盖）──────────
 test('A2 轮询失败 lastError：状态摘要里不写牧云报错原文，日志行照旧留原文', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-poll-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const lines = [];
   useJournal(createJournal({ write: line => lines.push(JSON.parse(line)) }));
   try {
@@ -60,7 +60,7 @@ test('A2 轮询失败 lastError：状态摘要里不写牧云报错原文，日�
 // ── O6 第二支：牧云事件 ID 详情读取失败（写者用例只盖了列表查询那一支）──────────
 test('O6 详情读取失败：返回体过闸、日志行留原文', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-detail-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const lines = [];
   useJournal(createJournal({ write: line => lines.push(JSON.parse(line)) }));
   try {
@@ -79,7 +79,7 @@ test('O6 详情读取失败：返回体过闸、日志行留原文', async t => 
 // ── O8 第二支：回包不是合法 JSON（knowledge-base §5 承诺的文案）───────────────
 test('O8 回包解析失败：before/after.error 是闸后文案，原文不落报告', async t => {
   const caseDir = await mkdtemp(path.join(tmpdir(), 'hids-t052-no-cases-'));
-  t.after(() => rm(caseDir, { recursive: true, force: true }));
+  t.after(() => rm(caseDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const wiki = { get: async file => ({ path: file, id: 'HP-01', revision: 3,
       content: '---\nid: HP-01\nstatus: active\n---\n判据原文：需核对授权。' }),
     agentIndex: async () => ({ pages: [{ id: 'HP-01', path: 'honeypot/HP-01.md', title: '蜜罐', content: '' }] }) };
@@ -99,7 +99,7 @@ test('O8 回包解析失败：before/after.error 是闸后文案，原文不落�
 // ── 边界：非 Error 的 throw（第三方库抛字符串）不许把正文带进队列状态文件 ────────
 test('O1 边界：抛字符串时记录侧一样只留固定文案 + 字符量，队列文件不含正文', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-throw-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const monitor = new TriageMonitor(options(directory, { retryMaxAttempts: 1,
     investigator: { run: async () => { throw 'SECRET_RAW_51c0 上游字符串 ' + 'X'.repeat(20000); } } }));
   await monitor.load();
@@ -117,7 +117,7 @@ test('O1 边界：抛字符串时记录侧一样只留固定文案 + 字符量�
 // ── 边界：O4 超长原文不再 240 截断，但也不落原文 ─────────────────────────────
 test('O4 边界：300 字原文只留全量字符量、不截断也不落原文，成功轮清空', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-kb-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const long = SECRET + 'y'.repeat(300);
   const prompts = { load: async () => ({ prompts: { knowledge: '整理' } }) };
   const store = new KnowledgeStore(directory);
@@ -138,7 +138,7 @@ test('O4 边界：300 字原文只留全量字符量、不截断也不落原文�
 //    triage-rules §9 都写了 steps[].detail 与 result.rule_evaluation 的超时态，这里钉住。
 test('O2b 超时变体：steps / result.rule_evaluation 归一到「调用超时」，回灌模型仍是原文', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t052-timeout-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const variant = '牧云事件查询失败：rpc timeout after 30s';
   const expected = `调用超时，原文 ${variant.length} 字未落盘`;
   let seen = null;

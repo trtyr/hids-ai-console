@@ -17,6 +17,10 @@
 //   .env.example（LLM_* 主判三项 / LLM_REVIEW_* 复核组三键）
 //
 // 假的上游只当 socket 对端（牧云 RPC+MCP 替身、模型端点），不是被测逻辑。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -141,7 +145,7 @@ const syslogLine = targetPort => '<134>1 2026-11-17T10:00:00Z host app - cloudwa
 
 async function startShippedServer(t, { cloudwalkerBase, primaryBase, reviewBase }) {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'hids-assembly-tester-'));
-  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  t.after(() => rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const port = await freePort();
 
   // 环境变量就是装配输入：主判三项指向 primary 端点，复核组三键指向 review 端点（两个不同 base_url）。

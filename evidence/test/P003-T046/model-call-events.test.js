@@ -11,7 +11,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createJournal, traceModelCall, useJournal } from '../../../log.js';
+import { createJournal, traceModelCall, useJournal } from '../../../src/shared/logging/log.js';
 import { InvestigationAgent } from '../../../investigation-agent.js';
 import { AgentToolbox } from '../../../agent-tools.js';
 import { RegoRuleMaintainer } from '../../../server.js';
@@ -171,7 +171,7 @@ test('A5 超时重试在快照里留痕：turns 里 timeout 与 error 分得开�
 test('A4 规则维护单发调用落事件，带 T041 规则维护会话 id（互引）', async t => {
   const sink = rig(t);
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t046-rule-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   await seedLibrary(path.join(directory, 'rules'), path.join(ROOT, 'rules'));
   const store = new RuleStore(path.join(directory, 'rules'));
   const sessions = new RuleSessionStore(path.join(directory, 'rule-sessions'));
@@ -203,7 +203,7 @@ test('A4 规则维护单发调用落事件，带 T041 规则维护会话 id（�
 test('A5 wiki 维护单发调用落事件，turn 是会话里的第几条用户消息、session_id 是维护会话 id', async t => {
   const sink = rig(t);
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t046-wiki-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   await seedLibrary(path.join(directory, 'wiki'), path.join(ROOT, 'wiki'));
   const wiki = new WikiStore(path.join(directory, 'wiki'));
   const model = { model: 'fake-light', complete: async () => ({ content: JSON.stringify({ ready: false, reply: '请补充原始记录。' }) }) };

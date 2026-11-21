@@ -23,6 +23,8 @@ export function publicRelease(value) {
     modules: moduleNames, changes: Object.fromEntries(['features', 'improvements', 'fixes']
       .map(key => [key, Array.isArray(value.changes?.[key]) ? value.changes[key] : []])),
     updated_at: value.updated_at || null, sequence: value.sequence || 0,
+    // P003-T062：应用人（actor）从存储到接口全程可见——谁应用了这版升级包，概览、历史与审计三处一致。
+    actor: value.actor || null,
     id: value.id, filename: value.filename, uploaded_at: value.uploaded_at || null };
 }
 

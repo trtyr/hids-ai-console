@@ -1,5 +1,9 @@
 // P003-T047 单测（HTTP 面）：误报入口的补跑入参、维护侧映射、维护会话查询两条路由。
 // 台子与 agent-api.test.js 同口径：真 createServer + 假 monitor，维护 Agent 换替身（只验接线与契约）。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';

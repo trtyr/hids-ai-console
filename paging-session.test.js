@@ -1,11 +1,13 @@
 // 分页与会话身份（P003-T006）：GET /api/trace/boards、GET /api/wiki/pages、GET /api/session。
 // 全部走 createServer 的注入点，不碰真实牧云 / 文件系统之外的外部服务；白板那组用临时目录。
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { TraceBoardService } from './trace-board.js';
+import { TraceBoardService } from './src/contexts/trace/application/trace-service.js';
+import { BoardStore } from './src/contexts/trace/infrastructure/board-store.js';
 import { createServer } from './server.js';
 
 const basic = credentials => `Basic ${Buffer.from(credentials).toString('base64')}`;
@@ -20,6 +22,8 @@ async function serve(t, options = {}) {
 
 // ---------- TraceBoardService.page ----------
 
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 test('白板 page 回本页摘要与切页前总数，按更新时间倒序', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'trace-page-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -27,7 +31,7 @@ test('白板 page 回本页摘要与切页前总数，按更新时间倒序', as
     ['ip:10.0.0.1', '2026-11-18T02:00:00.000Z']])
     await writeFile(path.join(directory, `${id}.json`),
       JSON.stringify({ id, title: id, status: 'done', created_at: updated, updated_at: updated }));
-  const service = new TraceBoardService({ toolbox: {}, model: {}, directory });
+  const service = new TraceBoardService({ toolbox: {}, model: {}, directory, store: new BoardStore(directory) });
 
   const second = await service.page({ count: 1, offset: 1 });
   assert.equal(second.total, 3);
@@ -43,7 +47,7 @@ test('白板 page 回本页摘要与切页前总数，按更新时间倒序', as
 });
 
 test('白板 page 在没有目录、坏文件时不抛，只数有效白板', async t => {
-  const missing = new TraceBoardService({ toolbox: {}, model: {}, directory: path.join(tmpdir(), `trace-page-missing-${process.pid}`) });
+  const missing = new TraceBoardService({ toolbox: {}, model: {}, store: new BoardStore(path.join(tmpdir(), `trace-page-missing-${process.pid}`)) });
   assert.deepEqual(await missing.page(), { boards: [], total: 0 });
 
   const directory = await mkdtemp(path.join(tmpdir(), 'trace-page-bad-'));
@@ -51,7 +55,7 @@ test('白板 page 在没有目录、坏文件时不抛，只数有效白板', as
   await writeFile(path.join(directory, 'broken.json'), '{ 不是 JSON');
   await writeFile(path.join(directory, 'nameless.json'), JSON.stringify({ title: '没有 id' }));
   await writeFile(path.join(directory, 'revshell:7.json'), JSON.stringify({ id: 'revshell:7', updated_at: '2026-11-18T00:00:00.000Z' }));
-  const service = new TraceBoardService({ toolbox: {}, model: {}, directory });
+  const service = new TraceBoardService({ toolbox: {}, model: {}, directory, store: new BoardStore(directory) });
   const page = await service.page({ count: 20, offset: 0 });
   assert.equal(page.total, 1);
   assert.deepEqual(page.boards.map(board => board.id), ['revshell:7']);

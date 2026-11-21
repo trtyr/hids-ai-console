@@ -350,6 +350,198 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /api/dict:
+    get:
+      tags: [字典]
+      summary: 事件类型 / 等级 / 结论 / 案件状态四张字典（机器值 + 中文名）
+      operationId: getDictionaries
+      description: |
+        P003-T059 A09：前端不再硬编码 11 个类型名与等级名。四张表全部取自代码唯一真源
+        （`src/shared/vocabulary.js` 的类型表与等级表、`src/contexts/triage/domain/triage-case.js` 的
+        结论词表与状态词表）——接口不做第二份对照表。
+      responses:
+        '200':
+          description: 四张字典
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [event_types, levels, verdicts, triage_statuses]
+                properties:
+                  event_types:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, label]
+                      properties:
+                        key: { type: string, description: 机器值（如 webshell、honeypot） }
+                        label: { type: string, description: 中文名（如 WebShell、蜜罐） }
+                  levels:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, rank, label]
+                      properties:
+                        key: { type: string, enum: [low, medium, high, critical] }
+                        rank: { type: integer, minimum: 1, maximum: 4 }
+                        label: { type: string, description: 中文名（低危/中危/高危/严重） }
+                  verdicts:
+                    type: array
+                    description: 后端三态（前端的「待研判」是 review 投影，不是第四种结论）
+                    items:
+                      type: object
+                      required: [key, label]
+                      properties:
+                        key: { type: string, enum: [threat, uncertain, false_positive] }
+                        label: { type: string }
+                  triage_statuses:
+                    type: array
+                    items: { type: string, enum: [not_queued, queued, running, done, failed] }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/agent/triage/{alertId}/case-files:
+    get:
+      tags: [研判]
+      summary: 列出一条案件的案卷材料清单（白名单文件 + 字节数 + mtime）
+      operationId: listCaseFiles
+      description: |
+        P003-T059 A02。案卷的 9 个文件（原始告警 / 字段表 / 研判事实 / 判据索引 / 上下文 / 结果 / result.json /
+        必查项）此前只有 `case_dir` 本地路径字符串外发，HTTP 侧读不到。清单只列白名单文件且盘上真实存在的；
+        没有案卷目录（无 syslog 报文或未匹配）回 404。
+      parameters:
+        - { name: alertId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 案卷材料清单
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alert_id, case_dir, files]
+                properties:
+                  alert_id: { type: string }
+                  case_dir: { type: string, description: 数据根下的案卷目录（相对部署机） }
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, bytes, mtime]
+                      properties:
+                        name: { type: string, description: 白名单文件名 }
+                        bytes: { type: integer }
+                        mtime: { type: string }
+        '400':
+          description: 告警 ID 无效（`code=caller_error`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: 该告警没有案卷目录（`code=caller_error`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/agent/triage/{alertId}/case-files/{name}:
+    get:
+      tags: [研判]
+      summary: 读一份案卷材料正文（白名单精确匹配；按扩展名给 content-type）
+      operationId: readCaseFileByName
+      description: |
+        P003-T059 A02。文件名必须在白名单内（精确匹配）——路径穿越（`../`、绝对路径、URL 编码变体）
+        不可能命中白名单，一律 400；案卷目录内不存在该文件回 404。扩展名 → content-type：
+        `.md` text/markdown、`.txt` text/plain、`.json` application/json。
+      parameters:
+        - { name: alertId, in: path, required: true, schema: { type: string } }
+        - { name: name, in: path, required: true, schema: { type: string, description: 白名单文件名，URL 编码 } }
+      responses:
+        '200':
+          description: 文件正文
+          content:
+            text/markdown:
+              schema: { type: string }
+            text/plain:
+              schema: { type: string }
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400':
+          description: 文件名不在白名单（含穿越变体）或告警 ID 无效（`code=caller_error`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: 无案卷目录或该案卷还没有这份材料（`code=caller_error`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+  /api/audit:
+    get:
+      tags: [审计]
+      summary: 查审计流（谁在何时对什么做了什么；append-only，独立于技术日志）
+      operationId: listAuditEvents
+      description: |
+        P003-T062 起所有**写接口**（POST/PUT/DELETE，dry-run 除外）都留审计事件；只读接口不产生事件。
+        存储是 append-only 的按天 JSONL（`<数据根>/audit/audit-<日期>.jsonl`），**不随技术日志的轮转或清理消失**。
+
+        事件形状：`{ at, actor: {kind, id}, action, object, before, after, result, request_id }`——
+        `actor.kind` 取 `user`（登录身份或未鉴权部署的 anonymous）/ `token`（静态管理员令牌，不含明文）/ `system`；
+        `result` 取 `ok` / `denied` / `error`；机密键的新旧值只记 `[redacted-changed]`，不落原文。
+
+        `request_id` 与技术日志（`GET /api/logs?request_id=`）共用同一请求链 id：审计回答「谁做的」，
+        日志回答「当时发生了什么」。
+
+        过滤（都给就是 AND）：`from` / `to`（闭区间，与 /api/logs 同一套解析）、`actor` / `action` / `object`
+        （不区分大小写的部分匹配）、`result`（精确，只能是 ok / denied / error，表外值回 400）。
+        分页与 total 口径同 `/api/logs`。
+      parameters:
+        - { $ref: '#/components/parameters/Count' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { name: from, in: query, description: 起始时间（含），ISO 8601 或 Unix 秒/毫秒, schema: { type: string } }
+        - { name: to, in: query, description: 结束时间（含），ISO 8601 或 Unix 秒/毫秒, schema: { type: string } }
+        - { name: actor, in: query, description: 按 actor（kind/id 合串）部分匹配, schema: { type: string } }
+        - { name: action, in: query, description: 按动作名部分匹配（如 config.write、rule.write）, schema: { type: string } }
+        - { name: object, in: query, description: 按 object JSON 部分匹配（如 alert_id）, schema: { type: string } }
+        - { name: result, in: query, description: 精确筛选 ok / denied / error, schema: { type: string, enum: [ok, denied, error] } }
+      responses:
+        '200':
+          description: 筛选后的审计事件页
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, total, truncated, echo]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      required: [at, actor, action, result]
+                      properties:
+                        at: { type: string, description: 事件时刻（ISO 8601） }
+                        actor:
+                          type: object
+                          required: [kind, id]
+                          properties:
+                            kind: { type: string, enum: [user, token, system] }
+                            id: { type: string, description: 登录名 / 令牌用途标注（不含明文）/ backend }
+                        action: { type: string, description: 审计动作名（见 description 的动作清单） }
+                        object: { type: object, nullable: true, additionalProperties: true }
+                        before: { nullable: true, additionalProperties: true }
+                        after: { nullable: true, additionalProperties: true }
+                        result: { type: string, enum: [ok, denied, error] }
+                        request_id: { type: string, nullable: true, description: 与技术日志共用的请求链 id }
+                  total: { type: integer, description: 筛选后、切页前的条数 }
+                  truncated: { type: boolean, description: 扫描超过 20000 条时为 true }
+                  echo:
+                    type: object
+                    properties:
+                      count: { type: integer }
+                      offset: { type: integer }
+        '400':
+          description: 调用方传错（count/offset/时间/result 非法），`code=caller_error`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
   /api/logs:
     get:
       tags: [日志]
@@ -876,6 +1068,53 @@ paths:
         '409': { $ref: '#/components/responses/BadRequest' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /api/agent/investigations:
+    get:
+      tags: [深度研判]
+      summary: 浏览历史研判记录（全量落盘研判，含 cases 列表列不出的记录）
+      description: |
+        P003-T059 A01。`GET /api/agent/triage/cases` 只列有原始报文的入队记录；这里列**全部落盘研判**
+        （存储文件名是 sha256 不可枚举，浏览入口在这）。`cases_total` 并列给出案件列表口径的条数，
+        两个口径的差异一目了然。分页与筛选口径与 /api/logs 一致（非法值 400 caller_error）。
+      operationId: listInvestigations
+      parameters:
+        - { $ref: '#/components/parameters/Count' }
+        - { $ref: '#/components/parameters/Offset' }
+        - { name: verdict, in: query, description: '按结论筛，逗号分隔可多选（threat/uncertain/false_positive/review；review 匹配无结论记录）', schema: { type: string } }
+        - { name: from, in: query, description: 起始时间（含，按 saved_at），ISO 8601 或 Unix 秒/毫秒, schema: { type: string } }
+        - { name: to, in: query, description: 结束时间（含，按 saved_at），ISO 8601 或 Unix 秒/毫秒, schema: { type: string } }
+      responses:
+        '200':
+          description: 研判记录摘要页（按 saved_at 倒序）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, items, cases_total]
+                properties:
+                  total: { type: integer, description: 筛选后、切页前的条数 }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [alert_id, mode, saved_at, degraded]
+                      properties:
+                        alert_id: { type: [string, 'null'] }
+                        mode: { type: [string, 'null'], enum: [deep, triage, null] }
+                        verdict: { type: [string, 'null'], enum: [threat, uncertain, false_positive, null] }
+                        verdict_label: { type: [string, 'null'] }
+                        confidence: { type: [string, 'null'] }
+                        saved_at: { type: [string, 'null'] }
+                        degraded: { type: boolean, description: 降级存疑的结论（P003-T035） }
+                        model: { type: [string, 'null'] }
+                  cases_total:
+                    type: [integer, 'null']
+                    description: 案件列表口径（GET /api/agent/triage/cases）的条数；未配研判队列为 null
+        '400':
+          description: 调用方传错（count/offset/verdict/时间非法），`code=caller_error`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
     post:
       tags: [深度研判]
       summary: 手动启动单告警研判

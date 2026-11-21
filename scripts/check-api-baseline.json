@@ -1,4 +1,8 @@
 {
+  "registry-stale|GET /api/agent/triage/{alertId}/case-files/{name}": {
+    "kind": "registry-stale",
+    "item": "GET /api/agent/triage/{alertId}/case-files/{name}"
+  },
   "impl-missing-in-contract|PUT /api/wiki/pages/{pagePath}": {
     "kind": "impl-missing-in-contract",
     "item": "PUT /api/wiki/pages/{pagePath}"

@@ -15,7 +15,7 @@ const rule = (id, expression = 'input.type == "x"', name = `规则 ${id}`) =>
 // 临时「数据根」：造一个与仓内 rules/ 同形的种子源，再用 withDataRoot 把 dataRoot() 引到它上面。
 async function tempRoot(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'hids-rule-lib-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return root;
 }
 
@@ -33,7 +33,7 @@ async function injected(t) {
   const directory = path.join(root, 'rules');
   const historyDirectory = path.join(root, 'rules-history');
   await mkdir(directory, { recursive: true });
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return { root, directory, historyDirectory,
     store: new RuleStore(directory, { historyDirectory, seedFrom: null }) };
 }

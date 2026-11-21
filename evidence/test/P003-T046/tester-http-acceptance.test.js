@@ -13,7 +13,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { useLogFile, useJournal } from '../../../log.js';
+import { useLogFile, useJournal, flushLogs } from '../../../src/shared/logging/log.js';
 import { createServer } from '../../../server.js';
 import { InvestigationAgent } from '../../../investigation-agent.js';
 import { InvestigationStore } from '../../../investigation-store.js';
@@ -83,7 +83,7 @@ const parameterOf = pointer => ({ $ref: `#/components/parameters/${pointer}` });
 // ── 装配 ────────────────────────────────────────────────────────────────────
 const workspace = async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t046-tester-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return directory;
 };
 
@@ -308,6 +308,7 @@ test('A1/A2/A5 e2e：三域调用落进真日志文件，GET /api/logs?event=ai.
   const responses = new Set(logs.filter(entry => entry.direction === 'response').map(key));
   for (const entry of logs.filter(entry => entry.direction === 'request')) assert.ok(responses.has(key(entry)), `request 没有配对的 response：${key(entry)}`);
   // 正文与工具返回一个字都不在盘上（事件里只有字符量）
+  await flushLogs(); // P003-T072：落盘异步 sink，读盘前排空
   const raw = await readFile(logFile, 'utf8');
   assert.doesNotMatch(raw, /SUMMARY_BODY_MARKER|CLAIM_BODY_MARKER|TOOL_BODY_MARKER|样本外的情况/);
 
@@ -342,6 +343,7 @@ test('A5 解析失败：turns.note 是固定文案、快照里搜不到回包正
   }
   const snapshot = JSON.stringify(result.turns);
   assert.doesNotMatch(snapshot, /SECRET_BODY_MARKER|SECRET_BOD|Unexpected token/, '快照里出现了回包正文或 V8 解析原文');
+  await flushLogs(); // P003-T072：落盘异步 sink，读盘前排空
   const raw = await readFile(logFile, 'utf8');
   assert.doesNotMatch(raw, /SECRET_BODY_MARKER|SECRET_BOD|Unexpected token/, '日志行里出现了回包正文或 V8 解析原文');
   // 事件侧 error 是固定文案（log.js decode 分支口径）

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { readFileSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -125,7 +125,7 @@ function makeLlmStub() {
 const mkAlert = (tag) => `syslog:honeypot:${tag.repeat(16).slice(0, 16)}:${1763373600 + tag.charCodeAt(0)}:${randomUUID()}`;
 
 async function seed() {
-  await rm(TMP, { recursive: true, force: true });
+  await rm(TMP, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   await mkdir(`${DATA}/cases`, { recursive: true });
   const alerts = {
     rule: mkAlert('a'),
@@ -588,7 +588,7 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
       const expect = { ...llm.counters };
       const expectedEvents = 2 * (expect.decision + expect.rule + expect.wiki);
       let events = [];
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 240; i++) { // P003-T072：异步 sink 下事件落文件晚半拍，预算 3s→12s
         const lines = (await readFile(`${TMP}/server.log`, 'utf8')).split('\n').filter(Boolean);
         events = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
           .filter((e) => e.event === 'ai.model_call' && e.domain === 'false_positive');
@@ -602,6 +602,27 @@ test('P003-T047 误报统一维护 Agent：HTTP 黑盒验收（A1–A7 + 边界 
         const d = await call(base, 'GET', `/api/false-positive/sessions/${s.id}`);
         const w = d.json?.outcomes?.wiki?.session_id;
         if (w) wikiSessionOf[s.id] = w;
+      }
+      if (events.length !== expectedEvents) {
+        // P003-T072 排查锚：全量负载下事件缺失时，把文件全貌一并打进断言消息（总行数 / 事件域分布 / 文件列表）。
+        const allLines = (await readFile(`${TMP}/server.log`, 'utf8')).split('\n').filter(Boolean);
+        const domains = {};
+        const roles = {};
+        for (const l of allLines) {
+          try {
+            const e = JSON.parse(l);
+            if (e.event === 'ai.model_call') {
+              domains[e.domain] = (domains[e.domain] || 0) + 1;
+              roles[`${e.domain}/${e.role}`] = (roles[`${e.domain}/${e.role}`] || 0) + 1;
+            }
+          } catch { /* 半行 */ }
+        }
+        const files = (await readdir(TMP)).join(',');
+        const sizes = {};
+        for (const f of await readdir(TMP)) {
+          try { sizes[f] = (await stat(path.join(TMP, f))).size; } catch { sizes[f] = -1; }
+        }
+        t.diagnostic(`server.log 全貌：${allLines.length} 行；ai.model_call 域分布 ${JSON.stringify(domains)}；域/角色 ${JSON.stringify(roles)}；TMP 文件字节数 ${JSON.stringify(sizes)}`);
       }
       const stats = checkModelCallEvents(events, { expect, wikiSessionOf });
       t.diagnostic(`A5 实测 ${JSON.stringify(stats)}；替身计数 ${JSON.stringify(expect)}；逐轮累加 ${JSON.stringify(ledger)}`);

@@ -1,6 +1,8 @@
 // P003-T036 单测：队列可靠性与恢复（A1–A9）。
 // 跑法：node --test --test-timeout=60000 evidence/test/P003-T036/queue-reliability.test.js
 // 纪律：无真实网络、无真实时钟依赖、无固定 sleep——等状态用带超时上界的 until()。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -53,6 +55,8 @@ const okInvestigator = (calls = []) => ({
 });
 
 // ── A1 失败退避与死信 ─────────────────────────────────────────────────────────
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 test('A1 退避曲线：每次失败翻倍、封顶 retryMaxMs，到上限判死信且不再有下次时刻', () => {
   const monitor = new TriageMonitor({ file: '/tmp/hids-t036-backoff.json', service: {}, investigator: {}, history: {},
     retryBaseMs: 100, retryMaxMs: 1000, retryMaxAttempts: 10 });

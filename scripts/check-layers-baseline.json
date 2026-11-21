@@ -39,10 +39,6 @@
     "kind": "struct.file-placement",
     "file": "knowledge-workbench.js"
   },
-  "struct.file-placement|{\"file\":\"log.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "log.js"
-  },
   "struct.file-placement|{\"file\":\"maintenance-server.js\"}": {
     "kind": "struct.file-placement",
     "file": "maintenance-server.js"
@@ -86,10 +82,6 @@
   "struct.file-placement|{\"file\":\"syslog-input.js\"}": {
     "kind": "struct.file-placement",
     "file": "syslog-input.js"
-  },
-  "struct.file-placement|{\"file\":\"trace-board.js\"}": {
-    "kind": "struct.file-placement",
-    "file": "trace-board.js"
   },
   "struct.file-placement|{\"file\":\"triage-monitor.js\"}": {
     "kind": "struct.file-placement",

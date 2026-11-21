@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eventTypes } from './cloudwalker.js';
 import { recordFailure, reasonForRecord } from './src/shared/redaction.js';
-import { traceModelCall } from './log.js';
+import { traceModelCall } from './src/shared/logging/log.js';
 import { RuleStore } from './rule-store.js';
 import { eventTypeFor } from './syslog-input.js';
 import { PromptStore } from './prompt-store.js';
@@ -12,13 +12,9 @@ import { pageExcerpts, pageSummary } from './wiki-store.js';
 import { readCaseFile, writeRequiredEvidence } from './syslog-case.js';
 import { finalizeTriageOutput } from './triage-output.js';
 import { appendEvidenceReport, collectRequiredEvidence, requiredEvidenceGaps, requiredEvidencePlan } from './required-evidence.js';
-
-const verdictMap = { '真实威胁': 'threat', '存疑': 'uncertain', '误报': 'false_positive', threat: 'threat',
-  uncertain: 'uncertain', false_positive: 'false_positive',
-  '确认威胁': 'threat', '疑似威胁': 'uncertain', '攻击尝试未成功': 'uncertain', '无法判定': 'uncertain',
-  confirmed_threat: 'threat', suspected_threat: 'uncertain', unsuccessful_attack: 'uncertain',
-  undetermined: 'uncertain', needs_review: 'uncertain', needs_data: 'uncertain', suggested_benign: 'false_positive' };
-const verdictLabels = { threat: '真实威胁', uncertain: '存疑', false_positive: '误报' };
+// 判定词表唯一真源（P003-T075 批 3 种子）：原来这里 17 行自抄 verdictMap/verdictLabels，
+// 与 triage-output / wiki-replay 各一份——现在统一 import triage 领域词表（D034 §4 #1 的根治）。
+import { VERDICT_MAP as verdictMap, VERDICT_LABELS as verdictLabels } from './src/contexts/triage/domain/triage-case.js';
 // 结论正文（summary）上限；客户报告 report 另有更严的 300 字口径（MAX_JUDGMENT_LENGTH，triage-output.js:1）。
 const conclusionBodyLimit = 500;
 const defaultRulesDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rules');

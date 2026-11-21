@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, createAnalysisProvider, RegoRuleMaintainer } from './server.js';
 import { RuleStore } from './rule-store.js';
-import { TraceBoardService } from './trace-board.js';
+import { TraceBoardService } from './src/contexts/trace/application/trace-service.js';
+import { BoardStore } from './src/contexts/trace/infrastructure/board-store.js';
 import { InvestigationStore } from './investigation-store.js';
 import { PromptStore } from './prompt-store.js';
 import { TriageMonitor } from './triage-monitor.js';
@@ -426,7 +427,7 @@ test('A4 真接线：POST syslog 告警起板走注入的 monitor/history，不�
     { action: 'conclude', summary: '断在来源', gaps: [] }];
   const boardService = new TraceBoardService({ toolbox, directory,
     model: { model: 'fake', complete: async () => ({ content: JSON.stringify(actions.shift()) }) },
-    promptStore: { load: async () => ({ prompts: { trace: '追查' } }) } });
+    promptStore: { load: async () => ({ prompts: { trace: '追查' } }) }, store: new BoardStore(directory) });
   const server = createServer(null, null, null, history, null, monitor, null, {}, boardService);
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());

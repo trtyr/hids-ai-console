@@ -1,6 +1,10 @@
 // P003-T044 单测：数据管理接口（盘点 / 归档 / 清理）。
 // 全部在 tmp 目录里跑：替身目录 + 内存队列 + 进程内 HTTP 请求；不碰真实网络、不碰仓内 .data、mtime 用 utimes 钉死。
 // 跑法：node --test evidence/test/P003-T044/data-admin.test.js
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
@@ -10,7 +14,7 @@ import { createServer } from '../../../server.js';
 import { TriageMonitor } from '../../../triage-monitor.js';
 import { InvestigationStore } from '../../../investigation-store.js';
 import { createConfigStore } from '../../../config-store.js';
-import { useJournal, createJournal } from '../../../log.js';
+import { useJournal, createJournal } from '../../../src/shared/logging/log.js';
 
 const OLD = Date.parse('2020-01-01T00:00:00.000Z');   // 老数据
 const NEW = Date.parse('2026-11-19T00:00:00.000Z');   // 新数据
@@ -33,7 +37,7 @@ const record = (alertId, status, at, extra = {}) =>
 // 一份 tmp 运行态：七个存储各就各位，路径与生产同一套名字（cases / investigations / trace-boards / …）。
 async function workspace(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'hids-data-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const locations = {
     cases: path.join(root, 'cases'),
     investigations: path.join(root, 'investigations'),
@@ -306,7 +310,9 @@ test('A3 真删留痕：data.cleaned 只记类型/动作/条数/字节，不带�
   await cleanup(base, { kind: 'investigations', action: 'delete', keep: 0, execute: true });
   const cleaned = journal.events('data.cleaned');
   assert.equal(cleaned.length, 1);
-  assert.deepEqual(Object.keys(cleaned[0]).sort(), ['action', 'bytes', 'count', 'event', 'kind', 'level', 'time']);
+  // P003-T072：留痕行在请求上下文里，自动带 request_id（反查是哪个请求发起的清理）。
+  assert.deepEqual(Object.keys(cleaned[0]).sort(),
+    ['action', 'bytes', 'count', 'event', 'kind', 'level', 'request_id', 'time']);
   assert.equal(cleaned[0].kind, 'investigations');
   assert.equal(cleaned[0].action, 'delete');
   assert.equal(cleaned[0].count, 1);

@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { eventTypes } from './cloudwalker.js';
 import { replayProposalHash, runWikiReplay } from './wiki-replay.js';
-import { traceModelCall } from './log.js';
+import { traceModelCall } from './src/shared/logging/log.js';
 
 const validId = value => /^[0-9a-f-]{36}$/i.test(value || '');
 const parse = text => {

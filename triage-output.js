@@ -1,5 +1,6 @@
+import { VERDICT_LABELS as labels } from './src/contexts/triage/domain/triage-case.js';
+
 const MAX_JUDGMENT_LENGTH = 300;
-const labels = { threat: '真实威胁', uncertain: '存疑', false_positive: '误报' };
 
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();

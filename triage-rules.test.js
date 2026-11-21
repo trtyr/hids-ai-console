@@ -1,3 +1,4 @@
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -32,6 +33,8 @@ const waitDone = async (monitor, id) => {
     await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(monitor.status(id)?.status, 'done');
 };
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('精确命中经审批网络规则后仍读取 Wiki 并交由 AI 复核', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-rule-hit-'));

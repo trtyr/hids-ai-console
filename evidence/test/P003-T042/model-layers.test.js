@@ -9,6 +9,7 @@
 // 全部替身：假 fetcher / 假 env / 临时目录，不碰真实网络与真实 process.env。
 // 全局根隔离（P003-T050 A2）：必须是本文件第一个 import——它要在 server.js / wiki-store.js 求值前
 // 把 HIDS_DATA_DIR 指到本进程的临时根；否则缺省库指着真全局根（fp-sessions 写、wiki/rules 读→种子）。
+import { BoardStore } from '../../../src/contexts/trace/infrastructure/board-store.js';
 import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,7 +23,7 @@ import { createServer, applyLiveConfig, configSummary } from '../../../server.js
 import { RegoRuleMaintainer } from '../../../server.js';
 import { createConfigStore, WRITABLE_CONFIG_KEYS } from '../../../config-store.js';
 import { WikiWorkbench } from '../../../wiki-workbench.js';
-import { TraceBoardService } from '../../../trace-board.js';
+import { TraceBoardService } from '../../../src/contexts/trace/application/trace-service.js';;
 import { createModelRolesFromEnv, modelRoleSummary, MODEL_ROLES,
   MODEL_ROLE_GROUPS } from '../../../model-client.js';
 
@@ -40,7 +41,7 @@ const endpoint = base => `${base.replace(/\/$/, '')}/chat/completions`;
 
 async function tempDir(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'hids-model-layers-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return dir;
 }
 
@@ -134,7 +135,7 @@ test('A2 轻量组：规则维护者 / wiki 维护者 / 溯源白板各拿自己
   const prompts = { load: async () => ({ prompts: {} }) };
   assert.equal(new RegoRuleMaintainer(models.rule_maintainer, null, prompts).model, models.rule_maintainer);
   assert.equal(new WikiWorkbench(null, models.wiki_maintainer, prompts, 'x').model, models.wiki_maintainer);
-  assert.equal(new TraceBoardService({ toolbox: null, model: models.trace_board, directory: 'x' }).model,
+  assert.equal(new TraceBoardService({ store: new BoardStore('x'), toolbox: null, model: models.trace_board, directory: 'x' }).model,
     models.trace_board);
 });
 
@@ -296,9 +297,9 @@ test('A4 .env.example 列全新六键、注释写明逐键回退，老键一个�
   const listed = new Set(example.split('\n').filter(line => /^[A-Z0-9_]+=/.test(line)).map(line => line.split('=')[0]));
   for (const key of NEW_KEYS) assert.ok(listed.has(key), `.env.example 少了 ${key}`);
   for (const key of Object.keys(PRIMARY)) assert.ok(listed.has(key), `.env.example 丢了老键名 ${key}`);
-  // P003-T045 加日志落盘三键后全集 47；再加键时这里跟 .env.example 头注一起改（T045 的 log-file.test.js 已按动态数钉，两处口径一致）。
-  assert.equal(listed.size, 47, `.env.example 的键数应与代码读的键数一致，实测 ${listed.size}`);
-  assert.match(example, /47 个键/, '头部键数说明要跟上');
+  // P003-T045 加日志落盘三键、P003-T072 加总量上限一键后全集 48；再加键时这里跟 .env.example 头注一起改。
+  assert.equal(listed.size, 48, `.env.example 的键数应与代码读的键数一致，实测 ${listed.size}`);
+  assert.match(example, /48 个键/, '头部键数说明要跟上');
 
   const comments = example.split('\n').filter(line => line.startsWith('#')).join('\n');
   for (const prefix of ['LLM_REVIEW_', 'LLM_LIGHT_']) assert.ok(comments.includes(prefix), `注释里该点名 ${prefix}* 这一组`);

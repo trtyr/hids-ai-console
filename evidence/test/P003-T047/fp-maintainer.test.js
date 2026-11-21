@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { useJournal } from '../../../log.js';
+import { useJournal } from '../../../src/shared/logging/log.js';
 import { FP_AUTO_VERDICT, FP_DOMAIN, FP_LIBRARIES, maintenanceSide, maintenanceSides } from '../../../fp-maintainer.js';
 import { CASE_ID, REASON, TARGET_PAGE, WHO, readSession, stack } from './helpers.js';
 

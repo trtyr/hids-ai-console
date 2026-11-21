@@ -4,7 +4,7 @@ import path from 'node:path';
 import { eventSeconds, eventTypeFor, fingerprint, parseSyslog, sessionKey } from './syslog-input.js';
 import { eventTypes } from './cloudwalker.js';
 import { matchSyslogEvent, updateSyslogDeliveryCount, writeSyslogCase, writeSyslogResult } from './syslog-case.js';
-import { log } from './log.js';
+import { log } from './src/shared/logging/log.js';
 import { recordFailure, reasonForRecord } from './src/shared/redaction.js';
 
 // parseSyslog 自己写死的三条判定语（syslog-input.js:46/52/56）：不是上游原文，照原样留。

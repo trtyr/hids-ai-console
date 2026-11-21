@@ -5,6 +5,10 @@
 //   2) 边界——空正文/非对象正文/正文超长/表外键逐个/非字符串值/空串与空白串/各键值形状下界；
 //   3) 错误码——400（六类原话）/ 401（纯文本四条头）/ 500（落盘失败，正文不含异常原文）；
 // 另加：被拒的写「什么都不变」（GET 仍是旧值、覆盖层不落盘）。每条请求都带 AbortSignal.timeout(5000)：请求卡住要在 5s 内变红，不许把门禁无限挂起。
+// 全局根隔离（P003-T050 A2）：本文件触发写接口 → 产生审计事件（P003-T062），必须先隔离数据根。
+import { assertIsolatedRoot } from '../P003-T034/isolate-data-root.js';
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chmod, mkdtemp, readdir, rm } from 'node:fs/promises';
@@ -27,7 +31,7 @@ const CONFIG_SLOT = 16; // createServer 串行参数，config 在最后一位（
 
 async function tempDir(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'hids-config-tester-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return dir;
 }
 

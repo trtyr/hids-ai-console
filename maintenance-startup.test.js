@@ -1,3 +1,4 @@
+import { assertIsolatedRoot } from './evidence/test/P003-T034/isolate-data-root.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, symlink } from 'node:fs/promises';
@@ -5,6 +6,8 @@ import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，不是真实全局根', () => assertIsolatedRoot());
 
 test('maintenance CLI starts when the deployment current path is a symlink',async t=>{
   const directory=await mkdtemp(path.join(tmpdir(),'hids-maintenance-startup-'));

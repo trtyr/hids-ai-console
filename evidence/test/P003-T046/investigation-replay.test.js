@@ -50,7 +50,7 @@ test('全局根隔离（P003-T050 A2）：本文件的数据根是临时根，�
 
 test('A3 回放接口按告警 ID 给出逐轮消息摘要、工具调用序列、各轮结论变化——读完案卷不再调模型', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t046-replay-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const history = new InvestigationStore(path.join(directory, 'investigations'));
   const { result, counter } = await investigate();
   await history.save(result);
@@ -103,7 +103,7 @@ test('A3 回放接口按告警 ID 给出逐轮消息摘要、工具调用序列�
 
 test('A3 旧案卷（没有逐轮快照）照样回放：turns 为空，工具序列仍按 trace 给出', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t046-replay-old-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const history = new InvestigationStore(path.join(directory, 'investigations'));
   await history.save({ alert_id: 'revshell:8', mode: 'deep', model: 'old-model',
     verdict: { verdict: 'threat', verdict_label: '真实威胁', confidence: '中', summary: '旧的结论' },
@@ -126,7 +126,7 @@ test('A3 旧案卷（没有逐轮快照）照样回放：turns 为空，工具�
 
 test('A3 失败口径：没记录 404、ID 或模式不合法 400', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'hids-t046-replay-bad-'));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const history = new InvestigationStore(path.join(directory, 'investigations'));
   const server = createServer(null, null, null, history, new PromptStore(path.join(directory, 'prompts.json')));
   const base = await listen(t, server);

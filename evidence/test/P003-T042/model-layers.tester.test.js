@@ -119,7 +119,7 @@ function serverWith(store, access = {}) {
 }
 async function tempDir(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'hids-model-layers-tester-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return dir;
 }
 async function listenWith(t, store, access = {}) {

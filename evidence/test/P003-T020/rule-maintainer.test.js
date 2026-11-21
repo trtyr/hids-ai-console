@@ -80,7 +80,7 @@ async function harness(initial) {
       for (const file of files) contents[file] = await readFile(path.join(rulesDir, file), 'utf8');
       return { files, contents };
     },
-    cleanup: () => rm(root, { recursive: true, force: true })
+    cleanup: () => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   };
 }
 

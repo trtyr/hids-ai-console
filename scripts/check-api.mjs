@@ -52,6 +52,8 @@ const ROUTES = [
   { route: 'GET /api/data/inventory', probe: "'/api/data/inventory'" },
   { route: 'POST /api/data/cleanup', probe: "'/api/data/cleanup'" },
   { route: 'GET /api/logs', probe: "'/api/logs'" },
+  { route: 'GET /api/audit', probe: "'/api/audit'" },
+  { route: 'GET /api/dict', probe: "'/api/dict'" },
   { route: 'POST /api/logs/cleanup', probe: "'/api/logs/cleanup'" },
   // 告警
   { route: 'GET /api/alerts', probe: "'/api/alerts'" },
@@ -66,6 +68,9 @@ const ROUTES = [
   { route: 'POST /api/agent/triage/{alertId}/false-positive', probe: '\\/false-positive$' },
   // 深度研判
   { route: 'POST /api/agent/investigations', probe: "'/api/agent/investigations'" },
+  { route: 'GET /api/agent/investigations', probe: "'/api/agent/investigations'" },
+  { route: 'GET /api/agent/triage/{alertId}/case-files', probe: '/case-files$' },
+  { route: 'GET /api/agent/triage/{alertId}/case-files/{name}', probe: '/case-files/' },
   { route: 'GET /api/agent/investigations/{alertId}/replay', probe: '\\/replay$' },
   { route: 'GET /api/agent/investigations/{alertId}', probe: "'/api/agent/investigations/'" },
   // 溯源白板
